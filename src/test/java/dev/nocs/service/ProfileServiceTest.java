@@ -1,6 +1,8 @@
 package dev.nocs.service;
 
+import dev.nocs.domain.OpticalTrain;
 import dev.nocs.domain.Profile;
+import dev.nocs.repository.InMemoryOpticalTrainRepository;
 import dev.nocs.repository.InMemoryProfileRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -13,6 +15,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ProfileServiceTest {
 
     private InMemoryProfileRepository repository;
+    private InMemoryOpticalTrainRepository opticalTrainRepository;
     private ProfileLoadService profileLoadService;
     private ProfileService profileService;
     private DriverRegistry driverRegistry;
@@ -20,9 +23,11 @@ class ProfileServiceTest {
     @BeforeEach
     void setUp() {
         repository = new InMemoryProfileRepository();
+        opticalTrainRepository = new InMemoryOpticalTrainRepository();
         driverRegistry = new DriverRegistry(List.of());
         profileLoadService = new ProfileLoadService(repository, driverRegistry);
-        profileService = new ProfileService(repository, profileLoadService);
+        OpticalTrainService opticalTrainService = new OpticalTrainService(opticalTrainRepository);
+        profileService = new ProfileService(repository, profileLoadService, opticalTrainService);
     }
 
     @Test
@@ -66,10 +71,12 @@ class ProfileServiceTest {
     void create_rejectsDuplicateCamera() {
         var ref = new dev.nocs.domain.DeviceReference(
                 dev.nocs.domain.EquipmentType.CAMERA, "03c3", "120e", 0, "ASI Camera");
-        var train1 = new dev.nocs.domain.OpticalTrain(600, null, ref, null, null);
-        var train2 = new dev.nocs.domain.OpticalTrain(400, null, ref, null, null);
+        OpticalTrain train1 = opticalTrainRepository.save(
+                new OpticalTrain("t1", "Train 1", 600, null, ref, null, null));
+        OpticalTrain train2 = opticalTrainRepository.save(
+                new OpticalTrain("t2", "Train 2", 400, null, ref, null, null));
 
         org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class, () ->
-                profileService.create("Test", List.of(), List.of(train1, train2), null, List.of()));
+                profileService.create("Test", List.of(), List.of(train1.id(), train2.id()), null, List.of()));
     }
 }

@@ -6,12 +6,12 @@ import dev.nocs.domain.Profile;
 import dev.nocs.repository.ProfileRepository;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Stream;
 
 /**
  * CRUD and load/unload operations for profiles.
@@ -21,10 +21,13 @@ public class ProfileService {
 
     private final ProfileRepository profileRepository;
     private final ProfileLoadService profileLoadService;
+    private final OpticalTrainService opticalTrainService;
 
-    public ProfileService(ProfileRepository profileRepository, ProfileLoadService profileLoadService) {
+    public ProfileService(ProfileRepository profileRepository, ProfileLoadService profileLoadService,
+                         OpticalTrainService opticalTrainService) {
         this.profileRepository = profileRepository;
         this.profileLoadService = profileLoadService;
+        this.opticalTrainService = opticalTrainService;
     }
 
     public List<Profile> findAll() {
@@ -36,53 +39,65 @@ public class ProfileService {
     }
 
     public Profile create(String name, List<String> driverIds,
-                         List<OpticalTrain> imagingTrains, OpticalTrain guidingTrain,
+                         List<String> imagingTrainIds, String guidingTrainId,
                          List<DeviceReference> mountPriority) {
-        validateCameraUniqueness(imagingTrains, guidingTrain);
+        List<OpticalTrain> trains = resolveTrains(imagingTrainIds, guidingTrainId);
+        validateCameraUniqueness(trains);
         Profile profile = new Profile(
                 UUID.randomUUID().toString(),
                 name,
                 driverIds != null ? driverIds : List.of(),
-                imagingTrains != null ? imagingTrains : List.of(),
-                guidingTrain,
+                imagingTrainIds != null ? imagingTrainIds : List.of(),
+                guidingTrainId,
                 mountPriority != null ? mountPriority : List.of());
         return profileRepository.save(profile);
     }
 
     public Optional<Profile> update(String id, String name, List<String> driverIds,
-                                   List<OpticalTrain> imagingTrains, OpticalTrain guidingTrain,
+                                   List<String> imagingTrainIds, String guidingTrainId,
                                    List<DeviceReference> mountPriority) {
         return profileRepository.findById(id)
                 .map(p -> {
-                    validateCameraUniqueness(
-                            imagingTrains != null ? imagingTrains : p.imagingTrains(),
-                            guidingTrain != null ? guidingTrain : p.guidingTrainOpt().orElse(null));
+                    List<String> ids = imagingTrainIds != null ? imagingTrainIds : p.imagingTrainIds();
+                    String guideId = guidingTrainId != null ? guidingTrainId : p.guidingTrainId();
+                    List<OpticalTrain> trains = resolveTrains(ids, guideId);
+                    validateCameraUniqueness(trains);
                     return new Profile(
                             p.id(),
                             name != null ? name : p.name(),
                             driverIds != null ? driverIds : p.driverIds(),
-                            imagingTrains != null ? imagingTrains : p.imagingTrains(),
-                            guidingTrain != null ? guidingTrain : p.guidingTrain(),
+                            ids,
+                            guideId,
                             mountPriority != null ? mountPriority : p.mountPriority());
                 })
                 .map(profileRepository::save);
     }
 
+    private List<OpticalTrain> resolveTrains(List<String> imagingTrainIds, String guidingTrainId) {
+        List<OpticalTrain> trains = new ArrayList<>();
+        if (imagingTrainIds != null) {
+            for (String trainId : imagingTrainIds) {
+                opticalTrainService.findById(trainId).ifPresent(trains::add);
+            }
+        }
+        if (guidingTrainId != null) {
+            opticalTrainService.findById(guidingTrainId).ifPresent(trains::add);
+        }
+        return trains;
+    }
+
     /**
      * Each camera can only be used by one optical train per profile.
      */
-    private void validateCameraUniqueness(List<OpticalTrain> imagingTrains, OpticalTrain guidingTrain) {
+    private void validateCameraUniqueness(List<OpticalTrain> trains) {
         Set<String> cameraKeys = new HashSet<>();
-        Stream.concat(
-                        imagingTrains.stream(),
-                        guidingTrain != null ? Stream.of(guidingTrain) : Stream.empty())
-                .flatMap(t -> t.cameraOpt().stream())
-                .map(DeviceReference::key)
-                .forEach(key -> {
-                    if (!cameraKeys.add(key)) {
-                        throw new IllegalArgumentException("Camera " + key + " is used by more than one optical train");
-                    }
-                });
+        for (OpticalTrain t : trains) {
+            t.cameraOpt().map(DeviceReference::key).ifPresent(key -> {
+                if (!cameraKeys.add(key)) {
+                    throw new IllegalArgumentException("Camera " + key + " is used by more than one optical train");
+                }
+            });
+        }
     }
 
     public void deleteById(String id) {

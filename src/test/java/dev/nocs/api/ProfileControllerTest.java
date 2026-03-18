@@ -1,6 +1,7 @@
 package dev.nocs.api;
 
 import dev.nocs.domain.Profile;
+import dev.nocs.service.OpticalTrainService;
 import dev.nocs.service.ProfileService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -26,6 +27,9 @@ class ProfileControllerTest {
 
     @MockBean
     ProfileService profileService;
+
+    @MockBean
+    OpticalTrainService opticalTrainService;
 
     @Test
     void listProfiles() throws Exception {
@@ -79,7 +83,7 @@ class ProfileControllerTest {
 
         mockMvc.perform(post("/profiles")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\"New Profile\",\"driverIds\":[\"driver.one\"]}"))
+                        .content("{\"name\":\"New Profile\",\"driverIds\":[\"driver.one\"],\"imagingTrainIds\":[],\"mountPriority\":[]}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value("new-id"))
                 .andExpect(jsonPath("$.name").value("New Profile"));

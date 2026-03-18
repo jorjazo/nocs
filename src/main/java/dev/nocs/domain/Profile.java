@@ -4,13 +4,13 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * A profile groups drivers that are loaded together and defines optical trains
+ * A profile groups drivers that are loaded together and references optical trains
  * for imaging and guiding. When a profile is loaded, all its drivers are loaded;
  * when unloaded, all its drivers are unloaded.
  *
- * <p>Optical trains: A profile can have zero or more imaging trains and zero or
- * one guiding train. Each camera can only be used by one optical train; focusers
- * and filter wheels can be shared.
+ * <p>Optical trains are first-class entities referenced by ID. Different profiles
+ * can share the same optical train. A profile has zero or more imaging train IDs
+ * and zero or one guiding train ID.
  *
  * <p>Mount priority: When drivers offer more than one mount, the profile keeps
  * an ordered list; the system operates the highest-priority available mount.
@@ -19,8 +19,8 @@ public record Profile(
         String id,
         String name,
         List<String> driverIds,
-        List<OpticalTrain> imagingTrains,
-        OpticalTrain guidingTrain,
+        List<String> imagingTrainIds,
+        String guidingTrainId,
         List<DeviceReference> mountPriority
 ) {
     public Profile {
@@ -33,15 +33,15 @@ public record Profile(
         if (driverIds == null) {
             driverIds = List.of();
         }
-        if (imagingTrains == null) {
-            imagingTrains = List.of();
+        if (imagingTrainIds == null) {
+            imagingTrainIds = List.of();
         }
         if (mountPriority == null) {
             mountPriority = List.of();
         }
     }
 
-    public Optional<OpticalTrain> guidingTrainOpt() {
-        return Optional.ofNullable(guidingTrain);
+    public Optional<String> guidingTrainIdOpt() {
+        return Optional.ofNullable(guidingTrainId);
     }
 }
