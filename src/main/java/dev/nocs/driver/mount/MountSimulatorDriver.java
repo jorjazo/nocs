@@ -8,6 +8,7 @@ import dev.nocs.domain.equipment.mount.MountConfiguration;
 import dev.nocs.domain.equipment.mount.MountDriverConfiguration;
 import dev.nocs.domain.equipment.mount.MountStatus;
 import dev.nocs.driver.EquipmentDriver;
+import dev.nocs.events.EquipmentEventPublisher;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -42,6 +43,11 @@ public class MountSimulatorDriver implements EquipmentDriver, MountDriver {
             new MountDriverConfiguration("simulator", "", 4030, ""));
     private final AtomicBoolean slewing = new AtomicBoolean(false);
     private final AtomicBoolean parked = new AtomicBoolean(false);
+    private final EquipmentEventPublisher eventPublisher;
+
+    public MountSimulatorDriver(EquipmentEventPublisher eventPublisher) {
+        this.eventPublisher = eventPublisher;
+    }
 
     @Override
     public Driver getMetadata() {
@@ -51,11 +57,14 @@ public class MountSimulatorDriver implements EquipmentDriver, MountDriver {
     @Override
     public void load() {
         loaded.set(true);
+        eventPublisher.publishConnected(EquipmentType.MOUNT, getDriverStatus());
+        eventPublisher.publishStatusChanged(EquipmentType.MOUNT, status.get());
     }
 
     @Override
     public void unload() {
         loaded.set(false);
+        eventPublisher.publishDisconnected(EquipmentType.MOUNT, "Profile unloaded");
     }
 
     @Override
@@ -115,6 +124,7 @@ public class MountSimulatorDriver implements EquipmentDriver, MountDriver {
         slewing.set(true);
         status.set(new MountStatus(raHours, decDegrees, status.get().tracking(), true, false));
         parked.set(false);
+        eventPublisher.publishStatusChanged(EquipmentType.MOUNT, status.get());
         // Simulate slew completion
         new Thread(() -> {
             try {
@@ -124,6 +134,7 @@ public class MountSimulatorDriver implements EquipmentDriver, MountDriver {
             }
             slewing.set(false);
             status.set(new MountStatus(raHours, decDegrees, status.get().tracking(), false, false));
+            eventPublisher.publishStatusChanged(EquipmentType.MOUNT, status.get());
         }).start();
     }
 
@@ -131,6 +142,7 @@ public class MountSimulatorDriver implements EquipmentDriver, MountDriver {
     public void park() {
         slewing.set(true);
         status.set(new MountStatus(0, 90, false, true, false));
+        eventPublisher.publishStatusChanged(EquipmentType.MOUNT, status.get());
         new Thread(() -> {
             try {
                 Thread.sleep(1500);
@@ -140,23 +152,27 @@ public class MountSimulatorDriver implements EquipmentDriver, MountDriver {
             slewing.set(false);
             parked.set(true);
             status.set(new MountStatus(0, 90, false, false, true));
+            eventPublisher.publishStatusChanged(EquipmentType.MOUNT, status.get());
         }).start();
     }
 
     @Override
     public void sync(double raHours, double decDegrees) {
         status.set(new MountStatus(raHours, decDegrees, status.get().tracking(), false, false));
+        eventPublisher.publishStatusChanged(EquipmentType.MOUNT, status.get());
     }
 
     @Override
     public void startTracking() {
         MountStatus s = status.get();
         status.set(new MountStatus(s.raHours(), s.decDegrees(), true, s.slewing(), s.parked()));
+        eventPublisher.publishStatusChanged(EquipmentType.MOUNT, status.get());
     }
 
     @Override
     public void stopTracking() {
         MountStatus s = status.get();
         status.set(new MountStatus(s.raHours(), s.decDegrees(), false, s.slewing(), s.parked()));
+        eventPublisher.publishStatusChanged(EquipmentType.MOUNT, status.get());
     }
 }

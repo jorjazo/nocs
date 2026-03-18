@@ -8,6 +8,7 @@ import dev.nocs.domain.equipment.filterwheel.FilterWheelConfiguration;
 import dev.nocs.domain.equipment.filterwheel.FilterWheelDriverConfiguration;
 import dev.nocs.domain.equipment.filterwheel.FilterWheelStatus;
 import dev.nocs.driver.EquipmentDriver;
+import dev.nocs.events.EquipmentEventPublisher;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -43,6 +44,11 @@ public class FilterWheelSimulatorDriver implements EquipmentDriver, FilterWheelD
             new FilterWheelConfiguration(DEFAULT_FILTERS));
     private final AtomicReference<FilterWheelDriverConfiguration> driverConfig = new AtomicReference<>(
             new FilterWheelDriverConfiguration("simulator", ""));
+    private final EquipmentEventPublisher eventPublisher;
+
+    public FilterWheelSimulatorDriver(EquipmentEventPublisher eventPublisher) {
+        this.eventPublisher = eventPublisher;
+    }
 
     @Override
     public Driver getMetadata() {
@@ -52,11 +58,14 @@ public class FilterWheelSimulatorDriver implements EquipmentDriver, FilterWheelD
     @Override
     public void load() {
         loaded.set(true);
+        eventPublisher.publishConnected(EquipmentType.FILTER_WHEEL, getDriverStatus());
+        eventPublisher.publishStatusChanged(EquipmentType.FILTER_WHEEL, getStatus());
     }
 
     @Override
     public void unload() {
         loaded.set(false);
+        eventPublisher.publishDisconnected(EquipmentType.FILTER_WHEEL, "Profile unloaded");
     }
 
     @Override
@@ -116,6 +125,7 @@ public class FilterWheelSimulatorDriver implements EquipmentDriver, FilterWheelD
         int slotCount = configuration.get().filterNames().size();
         if (slot < 0 || slot >= slotCount) return;
         moving.set(true);
+        eventPublisher.publishStatusChanged(EquipmentType.FILTER_WHEEL, getStatus());
         new Thread(() -> {
             try {
                 Thread.sleep(200);
@@ -124,6 +134,7 @@ public class FilterWheelSimulatorDriver implements EquipmentDriver, FilterWheelD
             }
             currentSlot.set(slot);
             moving.set(false);
+            eventPublisher.publishStatusChanged(EquipmentType.FILTER_WHEEL, getStatus());
         }).start();
     }
 }

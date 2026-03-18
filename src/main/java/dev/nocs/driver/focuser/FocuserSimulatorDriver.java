@@ -8,6 +8,7 @@ import dev.nocs.domain.equipment.focuser.FocuserConfiguration;
 import dev.nocs.domain.equipment.focuser.FocuserDriverConfiguration;
 import dev.nocs.domain.equipment.focuser.FocuserStatus;
 import dev.nocs.driver.EquipmentDriver;
+import dev.nocs.events.EquipmentEventPublisher;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -41,6 +42,11 @@ public class FocuserSimulatorDriver implements EquipmentDriver, FocuserDriver {
             new FocuserConfiguration(50000, 1));
     private final AtomicReference<FocuserDriverConfiguration> driverConfig = new AtomicReference<>(
             new FocuserDriverConfiguration("simulator", ""));
+    private final EquipmentEventPublisher eventPublisher;
+
+    public FocuserSimulatorDriver(EquipmentEventPublisher eventPublisher) {
+        this.eventPublisher = eventPublisher;
+    }
 
     @Override
     public Driver getMetadata() {
@@ -50,11 +56,14 @@ public class FocuserSimulatorDriver implements EquipmentDriver, FocuserDriver {
     @Override
     public void load() {
         loaded.set(true);
+        eventPublisher.publishConnected(EquipmentType.FOCUSER, getDriverStatus());
+        eventPublisher.publishStatusChanged(EquipmentType.FOCUSER, getStatus());
     }
 
     @Override
     public void unload() {
         loaded.set(false);
+        eventPublisher.publishDisconnected(EquipmentType.FOCUSER, "Profile unloaded");
     }
 
     @Override
@@ -123,7 +132,7 @@ public class FocuserSimulatorDriver implements EquipmentDriver, FocuserDriver {
 
     private void moveTo(int target) {
         moving.set(true);
-        int start = position.get();
+        eventPublisher.publishStatusChanged(EquipmentType.FOCUSER, getStatus());
         new Thread(() -> {
             try {
                 Thread.sleep(500);
@@ -132,6 +141,7 @@ public class FocuserSimulatorDriver implements EquipmentDriver, FocuserDriver {
             }
             position.set(target);
             moving.set(false);
+            eventPublisher.publishStatusChanged(EquipmentType.FOCUSER, getStatus());
         }).start();
     }
 }

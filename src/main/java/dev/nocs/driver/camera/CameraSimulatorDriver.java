@@ -8,6 +8,7 @@ import dev.nocs.domain.equipment.camera.CameraConfiguration;
 import dev.nocs.domain.equipment.camera.CameraDriverConfiguration;
 import dev.nocs.domain.equipment.camera.CameraStatus;
 import dev.nocs.driver.EquipmentDriver;
+import dev.nocs.events.EquipmentEventPublisher;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -46,6 +47,11 @@ public class CameraSimulatorDriver implements EquipmentDriver, CameraDriver {
             new CameraDriverConfiguration("simulator", 0));
     private final AtomicInteger frameIdCounter = new AtomicInteger(0);
     private final Map<String, byte[]> completedFrames = new ConcurrentHashMap<>();
+    private final EquipmentEventPublisher eventPublisher;
+
+    public CameraSimulatorDriver(EquipmentEventPublisher eventPublisher) {
+        this.eventPublisher = eventPublisher;
+    }
 
     @Override
     public Driver getMetadata() {
@@ -55,11 +61,14 @@ public class CameraSimulatorDriver implements EquipmentDriver, CameraDriver {
     @Override
     public void load() {
         loaded.set(true);
+        eventPublisher.publishConnected(EquipmentType.CAMERA, getDriverStatus());
+        eventPublisher.publishStatusChanged(EquipmentType.CAMERA, status.get());
     }
 
     @Override
     public void unload() {
         loaded.set(false);
+        eventPublisher.publishDisconnected(EquipmentType.CAMERA, "Profile unloaded");
     }
 
     @Override
@@ -118,6 +127,7 @@ public class CameraSimulatorDriver implements EquipmentDriver, CameraDriver {
     public String startExposure(double durationSeconds) {
         String frameId = "frame-" + frameIdCounter.incrementAndGet();
         status.set(new CameraStatus(true, status.get().temperatureCelsius(), frameId));
+        eventPublisher.publishStatusChanged(EquipmentType.CAMERA, status.get());
         long durationMs = (long) (durationSeconds * 1000);
         new Thread(() -> {
             try {
@@ -127,6 +137,7 @@ public class CameraSimulatorDriver implements EquipmentDriver, CameraDriver {
             }
             completedFrames.put(frameId, new byte[0]);
             status.set(new CameraStatus(false, status.get().temperatureCelsius(), frameId));
+            eventPublisher.publishStatusChanged(EquipmentType.CAMERA, status.get());
         }).start();
         return frameId;
     }

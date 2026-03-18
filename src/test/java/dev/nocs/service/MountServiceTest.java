@@ -3,21 +3,29 @@ package dev.nocs.service;
 import dev.nocs.domain.equipment.mount.MountConfiguration;
 import dev.nocs.domain.equipment.mount.MountStatus;
 import dev.nocs.driver.mount.MountSimulatorDriver;
+import dev.nocs.events.EquipmentEventPublisher;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+@ExtendWith(MockitoExtension.class)
 class MountServiceTest {
 
     private MountService mountService;
     private DriverRegistry driverRegistry;
 
+    @Mock
+    private EquipmentEventPublisher eventPublisher;
+
     @BeforeEach
     void setUp() {
-        MountSimulatorDriver driver = new MountSimulatorDriver();
+        MountSimulatorDriver driver = new MountSimulatorDriver(eventPublisher);
         driverRegistry = new DriverRegistry(List.of(driver));
         mountService = new MountService(driverRegistry);
     }
