@@ -29,7 +29,7 @@ class ProfileControllerTest {
 
     @Test
     void listProfiles() throws Exception {
-        Profile p = new Profile("id1", "Profile 1", List.of());
+        Profile p = new Profile("id1", "Profile 1", List.of(), List.of(), null, List.of());
         when(profileService.findAll()).thenReturn(List.of(p));
         when(profileService.getLoadedProfileId()).thenReturn(Optional.of("id1"));
 
@@ -43,7 +43,7 @@ class ProfileControllerTest {
 
     @Test
     void listProfiles_loadedFalseWhenNotLoaded() throws Exception {
-        Profile p = new Profile("id1", "Profile 1", List.of());
+        Profile p = new Profile("id1", "Profile 1", List.of(), List.of(), null, List.of());
         when(profileService.findAll()).thenReturn(List.of(p));
         when(profileService.getLoadedProfileId()).thenReturn(Optional.empty());
 
@@ -54,7 +54,7 @@ class ProfileControllerTest {
 
     @Test
     void getProfile() throws Exception {
-        Profile p = new Profile("id1", "Profile 1", List.of("driver.one"));
+        Profile p = new Profile("id1", "Profile 1", List.of("driver.one"), List.of(), null, List.of());
         when(profileService.findById("id1")).thenReturn(Optional.of(p));
 
         mockMvc.perform(get("/profiles/id1"))
@@ -74,8 +74,8 @@ class ProfileControllerTest {
 
     @Test
     void createProfile() throws Exception {
-        Profile created = new Profile("new-id", "New Profile", List.of("driver.one"));
-        when(profileService.create("New Profile", List.of("driver.one"))).thenReturn(created);
+        Profile created = new Profile("new-id", "New Profile", List.of("driver.one"), List.of(), null, List.of());
+        when(profileService.create(eq("New Profile"), eq(List.of("driver.one")), any(), any(), any())).thenReturn(created);
 
         mockMvc.perform(post("/profiles")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -87,7 +87,7 @@ class ProfileControllerTest {
 
     @Test
     void loadProfile() throws Exception {
-        Profile p = new Profile("id1", "Profile 1", List.of());
+        Profile p = new Profile("id1", "Profile 1", List.of(), List.of(), null, List.of());
         when(profileService.findById("id1")).thenReturn(Optional.of(p));
 
         mockMvc.perform(post("/profiles/id1/load"))

@@ -1,4 +1,4 @@
-package dev.nocs.driver.mount;
+package dev.nocs.driver.simulator;
 
 import dev.nocs.domain.Driver;
 import dev.nocs.domain.EquipmentType;
@@ -8,6 +8,7 @@ import dev.nocs.domain.equipment.mount.MountConfiguration;
 import dev.nocs.domain.equipment.mount.MountDriverConfiguration;
 import dev.nocs.domain.equipment.mount.MountStatus;
 import dev.nocs.driver.EquipmentDriver;
+import dev.nocs.driver.mount.MountDriver;
 import dev.nocs.events.EquipmentEventPublisher;
 import org.springframework.stereotype.Component;
 

@@ -18,6 +18,6 @@ public class OpenApiConfig {
                         .version("0.1.0")
                         .contact(new Contact()
                                 .name("NOCS")
-                                .url("https://github.com/nocs")));
+                                .url("https://github.com/jorjazo/nocs")));
     }
 }

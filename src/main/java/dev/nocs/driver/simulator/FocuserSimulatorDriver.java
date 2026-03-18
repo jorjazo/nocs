@@ -1,4 +1,4 @@
-package dev.nocs.driver.focuser;
+package dev.nocs.driver.simulator;
 
 import dev.nocs.domain.Driver;
 import dev.nocs.domain.EquipmentType;
@@ -8,6 +8,7 @@ import dev.nocs.domain.equipment.focuser.FocuserConfiguration;
 import dev.nocs.domain.equipment.focuser.FocuserDriverConfiguration;
 import dev.nocs.domain.equipment.focuser.FocuserStatus;
 import dev.nocs.driver.EquipmentDriver;
+import dev.nocs.driver.focuser.FocuserDriver;
 import dev.nocs.events.EquipmentEventPublisher;
 import org.springframework.stereotype.Component;
 

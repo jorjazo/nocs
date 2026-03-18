@@ -1,4 +1,4 @@
-package dev.nocs.driver.camera;
+package dev.nocs.driver.simulator;
 
 import dev.nocs.domain.Driver;
 import dev.nocs.domain.EquipmentType;
@@ -8,6 +8,7 @@ import dev.nocs.domain.equipment.camera.CameraConfiguration;
 import dev.nocs.domain.equipment.camera.CameraDriverConfiguration;
 import dev.nocs.domain.equipment.camera.CameraStatus;
 import dev.nocs.driver.EquipmentDriver;
+import dev.nocs.driver.camera.CameraDriver;
 import dev.nocs.events.EquipmentEventPublisher;
 import org.springframework.stereotype.Component;
 

@@ -2,7 +2,7 @@ package dev.nocs.service;
 
 import dev.nocs.domain.equipment.mount.MountConfiguration;
 import dev.nocs.domain.equipment.mount.MountStatus;
-import dev.nocs.driver.mount.MountSimulatorDriver;
+import dev.nocs.driver.simulator.MountSimulatorDriver;
 import dev.nocs.events.EquipmentEventPublisher;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
