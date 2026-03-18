@@ -41,6 +41,7 @@ public class ProfileService {
     public Profile create(String name, List<String> driverIds,
                          List<String> imagingTrainIds, String guidingTrainId,
                          List<DeviceReference> mountPriority) {
+        validateGuidingTrainNotImaging(imagingTrainIds, guidingTrainId);
         List<OpticalTrain> trains = resolveTrains(imagingTrainIds, guidingTrainId);
         validateCameraUniqueness(trains);
         Profile profile = new Profile(
@@ -60,6 +61,7 @@ public class ProfileService {
                 .map(p -> {
                     List<String> ids = imagingTrainIds != null ? imagingTrainIds : p.imagingTrainIds();
                     String guideId = guidingTrainId != null ? guidingTrainId : p.guidingTrainId();
+                    validateGuidingTrainNotImaging(ids, guideId);
                     List<OpticalTrain> trains = resolveTrains(ids, guideId);
                     validateCameraUniqueness(trains);
                     return new Profile(
@@ -84,6 +86,15 @@ public class ProfileService {
             opticalTrainService.findById(guidingTrainId).ifPresent(trains::add);
         }
         return trains;
+    }
+
+    /**
+     * Guiding train must not be any of the imaging trains.
+     */
+    private void validateGuidingTrainNotImaging(List<String> imagingTrainIds, String guidingTrainId) {
+        if (guidingTrainId != null && imagingTrainIds != null && imagingTrainIds.contains(guidingTrainId)) {
+            throw new IllegalArgumentException("Guiding train cannot be one of the imaging trains");
+        }
     }
 
     /**

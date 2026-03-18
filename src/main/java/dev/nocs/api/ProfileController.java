@@ -76,7 +76,7 @@ public class ProfileController {
 
     @Operation(summary = "Create profile")
     @ApiResponse(responseCode = "200", description = "Profile created")
-    @ApiResponse(responseCode = "400", description = "Validation failed (e.g. duplicate camera)")
+    @ApiResponse(responseCode = "400", description = "Validation failed (e.g. duplicate camera, guiding train same as imaging train)")
     @PostMapping
     public ProfileResponse createProfile(@RequestBody CreateProfileRequest request) {
         Profile profile = profileService.create(
@@ -90,7 +90,7 @@ public class ProfileController {
 
     @Operation(summary = "Update profile")
     @ApiResponse(responseCode = "200", description = "Profile updated")
-    @ApiResponse(responseCode = "400", description = "Validation failed (e.g. duplicate camera)")
+    @ApiResponse(responseCode = "400", description = "Validation failed (e.g. duplicate camera, guiding train same as imaging train)")
     @ApiResponse(responseCode = "404", description = "Profile not found")
     @PutMapping("/{id}")
     public ResponseEntity<ProfileResponse> updateProfile(@PathVariable String id, @RequestBody UpdateProfileRequest request) {

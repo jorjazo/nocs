@@ -79,4 +79,23 @@ class ProfileServiceTest {
         org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class, () ->
                 profileService.create("Test", List.of(), List.of(train1.id(), train2.id()), null, List.of()));
     }
+
+    @Test
+    void create_rejectsGuidingTrainSameAsImagingTrain() {
+        OpticalTrain train = opticalTrainRepository.save(
+                new OpticalTrain("t1", "Train 1", 600, null, null, null, null));
+
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class, () ->
+                profileService.create("Test", List.of(), List.of(train.id()), train.id(), List.of()));
+    }
+
+    @Test
+    void update_rejectsGuidingTrainSameAsImagingTrain() {
+        OpticalTrain train = opticalTrainRepository.save(
+                new OpticalTrain("t1", "Train 1", 600, null, null, null, null));
+        Profile created = profileService.create("Test", List.of(), List.of(), null, List.of());
+
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class, () ->
+                profileService.update(created.id(), "Test", List.of(), List.of(train.id()), train.id(), null));
+    }
 }

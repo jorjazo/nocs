@@ -90,6 +90,18 @@ class ProfileControllerTest {
     }
 
     @Test
+    void createProfile_rejectsGuidingTrainSameAsImagingTrain() throws Exception {
+        when(profileService.create(any(), any(), eq(List.of("t1")), eq("t1"), any()))
+                .thenThrow(new IllegalArgumentException("Guiding train cannot be one of the imaging trains"));
+
+        mockMvc.perform(post("/profiles")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Bad\",\"driverIds\":[],\"imagingTrainIds\":[\"t1\"],\"guidingTrainId\":\"t1\",\"mountPriority\":[]}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Guiding train cannot be one of the imaging trains"));
+    }
+
+    @Test
     void loadProfile() throws Exception {
         Profile p = new Profile("id1", "Profile 1", List.of(), List.of(), null, List.of());
         when(profileService.findById("id1")).thenReturn(Optional.of(p));
