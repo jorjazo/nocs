@@ -9,7 +9,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.Map;
 
 @Tag(name = "Profiles", description = "Profile CRUD and load/unload")
 @RestController
@@ -22,21 +21,23 @@ public class ProfileController {
         this.profileService = profileService;
     }
 
-    @Operation(summary = "List profiles")
-    @ApiResponse(responseCode = "200", description = "List of all profiles")
+    @Operation(summary = "List profiles", description = "List all profiles with loaded status")
+    @ApiResponse(responseCode = "200", description = "List of profiles, each with loaded flag")
     @GetMapping
-    public List<Profile> listProfiles() {
-        return profileService.findAll();
+    public List<ProfileListItem> listProfiles() {
+        String loadedId = profileService.getLoadedProfileId().orElse(null);
+        return profileService.findAll().stream()
+                .map(p -> new ProfileListItem(p.id(), p.name(), p.driverIds(), p.id().equals(loadedId)))
+                .toList();
     }
 
-    @Operation(summary = "Get loaded profile", description = "Returns the id of the currently loaded profile, or empty if none")
-    @ApiResponse(responseCode = "200", description = "Loaded profile id or empty object")
-    @GetMapping("/loaded")
-    public Map<String, String> getLoadedProfile() {
-        return profileService.getLoadedProfileId()
-                .map(id -> Map.<String, String>of("id", id))
-                .orElse(Map.of());
-    }
+    @io.swagger.v3.oas.annotations.media.Schema(description = "Profile with loaded status")
+    public record ProfileListItem(
+            String id,
+            String name,
+            java.util.List<String> driverIds,
+            boolean loaded
+    ) {}
 
     @Operation(summary = "Get profile by id")
     @ApiResponse(responseCode = "200", description = "Profile found")

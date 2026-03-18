@@ -31,30 +31,25 @@ class ProfileControllerTest {
     void listProfiles() throws Exception {
         Profile p = new Profile("id1", "Profile 1", List.of());
         when(profileService.findAll()).thenReturn(List.of(p));
+        when(profileService.getLoadedProfileId()).thenReturn(Optional.of("id1"));
 
         mockMvc.perform(get("/profiles"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$").isArray())
                 .andExpect(jsonPath("$[0].id").value("id1"))
-                .andExpect(jsonPath("$[0].name").value("Profile 1"));
+                .andExpect(jsonPath("$[0].name").value("Profile 1"))
+                .andExpect(jsonPath("$[0].loaded").value(true));
     }
 
     @Test
-    void getLoadedProfile_empty() throws Exception {
+    void listProfiles_loadedFalseWhenNotLoaded() throws Exception {
+        Profile p = new Profile("id1", "Profile 1", List.of());
+        when(profileService.findAll()).thenReturn(List.of(p));
         when(profileService.getLoadedProfileId()).thenReturn(Optional.empty());
 
-        mockMvc.perform(get("/profiles/loaded"))
+        mockMvc.perform(get("/profiles"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id").doesNotExist());
-    }
-
-    @Test
-    void getLoadedProfile_returnsId() throws Exception {
-        when(profileService.getLoadedProfileId()).thenReturn(Optional.of("id1"));
-
-        mockMvc.perform(get("/profiles/loaded"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id").value("id1"));
+                .andExpect(jsonPath("$[0].loaded").value(false));
     }
 
     @Test

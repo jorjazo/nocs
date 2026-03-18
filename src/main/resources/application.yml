@@ -7,6 +7,11 @@ spring:
   application:
     name: nocs
 
+# CORS: comma-separated origins for nocs-web (Next.js dev typically uses 3000)
+nocs:
+  cors:
+    allowed-origins: ${NOCS_CORS_ORIGINS:http://localhost:3000,http://127.0.0.1:3000}
+
 # OpenAPI / Swagger UI
 springdoc:
   api-docs:

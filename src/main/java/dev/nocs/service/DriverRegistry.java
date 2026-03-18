@@ -99,6 +99,19 @@ public class DriverRegistry {
                 .findFirst();
     }
 
+    /**
+     * Get the first loaded driver that implements the given equipment interface.
+     * Used for equipment-specific operations (mount, camera, focuser, filter wheel).
+     */
+    @SuppressWarnings("unchecked")
+    public <T> Optional<T> getEquipmentDriver(Class<T> equipmentType) {
+        return drivers.stream()
+                .filter(EquipmentDriver::isLoaded)
+                .filter(equipmentType::isInstance)
+                .map(d -> (T) d)
+                .findFirst();
+    }
+
     private Optional<EquipmentDriver> findDriver(String driverId) {
         return drivers.stream()
                 .filter(d -> d.getMetadata().id().equals(driverId))
