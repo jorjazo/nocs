@@ -3,6 +3,9 @@ package dev.nocs.api;
 import dev.nocs.domain.EquipmentType;
 import dev.nocs.domain.LogicalDevice;
 import dev.nocs.service.DriverRegistry;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -12,9 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 import java.util.Map;
 
-/**
- * REST API for devices (Phase 0).
- */
+@Tag(name = "Devices", description = "Logical devices from loaded drivers")
 @RestController
 @RequestMapping("/devices")
 public class DeviceController {
@@ -25,17 +26,16 @@ public class DeviceController {
         this.driverRegistry = driverRegistry;
     }
 
-    /**
-     * List devices, grouped by equipment type.
-     */
+    @Operation(summary = "List devices", description = "List all logical devices from loaded drivers, grouped by equipment type")
+    @ApiResponse(responseCode = "200", description = "Devices grouped by MOUNT, CAMERA, FOCUSER, FILTER_WHEEL")
     @GetMapping
     public Map<EquipmentType, List<LogicalDevice>> listDevices() {
         return driverRegistry.listDevicesGroupedByType();
     }
 
-    /**
-     * List logical devices for an equipment type.
-     */
+    @Operation(summary = "List devices by type", description = "List logical devices for an equipment type (MOUNT, CAMERA, FOCUSER, FILTER_WHEEL)")
+    @ApiResponse(responseCode = "200", description = "List of devices")
+    @ApiResponse(responseCode = "400", description = "Invalid equipment type")
     @GetMapping("/{equipmentTypeId}")
     public ResponseEntity<List<LogicalDevice>> listDevicesByType(
             @PathVariable String equipmentTypeId) {
@@ -46,20 +46,21 @@ public class DeviceController {
         return ResponseEntity.ok(driverRegistry.listDevices(type));
     }
 
-    /**
-     * Get a logical device by equipment type, hardware id, and index.
-     */
-    @GetMapping("/{equipmentTypeId}/{hwId}/{index}")
+    @Operation(summary = "Get device", description = "Get a logical device by equipment type, vendor id, product id, and index")
+    @ApiResponse(responseCode = "200", description = "Device found")
+    @ApiResponse(responseCode = "400", description = "Invalid equipment type")
+    @ApiResponse(responseCode = "404", description = "Device not found")
+    @GetMapping("/{equipmentTypeId}/{vendorId}/{productId}/{index}")
     public ResponseEntity<LogicalDevice> getDevice(
             @PathVariable String equipmentTypeId,
-            @PathVariable String hwId,
+            @PathVariable String vendorId,
+            @PathVariable String productId,
             @PathVariable int index) {
         EquipmentType type = parseEquipmentType(equipmentTypeId);
         if (type == null) {
             return ResponseEntity.badRequest().build();
         }
-        String decodedHwId = hwId.replace('-', ':');
-        return driverRegistry.getDevice(type, decodedHwId, index)
+        return driverRegistry.getDevice(type, vendorId, productId, index)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }

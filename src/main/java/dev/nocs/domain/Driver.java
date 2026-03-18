@@ -3,8 +3,8 @@ package dev.nocs.domain;
 import java.util.List;
 
 /**
- * Metadata and logical devices for a driver. Drivers report their metadata
- * and logical devices at runtime.
+ * Metadata for a driver. Drivers report their metadata and supported vendor IDs
+ * at runtime.
  */
 public record Driver(
         String id,
@@ -13,7 +13,7 @@ public record Driver(
         String version,
         String manufacturer,
         String website,
-        List<LogicalDevice> supportedHardwareDevices
+        List<String> supportedVendorIds
 ) {
     public Driver {
         if (id == null || id.isBlank()) {
@@ -22,8 +22,8 @@ public record Driver(
         if (displayName == null || displayName.isBlank()) {
             throw new IllegalArgumentException("displayName must not be blank");
         }
-        if (supportedHardwareDevices == null) {
-            supportedHardwareDevices = List.of();
+        if (supportedVendorIds == null) {
+            supportedVendorIds = List.of();
         }
     }
 }

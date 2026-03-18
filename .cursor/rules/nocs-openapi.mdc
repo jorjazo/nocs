@@ -1,0 +1,37 @@
+---
+description: Keep OpenAPI docs and specs up to date when changing the NOCS API
+globs: "**/*Controller.java"
+alwaysApply: false
+---
+
+# OpenAPI Documentation
+
+## Keep OpenAPI Up to Date
+
+When adding or modifying REST endpoints in the NOCS API:
+
+1. **Add `@Operation`** to every controller method with `summary` and `description`
+2. **Add `@ApiResponse`** for each HTTP status (200, 201, 204, 400, 404, etc.)
+3. **Add `@Tag`** to controller classes for grouping in Swagger UI
+4. **Add `@Schema`** to request/response DTOs and records for field descriptions and required flags
+
+## Annotations Reference
+
+```java
+@Tag(name = "ResourceName", description = "Brief description")
+@Operation(summary = "Short summary", description = "Detailed description")
+@ApiResponse(responseCode = "200", description = "Success")
+@Schema(description = "Field description", requiredMode = Schema.RequiredMode.REQUIRED)
+```
+
+## Endpoints
+
+- **OpenAPI spec (JSON)**: `GET /api/v1/v3/api-docs`
+- **Swagger UI**: `GET /api/v1/swagger-ui.html`
+
+## Checklist
+
+Before completing API changes:
+- [ ] New endpoints have @Operation and @ApiResponse
+- [ ] New DTOs/records have @Schema on fields
+- [ ] Run app and verify Swagger UI reflects changes at `/api/v1/swagger-ui.html`

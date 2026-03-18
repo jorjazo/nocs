@@ -6,7 +6,8 @@ package dev.nocs.domain;
  */
 public record LogicalDevice(
         String displayName,
-        String hardwareId,
+        String vendorId,
+        String productId,
         EquipmentType equipmentType,
         int index
 ) {
@@ -14,8 +15,11 @@ public record LogicalDevice(
         if (displayName == null || displayName.isBlank()) {
             throw new IllegalArgumentException("displayName must not be blank");
         }
-        if (hardwareId == null || hardwareId.isBlank()) {
-            throw new IllegalArgumentException("hardwareId must not be blank");
+        if (vendorId == null || vendorId.isBlank()) {
+            throw new IllegalArgumentException("vendorId must not be blank");
+        }
+        if (productId == null || productId.isBlank()) {
+            throw new IllegalArgumentException("productId must not be blank");
         }
         if (equipmentType == null) {
             throw new IllegalArgumentException("equipmentType must not be null");

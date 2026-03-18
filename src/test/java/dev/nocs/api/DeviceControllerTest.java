@@ -29,7 +29,7 @@ class DeviceControllerTest {
 
     @Test
     void listDevices_returnsGroupedByType() throws Exception {
-        LogicalDevice cam = new LogicalDevice("Cam", "03c3:120e", EquipmentType.CAMERA, 0);
+        LogicalDevice cam = new LogicalDevice("Cam", "03c3", "120e", EquipmentType.CAMERA, 0);
         when(driverRegistry.listDevicesGroupedByType())
                 .thenReturn(Map.of(EquipmentType.CAMERA, List.of(cam)));
 
@@ -37,14 +37,15 @@ class DeviceControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.CAMERA").isArray())
                 .andExpect(jsonPath("$.CAMERA[0].displayName").value("Cam"))
-                .andExpect(jsonPath("$.CAMERA[0].hardwareId").value("03c3:120e"))
+                .andExpect(jsonPath("$.CAMERA[0].vendorId").value("03c3"))
+                .andExpect(jsonPath("$.CAMERA[0].productId").value("120e"))
                 .andExpect(jsonPath("$.CAMERA[0].equipmentType").value("CAMERA"))
                 .andExpect(jsonPath("$.CAMERA[0].index").value(0));
     }
 
     @Test
     void listDevicesByType_returnsDevicesForType() throws Exception {
-        LogicalDevice cam = new LogicalDevice("Cam", "03c3:120e", EquipmentType.CAMERA, 0);
+        LogicalDevice cam = new LogicalDevice("Cam", "03c3", "120e", EquipmentType.CAMERA, 0);
         when(driverRegistry.listDevices(EquipmentType.CAMERA)).thenReturn(List.of(cam));
 
         mockMvc.perform(get("/devices/CAMERA"))
@@ -61,29 +62,30 @@ class DeviceControllerTest {
 
     @Test
     void getDevice_returnsDeviceWhenFound() throws Exception {
-        LogicalDevice device = new LogicalDevice("Cam", "03c3:120e", EquipmentType.CAMERA, 0);
-        when(driverRegistry.getDevice(EquipmentType.CAMERA, "03c3:120e", 0))
+        LogicalDevice device = new LogicalDevice("Cam", "03c3", "120e", EquipmentType.CAMERA, 0);
+        when(driverRegistry.getDevice(EquipmentType.CAMERA, "03c3", "120e", 0))
                 .thenReturn(Optional.of(device));
 
-        mockMvc.perform(get("/devices/CAMERA/03c3-120e/0"))
+        mockMvc.perform(get("/devices/CAMERA/03c3/120e/0"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.displayName").value("Cam"))
-                .andExpect(jsonPath("$.hardwareId").value("03c3:120e"))
+                .andExpect(jsonPath("$.vendorId").value("03c3"))
+                .andExpect(jsonPath("$.productId").value("120e"))
                 .andExpect(jsonPath("$.index").value(0));
     }
 
     @Test
     void getDevice_returns404WhenNotFound() throws Exception {
-        when(driverRegistry.getDevice(EquipmentType.CAMERA, "03c3:120e", 0))
+        when(driverRegistry.getDevice(EquipmentType.CAMERA, "03c3", "120e", 0))
                 .thenReturn(Optional.empty());
 
-        mockMvc.perform(get("/devices/CAMERA/03c3-120e/0"))
+        mockMvc.perform(get("/devices/CAMERA/03c3/120e/0"))
                 .andExpect(status().isNotFound());
     }
 
     @Test
     void getDevice_returns400ForInvalidEquipmentType() throws Exception {
-        mockMvc.perform(get("/devices/BAD/03c3-120e/0"))
+        mockMvc.perform(get("/devices/BAD/03c3/120e/0"))
                 .andExpect(status().isBadRequest());
     }
 }

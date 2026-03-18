@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -59,20 +60,11 @@ class DriverRegistryTest {
 
     @Test
     void listDevicesGroupedByType_groupsCorrectly() {
-        LogicalDevice cam1 = new LogicalDevice("Cam1", "03c3:120e", EquipmentType.CAMERA, 0);
-        LogicalDevice cam2 = new LogicalDevice("Cam2", "03c3:120e", EquipmentType.CAMERA, 1);
-        LogicalDevice mount1 = new LogicalDevice("Mount1", "serial:1", EquipmentType.MOUNT, 0);
-        EquipmentDriver driver = new EquipmentDriver() {
-            @Override
-            public Driver getMetadata() {
-                return new Driver("test", "Test", "", "1.0", "", "", List.of());
-            }
-
-            @Override
-            public List<LogicalDevice> getLogicalDevices() {
-                return List.of(cam1, cam2, mount1);
-            }
-        };
+        LogicalDevice cam1 = new LogicalDevice("Cam1", "03c3", "120e", EquipmentType.CAMERA, 0);
+        LogicalDevice cam2 = new LogicalDevice("Cam2", "03c3", "120e", EquipmentType.CAMERA, 1);
+        LogicalDevice mount1 = new LogicalDevice("Mount1", "0001", "0001", EquipmentType.MOUNT, 0);
+        EquipmentDriver driver = loadedStubDriver("test", List.of(cam1, cam2, mount1));
+        driver.load();
         DriverRegistry registry = new DriverRegistry(List.of(driver));
 
         Map<EquipmentType, List<LogicalDevice>> grouped = registry.listDevicesGroupedByType();
@@ -83,20 +75,23 @@ class DriverRegistryTest {
     }
 
     @Test
-    void listDevices_filtersByEquipmentType() {
-        LogicalDevice cam = new LogicalDevice("Cam", "03c3:120e", EquipmentType.CAMERA, 0);
-        LogicalDevice mount = new LogicalDevice("Mount", "serial:1", EquipmentType.MOUNT, 0);
-        EquipmentDriver driver = new EquipmentDriver() {
-            @Override
-            public Driver getMetadata() {
-                return new Driver("test", "Test", "", "1.0", "", "", List.of());
-            }
+    void listDevices_returnsEmptyWhenDriverNotLoaded() {
+        LogicalDevice cam = new LogicalDevice("Cam", "03c3", "120e", EquipmentType.CAMERA, 0);
+        EquipmentDriver driver = loadedStubDriver("test", List.of(cam));
+        driver.unload();
+        DriverRegistry registry = new DriverRegistry(List.of(driver));
 
-            @Override
-            public List<LogicalDevice> getLogicalDevices() {
-                return List.of(cam, mount);
-            }
-        };
+        List<LogicalDevice> cameras = registry.listDevices(EquipmentType.CAMERA);
+
+        assertThat(cameras).isEmpty();
+    }
+
+    @Test
+    void listDevices_filtersByEquipmentType() {
+        LogicalDevice cam = new LogicalDevice("Cam", "03c3", "120e", EquipmentType.CAMERA, 0);
+        LogicalDevice mount = new LogicalDevice("Mount", "0001", "0001", EquipmentType.MOUNT, 0);
+        EquipmentDriver driver = loadedStubDriver("test", List.of(cam, mount));
+        driver.load();
         DriverRegistry registry = new DriverRegistry(List.of(driver));
 
         List<LogicalDevice> cameras = registry.listDevices(EquipmentType.CAMERA);
@@ -107,33 +102,51 @@ class DriverRegistryTest {
 
     @Test
     void getDevice_returnsDeviceWhenFound() {
-        LogicalDevice device = new LogicalDevice("Cam", "03c3:120e", EquipmentType.CAMERA, 0);
-        EquipmentDriver driver = new EquipmentDriver() {
-            @Override
-            public Driver getMetadata() {
-                return new Driver("test", "Test", "", "1.0", "", "", List.of());
-            }
-
-            @Override
-            public List<LogicalDevice> getLogicalDevices() {
-                return List.of(device);
-            }
-        };
+        LogicalDevice device = new LogicalDevice("Cam", "03c3", "120e", EquipmentType.CAMERA, 0);
+        EquipmentDriver driver = loadedStubDriver("test", List.of(device));
+        driver.load();
         DriverRegistry registry = new DriverRegistry(List.of(driver));
 
-        Optional<LogicalDevice> result = registry.getDevice(EquipmentType.CAMERA, "03c3:120e", 0);
+        Optional<LogicalDevice> result = registry.getDevice(EquipmentType.CAMERA, "03c3", "120e", 0);
 
         assertThat(result).isPresent();
         assertThat(result.get()).isEqualTo(device);
     }
 
     @Test
+    void getDevice_returnsEmptyWhenDriverNotLoaded() {
+        LogicalDevice device = new LogicalDevice("Cam", "03c3", "120e", EquipmentType.CAMERA, 0);
+        EquipmentDriver driver = loadedStubDriver("test", List.of(device));
+        driver.unload();
+        DriverRegistry registry = new DriverRegistry(List.of(driver));
+
+        Optional<LogicalDevice> result = registry.getDevice(EquipmentType.CAMERA, "03c3", "120e", 0);
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
     void getDevice_returnsEmptyWhenNotFound() {
         DriverRegistry registry = new DriverRegistry(List.of());
 
-        Optional<LogicalDevice> result = registry.getDevice(EquipmentType.CAMERA, "03c3:120e", 0);
+        Optional<LogicalDevice> result = registry.getDevice(EquipmentType.CAMERA, "03c3", "120e", 0);
 
         assertThat(result).isEmpty();
+    }
+
+    @Test
+    void loadDriver_and_unloadDriver() {
+        LogicalDevice device = new LogicalDevice("Cam", "03c3", "120e", EquipmentType.CAMERA, 0);
+        EquipmentDriver driver = loadedStubDriver("driver.one", List.of(device));
+        DriverRegistry registry = new DriverRegistry(List.of(driver));
+
+        assertThat(registry.listDevices(EquipmentType.CAMERA)).isEmpty();
+
+        registry.loadDriver("driver.one");
+        assertThat(registry.listDevices(EquipmentType.CAMERA)).hasSize(1);
+
+        registry.unloadDriver("driver.one");
+        assertThat(registry.listDevices(EquipmentType.CAMERA)).isEmpty();
     }
 
     private static EquipmentDriver stubDriver(String id, String displayName) {
@@ -144,8 +157,49 @@ class DriverRegistryTest {
             }
 
             @Override
+            public void load() {}
+
+            @Override
+            public void unload() {}
+
+            @Override
+            public boolean isLoaded() {
+                return false;
+            }
+
+            @Override
             public List<LogicalDevice> getLogicalDevices() {
                 return List.of();
+            }
+        };
+    }
+
+    private static EquipmentDriver loadedStubDriver(String id, List<LogicalDevice> devices) {
+        AtomicBoolean loaded = new AtomicBoolean(false);
+        return new EquipmentDriver() {
+            @Override
+            public Driver getMetadata() {
+                return new Driver(id, "Test", "", "1.0", "", "", List.of());
+            }
+
+            @Override
+            public void load() {
+                loaded.set(true);
+            }
+
+            @Override
+            public void unload() {
+                loaded.set(false);
+            }
+
+            @Override
+            public boolean isLoaded() {
+                return loaded.get();
+            }
+
+            @Override
+            public List<LogicalDevice> getLogicalDevices() {
+                return loaded.get() ? devices : List.of();
             }
         };
     }
