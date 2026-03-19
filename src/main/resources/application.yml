@@ -14,6 +14,12 @@ nocs:
   # ZWO EAF SDK path (libEAFFocuser.so or libEAFFocuser.bin). Empty = auto-detect.
   eaf:
     sdk-path: ${NOCS_EAF_SDK_PATH:}
+  # ZWO ASI Camera SDK path (libASICamera2.so). Empty = auto-detect.
+  asi:
+    sdk-path: ${NOCS_ASI_SDK_PATH:}
+  # Image storage directory for FITS and preview files. Empty = system temp dir.
+  images:
+    storage-path: ${NOCS_IMAGES_PATH:}
 
 # OpenAPI / Swagger UI
 springdoc:

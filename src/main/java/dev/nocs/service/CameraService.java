@@ -16,9 +16,11 @@ import java.util.Optional;
 public class CameraService {
 
     private final DriverRegistry driverRegistry;
+    private final ImageStorageService imageStorage;
 
-    public CameraService(DriverRegistry driverRegistry) {
+    public CameraService(DriverRegistry driverRegistry, ImageStorageService imageStorage) {
         this.driverRegistry = driverRegistry;
+        this.imageStorage = imageStorage;
     }
 
     public Optional<CameraStatus> getStatus() {
@@ -61,5 +63,22 @@ public class CameraService {
     public Optional<byte[]> getImage(String frameId) {
         return driverRegistry.getEquipmentDriver(CameraDriver.class)
                 .map(d -> d.getImage(frameId));
+    }
+
+    public byte[] getPreviewImage() {
+        return imageStorage.getPreviewBytes();
+    }
+
+    public byte[] getFitsImage() {
+        return imageStorage.getFitsBytes();
+    }
+
+    public boolean hasLatestImage() {
+        return imageStorage.hasImage();
+    }
+
+    public ImageMetadata getLatestMetadata() {
+        var stored = imageStorage.getLatest();
+        return stored != null ? stored.metadata() : null;
     }
 }

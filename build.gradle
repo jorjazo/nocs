@@ -38,6 +38,12 @@ tasks.named('test') {
     if (System.getenv('NOCS_EAF_SDK_PATH') == null && file('native/linux-x64/libEAFFocuser.bin').exists()) {
         environment 'NOCS_EAF_SDK_PATH', file('native/linux-x64').absolutePath
     }
+    if (System.getenv('NOCS_EFW_SDK_PATH') == null && file('native/linux-x64/libEFWFilter.bin').exists()) {
+        environment 'NOCS_EFW_SDK_PATH', file('native/linux-x64').absolutePath
+    }
+    if (System.getenv('NOCS_ASI_SDK_PATH') == null && file('native/linux-x64/libASICamera2.so').exists()) {
+        environment 'NOCS_ASI_SDK_PATH', file('native/linux-x64').absolutePath
+    }
 }
 
 // Copy libudev from system into native/ for shipping (libEAFFocuser needs it via LD_PRELOAD).
@@ -71,14 +77,59 @@ tasks.register('copyEafSdk', Copy) {
     onlyIf { sourceDir != null }
 }
 
+// Copy ZWO ASI Camera SDK lib into native/ for shipping.
+// Run: ./gradlew copyAsiSdk (uses ../ASI_Camera_SDK by default)
+tasks.register('copyAsiSdk', Copy) {
+    def envSrc = System.getenv('ASI_SDK_SOURCE')
+    def candidates = [
+        envSrc ? file(envSrc) : null,
+        file(projectDir.parent).toPath().resolve('ASI_Camera_SDK/ASI_linux_mac_SDK_V1.41/lib/x64').toFile(),
+        file(projectDir.parent).toPath().resolve('indi-3rdparty/libasi/x64').toFile(),
+        file('/tmp/indi-3rdparty/libasi/x64')
+    ]
+    def sourceDir = candidates.find { it?.exists() }
+    from sourceDir
+    into 'native/linux-x64'
+    include 'libASICamera2.so', 'libASICamera2.so.*'
+    onlyIf { sourceDir != null }
+}
+
+// Copy ZWO EFW SDK lib from indi-3rdparty into native/ for shipping.
+// Run: EFW_SDK_SOURCE=/path/to/indi-3rdparty/libasi/x64 ./gradlew copyEfwSdk
+tasks.register('copyEfwSdk', Copy) {
+    def envSrc = System.getenv('EFW_SDK_SOURCE')
+    def candidates = [
+        envSrc ? file(envSrc) : null,
+        file(projectDir.parent).toPath().resolve('indi-3rdparty/libasi/x64').toFile(),
+        file('/tmp/indi-3rdparty/libasi/x64')
+    ]
+    def sourceDir = candidates.find { it?.exists() }
+    from sourceDir
+    into 'native/linux-x64'
+    include 'libEFWFilter.bin', 'libEFWFilter.so'
+    onlyIf { sourceDir != null }
+}
+
 tasks.named('bootRun') {
-    if (file('native/linux-x64/libEAFFocuser.bin').exists() && System.getenv('LD_PRELOAD') == null) {
+    def nativeDir = file('native/linux-x64')
+    def hasEaf = file('native/linux-x64/libEAFFocuser.bin').exists()
+    def hasEfw = file('native/linux-x64/libEFWFilter.bin').exists()
+    def hasAsi = file('native/linux-x64/libASICamera2.so').exists()
+    if ((hasEaf || hasEfw || hasAsi) && System.getenv('LD_PRELOAD') == null) {
         def libudev = file('native/linux-x64/libudev.so.1').exists()
             ? file('native/linux-x64/libudev.so.1').absolutePath
             : '/usr/lib/x86_64-linux-gnu/libudev.so.1'
         if (new File(libudev).exists()) {
             environment 'LD_PRELOAD', libudev
-            environment 'NOCS_EAF_SDK_PATH', file('native/linux-x64').absolutePath
         }
+    }
+    if (hasEaf) {
+        environment 'NOCS_EAF_SDK_PATH', nativeDir.absolutePath
+    }
+    if (hasEfw) {
+        environment 'NOCS_EFW_SDK_PATH', nativeDir.absolutePath
+    }
+    if (hasAsi) {
+        environment 'NOCS_ASI_SDK_PATH', nativeDir.absolutePath
     }
 }

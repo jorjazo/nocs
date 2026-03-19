@@ -123,6 +123,33 @@ public class CameraController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
+    @Operation(summary = "Get latest preview image (JPEG)")
+    @ApiResponse(responseCode = "200", description = "JPEG preview of the last exposure")
+    @ApiResponse(responseCode = "404", description = "No exposure available")
+    @GetMapping("/image/preview")
+    public ResponseEntity<byte[]> getPreview() {
+        byte[] data = cameraService.getPreviewImage();
+        if (data == null) return ResponseEntity.notFound().build();
+        return ResponseEntity.ok()
+                .contentType(MediaType.IMAGE_JPEG)
+                .header(HttpHeaders.CACHE_CONTROL, "no-cache")
+                .body(data);
+    }
+
+    @Operation(summary = "Download latest FITS image")
+    @ApiResponse(responseCode = "200", description = "FITS file of the last exposure")
+    @ApiResponse(responseCode = "404", description = "No exposure available")
+    @GetMapping("/image/fits")
+    public ResponseEntity<byte[]> getFits() {
+        byte[] data = cameraService.getFitsImage();
+        if (data == null) return ResponseEntity.notFound().build();
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"latest.fits\"")
+                .header(HttpHeaders.CACHE_CONTROL, "no-cache")
+                .body(data);
+    }
+
     @io.swagger.v3.oas.annotations.media.Schema(description = "Expose request")
     public record ExposeRequest(
             @io.swagger.v3.oas.annotations.media.Schema(requiredMode = io.swagger.v3.oas.annotations.media.Schema.RequiredMode.REQUIRED)
