@@ -19,10 +19,66 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0'
+    implementation 'net.java.dev.jna:jna:5.14.0'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
 tasks.named('test') {
     useJUnitPlatform()
+    // libEAFFocuser.bin needs libudev but isn't linked against it; EafDriverLoadTest requires LD_PRELOAD
+    if ((System.getenv('NOCS_EAF_SDK_PATH') != null || file('native/linux-x64/libEAFFocuser.bin').exists()) && System.getenv('LD_PRELOAD') == null) {
+        def libudev = file('native/linux-x64/libudev.so.1').exists()
+            ? file('native/linux-x64/libudev.so.1').absolutePath
+            : '/usr/lib/x86_64-linux-gnu/libudev.so.1'
+        if (new File(libudev).exists()) {
+            environment 'LD_PRELOAD', libudev
+        }
+    }
+    if (System.getenv('NOCS_EAF_SDK_PATH') == null && file('native/linux-x64/libEAFFocuser.bin').exists()) {
+        environment 'NOCS_EAF_SDK_PATH', file('native/linux-x64').absolutePath
+    }
+}
+
+// Copy libudev from system into native/ for shipping (libEAFFocuser needs it via LD_PRELOAD).
+// Run: ./gradlew copyLibudev (uses system libudev on Debian/Ubuntu)
+tasks.register('copyLibudev', Copy) {
+    def candidates = [
+        '/usr/lib/x86_64-linux-gnu/libudev.so.1',
+        '/lib/x86_64-linux-gnu/libudev.so.1',
+        '/usr/lib64/libudev.so.1'
+    ]
+    def src = candidates.find { new File(it).exists() }?.with { new File(it).canonicalFile }
+    from src
+    into 'native/linux-x64'
+    rename { 'libudev.so.1' }
+    onlyIf { src != null }
+}
+
+// Copy ZWO EAF SDK lib from indi-3rdparty into native/ for shipping.
+// Run: EAF_SDK_SOURCE=/path/to/indi-3rdparty/libasi/x64 ./gradlew copyEafSdk
+tasks.register('copyEafSdk', Copy) {
+    def envSrc = System.getenv('EAF_SDK_SOURCE')
+    def candidates = [
+        envSrc ? file(envSrc) : null,
+        file(projectDir.parent).toPath().resolve('indi-3rdparty/libasi/x64').toFile(),
+        file('/tmp/indi-3rdparty/libasi/x64')
+    ]
+    def sourceDir = candidates.find { it?.exists() }
+    from sourceDir
+    into 'native/linux-x64'
+    include 'libEAFFocuser.bin', 'libEAFFocuser.so'
+    onlyIf { sourceDir != null }
+}
+
+tasks.named('bootRun') {
+    if (file('native/linux-x64/libEAFFocuser.bin').exists() && System.getenv('LD_PRELOAD') == null) {
+        def libudev = file('native/linux-x64/libudev.so.1').exists()
+            ? file('native/linux-x64/libudev.so.1').absolutePath
+            : '/usr/lib/x86_64-linux-gnu/libudev.so.1'
+        if (new File(libudev).exists()) {
+            environment 'LD_PRELOAD', libudev
+            environment 'NOCS_EAF_SDK_PATH', file('native/linux-x64').absolutePath
+        }
+    }
 }

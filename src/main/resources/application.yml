@@ -11,6 +11,9 @@ spring:
 nocs:
   cors:
     allowed-origins: ${NOCS_CORS_ORIGINS:http://localhost:3000,http://127.0.0.1:3000}
+  # ZWO EAF SDK path (libEAFFocuser.so or libEAFFocuser.bin). Empty = auto-detect.
+  eaf:
+    sdk-path: ${NOCS_EAF_SDK_PATH:}
 
 # OpenAPI / Swagger UI
 springdoc:

@@ -68,11 +68,17 @@ public class EventsController {
                             "equipmentType", EquipmentType.CAMERA.name(),
                             "status", status
                     )));
-            focuserService.getStatus().ifPresent(status ->
-                    sendEventUnchecked(emitter, "equipment_status", Map.of(
-                            "equipmentType", EquipmentType.FOCUSER.name(),
-                            "status", status
-                    )));
+            focuserService.getStatus().ifPresent(status -> {
+                var data = new java.util.HashMap<String, Object>();
+                data.put("equipmentType", EquipmentType.FOCUSER.name());
+                data.put("status", status);
+                focuserService.getDriverStatus().ifPresent(ds ->
+                        data.put("driverStatus", Map.of(
+                                "connectionState", ds.connectionState().name(),
+                                "lastError", ds.lastError() != null ? ds.lastError() : ""
+                        )));
+                sendEventUnchecked(emitter, "equipment_status", data);
+            });
             filterWheelService.getStatus().ifPresent(status ->
                     sendEventUnchecked(emitter, "equipment_status", Map.of(
                             "equipmentType", EquipmentType.FILTER_WHEEL.name(),

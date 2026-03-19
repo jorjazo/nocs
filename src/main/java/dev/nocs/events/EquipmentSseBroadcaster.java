@@ -37,7 +37,7 @@ public class EquipmentSseBroadcaster {
         emitter.onCompletion(() -> emitters.remove(emitter));
         emitter.onTimeout(() -> emitters.remove(emitter));
         emitter.onError(e -> {
-            log.warn("SSE emitter error, removing: {}", e.getMessage());
+            log.debug("SSE emitter closed (client disconnected): {}", e.getMessage());
             emitters.remove(emitter);
         });
         return emitter;
@@ -88,7 +88,7 @@ public class EquipmentSseBroadcaster {
                 emitter.send(SseEmitter.event().name(eventType).data(json));
                 return false;
             } catch (IOException e) {
-                log.debug("Failed to send to emitter: {}", e.getMessage());
+                log.debug("SSE send failed (client disconnected): {}", e.getMessage());
                 return true;
             }
         });

@@ -101,10 +101,16 @@ public class FocuserController {
     @Operation(summary = "Move focuser relative")
     @ApiResponse(responseCode = "204", description = "Move started")
     @ApiResponse(responseCode = "404", description = "No focuser driver loaded")
+    @ApiResponse(responseCode = "409", description = "Focuser not connected")
     @PostMapping("/move")
     public ResponseEntity<Void> moveRelative(@RequestBody MoveRequest request) {
         if (focuserService.getStatus().isEmpty()) {
             return ResponseEntity.notFound().build();
+        }
+        if (focuserService.getDriverStatus()
+                .filter(s -> s.connectionState() == DriverStatus.ConnectionState.CONNECTED)
+                .isEmpty()) {
+            return ResponseEntity.status(409).body(null);
         }
         focuserService.moveRelative(request.steps());
         return ResponseEntity.noContent().build();
@@ -113,10 +119,16 @@ public class FocuserController {
     @Operation(summary = "Move focuser to absolute position")
     @ApiResponse(responseCode = "204", description = "Move started")
     @ApiResponse(responseCode = "404", description = "No focuser driver loaded")
+    @ApiResponse(responseCode = "409", description = "Focuser not connected")
     @PostMapping("/absolute")
     public ResponseEntity<Void> moveAbsolute(@RequestBody AbsoluteRequest request) {
         if (focuserService.getStatus().isEmpty()) {
             return ResponseEntity.notFound().build();
+        }
+        if (focuserService.getDriverStatus()
+                .filter(s -> s.connectionState() == DriverStatus.ConnectionState.CONNECTED)
+                .isEmpty()) {
+            return ResponseEntity.status(409).build();
         }
         focuserService.moveAbsolute(request.position());
         return ResponseEntity.noContent().build();

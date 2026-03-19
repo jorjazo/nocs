@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 
 class ProfileServiceTest {
 
@@ -25,7 +26,10 @@ class ProfileServiceTest {
         repository = new InMemoryProfileRepository();
         opticalTrainRepository = new InMemoryOpticalTrainRepository();
         driverRegistry = new DriverRegistry(List.of());
-        profileLoadService = new ProfileLoadService(repository, driverRegistry);
+        profileLoadService = new ProfileLoadService(
+                repository, driverRegistry,
+                mock(FocuserService.class), mock(MountService.class),
+                mock(CameraService.class), mock(FilterWheelService.class));
         OpticalTrainService opticalTrainService = new OpticalTrainService(opticalTrainRepository);
         profileService = new ProfileService(repository, profileLoadService, opticalTrainService);
     }
