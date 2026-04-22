@@ -1,0 +1,22 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: nocs
+  flyway:
+    enabled: false
+  datasource:
+    url: jdbc:sqlite:file::memory:?cache=shared
+    driver-class-name: org.sqlite.JDBC
+  threads:
+    virtual:
+      enabled: true
+  mvc:
+    async:
+      request-timeout: -1
+
+logging:
+  level:
+    root: INFO
+    dev.nocs: DEBUG
