@@ -116,3 +116,6 @@ release/
 dist-archives/
 nocs-*.tar.gz
 nocs-*.zip
+
+# Local git worktrees (agent / parallel work)
+.worktrees/
