@@ -24,6 +24,7 @@ public class NocsApplication {
         Properties props = new Properties();
         props.setProperty("spring.config.additional-location", "file:" + configFile);
         props.setProperty("nocs.datasource.url", "jdbc:sqlite:file:" + dataDir.resolve("nocs.sqlite"));
+        props.setProperty("nocs.data-dir", dataDir.toString());
 
         SpringApplication app = new SpringApplication(NocsApplication.class);
         app.setDefaultProperties(props);
