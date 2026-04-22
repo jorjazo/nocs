@@ -1,3 +1,6 @@
+import org.gradle.api.tasks.bundling.Compression
+import org.gradle.api.tasks.bundling.Tar
+
 plugins {
     java
     application
@@ -42,4 +45,30 @@ tasks.withType<Test> {
 
 application {
     mainClass.set("dev.nocs.NocsApplication")
+}
+
+runtime {
+    options.set(listOf("--strip-debug", "--compress", "2", "--no-header-files", "--no-man-pages"))
+    modules.set(
+        listOf(
+            "java.base", "java.desktop", "java.instrument", "java.logging",
+            "java.management", "java.naming", "java.net.http", "java.prefs",
+            "java.security.jgss", "java.sql", "java.xml",
+            "jdk.crypto.ec", "jdk.jdi", "jdk.unsupported",
+        ),
+    )
+    imageDir.set(layout.buildDirectory.dir("image").get().asFile)
+    imageZip.set(layout.buildDirectory.file("distributions/nocs-${project.version}-linux-x86_64.zip").get().asFile)
+}
+
+tasks.register<Tar>("runtimeTarGz") {
+    dependsOn("runtime")
+    compression = Compression.GZIP
+    archiveFileName.set("nocs-${project.version}-linux-x86_64.tar.gz")
+    destinationDirectory.set(layout.buildDirectory.dir("distributions"))
+    into("nocs-${project.version}") {
+        from(layout.buildDirectory.dir("image"))
+        filePermissions { unix("755") }
+        dirPermissions { unix("755") }
+    }
 }
