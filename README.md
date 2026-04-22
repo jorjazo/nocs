@@ -64,7 +64,9 @@ On first run NOCS creates its data directory, copies example configs, and prints
 
 ## License
 
-_Not yet chosen._ Until a `LICENSE` file is added at the repo root, all rights are reserved by default.
+NOCS is licensed under the **GNU General Public License v3.0** — see [`LICENSE`](LICENSE).
+
+In short: you can use, study, modify, and redistribute NOCS; any distributed modifications must be released under GPL-3.0 as well, with source code made available. This matches the licensing vibe of the INDI ecosystem that NOCS sits on top of.
 
 ## Contributing
 
