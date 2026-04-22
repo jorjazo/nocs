@@ -1,0 +1,118 @@
+# =============================================================
+# Java / Gradle
+# =============================================================
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+*.class
+*.jar
+*.war
+*.ear
+*.nar
+hs_err_pid*
+replay_pid*
+
+# Gradle user-local files
+gradle-app.setting
+
+# =============================================================
+# Maven (in case any subproject uses it)
+# =============================================================
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+
+# =============================================================
+# Node / Vite / web client
+# =============================================================
+node_modules/
+dist/
+dist-ssr/
+.vite/
+.turbo/
+.next/
+.nuxt/
+.cache/
+coverage/
+*.tsbuildinfo
+
+# =============================================================
+# JetBrains IDEs
+# =============================================================
+.idea/
+*.iml
+*.ipr
+*.iws
+out/
+
+# =============================================================
+# VS Code / Cursor
+# =============================================================
+.vscode/
+*.code-workspace
+
+# =============================================================
+# Eclipse
+# =============================================================
+.classpath
+.project
+.settings/
+bin/
+
+# =============================================================
+# Environment / secrets
+# =============================================================
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+secrets/
+
+# =============================================================
+# NOCS runtime data (never commit user data or generated config)
+# =============================================================
+data/
+data_dir/
+sessions/
+*.sqlite
+*.sqlite-journal
+*.sqlite-shm
+*.sqlite-wal
+config.yaml
+safety.yaml
+!config.example.yaml
+!safety.example.yaml
+
+# =============================================================
+# Logs
+# =============================================================
+*.log
+logs/
+
+# =============================================================
+# OS junk
+# =============================================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# =============================================================
+# Release archives (produced by the build, not checked in)
+# =============================================================
+release/
+dist-archives/
+nocs-*.tar.gz
+nocs-*.zip
