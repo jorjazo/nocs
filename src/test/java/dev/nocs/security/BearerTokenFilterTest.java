@@ -27,7 +27,7 @@ class BearerTokenFilterTest {
     @Test
     void apiRequestsAcceptValidToken() throws Exception {
         mockMvc.perform(get("/api/config").header("Authorization", "Bearer test-token-abc"))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isOk());
     }
 
     @Test
