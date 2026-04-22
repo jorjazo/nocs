@@ -4,6 +4,15 @@ server:
 nocs:
   datasource:
     url: jdbc:sqlite:file::memory:?cache=shared
+  indi:
+    auto-connect: true
+    mode: disabled
+    host: 127.0.0.1
+    port: 7624
+    drivers: []
+    restart:
+      initial-backoff-ms: 500
+      max-backoff-ms: 30000
 
 spring:
   application:

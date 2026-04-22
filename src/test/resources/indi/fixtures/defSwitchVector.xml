@@ -1,0 +1,4 @@
+<defSwitchVector device="Telescope Simulator" name="CONNECTION" label="Connection" group="Main" state="Idle" perm="rw" rule="OneOfMany" timeout="60" timestamp="2026-04-22T10:00:00">
+    <defSwitch name="CONNECT" label="Connect">Off</defSwitch>
+    <defSwitch name="DISCONNECT" label="Disconnect">On</defSwitch>
+</defSwitchVector>

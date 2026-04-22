@@ -1,0 +1,3 @@
+<setNumberVector device="CCD Simulator" name="CCD_EXPOSURE" state="Ok" timestamp="2026-04-22T10:00:05">
+    <oneNumber name="CCD_EXPOSURE_VALUE">0</oneNumber>
+</setNumberVector>

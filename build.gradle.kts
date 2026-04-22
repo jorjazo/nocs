@@ -36,6 +36,7 @@ dependencies {
     testImplementation("io.projectreactor:reactor-test")
     testImplementation("org.springframework:spring-webflux")
     testImplementation("io.projectreactor.netty:reactor-netty-http")
+    testImplementation("org.awaitility:awaitility:4.2.2")
 }
 
 tasks.withType<Test> {

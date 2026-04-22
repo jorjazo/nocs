@@ -7,4 +7,23 @@ nocs:
     host: 0.0.0.0
     port: 8080
 
-# Future sections (Plan B+): devices, safety, observatory, optical_trains.
+  # INDI driver backplane. v0.1 uses INDI under the hood; users never see it.
+  indi:
+    # When true (default), NOCS connects to indiserver on startup. Set false for headless tests.
+    auto-connect: true
+    # managed  = NOCS spawns indiserver with the drivers below
+    # external = NOCS connects to an already-running indiserver on host:port
+    # disabled = do not connect (headless NOCS, no devices)
+    mode: managed
+    host: 127.0.0.1
+    port: 7624
+    drivers:
+      - indi_simulator_telescope
+      - indi_simulator_ccd
+      - indi_simulator_focus
+      - indi_simulator_wheel
+    restart:
+      initial-backoff-ms: 500
+      max-backoff-ms: 30000
+
+# Future sections: safety, observatory, optical_trains.

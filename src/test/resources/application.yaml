@@ -1,0 +1,4 @@
+# Tests must not open a real INDI TCP connection by default (no indiserver in unit tests).
+nocs:
+  indi:
+    auto-connect: false

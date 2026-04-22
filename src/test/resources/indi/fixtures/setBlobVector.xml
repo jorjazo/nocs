@@ -1,0 +1,3 @@
+<setBLOBVector device="CCD Simulator" name="CCD1" state="Ok" timestamp="2026-04-22T10:00:05">
+    <oneBLOB name="CCD1" size="3" format=".fits">AQID</oneBLOB>
+</setBLOBVector>

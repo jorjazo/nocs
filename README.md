@@ -2,7 +2,7 @@
 
 NOCS is a standalone observatory-control server for amateur astrophotography. One install, one web UI, one bearer token — no KStars, no Ekos, no INDI panels to touch.
 
-> **Status:** v0.1 server skeleton (Plan A) is implemented; device and imaging features are not yet present.
+> **Status:** v0.1 server skeleton (Plan A) and abstract device layer + INDI adapter (Plan B) are implemented; targets, imaging sequences, plate solving, and safety are not yet present.
 
 ## Who it's for (v0.1)
 
@@ -76,6 +76,26 @@ To build a self-contained archive (linux-x86_64, with a bundled JDK 25):
 ```
 
 Multi-arch archives (linux-arm64, windows-x86_64) land in a later plan.
+
+## Devices & INDI (Plan B)
+
+NOCS uses INDI as its driver backplane. With `nocs.indi.mode=managed` in `config.yaml`, NOCS launches `indiserver` with the configured drivers (using a dedicated Unix socket path under `/tmp/nocs-indiserver-<port>` so it does not clash with another `indiserver` on the machine). With `mode=external` it only connects to an existing `indiserver` on `host:port`. With `mode=disabled`, no device connection is attempted.
+
+Unit tests set `nocs.indi.auto-connect=false` (see `src/test/resources/application.yaml`) so they never open a real INDI socket. The integration test `IndiSimulatorIntegrationTest` runs when `NOCS_INDI_BIN=1` and `indi-bin` is installed (as in CI).
+
+Example `curl` flow against the default simulator driver list in `config.example.yaml`:
+
+```bash
+TOKEN="<printed token>"
+curl -s -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/devices
+curl -s -X POST -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/devices/telescope-simulator/connect
+curl -s -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+     -d '{"raHours":0.712,"decDegrees":41.269}' http://localhost:8080/api/mounts/telescope-simulator/slew
+curl -s -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+     -d '{"durationSeconds":1.0}' http://localhost:8080/api/cameras/ccd-simulator/expose
+```
+
+Captured FITS blobs are written under `data_dir/captures/tmp/` until Plan D adds `ImageStoreService` and canonical session paths.
 
 ## Install (release archives, when published)
 

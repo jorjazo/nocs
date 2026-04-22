@@ -1,0 +1,3 @@
+<defBLOBVector device="CCD Simulator" name="CCD1" label="Image Data" group="Data" state="Idle" perm="ro" timeout="0" timestamp="2026-04-22T10:00:00">
+    <defBLOB name="CCD1" label="Image"/>
+</defBLOBVector>

@@ -21,7 +21,15 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      - name: Install INDI
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y indi-bin
+          which indiserver indi_simulator_telescope indi_simulator_ccd indi_simulator_focus indi_simulator_wheel
+
       - name: Run tests
+        env:
+          NOCS_INDI_BIN: "1"
         run: ./gradlew --no-daemon check
 
       - name: Build archive
