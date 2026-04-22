@@ -77,13 +77,13 @@ public class TargetService {
 
     public long addCustom(String name, double ra, double dec, String notes) {
         long id = custom.insert(name, ra, dec, TargetKind.CUSTOM, notes);
-        bus.publish(Event.of(Topic.SYSTEM, "target_custom_added", Map.of("id", id, "name", name)));
+        bus.publish(Event.of(Topic.TARGET, "target_custom_added", Map.of("id", id, "name", name)));
         return id;
     }
 
     public boolean deleteCustom(long id) {
         boolean removed = custom.delete(id);
-        if (removed) bus.publish(Event.of(Topic.SYSTEM, "target_custom_deleted", Map.of("id", id)));
+        if (removed) bus.publish(Event.of(Topic.TARGET, "target_custom_deleted", Map.of("id", id)));
         return removed;
     }
 
