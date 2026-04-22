@@ -1,5 +1,6 @@
 package dev.nocs.observatory;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -13,6 +14,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 class V2MigrationTest {
 
     @Autowired JdbcTemplate jdbc;
+
+    @BeforeEach
+    void cleanObservatories() {
+        jdbc.update("DELETE FROM observatories");
+    }
 
     @Test
     void observatoriesTableExists() {
