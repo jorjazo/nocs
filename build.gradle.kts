@@ -31,6 +31,8 @@ dependencies {
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.springframework.security:spring-security-test")
     testImplementation("io.projectreactor:reactor-test")
+    testImplementation("org.springframework:spring-webflux")
+    testImplementation("io.projectreactor.netty:reactor-netty-http")
 }
 
 tasks.withType<Test> {
