@@ -1,0 +1,5 @@
+# test fixture
+# columns: id	primary_name	aliases	kind	ra_j2000_deg	dec_j2000_deg	constellation	magnitude	size_arcmin	notes
+messier:M31	M31	NGC224,Andromeda Galaxy	GALAXY	10.684708	41.268751	And	3.44	189.1x61.7	
+messier:M42	M42	NGC1976,Orion Nebula	NEBULA	83.822083	-5.391111	Ori	4.0	65x60	
+messier:M13	M13	NGC6205,Great Hercules Cluster	CLUSTER_GLOBULAR	250.423458	36.459722	Her	5.8	20	
