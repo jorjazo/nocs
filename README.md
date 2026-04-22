@@ -2,7 +2,7 @@
 
 NOCS is a standalone observatory-control server for amateur astrophotography. One install, one web UI, one bearer token — no KStars, no Ekos, no INDI panels to touch.
 
-> **Status:** v0.1 server skeleton (Plan A) and abstract device layer + INDI adapter (Plan B) are implemented; targets, imaging sequences, plate solving, and safety are not yet present.
+> **Status:** v0.1 server skeleton (Plan A), abstract device layer + INDI adapter (Plan B), and target service + bundled catalogs (Plan C) are implemented; imaging sequences, plate solving, and safety are not yet present.
 
 ## Who it's for (v0.1)
 
@@ -67,6 +67,25 @@ TOKEN="<printed token>"
 curl -s -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/config
 curl -s -H "Authorization: Bearer $TOKEN" "http://localhost:8080/api/events?topics=system"
 ```
+
+### Target picker
+
+With an active observatory row in place, the target API is live:
+
+```bash
+TOKEN="..."  # printed on startup
+curl -sS -H "Authorization: Bearer $TOKEN" -X POST \
+     -H "Content-Type: application/json" \
+     -d '{"name":"Backyard","latitudeDeg":40.0,"longitudeDeg":-74.0,"elevationM":10,"timezone":"America/New_York","horizonMaskJson":"[]"}' \
+     "http://localhost:8080/api/observatories"
+
+curl -sS -H "Authorization: Bearer $TOKEN" "http://localhost:8080/api/targets/search?q=M31"
+curl -sS -H "Authorization: Bearer $TOKEN" "http://localhost:8080/api/targets/planet:jupiter"
+```
+
+The catalog is built-in (Messier, Caldwell, NGC+IC, IAU named stars, solar system). To refresh from upstream, run `./scripts/fetch-catalogs.sh` and commit the outputs.
+
+Set `nocs.targets.online-resolver: true` in your `config.yaml` to fall back to SIMBAD when a name is not in the bundled catalog.
 
 To build a self-contained archive (linux-x86_64, with a bundled JDK 25):
 
