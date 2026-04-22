@@ -42,4 +42,10 @@ class TargetIdTest {
         assertThat(p.catalog()).isEqualTo("custom");
         assertThat(p.designator()).isEqualTo("42");
     }
+
+    @Test
+    void sunAndMoonIdsNeedNoColon() {
+        assertThat(TargetId.parse("sun").catalog()).isEqualTo("sun");
+        assertThat(TargetId.parse("Moon").catalog()).isEqualTo("moon");
+    }
 }

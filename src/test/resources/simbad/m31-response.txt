@@ -1,0 +1,14 @@
+C.D.S.  -  SIMBAD4 rel 1.8  -  2026.04.22CEST13:12:47
+
+M31
+
+Object M 31  ---  G  ---  OID=@2048117   (@@13693,0)  ---  coobox=3571
+
+Coordinates(ICRS,ep=J2000,eq=2000): 00 42 44.3503 +41 16 09.067 (Opt ) E [0.0100 0.0100 90] 2002AAS...30107708I
+
+Flux U : 5.32 [0.14] C
+Flux B : 4.36 [0.02] C
+Flux V : 3.44 [0.02] C
+
+Identifiers (52):
+    M  31                         NGC  224                        UGC   454

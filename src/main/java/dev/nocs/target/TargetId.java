@@ -8,6 +8,13 @@ public final class TargetId {
         if (id == null || id.isBlank()) {
             throw new IllegalArgumentException("target id must not be blank");
         }
+        String trimmed = id.trim();
+        if (trimmed.equalsIgnoreCase("sun")) {
+            return new Parsed("sun", "");
+        }
+        if (trimmed.equalsIgnoreCase("moon")) {
+            return new Parsed("moon", "");
+        }
         int colon = id.indexOf(':');
         if (colon < 1 || colon == id.length() - 1) {
             throw new IllegalArgumentException("target id must be 'catalog:designator', got: " + id);
