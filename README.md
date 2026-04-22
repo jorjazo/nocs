@@ -2,7 +2,7 @@
 
 NOCS is a standalone observatory-control server for amateur astrophotography. One install, one web UI, one bearer token — no KStars, no Ekos, no INDI panels to touch.
 
-> **Status:** pre-implementation. Design spec is complete; code has not yet been written.
+> **Status:** v0.1 server skeleton (Plan A) is implemented; device and imaging features are not yet present.
 
 ## Who it's for (v0.1)
 
@@ -48,19 +48,46 @@ Full design is in [`docs/superpowers/specs/2026-04-21-nocs-v0.1-design.md`](docs
 | Remote access from a browser | X forwarding / VNC / webapps on top | Native: HTTP server, browser client |
 | Scripting | KStars DBus / INDI properties | HTTP REST API from day one |
 
-## Install (planned, not yet available)
+## Developer quickstart (v0.1 skeleton)
+
+Requirements: JDK 25 on `PATH` (or let Gradle's toolchain auto-provision it).
+
+```bash
+./gradlew bootRun
+```
+
+On first run NOCS picks a data directory (`$XDG_DATA_HOME/nocs` on Linux, `%APPDATA%\\nocs` on Windows, or `$NOCS_DATA_DIR` if set), copies `config.example.yaml` into it, generates a bearer token, and prints it.
+
+Then in another terminal:
+
+```bash
+TOKEN="<printed token>"
+curl -s -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/config
+curl -s -H "Authorization: Bearer $TOKEN" "http://localhost:8080/api/events?topics=system"
+```
+
+To build a self-contained archive (linux-x86_64, with a bundled JDK 25):
+
+```bash
+./gradlew runtimeTarGz
+# Output: build/distributions/nocs-<version>-linux-x86_64.tar.gz
+```
+
+Multi-arch archives (linux-arm64, windows-x86_64) land in a later plan.
+
+## Install (release archives, when published)
 
 ```
-# Linux / macOS / Raspberry Pi
-curl -LO https://github.com/jorjazo/nocs/releases/latest/download/nocs-<version>-linux-<arch>.tar.gz
-tar xzf nocs-<version>-linux-<arch>.tar.gz
+# Linux x86_64
+curl -LO https://github.com/jorjazo/nocs/releases/latest/download/nocs-<version>-linux-x86_64.tar.gz
+tar xzf nocs-<version>-linux-x86_64.tar.gz
 cd nocs-<version>
 ./bin/nocs
 ```
 
 No JRE required on the host. No `sudo`. No package manager. The archive contains a bundled JDK 25 runtime.
 
-On first run NOCS creates its data directory, copies example configs, and prints a generated bearer token. Point a browser at `http://<host>:<port>/` and paste the token.
+On first run NOCS creates its data directory, copies example configs, and prints a generated bearer token. Point a browser at `http://<host>:<port>/` and use the token for API calls.
 
 ## License
 
@@ -70,4 +97,4 @@ In short: you can use, study, modify, and redistribute NOCS; any distributed mod
 
 ## Contributing
 
-Too early — there's no code yet. If you have thoughts on the design, open an issue against the design doc.
+Bug reports and design feedback are welcome via issues. See the design spec and plan decomposition under `docs/superpowers/`.
