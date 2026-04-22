@@ -39,6 +39,8 @@ Out of v0.1 (but architecturally reserved): autoguiding, multi-target scheduler,
 
 Full design is in [`docs/superpowers/specs/2026-04-21-nocs-v0.1-design.md`](docs/superpowers/specs/2026-04-21-nocs-v0.1-design.md). Start there if you want to understand how NOCS is put together before any code lands.
 
+The v0.1 work is split into nine implementation plans (A–I); see [`docs/superpowers/plans/2026-04-22-v0.1-plan-decomposition.md`](docs/superpowers/plans/2026-04-22-v0.1-plan-decomposition.md).
+
 ## Comparison with the INDI + Ekos + KStars stack
 
 | Concern | Ekos + INDI + KStars | NOCS v0.1 |
