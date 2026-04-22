@@ -6,8 +6,6 @@ plugins {
     id("org.beryx.runtime") version "2.0.1"
 }
 
-extra["flyway.version"] = "12.4.0"
-
 group = "dev.nocs"
 version = "0.1.0-SNAPSHOT"
 
@@ -28,7 +26,6 @@ dependencies {
     implementation("io.projectreactor:reactor-core")
     implementation("org.xerial:sqlite-jdbc:3.49.1.0")
     implementation("org.flywaydb:flyway-core")
-    implementation("org.flywaydb:flyway-database-nc-sqlite:12.4.0")
     implementation("com.fasterxml.jackson.dataformat:jackson-dataformat-yaml")
 
     testImplementation("org.springframework.boot:spring-boot-starter-test")
@@ -38,6 +35,7 @@ dependencies {
 
 tasks.withType<Test> {
     useJUnitPlatform()
+    environment("NOCS_DATA_DIR", layout.buildDirectory.dir("test-data").get().asFile.absolutePath)
 }
 
 application {

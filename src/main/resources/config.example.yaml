@@ -1,0 +1,10 @@
+# NOCS configuration. Generated on first run. Edit to taste.
+# Bearer token required on every API call: Authorization: Bearer <token>
+nocs:
+  auth:
+    token: GENERATE_ME
+  server:
+    host: 0.0.0.0
+    port: 8080
+
+# Future sections (Plan B+): devices, safety, observatory, optical_trains.
