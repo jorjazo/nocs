@@ -9,12 +9,23 @@ public record NocsProperties(
         Server server,
         Datasource datasource,
         String dataDir,
-        IndiConfig indi) {
+        IndiConfig indi,
+        Targets targets) {
 
     public record Auth(String token) {}
 
     public record Server(String host, Integer port) {}
 
     public record Datasource(String url) {}
-}
 
+    public record Targets(Boolean onlineResolver, String simbadBaseUrl) {
+        public Targets {
+            if (onlineResolver == null) {
+                onlineResolver = false;
+            }
+            if (simbadBaseUrl == null || simbadBaseUrl.isBlank()) {
+                simbadBaseUrl = "https://simbad.u-strasbg.fr/simbad";
+            }
+        }
+    }
+}

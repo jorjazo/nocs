@@ -26,4 +26,14 @@ nocs:
       initial-backoff-ms: 500
       max-backoff-ms: 30000
 
+  # Target picker (Plan C). Flip online-resolver to true to fall back to SIMBAD
+  # when a name is not found in the bundled catalogs.
+  targets:
+    online-resolver: false
+    simbad-base-url: https://simbad.u-strasbg.fr/simbad
+
+  # Observatory defaults are stored in the database (see /api/observatories).
+  # On first run, if no observatory row exists, a placeholder is inserted at
+  # lat=0, lon=0 and flagged active so API calls have a location to use.
+
 # Future sections: safety, observatory, optical_trains.

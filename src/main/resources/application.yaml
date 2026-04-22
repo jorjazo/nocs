@@ -13,6 +13,9 @@ nocs:
     restart:
       initial-backoff-ms: 500
       max-backoff-ms: 30000
+  targets:
+    online-resolver: false
+    simbad-base-url: https://simbad.u-strasbg.fr/simbad
 
 spring:
   application:
