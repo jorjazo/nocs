@@ -22,6 +22,8 @@ gradle-app.setting
 # Maven (in case any subproject uses it)
 # =============================================================
 target/
+!src/main/java/dev/nocs/target/
+!src/main/java/dev/nocs/target/**
 !src/test/java/dev/nocs/target/
 !src/test/java/dev/nocs/target/**
 pom.xml.tag
