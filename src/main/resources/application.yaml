@@ -1,20 +1,26 @@
 server:
   port: 8080
 
+nocs:
+  datasource:
+    url: jdbc:sqlite:file::memory:?cache=shared
+
 spring:
   application:
     name: nocs
-  flyway:
-    enabled: false
-  datasource:
-    url: jdbc:sqlite:file::memory:?cache=shared
-    driver-class-name: org.sqlite.JDBC
   threads:
     virtual:
       enabled: true
   mvc:
     async:
       request-timeout: -1
+  datasource:
+    url: ${nocs.datasource.url}
+    driver-class-name: org.sqlite.JDBC
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
 
 logging:
   level:
