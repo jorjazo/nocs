@@ -2,7 +2,7 @@
 
 NOCS is a standalone observatory-control server for amateur astrophotography. One install, one web UI, one bearer token — no KStars, no Ekos, no INDI panels to touch.
 
-> **Status:** v0.1 server skeleton (Plan A), abstract device layer + INDI adapter (Plan B), and target service + bundled catalogs (Plan C) are implemented; imaging sequences, plate solving, and safety are not yet present.
+> **Status:** v0.1 server skeleton (Plan A), abstract device layer + INDI adapter (Plan B), target service + bundled catalogs (Plan C), and **ImageStoreService** with `/api/images/*` (Plan D) are implemented; imaging sequences, plate solving, and safety are not yet present.
 
 ## Who it's for (v0.1)
 
@@ -83,6 +83,28 @@ curl -sS -H "Authorization: Bearer $TOKEN" "http://localhost:8080/api/targets/se
 curl -sS -H "Authorization: Bearer $TOKEN" "http://localhost:8080/api/targets/planet:jupiter"
 ```
 
+### Captures & thumbnails (Plan D)
+
+After triggering an exposure on a connected camera (real driver or `indi_simulator_ccd`):
+
+```bash
+TOKEN="<printed token>"
+curl -s -H "Authorization: Bearer $TOKEN" \
+     -H 'Content-Type: application/json' \
+     -d '{"durationSeconds":30,"filter":"L","target":"M31","step":"L_30s","seq":1}' \
+     http://localhost:8080/api/cameras/<camera-id>/expose
+
+curl -s -H "Authorization: Bearer $TOKEN" \
+     "http://localhost:8080/api/images?device=<camera-id>"
+
+# The response includes the new image id; download the FITS and the thumbnail:
+ID=<id-from-list>
+curl -s -H "Authorization: Bearer $TOKEN" \
+     -o capture.fits "http://localhost:8080/api/images/$ID.fits"
+curl -s -H "Authorization: Bearer $TOKEN" \
+     -o capture.thumb.jpg "http://localhost:8080/api/images/$ID/thumb.jpg"
+```
+
 The catalog is built-in (Messier, Caldwell, NGC+IC, IAU named stars, solar system). To refresh from upstream, run `./scripts/fetch-catalogs.sh` and commit the outputs.
 
 Set `nocs.targets.online-resolver: true` in your `config.yaml` to fall back to SIMBAD when a name is not in the bundled catalog.
@@ -114,7 +136,7 @@ curl -s -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/
      -d '{"durationSeconds":1.0}' http://localhost:8080/api/cameras/ccd-simulator/expose
 ```
 
-Captured FITS blobs are written under `data_dir/captures/tmp/` until Plan D adds `ImageStoreService` and canonical session paths.
+Captured FITS blobs are written under `data_dir/sessions/<date>/<target>/` with thumbnails alongside, and indexed in the SQLite `images` table (see `GET /api/images`).
 
 ## Install (release archives, when published)
 

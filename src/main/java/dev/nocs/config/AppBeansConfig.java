@@ -2,8 +2,8 @@ package dev.nocs.config;
 
 import dev.nocs.device.CameraImageSink;
 import dev.nocs.device.DeviceService;
-import dev.nocs.device.TempDirCameraImageSink;
 import dev.nocs.events.EventBus;
+import dev.nocs.image.ImageStoreService;
 import dev.nocs.indi.IndiClient;
 import dev.nocs.indi.IndiConfig;
 import dev.nocs.indi.IndiServerSupervisor;
@@ -13,7 +13,6 @@ import dev.nocs.target.catalog.CatalogLoader;
 import dev.nocs.target.catalog.InMemoryTargetIndex;
 import dev.nocs.target.catalog.SolarSystemCatalog;
 import java.io.IOException;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import org.springframework.context.annotation.Bean;
@@ -28,9 +27,8 @@ public class AppBeansConfig {
     }
 
     @Bean
-    CameraImageSink cameraImageSink(NocsProperties props, EventBus bus) {
-        String dataDir = props.dataDir() != null ? props.dataDir() : System.getProperty("java.io.tmpdir");
-        return new TempDirCameraImageSink(Path.of(dataDir), bus);
+    CameraImageSink cameraImageSink(ImageStoreService imageStore) {
+        return imageStore::accept;
     }
 
     @Bean
