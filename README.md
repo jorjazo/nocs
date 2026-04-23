@@ -2,7 +2,7 @@
 
 NOCS is a standalone observatory-control server for amateur astrophotography. One install, one web UI, one bearer token — no KStars, no Ekos, no INDI panels to touch.
 
-> **Status:** v0.1 server skeleton (Plan A), abstract device layer + INDI adapter (Plan B), target service + bundled catalogs (Plan C), **ImageStoreService** with `/api/images/*` (Plan D), and **SafetyService** with YAML rules and `/api/safety/*` (Plan F) are implemented; plate solving, imaging sequences, and the web client are not yet present.
+> **Status:** v0.1 server skeleton (Plan A), abstract device layer + INDI adapter (Plan B), target service + bundled catalogs (Plan C), **ImageStoreService** with `/api/images/*` (Plan D), **plate solving + optional ASTAP fetch-install** (Plan E), and **SafetyService** with YAML rules and `/api/safety/*` (Plan F) are implemented; imaging sequences and the web client are not yet present.
 
 ## Who it's for (v0.1)
 
@@ -103,6 +103,39 @@ curl -s -H "Authorization: Bearer $TOKEN" \
      -o capture.fits "http://localhost:8080/api/images/$ID.fits"
 curl -s -H "Authorization: Bearer $TOKEN" \
      -o capture.thumb.jpg "http://localhost:8080/api/images/$ID/thumb.jpg"
+```
+
+### Plate solving (Plan E)
+
+After saving an image via `/api/cameras/{id}/expose`, plate-solve it. The default `nocs.platesolving.solver=astap` requires an installed ASTAP CLI + H18 star DB. If you already have ASTAP, point the config at it; otherwise opt in to the bundled fetch-and-install:
+
+```bash
+TOKEN="<printed token>"
+
+# Check whether ASTAP is detected on this machine:
+curl -s -H "Authorization: Bearer $TOKEN" \
+     http://localhost:8080/api/platesolving/install
+
+# Opt in (one-time): edit data_dir/config.yaml to set
+#   nocs.platesolving.install.allow-network: true
+#   nocs.platesolving.install.binary-url-template: <pinned URL>
+#   nocs.platesolving.install.binary-sha256.<your-platform>: <pinned hex>
+#   nocs.platesolving.install.db-url: <pinned URL>
+#   nocs.platesolving.install.db-sha256: <pinned hex>
+# Restart NOCS, then:
+curl -s -X POST -H "Authorization: Bearer $TOKEN" \
+     -H 'Content-Type: application/json' \
+     -d '{"acceptLicense": true}' \
+     http://localhost:8080/api/platesolving/install
+
+curl -s -H "Authorization: Bearer $TOKEN" \
+     http://localhost:8080/api/platesolving/install/progress
+
+# Solve a saved image:
+curl -s -X POST -H "Authorization: Bearer $TOKEN" \
+     -H 'Content-Type: application/json' \
+     -d '{"image_id": 42}' \
+     http://localhost:8080/api/platesolving/solve
 ```
 
 ### Safety (Plan F)
