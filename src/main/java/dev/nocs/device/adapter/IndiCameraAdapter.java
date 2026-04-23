@@ -11,6 +11,7 @@ import dev.nocs.events.EventBus;
 import dev.nocs.events.Topic;
 import dev.nocs.indi.IndiClient;
 import dev.nocs.indi.IndiProperty;
+import dev.nocs.safety.DeviceEStoppedException;
 import java.io.IOException;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
@@ -88,6 +89,7 @@ public class IndiCameraAdapter implements Camera {
 
     @Override
     public void cool(double setpointCelsius) {
+        assertNotEStopped();
         try {
             client.setSwitch(indiName, "CCD_COOLER", Map.of("COOLER_ON", true, "COOLER_OFF", false));
             client.setNumber(indiName, "CCD_TEMPERATURE", Map.of("CCD_TEMPERATURE_VALUE", setpointCelsius));
@@ -98,6 +100,7 @@ public class IndiCameraAdapter implements Camera {
 
     @Override
     public void expose(double durationSeconds) {
+        assertNotEStopped();
         try {
             client.setNumber(indiName, "CCD_EXPOSURE", Map.of("CCD_EXPOSURE_VALUE", durationSeconds));
         } catch (IOException e) {
@@ -107,6 +110,7 @@ public class IndiCameraAdapter implements Camera {
 
     @Override
     public void abortExposure() {
+        assertNotEStopped();
         try {
             client.setSwitch(indiName, "CCD_ABORT_EXPOSURE", Map.of("ABORT", true));
         } catch (IOException e) {
@@ -114,9 +118,29 @@ public class IndiCameraAdapter implements Camera {
         }
     }
 
+    @Override
+    public void emergencyStop() {
+        try {
+            client.setSwitch(indiName, "CCD_ABORT_EXPOSURE", Map.of("ABORT", true));
+        } catch (IOException ignored) {
+            // best-effort: still transition to E_STOPPED so commands are blocked
+        }
+        transition(CameraState.E_STOPPED);
+    }
+
+    @Override
+    public void resetEStop() {
+        if (state.get() == CameraState.E_STOPPED) {
+            transition(CameraState.IDLE);
+        }
+    }
+
     public void onProperty(IndiProperty p) {
         if (!p.device().equals(indiName)) {
             return;
+        }
+        if (state.get() == CameraState.E_STOPPED) {
+            return; // ignore property updates while latched in E_STOPPED
         }
         CameraState next = state.get();
         if (p instanceof IndiProperty.SwitchVector sw && sw.name().equals("CONNECTION")) {
@@ -147,12 +171,24 @@ public class IndiCameraAdapter implements Camera {
     }
 
     public void onBlob(byte[] bytes, String format) {
+        if (state.get() == CameraState.E_STOPPED) {
+            // spec §6.3: a partial download that completes is still saved with e_stopped:true.
+            // Plan D will add the FITS header flag; for now we keep the bytes via the sink.
+            sink.accept(id, bytes, format == null ? ".fits" : format);
+            return;
+        }
         CameraState prev = state.getAndSet(CameraState.DOWNLOADING);
         if (prev != CameraState.DOWNLOADING) {
             publishStateEvent(prev, CameraState.DOWNLOADING);
         }
         sink.accept(id, bytes, format == null ? ".fits" : format);
         transition(CameraState.IDLE);
+    }
+
+    private void assertNotEStopped() {
+        if (state.get() == CameraState.E_STOPPED) {
+            throw new DeviceEStoppedException(id.value());
+        }
     }
 
     private void transition(CameraState next) {

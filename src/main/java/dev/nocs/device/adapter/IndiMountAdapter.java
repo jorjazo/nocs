@@ -10,6 +10,7 @@ import dev.nocs.events.EventBus;
 import dev.nocs.events.Topic;
 import dev.nocs.indi.IndiClient;
 import dev.nocs.indi.IndiProperty;
+import dev.nocs.safety.DeviceEStoppedException;
 import java.io.IOException;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
@@ -74,6 +75,7 @@ public class IndiMountAdapter implements Mount {
 
     @Override
     public void slew(double raHours, double decDegrees) {
+        assertNotEStopped();
         try {
             client.setSwitch(indiName, "ON_COORD_SET", Map.of("SLEW", true, "TRACK", false, "SYNC", false));
             client.setNumber(indiName, "EQUATORIAL_EOD_COORD", Map.of("RA", raHours, "DEC", decDegrees));
@@ -84,6 +86,7 @@ public class IndiMountAdapter implements Mount {
 
     @Override
     public void syncTo(double raHours, double decDegrees) {
+        assertNotEStopped();
         try {
             client.setSwitch(indiName, "ON_COORD_SET", Map.of("SLEW", false, "TRACK", false, "SYNC", true));
             client.setNumber(indiName, "EQUATORIAL_EOD_COORD", Map.of("RA", raHours, "DEC", decDegrees));
@@ -94,6 +97,7 @@ public class IndiMountAdapter implements Mount {
 
     @Override
     public void park() {
+        assertNotEStopped();
         try {
             client.setSwitch(indiName, "TELESCOPE_PARK", Map.of("PARK", true, "UNPARK", false));
         } catch (IOException e) {
@@ -103,6 +107,7 @@ public class IndiMountAdapter implements Mount {
 
     @Override
     public void unpark() {
+        assertNotEStopped();
         try {
             client.setSwitch(indiName, "TELESCOPE_PARK", Map.of("PARK", false, "UNPARK", true));
         } catch (IOException e) {
@@ -112,6 +117,7 @@ public class IndiMountAdapter implements Mount {
 
     @Override
     public void abort() {
+        // Abort is allowed even while E_STOPPED — it is the safe direction.
         try {
             client.setSwitch(indiName, "TELESCOPE_ABORT_MOTION", Map.of("ABORT", true));
         } catch (IOException e) {
@@ -119,9 +125,30 @@ public class IndiMountAdapter implements Mount {
         }
     }
 
+    @Override
+    public void emergencyStop() {
+        try {
+            client.setSwitch(indiName, "TELESCOPE_ABORT_MOTION", Map.of("ABORT", true));
+            client.setSwitch(indiName, "TELESCOPE_PARK", Map.of("PARK", true, "UNPARK", false));
+        } catch (IOException ignored) {
+            // best-effort: still transition to E_STOPPED so commands are blocked
+        }
+        transition(MountState.E_STOPPED);
+    }
+
+    @Override
+    public void resetEStop() {
+        if (state.get() == MountState.E_STOPPED) {
+            transition(MountState.IDLE);
+        }
+    }
+
     public void onProperty(IndiProperty p) {
         if (!p.device().equals(indiName)) {
             return;
+        }
+        if (state.get() == MountState.E_STOPPED) {
+            return; // ignore property updates while latched in E_STOPPED
         }
         MountState next = state.get();
         if (p instanceof IndiProperty.SwitchVector sw) {
@@ -146,6 +173,12 @@ public class IndiMountAdapter implements Mount {
             };
         }
         transition(next);
+    }
+
+    private void assertNotEStopped() {
+        if (state.get() == MountState.E_STOPPED) {
+            throw new DeviceEStoppedException(id.value());
+        }
     }
 
     private void transition(MountState next) {
