@@ -129,7 +129,7 @@ class IndiSimulatorIntegrationTest {
         Awaitility.await().atMost(Duration.ofSeconds(45)).untilAsserted(() -> {
             long mountStates = seen.stream().filter(e -> e.topic() == Topic.MOUNT).count();
             long cameraImages =
-                    seen.stream().filter(e -> e.topic() == Topic.CAMERA && "image_received".equals(e.type()))
+                    seen.stream().filter(e -> e.topic() == Topic.CAMERA && "image_saved".equals(e.type()))
                             .count();
             long wheelStates = seen.stream().filter(e -> e.topic() == Topic.FILTERWHEEL).count();
             long focuserStates = seen.stream().filter(e -> e.topic() == Topic.FOCUSER).count();
