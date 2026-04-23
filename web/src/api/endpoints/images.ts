@@ -1,4 +1,4 @@
-import { apiFetch } from "../client";
+import { apiBlob, apiFetch } from "../client";
 import type { ImageView } from "../types";
 
 export interface ImageListFilters {
@@ -21,4 +21,17 @@ function qs(filters: ImageListFilters): string {
 
 export const imagesApi = {
   list: (filters: ImageListFilters = {}) => apiFetch<ImageView[]>(`/api/images${qs(filters)}`),
+  get: (id: number) => apiFetch<ImageView>(`/api/images/${id}`),
+  delete: (id: number) => apiFetch<void>(`/api/images/${id}`, { method: "DELETE" }),
+  downloadFits: async (id: number, filename: string) => {
+    const blob = await apiBlob(`/api/images/${id}.fits`);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  },
 };
