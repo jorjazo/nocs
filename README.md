@@ -2,7 +2,7 @@
 
 NOCS is a standalone observatory-control server for amateur astrophotography. One install, one web UI, one bearer token — no KStars, no Ekos, no INDI panels to touch.
 
-> **Status:** v0.1 server skeleton (Plan A), abstract device layer + INDI adapter (Plan B), target service + bundled catalogs (Plan C), **ImageStoreService** with `/api/images/*` (Plan D), **plate solving + optional ASTAP fetch-install** (Plan E), and **SafetyService** with YAML rules and `/api/safety/*` (Plan F) are implemented; imaging sequences and the web client are not yet present.
+> **Status:** v0.1 server skeleton (Plan A), abstract device layer + INDI adapter (Plan B), target service + bundled catalogs (Plan C), **ImageStoreService** with `/api/images/*` (Plan D), **plate solving + optional ASTAP fetch-install** (Plan E), **SafetyService** with YAML rules and `/api/safety/*` (Plan F), and a **bundled React web client** (Plan H) are implemented; see the plan decomposition for any remaining G/H follow-ups.
 
 ## Who it's for (v0.1)
 
@@ -67,6 +67,44 @@ TOKEN="<printed token>"
 curl -s -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/config
 curl -s -H "Authorization: Bearer $TOKEN" "http://localhost:8080/api/events?topics=system"
 ```
+
+## Web client
+
+The React + Vite + TypeScript SPA lives in `web/` and is served by the Spring app from `classpath:/static/`.
+
+### Dev loop
+
+In one terminal, run the backend:
+
+```bash
+./gradlew bootRun
+```
+
+In another, start Vite with HMR:
+
+```bash
+cd web && npm run dev
+```
+
+Vite listens on `http://localhost:5173` and proxies `/api/*` (REST + SSE) to `http://localhost:8080`.
+The bearer token is whatever was generated on first run; paste it into the login panel.
+
+### Build
+
+`./gradlew bootJar` (or `runtimeDist`) automatically runs:
+
+1. `npmCiWeb` — `npm ci` in `web/`
+2. `npmBuildWeb` — `vite build` → `web/dist/`
+3. `syncWebDist` — copies `web/dist/` into `build/generated/nocs-spa/static/`
+
+The result is bundled inside the Spring boot jar (and therefore inside the jlink archive).
+
+### Tests / lint / format
+
+`./gradlew check` runs:
+
+- Java: JUnit + MockMvc
+- Web: `npm run test`, `npm run lint`, `npm run format:check`
 
 ### Target picker
 

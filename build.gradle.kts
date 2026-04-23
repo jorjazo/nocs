@@ -302,6 +302,17 @@ tasks.register("verifyArchiveSize") {
                 String.format("%s exceeds 150 MB envelope (%.1f MB)", f.name, sizeMb),
             )
         }
+        val webDir = layout.buildDirectory.dir("generated/nocs-spa/static").get().asFile
+        if (webDir.exists()) {
+            val webBytes = webDir.walkTopDown().filter { it.isFile }.sumOf { it.length() }
+            val webMb = webBytes.toDouble() / (1024.0 * 1024.0)
+            logger.lifecycle(String.format("%-50s %6.1f MB (web/dist)", "web bundle", webMb))
+            if (webBytes > 8L * 1024 * 1024) {
+                logger.warn(
+                    "Web bundle exceeds 8 MB — investigate Vite build output (vite-bundle-visualizer).",
+                )
+            }
+        }
     }
 }
 
