@@ -10,6 +10,10 @@ export default mergeConfig(
       setupFiles: "./src/test/setup.ts",
       css: false,
       include: ["src/**/*.{test,spec}.{ts,tsx}"],
+      reporters: ["default", "junit"],
+      outputFile: {
+        junit: "./test-results/junit.xml",
+      },
     },
   }),
 );
