@@ -5,17 +5,21 @@ import dev.nocs.device.DeviceId;
 import dev.nocs.events.Event;
 import dev.nocs.events.EventBus;
 import dev.nocs.events.Topic;
+import dev.nocs.platesolving.PlateSolutionRecord;
+import dev.nocs.platesolving.PlateSolutionRepository;
 import dev.nocs.session.Session;
 import dev.nocs.session.SessionService;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.SequencedMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -32,19 +36,22 @@ public class ImageStoreService {
     private final PendingCaptures pending = new PendingCaptures();
     private final Path dataDir;
     private final ObjectProvider<SessionService> sessionService;
+    private final PlateSolutionRepository plateSolutions;
 
     public ImageStoreService(
             ImageRepository repo,
             EventBus bus,
             ThumbnailGenerator thumbnails,
             NocsProperties props,
-            ObjectProvider<SessionService> sessionService) {
+            ObjectProvider<SessionService> sessionService,
+            PlateSolutionRepository plateSolutions) {
         this.repo = repo;
         this.bus = bus;
         this.thumbnails = thumbnails;
         String dir = props.dataDir() != null ? props.dataDir() : System.getProperty("java.io.tmpdir");
         this.dataDir = Path.of(dir);
         this.sessionService = sessionService;
+        this.plateSolutions = plateSolutions;
     }
 
     public void prepareCapture(DeviceId camera, CaptureContext ctx) {
@@ -146,12 +153,76 @@ public class ImageStoreService {
         return repo.delete(id);
     }
 
+    public Optional<byte[]> loadFits(long id) {
+        return find(id).flatMap(rec -> {
+            try {
+                return Optional.of(Files.readAllBytes(Path.of(rec.fitsPath())));
+            } catch (IOException e) {
+                log.warn("loadFits failed for id {}: {}", id, e.getMessage());
+                return Optional.empty();
+            }
+        });
+    }
+
     /**
-     * Stub for Plan E: plate solver will amend the saved FITS header (RA/Dec/scale/rotation) and
-     * re-derive width/height/dateObs in the row. v0.1 (Plan D) does not implement amendment.
+     * Rewrites the saved FITS header with {@code additionalCards}, persisting the bytes
+     * atomically and refreshing the {@code images.bytes} count. When the additions look
+     * like a WCS solution (presence of {@code CRVAL1} + {@code CRVAL2}), upserts a
+     * {@link PlateSolutionRecord} for the image. Returns true when the row was updated.
      */
-    public void amendHeader(long id, Map<String, String> additionalCards) {
-        log.debug("amendHeader stub called for id={} (cards={}), no-op in Plan D", id, additionalCards);
+    public boolean amendHeader(long id, SequencedMap<String, String> additionalCards) {
+        Optional<ImageRecord> existing = repo.findById(id);
+        if (existing.isEmpty()) {
+            return false;
+        }
+        ImageRecord rec = existing.get();
+        Path path = Path.of(rec.fitsPath());
+        byte[] original;
+        try {
+            original = Files.readAllBytes(path);
+        } catch (IOException e) {
+            log.error("amendHeader cannot read {}: {}", path, e.getMessage());
+            return false;
+        }
+        byte[] amended = FitsHeaderWriter.writeWithCards(original, additionalCards);
+        try {
+            Path tmp = path.resolveSibling(path.getFileName() + ".amend");
+            Files.write(tmp, amended);
+            Files.move(tmp, path, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException e) {
+            log.error("amendHeader cannot write {}: {}", path, e.getMessage());
+            return false;
+        }
+        repo.updateBytes(id, amended.length);
+
+        if (additionalCards != null
+                && additionalCards.containsKey("CRVAL1")
+                && additionalCards.containsKey("CRVAL2")) {
+            try {
+                double ra = Double.parseDouble(additionalCards.get("CRVAL1").trim());
+                double dec = Double.parseDouble(additionalCards.get("CRVAL2").trim());
+                double pixelScale = additionalCards.containsKey("CDELT2")
+                        ? Math.abs(Double.parseDouble(additionalCards.get("CDELT2").trim())) * 3600.0
+                        : 0.0;
+                double rot = additionalCards.containsKey("CROTA2")
+                        ? Double.parseDouble(additionalCards.get("CROTA2").trim())
+                        : 0.0;
+                double fovW = additionalCards.containsKey("FOVWIDTH")
+                        ? Double.parseDouble(additionalCards.get("FOVWIDTH").trim())
+                        : 0.0;
+                double fovH = additionalCards.containsKey("FOVHIGHT")
+                        ? Double.parseDouble(additionalCards.get("FOVHIGHT").trim())
+                        : 0.0;
+                String solver = additionalCards.containsKey("PLATESLV")
+                        ? additionalCards.get("PLATESLV").replace("'", "").trim()
+                        : "unknown";
+                plateSolutions.upsert(PlateSolutionRecord.forInsert(
+                        id, ra, dec, pixelScale, rot, fovW, fovH, 0L, solver, Instant.now()));
+            } catch (NumberFormatException e) {
+                log.warn("amendHeader: WCS cards present but un-parseable for id {}: {}", id, e.getMessage());
+            }
+        }
+        return true;
     }
 
     private static boolean isFits(String extension) {

@@ -104,6 +104,10 @@ public class ImageRepository {
         return jdbc.update("DELETE FROM images WHERE id = ?", id) > 0;
     }
 
+    public int updateBytes(long id, long bytes) {
+        return jdbc.update("UPDATE images SET bytes = ? WHERE id = ?", bytes, id);
+    }
+
     private static void setNullableInt(java.sql.PreparedStatement ps, int idx, Integer value) throws SQLException {
         if (value == null) {
             ps.setNull(idx, java.sql.Types.INTEGER);

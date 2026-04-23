@@ -32,7 +32,7 @@ public record PlateSolution(
 
     /**
      * FITS WCS-style header cards. Inserted into the saved FITS via
-     * {@link dev.nocs.image.ImageStoreService#amendHeader(long, java.util.Map)}.
+     * {@link dev.nocs.image.ImageStoreService#amendHeader(long, java.util.SequencedMap)}.
      * Insertion order is preserved by {@link SequencedMap}.
      */
     public SequencedMap<String, String> toFitsCards() {
