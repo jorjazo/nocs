@@ -3,18 +3,22 @@ import { render, screen } from "@testing-library/react";
 import App from "./App";
 import { clearToken, setToken } from "./api/token";
 
-describe("App", () => {
-  beforeEach(() => clearToken());
+describe("App shell", () => {
+  beforeEach(() => {
+    clearToken();
+  });
   afterEach(() => clearToken());
 
-  it("shows the login panel before a token is set", () => {
+  it("renders the login panel without a token", () => {
     render(<App />);
     expect(screen.getByLabelText(/Bearer token/i)).toBeInTheDocument();
   });
 
-  it("renders the bootstrap message after a token is set", () => {
-    setToken("dev-token");
+  it("renders the navigation once a token is set", () => {
+    setToken("dev");
     render(<App />);
-    expect(screen.getByText(/web client bootstrap/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Dashboard/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Sequences/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Safety/i })).toBeInTheDocument();
   });
 });
