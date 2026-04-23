@@ -37,6 +37,10 @@ dependency-reduced-pom.xml
 # Node / Vite / web client
 # =============================================================
 node_modules/
+web/node_modules/
+web/dist/
+build/generated-resources/
+build/generated/nocs-spa/
 dist/
 dist-ssr/
 .vite/

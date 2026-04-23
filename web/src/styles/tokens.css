@@ -1,0 +1,21 @@
+:root {
+  --color-bg: #0b1220;
+  --color-surface: #131b2c;
+  --color-surface-2: #1a2440;
+  --color-border: #25324f;
+  --color-text: #e6edf7;
+  --color-text-muted: #8b98b3;
+  --color-accent: #5fb4ff;
+  --color-success: #5cdaa6;
+  --color-warning: #f1c14d;
+  --color-danger: #ff6b6b;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --radius: 6px;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-body: system-ui, -apple-system, sans-serif;
+}

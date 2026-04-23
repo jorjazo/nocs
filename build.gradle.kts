@@ -8,6 +8,7 @@ plugins {
     id("org.springframework.boot") version "3.5.3"
     id("io.spring.dependency-management") version "1.1.6"
     id("org.beryx.runtime") version "2.0.1"
+    id("com.github.node-gradle.node") version "7.1.0"
 }
 
 group = "dev.nocs"
@@ -302,4 +303,94 @@ tasks.register("verifyArchiveSize") {
             )
         }
     }
+}
+
+// --- Web client (Vite + React) — see docs/superpowers/plans/2026-04-23-nocs-web-client.md (Task 1)
+node {
+    version.set("22.12.0")
+    npmVersion.set("10.9.0")
+    download.set(true)
+    workDir.set(layout.buildDirectory.dir("nodejs"))
+    npmWorkDir.set(layout.buildDirectory.dir("npm"))
+    nodeProjectDir.set(file("web"))
+}
+
+// Vite output must land under `static/` so ResourceHttpRequestHandler maps `classpath:/static/`.
+val webSpaResourceRoot = layout.buildDirectory.dir("generated/nocs-spa")
+
+val npmCiWeb =
+    tasks.register<com.github.gradle.node.npm.task.NpmTask>("npmCiWeb") {
+        group = "web"
+        description = "Install web/ npm dependencies for CI builds."
+        dependsOn(tasks.named("nodeSetup"))
+        args.set(listOf("ci", "--no-audit", "--no-fund"))
+        inputs.file("web/package.json")
+        inputs.file("web/package-lock.json")
+        outputs.dir("web/node_modules")
+    }
+
+val npmBuildWeb =
+    tasks.register<com.github.gradle.node.npm.task.NpmTask>("npmBuildWeb") {
+        group = "web"
+        description = "Run vite build to produce web/dist."
+        dependsOn(npmCiWeb)
+        args.set(listOf("run", "build"))
+        inputs.dir("web/src")
+        inputs.dir("web/public")
+        inputs.file("web/index.html")
+        inputs.file("web/package.json")
+        inputs.file("web/package-lock.json")
+        inputs.file("web/tsconfig.json")
+        inputs.file("web/vite.config.ts")
+        outputs.dir("web/dist")
+    }
+
+val syncWebDist =
+    tasks.register<Sync>("syncWebDist") {
+        group = "web"
+        description = "Copy web/dist into generated/nocs-spa/static for classpath:/static/."
+        dependsOn(npmBuildWeb)
+        from("web/dist")
+        into(webSpaResourceRoot.map { it.dir("static") })
+    }
+
+sourceSets.named("main") {
+    resources.srcDir(webSpaResourceRoot)
+}
+
+tasks.named("processResources") {
+    dependsOn(syncWebDist)
+}
+
+val npmTestWeb =
+    tasks.register<com.github.gradle.node.npm.task.NpmTask>("npmTestWeb") {
+        group = "verification"
+        description = "Run web/ Vitest suite."
+        dependsOn(npmCiWeb)
+        args.set(listOf("test"))
+        inputs.dir("web/src")
+    }
+
+val npmLintWeb =
+    tasks.register<com.github.gradle.node.npm.task.NpmTask>("npmLintWeb") {
+        group = "verification"
+        description = "Run web/ ESLint."
+        dependsOn(npmCiWeb)
+        args.set(listOf("run", "lint"))
+        inputs.dir("web/src")
+        inputs.file("web/eslint.config.mjs")
+    }
+
+val npmFormatCheckWeb =
+    tasks.register<com.github.gradle.node.npm.task.NpmTask>("npmFormatCheckWeb") {
+        group = "verification"
+        description = "Run web/ Prettier in --check mode."
+        dependsOn(npmCiWeb)
+        args.set(listOf("run", "format:check"))
+        inputs.dir("web/src")
+        inputs.file("web/.prettierrc.json")
+    }
+
+tasks.named("check") {
+    dependsOn(npmTestWeb, npmLintWeb, npmFormatCheckWeb)
 }
