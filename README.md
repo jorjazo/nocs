@@ -126,14 +126,21 @@ The catalog is built-in (Messier, Caldwell, NGC+IC, IAU named stars, solar syste
 
 Set `nocs.targets.online-resolver: true` in your `config.yaml` to fall back to SIMBAD when a name is not in the bundled catalog.
 
-To build a self-contained archive (linux-x86_64, with a bundled JDK 25):
+To build a self-contained archive for **this machine’s** OS/arch (bundled JDK 25 via `jlink`):
 
 ```bash
-./gradlew runtimeTarGz
-# Output: build/distributions/nocs-<version>-linux-x86_64.tar.gz
+./gradlew runtimeDist verifyArchiveSize
+# e.g. build/distributions/nocs-<version>-linux-x86_64.tar.gz on Linux x86_64
 ```
 
-Multi-arch archives (linux-arm64, windows-x86_64) land in a later plan.
+Other platforms use the same Gradle targets on a **matching** host, or set an explicit target (must match the runner — foreign targets are not cross-linked from one OS):
+
+```bash
+./gradlew -Pnocs.packaging.target=linux-arm64 runtimeDist verifyArchiveSize
+./gradlew -Pnocs.packaging.target=windows-x86_64 runtimeDist verifyArchiveSize
+```
+
+CI builds all three archives on native `ubuntu-latest`, `ubuntu-24.04-arm64`, and `windows-latest` jobs.
 
 ## Devices & INDI (Plan B)
 
@@ -155,19 +162,54 @@ curl -s -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/
 
 Captured FITS blobs are written under `data_dir/sessions/<date>/<target>/` with thumbnails alongside, and indexed in the SQLite `images` table (see `GET /api/images`).
 
-## Install (release archives, when published)
+## Install (release archives)
 
-```
-# Linux x86_64
-curl -LO https://github.com/jorjazo/nocs/releases/latest/download/nocs-<version>-linux-x86_64.tar.gz
-tar xzf nocs-<version>-linux-x86_64.tar.gz
-cd nocs-<version>
+Each release publishes three self-contained archives. Pick the one for your machine, unpack it, and run the launcher — no system JDK, no `sudo`, no package manager.
+
+### Linux x86_64
+
+```bash
+VERSION=0.1.0    # replace with the release tag without the leading "v"
+curl -LO https://github.com/jorjazo/nocs/releases/download/v${VERSION}/nocs-${VERSION}-linux-x86_64.tar.gz
+tar xzf nocs-${VERSION}-linux-x86_64.tar.gz
+cd nocs-${VERSION}
 ./bin/nocs
 ```
 
-No JRE required on the host. No `sudo`. No package manager. The archive contains a bundled JDK 25 runtime.
+### Linux arm64 (Raspberry Pi 4 / 5)
 
-On first run NOCS creates its data directory, copies example configs, and prints a generated bearer token. Point a browser at `http://<host>:<port>/` and use the token for API calls.
+```bash
+VERSION=0.1.0
+curl -LO https://github.com/jorjazo/nocs/releases/download/v${VERSION}/nocs-${VERSION}-linux-arm64.tar.gz
+tar xzf nocs-${VERSION}-linux-arm64.tar.gz
+cd nocs-${VERSION}
+./bin/nocs
+```
+
+### Windows x86_64
+
+In PowerShell:
+
+```powershell
+$VERSION = "0.1.0"
+Invoke-WebRequest "https://github.com/jorjazo/nocs/releases/download/v$VERSION/nocs-$VERSION-windows-x86_64.zip" -OutFile "nocs.zip"
+Expand-Archive nocs.zip -DestinationPath .
+cd "nocs-$VERSION"
+.\bin\nocs.bat
+```
+
+### Verify your download
+
+Each release ships a `SHA256SUMS.txt`:
+
+```bash
+curl -LO https://github.com/jorjazo/nocs/releases/download/v${VERSION}/SHA256SUMS.txt
+sha256sum -c SHA256SUMS.txt --ignore-missing
+```
+
+On Windows, use `Get-FileHash <archive> -Algorithm SHA256` and compare to the matching line in `SHA256SUMS.txt`.
+
+The archive contains a bundled JDK 25 runtime. On first run NOCS creates its data directory (`$XDG_DATA_HOME/nocs` on Linux, `%APPDATA%\nocs` on Windows), copies example configs, and prints a generated bearer token. Point a browser at `http://<host>:<port>/` and use the token for API calls.
 
 ## License
 
