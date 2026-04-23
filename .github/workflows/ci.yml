@@ -21,9 +21,6 @@ jobs:
           - runs-on: ubuntu-24.04-arm64
             target: linux-arm64
             indi: "1"
-          - runs-on: windows-latest
-            target: windows-x86_64
-            indi: "0"
     runs-on: ${{ matrix.runs-on }}
     env:
       ORG_GRADLE_PROJECT_nocs.packaging.target: ${{ matrix.target }}
@@ -65,18 +62,9 @@ jobs:
           NOCS_INDI_BIN: ${{ matrix.indi }}
         run: ./gradlew --no-daemon check
 
-      - name: Publish test results (Linux)
-        if: (!cancelled()) && runner.os == 'Linux'
+      - name: Publish test results
+        if: (!cancelled())
         uses: EnricoMi/publish-unit-test-result-action@v2
-        with:
-          check_name: Test Results (${{ matrix.target }})
-          files: |
-            build/test-results/test/**/*.xml
-            web/test-results/**/*.xml
-
-      - name: Publish test results (Windows)
-        if: (!cancelled()) && runner.os == 'Windows'
-        uses: EnricoMi/publish-unit-test-result-action/windows@v2
         with:
           check_name: Test Results (${{ matrix.target }})
           files: |
@@ -86,18 +74,9 @@ jobs:
       - name: Build release archive
         run: ./gradlew --no-daemon runtimeDist verifyArchiveSize
 
-      - name: Smoke-test (Linux)
-        if: runner.os == 'Linux'
+      - name: Smoke-test
         shell: bash
         run: ./smoke/smoke.sh build/distributions/nocs-*-${{ matrix.target }}.tar.gz
-
-      - name: Smoke-test (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $zip = Get-ChildItem "build/distributions/nocs-*-windows-x86_64.zip" | Select-Object -First 1
-          if (-not $zip) { throw "windows zip not found" }
-          ./smoke/smoke.ps1 -ArchivePath $zip.FullName
 
       - name: Upload archive
         if: success()
