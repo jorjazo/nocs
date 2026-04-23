@@ -20,6 +20,19 @@ nocs:
     rules-path: ""
     altitude-eval-interval-ms: 10000
     sensor-offline-default-seconds: 60
+  platesolving:
+    solver: astap
+    solve-timeout-sec: 60
+    astap:
+      binary-path: ""
+      db-dir: ""
+      db-name: H18
+    install:
+      allow-network: false
+      binary-url-template: "https://sourceforge.net/projects/astap-program/files/astap_cli_{os}_{arch}.zip/download"
+      binary-sha256: {}
+      db-url: ""
+      db-sha256: ""
 
 spring:
   application:
