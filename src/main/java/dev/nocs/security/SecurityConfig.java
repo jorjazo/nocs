@@ -21,7 +21,15 @@ public class SecurityConfig {
             .exceptionHandling(ex -> ex.authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))
             .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(authz -> authz
-                    .requestMatchers("/", "/index.html", "/static/**", "/favicon.ico").permitAll()
+                    .requestMatchers(
+                                    "/",
+                                    "/index.html",
+                                    "/assets/**",
+                                    "/static/**",
+                                    "/favicon.ico",
+                                    "/favicon.svg",
+                                    "/error.html")
+                            .permitAll()
                     .requestMatchers("/api/**").authenticated()
                     .anyRequest().permitAll())
             .httpBasic(AbstractHttpConfigurer::disable)

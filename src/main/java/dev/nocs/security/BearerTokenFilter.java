@@ -25,17 +25,29 @@ public class BearerTokenFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest req, HttpServletResponse res, FilterChain chain)
             throws ServletException, IOException {
-        String header = req.getHeader("Authorization");
-        if (header != null && header.startsWith("Bearer ")) {
-            String token = header.substring("Bearer ".length()).trim();
-            if (expectedToken != null && !expectedToken.isBlank() && expectedToken.equals(token)) {
-                var auth = new UsernamePasswordAuthenticationToken(
-                        "nocs-user",
-                        null,
-                        List.of(new SimpleGrantedAuthority("ROLE_USER")));
-                SecurityContextHolder.getContext().setAuthentication(auth);
-            }
+        String token = extractToken(req);
+        if (token != null && expectedToken != null && !expectedToken.isBlank() && expectedToken.equals(token)) {
+            var auth = new UsernamePasswordAuthenticationToken(
+                    "nocs-user", null, List.of(new SimpleGrantedAuthority("ROLE_USER")));
+            SecurityContextHolder.getContext().setAuthentication(auth);
         }
         chain.doFilter(req, res);
+    }
+
+    private static String extractToken(HttpServletRequest req) {
+        String header = req.getHeader("Authorization");
+        if (header != null && header.startsWith("Bearer ")) {
+            return header.substring("Bearer ".length()).trim();
+        }
+        // Fallback: ?token=... — only honoured for GET /api/events and GET /api/images/**.
+        String path = req.getRequestURI();
+        if ("GET".equalsIgnoreCase(req.getMethod())
+                && (path.equals("/api/events") || path.startsWith("/api/images/"))) {
+            String t = req.getParameter("token");
+            if (t != null && !t.isBlank()) {
+                return t;
+            }
+        }
+        return null;
     }
 }
