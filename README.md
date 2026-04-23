@@ -2,7 +2,7 @@
 
 NOCS is a standalone observatory-control server for amateur astrophotography. One install, one web UI, one bearer token — no KStars, no Ekos, no INDI panels to touch.
 
-> **Status:** v0.1 server skeleton (Plan A), abstract device layer + INDI adapter (Plan B), target service + bundled catalogs (Plan C), and **ImageStoreService** with `/api/images/*` (Plan D) are implemented; imaging sequences, plate solving, and safety are not yet present.
+> **Status:** v0.1 server skeleton (Plan A), abstract device layer + INDI adapter (Plan B), target service + bundled catalogs (Plan C), **ImageStoreService** with `/api/images/*` (Plan D), and **SafetyService** with YAML rules and `/api/safety/*` (Plan F) are implemented; plate solving, imaging sequences, and the web client are not yet present.
 
 ## Who it's for (v0.1)
 
@@ -104,6 +104,23 @@ curl -s -H "Authorization: Bearer $TOKEN" \
 curl -s -H "Authorization: Bearer $TOKEN" \
      -o capture.thumb.jpg "http://localhost:8080/api/images/$ID/thumb.jpg"
 ```
+
+### Safety (Plan F)
+
+NOCS ships a YAML rule engine plus an always-available emergency stop:
+
+- `safety.yaml` lives in your data dir (copied from `safety.example.yaml` on first run). Reload after edits:
+  `curl -X POST -H 'Authorization: Bearer <token>' http://localhost:8080/api/safety/rules/reload`.
+- Supported conditions: `humidity_above`, `rain_detected`, `altitude_below`, `sensor_offline`.
+- Supported actions: `pause_sequence`, `abort_and_park`, `e_stop`.
+- Push a sensor reading (for example from a weather script):
+  `curl -X POST -H 'Authorization: Bearer <token>' -H 'Content-Type: application/json' \
+       http://localhost:8080/api/safety/sensors/readings \
+       -d '{"sensor":"weather","values":{"rain_detected":true}}'`.
+- Emergency stop:
+  `curl -X POST -H 'Authorization: Bearer <token>' http://localhost:8080/api/safety/e-stop`.
+- After an E-stop, devices stay in `E_STOPPED` and reject commands until you reset:
+  `curl -X POST -H 'Authorization: Bearer <token>' http://localhost:8080/api/safety/reset`.
 
 The catalog is built-in (Messier, Caldwell, NGC+IC, IAU named stars, solar system). To refresh from upstream, run `./scripts/fetch-catalogs.sh` and commit the outputs.
 
