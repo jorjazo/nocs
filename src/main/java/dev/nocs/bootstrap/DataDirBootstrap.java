@@ -1,6 +1,7 @@
 package dev.nocs.bootstrap;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -31,15 +32,22 @@ public final class DataDirBootstrap {
         Files.createDirectories(dataDir);
         Files.createDirectories(dataDir.resolve("sessions"));
         Files.createDirectories(dataDir.resolve("logs"));
-        Path configFile = dataDir.resolve("config.yaml");
-        if (!Files.exists(configFile)) {
-            try (var in = DataDirBootstrap.class.getResourceAsStream("/config.example.yaml")) {
-                if (in == null) {
-                    throw new IOException("config.example.yaml missing from classpath");
-                }
-                Files.copy(in, configFile, StandardCopyOption.REPLACE_EXISTING);
-            }
-        }
+        Path configFile = copyIfMissing(dataDir, "config.example.yaml", "config.yaml");
+        copyIfMissing(dataDir, "safety.example.yaml", "safety.yaml");
         return configFile;
+    }
+
+    private static Path copyIfMissing(Path dataDir, String resource, String target) throws IOException {
+        Path dest = dataDir.resolve(target);
+        if (Files.exists(dest)) {
+            return dest;
+        }
+        try (InputStream in = DataDirBootstrap.class.getResourceAsStream("/" + resource)) {
+            if (in == null) {
+                throw new IOException(resource + " missing from classpath");
+            }
+            Files.copy(in, dest, StandardCopyOption.REPLACE_EXISTING);
+        }
+        return dest;
     }
 }

@@ -1,0 +1,18 @@
+# NOCS safety rules. v0.1 supports a fixed vocabulary; see docs/superpowers/specs.
+# Reload at runtime via POST /api/safety/rules/reload.
+rules:
+  - name: humidity-high
+    when: { humidity_above: 90 }
+    then: pause_sequence
+
+  - name: rain
+    when: { rain_detected: true }
+    then: e_stop
+
+  - name: low-altitude
+    when: { altitude_below: 20 }
+    then: abort_and_park
+
+  - name: weather-offline
+    when: { sensor_offline: { sensor: weather, threshold_seconds: 120 } }
+    then: pause_sequence
