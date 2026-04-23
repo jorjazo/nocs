@@ -44,4 +44,12 @@ class DataSourceConfigTest {
                 Integer.class);
         assertThat(count).isEqualTo(1);
     }
+
+    @Test
+    void flywayCreatesPlateSolutionsTable() {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='plate_solutions'",
+                Integer.class);
+        assertThat(count).isEqualTo(1);
+    }
 }
