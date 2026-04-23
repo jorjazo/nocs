@@ -8,6 +8,9 @@ on:
 
 jobs:
   build:
+    permissions:
+      checks: write
+      pull-requests: write
     strategy:
       fail-fast: false
       matrix:
@@ -47,6 +50,24 @@ jobs:
         env:
           NOCS_INDI_BIN: ${{ matrix.indi }}
         run: ./gradlew --no-daemon check
+
+      - name: Publish test results (Linux)
+        if: (!cancelled()) && runner.os == 'Linux'
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        with:
+          check_name: Test Results (${{ matrix.target }})
+          files: |
+            build/test-results/test/**/*.xml
+            web/test-results/**/*.xml
+
+      - name: Publish test results (Windows)
+        if: (!cancelled()) && runner.os == 'Windows'
+        uses: EnricoMi/publish-unit-test-result-action/windows@v2
+        with:
+          check_name: Test Results (${{ matrix.target }})
+          files: |
+            build/test-results/test/**/*.xml
+            web/test-results/**/*.xml
 
       - name: Build release archive
         run: ./gradlew --no-daemon runtimeDist verifyArchiveSize
