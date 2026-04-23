@@ -1,9 +1,18 @@
 package dev.nocs.config;
 
+import dev.nocs.bootstrap.DataDirBootstrap;
 import dev.nocs.device.CameraImageSink;
 import dev.nocs.device.DeviceService;
 import dev.nocs.events.EventBus;
 import dev.nocs.image.ImageStoreService;
+import dev.nocs.platesolving.DisabledPlateSolvingService;
+import dev.nocs.platesolving.PlateSolvingService;
+import dev.nocs.platesolving.astap.AstapInstallationLocator;
+import dev.nocs.platesolving.astap.AstapInvoker;
+import dev.nocs.platesolving.astap.AstapPlateSolver;
+import dev.nocs.platesolving.install.AstapInstallService;
+import dev.nocs.platesolving.install.AstapInstallSpecs;
+import dev.nocs.platesolving.install.AstapInstaller;
 import dev.nocs.observatory.ObservatoryService;
 import dev.nocs.safety.SafetyActionDispatcher;
 import dev.nocs.safety.SafetyRuleEngine;
@@ -30,6 +39,36 @@ import org.springframework.context.annotation.Configuration;
 
 @Configuration
 public class AppBeansConfig {
+
+    @Bean
+    java.nio.file.Path nocsDataDir(NocsProperties props) {
+        String dir = props.dataDir() != null && !props.dataDir().isBlank()
+                ? props.dataDir()
+                : DataDirBootstrap.resolveDataDir().toString();
+        return java.nio.file.Path.of(dir);
+    }
+
+    @Bean
+    PlateSolvingService plateSolvingService(
+            NocsProperties props,
+            AstapInstallationLocator locator,
+            AstapInvoker invoker,
+            java.nio.file.Path nocsDataDir) {
+        String solver = props.platesolving() == null ? "astap" : props.platesolving().solver();
+        if ("disabled".equalsIgnoreCase(solver)) {
+            return new DisabledPlateSolvingService();
+        }
+        return new AstapPlateSolver(locator, invoker, props, nocsDataDir);
+    }
+
+    @Bean
+    AstapInstallService astapInstallService(
+            NocsProperties props,
+            java.nio.file.Path nocsDataDir,
+            EventBus bus,
+            AstapInstaller installer) {
+        return new AstapInstallService(props, nocsDataDir, bus, installer, AstapInstallSpecs::forCurrent);
+    }
 
     @Bean
     IndiClient indiClient() {

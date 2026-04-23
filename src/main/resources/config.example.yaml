@@ -46,4 +46,37 @@ nocs:
     altitude-eval-interval-ms: 10000
     sensor-offline-default-seconds: 60
 
+  # Plate solving (Plan E). v0.1 ships ASTAP CLI as the only solver. The binary
+  # and the H18 star DB are not bundled in the release archive (license hygiene
+  # + size). NOCS can fetch and install them on first run when you opt in by
+  # flipping `install.allow-network` to true and posting to
+  # POST /api/platesolving/install with `{"acceptLicense": true}`. Alternatively
+  # set `astap.binary-path` and `astap.db-dir` to an existing install on disk.
+  platesolving:
+    # solver: astap | disabled
+    solver: astap
+    # Per-call timeout. Override per request via the `timeout_sec` body field.
+    solve-timeout-sec: 60
+    astap:
+      # Empty = look under ${data_dir}/astap/bin/astap_cli, then $PATH.
+      binary-path: ""
+      # Empty = look under ${data_dir}/astap/db.
+      db-dir: ""
+      # H18 is the recommended default; D50/V17/G17 will be supported later.
+      db-name: H18
+    install:
+      # Hard opt-in. Without this, POST /api/platesolving/install returns 403.
+      allow-network: false
+      # Templated URL — {os} ∈ {linux, windows}, {arch} ∈ {x86_64, arm64}.
+      # Pin to a specific ASTAP release before enabling.
+      binary-url-template: ""
+      # Per-platform SHA-256 of the binary archive. Required if you enable.
+      binary-sha256:
+        linux-x86_64: ""
+        linux-arm64: ""
+        windows-x86_64: ""
+      # H18 (or chosen db-name) star DB archive URL + SHA-256.
+      db-url: ""
+      db-sha256: ""
+
 # Future sections: optical_trains, etc.

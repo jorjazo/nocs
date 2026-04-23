@@ -32,6 +32,8 @@ public final class DataDirBootstrap {
         Files.createDirectories(dataDir);
         Files.createDirectories(dataDir.resolve("sessions"));
         Files.createDirectories(dataDir.resolve("logs"));
+        Files.createDirectories(dataDir.resolve("astap").resolve("bin"));
+        Files.createDirectories(dataDir.resolve("astap").resolve("db"));
         Path configFile = copyIfMissing(dataDir, "config.example.yaml", "config.yaml");
         copyIfMissing(dataDir, "safety.example.yaml", "safety.yaml");
         return configFile;
