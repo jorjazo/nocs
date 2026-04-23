@@ -1,0 +1,4 @@
+rules:
+  - name: bad
+    when: { humidity_above: 90 }
+    then: nuke_everything
