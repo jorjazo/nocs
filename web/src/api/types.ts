@@ -197,6 +197,15 @@ export interface SessionRow {
   closed_at: string | null;
 }
 
+/** JSON from POST /api/sessions (Java `Session` record). */
+export interface SessionCreated {
+  id: number;
+  name: string;
+  openedAt: string;
+  closedAt: string | null;
+  logPath: string;
+}
+
 export interface SessionEventRow {
   id: number;
   ts: string;
