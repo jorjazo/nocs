@@ -101,37 +101,41 @@ export interface SafetyStatusView {
 
 export interface InstallStatusView {
   installed: boolean;
-  binaryPath: string | null;
-  dbDir: string | null;
-  dbName: string;
-  ready: boolean;
-  supportedPlatform: boolean;
-  allowNetwork: boolean;
+  binary_path: string | null;
+  db_dir: string | null;
+  db_name: string;
+  /** Star DB and binary layout OK for solving */
+  db_present: boolean;
+  supported_platform: boolean;
+  allow_network: boolean;
 }
 
 export interface InstallProgressView {
-  state: string;
+  phase: string;
   message: string;
-  bytesDone: number;
-  bytesTotal: number;
-  errorMessage: string | null;
+  bytes_done: number;
+  bytes_total: number;
+  updated_at: string;
 }
 
 export interface PlateSolutionView {
-  raJ2000Deg: number;
-  decJ2000Deg: number;
-  rotationDeg: number;
-  pixelScaleArcsec: number;
+  ra_j2000_deg: number;
+  dec_j2000_deg: number;
+  pixel_scale_arcsec_per_pixel: number;
+  rotation_deg: number;
+  field_width_deg: number;
+  field_height_deg: number;
   solver: string;
-  durationMs: number;
+  solved_at: string;
+  duration_ms: number;
 }
 
 export interface SolveResponse {
-  imageId: number;
-  status: "ok" | "error";
-  failureKind?: string;
+  solved: boolean;
+  image_id: number;
+  failure_kind?: string;
   message?: string;
-  durationMs?: number;
+  duration_ms: number;
   solution?: PlateSolutionView;
 }
 
