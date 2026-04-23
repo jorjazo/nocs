@@ -10,7 +10,8 @@ public record NocsProperties(
         Datasource datasource,
         String dataDir,
         IndiConfig indi,
-        Targets targets) {
+        Targets targets,
+        Safety safety) {
 
     public record Auth(String token) {}
 
@@ -25,6 +26,17 @@ public record NocsProperties(
             }
             if (simbadBaseUrl == null || simbadBaseUrl.isBlank()) {
                 simbadBaseUrl = "https://simbad.u-strasbg.fr/simbad";
+            }
+        }
+    }
+
+    public record Safety(String rulesPath, Long altitudeEvalIntervalMs, Long sensorOfflineDefaultSeconds) {
+        public Safety {
+            if (altitudeEvalIntervalMs == null || altitudeEvalIntervalMs <= 0) {
+                altitudeEvalIntervalMs = 10_000L;
+            }
+            if (sensorOfflineDefaultSeconds == null || sensorOfflineDefaultSeconds <= 0) {
+                sensorOfflineDefaultSeconds = 60L;
             }
         }
     }

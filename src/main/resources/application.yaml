@@ -16,6 +16,10 @@ nocs:
   targets:
     online-resolver: false
     simbad-base-url: https://simbad.u-strasbg.fr/simbad
+  safety:
+    rules-path: ""
+    altitude-eval-interval-ms: 10000
+    sensor-offline-default-seconds: 60
 
 spring:
   application:

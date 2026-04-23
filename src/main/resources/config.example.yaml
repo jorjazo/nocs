@@ -36,4 +36,14 @@ nocs:
   # On first run, if no observatory row exists, a placeholder is inserted at
   # lat=0, lon=0 and flagged active so API calls have a location to use.
 
-# Future sections: safety, observatory, optical_trains.
+  # Safety rules (Plan F). On first run, a copy of safety.example.yaml is placed
+  # in your data_dir as safety.yaml. Edit it (or point rules-path at another file)
+  # to change which conditions trigger pause/abort/e-stop. Reload at runtime via
+  # POST /api/safety/rules/reload.
+  safety:
+    # Empty = use ${data_dir}/safety.yaml. Absolute paths are honoured.
+    rules-path: ""
+    altitude-eval-interval-ms: 10000
+    sensor-offline-default-seconds: 60
+
+# Future sections: optical_trains, etc.
