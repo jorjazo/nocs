@@ -46,7 +46,7 @@
 
   function display(element: IndiElement): string {
     const value = element.value;
-    if (typeof value === "number") return formatNumber(value, element.format);
+    if (typeof value === "number") return formatNumber(value, "format" in element ? element.format : undefined);
     if (typeof value === "object") return `${value.format || "—"} · ${value.size} bytes`;
     return String(value);
   }

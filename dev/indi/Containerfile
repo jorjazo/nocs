@@ -1,5 +1,7 @@
 # INDI server with the full driver set from the official INDI PPA, used for
 # development and CI. Runs the simulators by default (see compose.yaml).
+# The GSC star catalog (~300 MB) makes the simulated cameras render real star
+# fields, which guiding, focusing and plate solving need.
 # The PPA only publishes for the current Ubuntu release (26.04 LTS as of 2026-10).
 FROM ubuntu:26.04
 
@@ -9,7 +11,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends software-properties-common gpg-agent \
     && add-apt-repository -y ppa:mutlaqja/ppa \
     && apt-get update \
-    && apt-get install -y --no-install-recommends indi-bin \
+    && apt-get install -y --no-install-recommends indi-bin gsc \
     && apt-get purge -y software-properties-common gpg-agent \
     && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*

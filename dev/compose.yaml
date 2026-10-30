@@ -9,3 +9,19 @@ services:
     ports:
       - "127.0.0.1:7624:7624"
     restart: unless-stopped
+
+  phd2:
+    build:
+      context: phd2
+      dockerfile: Containerfile
+    image: nocs-dev-phd2
+    init: true
+    environment:
+      PHD2_SETTINGS: /etc/phd2/simulators.phd
+    volumes:
+      - ./phd2/simulators.phd:/etc/phd2/simulators.phd:ro
+    depends_on:
+      - indi
+    ports:
+      - "127.0.0.1:4400:4400"
+    restart: unless-stopped

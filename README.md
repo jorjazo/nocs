@@ -33,7 +33,8 @@ The goal: the ease of use of a dedicated appliance, without the vendor lock-in.
 Requirements: Docker, [uv](https://docs.astral.sh/uv/), Node.js 24 and pnpm.
 
 ```sh
-# INDI server with simulated mount, cameras, focuser and filter wheel (localhost:7624)
+# INDI simulators with a real star catalog (localhost:7624) and headless PHD2
+# configured for them (JSON-RPC on localhost:4400)
 docker compose -f dev/compose.yaml up -d
 
 # Server: tests (unit + integration against the simulators), lint, types
@@ -47,6 +48,10 @@ cd ../web
 pnpm install && pnpm build
 cd .. && NOCS_WEB_DIR=web/dist uv run --project server nocsd
 ```
+
+After changing wire or state models in `server/src/nocs/api/schemas.py`, run
+`pnpm gen:types` in `web/` to regenerate the TypeScript types (CI checks they
+are up to date).
 
 For live-reloading UI work, run `pnpm dev` in `web/` while nocsd runs; Vite
 proxies `/api` to it. nocsd is configured with `NOCS_*` environment variables

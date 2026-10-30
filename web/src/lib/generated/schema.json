@@ -1,0 +1,499 @@
+{
+  "$defs": {
+    "AppState": {
+      "additionalProperties": false,
+      "description": "The whole state tree sent in snapshots and modified by patches.",
+      "properties": {
+        "indi": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/IndiState"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "AppState",
+      "type": "object"
+    },
+    "BlobInfo": {
+      "additionalProperties": false,
+      "properties": {
+        "format": {
+          "type": "string"
+        },
+        "size": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "format",
+        "size"
+      ],
+      "title": "BlobInfo",
+      "type": "object"
+    },
+    "Health": {
+      "properties": {
+        "indi_connected": {
+          "type": "boolean"
+        },
+        "status": {
+          "const": "ok",
+          "default": "ok",
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "version",
+        "indi_connected"
+      ],
+      "title": "Health",
+      "type": "object"
+    },
+    "Hello": {
+      "description": "First client message: the state epoch and version the client already holds, if any.",
+      "properties": {
+        "epoch": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "since": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "type": {
+          "const": "hello",
+          "default": "hello",
+          "type": "string"
+        }
+      },
+      "title": "Hello",
+      "type": "object"
+    },
+    "IndiDevice": {
+      "additionalProperties": false,
+      "properties": {
+        "interfaces": {
+          "description": "Present once DRIVER_INFO is defined.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "properties": {
+          "additionalProperties": {
+            "$ref": "#/$defs/IndiProperty"
+          },
+          "type": "object"
+        }
+      },
+      "title": "IndiDevice",
+      "type": "object"
+    },
+    "IndiMessage": {
+      "additionalProperties": false,
+      "properties": {
+        "device": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "text": {
+          "type": "string"
+        },
+        "timestamp": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "device",
+        "timestamp",
+        "text"
+      ],
+      "title": "IndiMessage",
+      "type": "object"
+    },
+    "IndiNumberElement": {
+      "additionalProperties": false,
+      "properties": {
+        "format": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "max": {
+          "type": "number"
+        },
+        "min": {
+          "type": "number"
+        },
+        "step": {
+          "type": "number"
+        },
+        "value": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "label",
+        "value",
+        "format",
+        "min",
+        "max",
+        "step"
+      ],
+      "title": "IndiNumberElement",
+      "type": "object"
+    },
+    "IndiProperty": {
+      "additionalProperties": false,
+      "properties": {
+        "elements": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/IndiNumberElement"
+              },
+              {
+                "$ref": "#/$defs/IndiValueElement"
+              }
+            ]
+          },
+          "type": "object"
+        },
+        "group": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "message": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "perm": {
+          "enum": [
+            "ro",
+            "wo",
+            "rw"
+          ],
+          "type": "string"
+        },
+        "rule": {
+          "anyOf": [
+            {
+              "enum": [
+                "OneOfMany",
+                "AtMostOne",
+                "AnyOfMany"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "state": {
+          "$ref": "#/$defs/PropertyStateName"
+        },
+        "timestamp": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "type": {
+          "enum": [
+            "text",
+            "number",
+            "switch",
+            "light",
+            "blob"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "label",
+        "group",
+        "state",
+        "perm",
+        "rule",
+        "timestamp",
+        "message",
+        "elements"
+      ],
+      "title": "IndiProperty",
+      "type": "object"
+    },
+    "IndiServer": {
+      "additionalProperties": false,
+      "properties": {
+        "connected": {
+          "type": "boolean"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "host": {
+          "type": "string"
+        },
+        "port": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "host",
+        "port",
+        "connected",
+        "error"
+      ],
+      "title": "IndiServer",
+      "type": "object"
+    },
+    "IndiState": {
+      "additionalProperties": false,
+      "properties": {
+        "devices": {
+          "additionalProperties": {
+            "$ref": "#/$defs/IndiDevice"
+          },
+          "type": "object"
+        },
+        "messages": {
+          "items": {
+            "$ref": "#/$defs/IndiMessage"
+          },
+          "type": "array"
+        },
+        "server": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/IndiServer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "IndiState",
+      "type": "object"
+    },
+    "IndiValueElement": {
+      "additionalProperties": false,
+      "description": "Text (string), switch (bool), light (state name) or BLOB (metadata only).",
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/$defs/BlobInfo"
+            }
+          ]
+        }
+      },
+      "required": [
+        "label",
+        "value"
+      ],
+      "title": "IndiValueElement",
+      "type": "object"
+    },
+    "PatchMessage": {
+      "properties": {
+        "ops": {
+          "items": {
+            "$ref": "#/$defs/PatchOp"
+          },
+          "type": "array"
+        },
+        "type": {
+          "const": "patch",
+          "default": "patch",
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "type",
+        "version",
+        "ops"
+      ],
+      "title": "PatchMessage",
+      "type": "object"
+    },
+    "PatchOp": {
+      "properties": {
+        "op": {
+          "enum": [
+            "set",
+            "delete"
+          ],
+          "type": "string"
+        },
+        "path": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "value": {
+          "default": null
+        }
+      },
+      "required": [
+        "op",
+        "path",
+        "value"
+      ],
+      "title": "PatchOp",
+      "type": "object"
+    },
+    "PropertyStateName": {
+      "enum": [
+        "Idle",
+        "Ok",
+        "Busy",
+        "Alert"
+      ],
+      "type": "string"
+    },
+    "SetPropertyRequest": {
+      "properties": {
+        "values": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              }
+            ]
+          },
+          "minProperties": 1,
+          "type": "object"
+        }
+      },
+      "required": [
+        "values"
+      ],
+      "title": "SetPropertyRequest",
+      "type": "object"
+    },
+    "SnapshotMessage": {
+      "properties": {
+        "epoch": {
+          "type": "string"
+        },
+        "state": {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        "type": {
+          "const": "snapshot",
+          "default": "snapshot",
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "type",
+        "epoch",
+        "version",
+        "state"
+      ],
+      "title": "SnapshotMessage",
+      "type": "object"
+    },
+    "StateSnapshot": {
+      "properties": {
+        "state": {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "version",
+        "state"
+      ],
+      "title": "StateSnapshot",
+      "type": "object"
+    }
+  },
+  "title": "NOCS API"
+}

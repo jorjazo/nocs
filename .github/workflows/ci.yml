@@ -19,7 +19,7 @@ jobs:
       - name: Start INDI simulators
         working-directory: .
         run: |
-          docker compose -f dev/compose.yaml up -d --build
+          docker compose -f dev/compose.yaml up -d --build indi
           timeout 60 bash -c 'until (echo > /dev/tcp/127.0.0.1/7624) 2>/dev/null; do sleep 1; done'
       - run: uv sync --locked
       - run: uv run ruff check .
@@ -49,6 +49,16 @@ jobs:
           node-version: 24
           cache: pnpm
           cache-dependency-path: web/pnpm-lock.yaml
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
       - run: pnpm install --frozen-lockfile
+      - name: Generated types match the server schema
+        run: |
+          pnpm gen:types
+          git diff --exit-code -- src/lib/generated || {
+            echo "::error::src/lib/generated is stale: run 'pnpm gen:types' in web/ and commit"
+            exit 1
+          }
       - run: pnpm check
       - run: pnpm build

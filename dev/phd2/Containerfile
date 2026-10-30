@@ -1,0 +1,25 @@
+# PHD2 running headless under a virtual X display, for development and CI.
+# Its JSON-RPC event server listens on port 4400. PHD2 links against libindi,
+# so the INDI PPA is needed as well.
+FROM ubuntu:26.04
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends software-properties-common gpg-agent \
+    && add-apt-repository -y ppa:mutlaqja/ppa \
+    && add-apt-repository -y ppa:pch/phd2 \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends phd2 xvfb \
+    && apt-get purge -y software-properties-common gpg-agent \
+    && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --chmod=755 entrypoint.sh /usr/local/bin/phd2-headless
+
+USER ubuntu
+WORKDIR /home/ubuntu
+
+EXPOSE 4400
+
+ENTRYPOINT ["phd2-headless"]

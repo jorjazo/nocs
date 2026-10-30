@@ -14,7 +14,7 @@
 
   function groups(device: IndiDevice): [string, [string, IndiProperty][]][] {
     const byGroup = new Map<string, [string, IndiProperty][]>();
-    for (const entry of Object.entries(device.properties)) {
+    for (const entry of Object.entries(device.properties ?? {})) {
       const group = entry[1].group || "General";
       byGroup.set(group, [...(byGroup.get(group) ?? []), entry]);
     }
@@ -22,7 +22,7 @@
   }
 
   function isConnected(device: IndiDevice): boolean {
-    return device.properties.CONNECTION?.elements.CONNECT?.value === true;
+    return device.properties?.CONNECTION?.elements.CONNECT?.value === true;
   }
 </script>
 
@@ -54,7 +54,7 @@
           {isConnected(device) ? "connected" : "disconnected"}
         </span>
         <span class="muted count">
-          {[...(device.interfaces ?? []), `${Object.keys(device.properties).length} properties`].join(" · ")}
+          {[...(device.interfaces ?? []), `${Object.keys(device.properties ?? {}).length} properties`].join(" · ")}
         </span>
       </summary>
       {#each groups(device) as [group, properties] (group)}
