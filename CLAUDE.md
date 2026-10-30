@@ -34,10 +34,12 @@ docs/     design, roadmap, ux, adr/, spikes/
 docker compose -f dev/compose.yaml up -d --build  # INDI simulators :7624, PHD2 :4400
 cd server && uv sync
 uv run ruff check . && uv run ruff format --check . && uv run pyright   # strict
-NOCS_TEST_INDI=localhost:7624 NOCS_TEST_INDI_FIFO=../dev/.run/fifo uv run pytest
+NOCS_TEST_INDI=localhost:7624 NOCS_TEST_INDI_FIFO=../dev/.run/fifo \
+  NOCS_TEST_INDI_UPLOADS=../dev/.run/uploads uv run pytest
 cd web && pnpm install && pnpm check && pnpm build
 pnpm gen:types        # after changing server/src/nocs/api/schemas.py (CI checks)
 NOCS_WEB_DIR=web/dist NOCS_INDI_FIFO=dev/.run/fifo NOCS_INDI_DRIVERS_DIR=dev/.run/drivers \
+  NOCS_INDI_UPLOAD_DIR=/run/indi/uploads NOCS_INDI_UPLOAD_DIR_LOCAL=dev/.run/uploads \
   uv run --project server nocsd               # http://127.0.0.1:8000
 # profiles live in ~/.config/nocs/profiles/ (NOCS_CONFIG_DIR); dev/profiles/ has the simulators
 ```
@@ -59,8 +61,9 @@ CI runs all of the above (INDI simulators included) on every push to `main`.
 - **Imaging pipeline** (from the Pi 5 spike): JPEG previews (not WebP), OpenCV
   for debayer and downscale, star metrics (`sep`) in a worker process, never on
   the event loop. ASTAP downsampling must be chosen from star size, not `-z 0`.
-  Receiving a 26 MP frame as a BLOB blocks the event loop ~0.3 s on the Pi
-  (base64 decode); `UPLOAD_LOCAL` avoids it (spike follow-up, ADR 0012 pending).
+  Frames arrive by `UPLOAD_LOCAL` when indiserver shares the filesystem (a BLOB
+  blocks the event loop ~0.3 s per 26 MP frame on the Pi), are analysed in one
+  spawned worker process, and OpenCV calls an RGGB sensor "BG" (ADR 0012).
 - **Python runtime:** nocsd should run on a uv-managed Python (3.12/3.13), not
   the system interpreter: scientific deps lack arm64 wheels for Ubuntu 26.04's
   Python 3.14.
@@ -80,6 +83,11 @@ CI runs all of the above (INDI simulators included) on every push to `main`.
 - indiserver does not create its `-f` FIFO, and keeps restarting (`-r`) a driver
   that cannot be executed instead of reporting it.
 - Expat ≥ 2.6 defers small trailing chunks: the stream parser must `flush()`.
+- Drivers reuse `UPLOAD_LOCAL` file names, and indiserver re-sends definitions
+  when any client connects: a frame's path is the next *update* of
+  `CCD_FILE_PATH`, not its value.
+- On ext4, renaming a file over an existing one flushes it to disk first
+  (~2 s for a 26 MP frame on the Pi's microSD): move frames to new names only.
 - The simulators render real stars only with the GSC catalog (in the dev image);
   their stars are very sharp (HFR < 1 px).
 

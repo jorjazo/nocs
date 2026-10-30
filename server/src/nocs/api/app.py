@@ -8,9 +8,11 @@ import logging
 from collections.abc import AsyncGenerator, Generator
 from contextlib import asynccontextmanager
 from dataclasses import asdict, dataclass
+from pathlib import Path, PurePosixPath
 
 import anyio
 from fastapi import FastAPI, HTTPException, Response, WebSocket, WebSocketDisconnect, status
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 
@@ -25,6 +27,7 @@ from nocs.api.schemas import (
     Health,
     Hello,
     JobStarted,
+    LoopRequest,
     PatchMessage,
     SerialPortInfo,
     ServerMessage,
@@ -51,6 +54,8 @@ from nocs.imaging import (
     CaptureService,
     image_connector,
 )
+from nocs.imaging.capture import UploadDirs
+from nocs.imaging.worker import ImageWorker
 from nocs.indi.drivers import DriverFifo, load_catalog
 from nocs.jobs import JobManager, ResourceBusyError
 from nocs.services.indi_bridge import IndiBridge, NotConnectedError
@@ -86,13 +91,17 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
         services.equipment = EquipmentService(
             store, ProfileStore(settings.config_dir), bridge, fifo
         )
+        services.worker = ImageWorker(settings.data_dir / "previews")
+        services.worker.start()
         services.capture = CaptureService(
             store,
             services.jobs,
             services.equipment,
             bridge,
             image_connector(settings.indi_host, settings.indi_port),
+            services.worker,
             settings.data_dir,
+            _upload_dirs(settings),
         )
         task = asyncio.create_task(bridge.run(), name="indi-bridge")
         try:
@@ -101,6 +110,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
             await jobs().close()
             await capture().close()
             await equipment().close()
+            services.worker.close()
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await task
@@ -224,6 +234,24 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
             job_id = capture().expose(Role(role), request.exposure, frame_type, request.save)
         return JobStarted(job=job_id)
 
+    @app.post("/api/cameras/{role}/loop", status_code=status.HTTP_202_ACCEPTED)
+    async def camera_loop(  # pyright: ignore[reportUnusedFunction]
+        role: CameraRoleName, request: LoopRequest
+    ) -> JobStarted:
+        frame_type = FRAME_TYPES[request.frame_type] if request.frame_type else None
+        with _camera_errors():
+            job_id = capture().loop(Role(role), request.exposure, frame_type)
+        return JobStarted(job=job_id)
+
+    @app.get("/api/previews/{name}")
+    async def preview(name: str) -> FileResponse:  # pyright: ignore[reportUnusedFunction]
+        path = services.worker.preview_path(name) if services.worker is not None else None
+        if path is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "no such preview")
+        # Each preview has a name of its own and never changes.
+        headers = {"Cache-Control": "public, max-age=31536000, immutable"}
+        return FileResponse(path, media_type="image/jpeg", headers=headers)
+
     @app.get("/api/indi/drivers")
     async def drivers() -> list[Driver]:  # pyright: ignore[reportUnusedFunction]
         catalog = await anyio.to_thread.run_sync(load_catalog, settings.indi_drivers_dir)
@@ -255,9 +283,18 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
 
 @dataclass
 class _Services:
+    worker: ImageWorker | None = None
     jobs: JobManager | None = None
     equipment: EquipmentService | None = None
     capture: CaptureService | None = None
+
+
+def _upload_dirs(settings: Settings) -> UploadDirs | None:
+    if settings.indi_upload_dir is None:
+        return None
+    driver = PurePosixPath(settings.indi_upload_dir)
+    local = settings.indi_upload_dir_local or Path(settings.indi_upload_dir)
+    return UploadDirs(driver, local)
 
 
 @contextlib.contextmanager

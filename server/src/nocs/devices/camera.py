@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -13,6 +14,8 @@ from nocs.indi import (
     IndiClient,
     IndiEvent,
     NumberElement,
+    Property,
+    PropertyDefined,
     PropertyState,
     PropertyUpdated,
     TextElement,
@@ -273,30 +276,99 @@ class Camera(Device):
 
     async def expose(self, seconds: float, frame_type: FrameType | None = None) -> Frame:
         """Take one exposure and return the image as delivered by the driver (FITS)."""
-        if seconds < 0:
-            raise ValueError("exposure must not be negative")
-        if frame_type is not None and frame_type is not self.frame_type:
-            await self.set_frame_type(frame_type)
+        await self._prepare(seconds, frame_type)
+        await self._set_upload_mode("UPLOAD_CLIENT")
         images = self.images if self.images is not None else self.client
         if self.images is None:
             await self.client.enable_blob(self.name, BlobMode.ALSO, "CCD1")
 
+        def frame(prop: Property) -> Frame | None:
+            blob = prop.elements.get("CCD1") if prop.name == "CCD1" else None
+            if not isinstance(blob, BlobElement) or blob.data is None:
+                return None
+            data, blob.data = blob.data, None  # do not keep tens of MB in the property mirror
+            return Frame(data, blob.format, seconds)
+
+        return await self._exposure(seconds, frame, images)
+
+    async def expose_to_file(
+        self,
+        seconds: float,
+        frame_type: FrameType | None = None,
+        *,
+        directory: str,
+        prefix: str = "NOCS_XXX",
+    ) -> str:
+        """Take one exposure that the driver saves itself (``UPLOAD_LOCAL``).
+
+        Returns the path the driver wrote, as indiserver's host sees it. Nothing
+        crosses the connection but that path, which is much cheaper than a BLOB
+        when nocsd and indiserver share a filesystem (ADR 0012).
+        """
+        await self._prepare(seconds, frame_type)
+        if not self.has("UPLOAD_SETTINGS"):
+            raise DeviceError(f"{self.name} cannot save images itself")
+        settings = self.prop("UPLOAD_SETTINGS")
+        wanted = {"UPLOAD_DIR": directory, "UPLOAD_PREFIX": prefix}
+        if any(settings.text(k) != v for k, v in wanted.items()):
+            await self.command("UPLOAD_SETTINGS", wanted)
+        await self._set_upload_mode("UPLOAD_LOCAL")
+
+        def saved(prop: Property) -> str | None:
+            if prop.name != "CCD_FILE_PATH" or prop.state is not PropertyState.OK:
+                return None
+            element = prop.elements.get("FILE_PATH")
+            return element.value if isinstance(element, TextElement) and element.value else None
+
+        # indiserver re-sends definitions when a client connects, and drivers reuse file
+        # names, so an old path can come back mid-exposure: only an update counts.
+        return await self._exposure(seconds, saved, self.client, updates_of="CCD_FILE_PATH")
+
+    async def _prepare(self, seconds: float, frame_type: FrameType | None) -> None:
+        if seconds < 0:
+            raise ValueError("exposure must not be negative")
+        if frame_type is not None and frame_type is not self.frame_type:
+            await self.set_frame_type(frame_type)
+
+    async def _set_upload_mode(self, mode: str) -> None:
+        if not self.has("UPLOAD_MODE") or self.prop("UPLOAD_MODE").switch(mode):
+            return
+        values = {m: m == mode for m in self.prop("UPLOAD_MODE").elements}
+        await self.command("UPLOAD_MODE", values, done=lambda p: p.switch(mode))
+
+    async def _exposure[T](
+        self,
+        seconds: float,
+        result_of: Callable[[Property], T | None],
+        images: IndiClient,
+        *,
+        updates_of: str | None = None,
+    ) -> T:
+        """Start an exposure and wait for the update of this camera that ``result_of`` accepts.
+
+        For property ``updates_of``, a definition counts only if the property did
+        not exist yet: a definition of a known property is a re-send, not news.
+        Fails on an ``Alert`` exposure or a lost connection; a cancelled wait aborts
+        the exposure on the camera too.
+        """
         loop = asyncio.get_running_loop()
-        result: asyncio.Future[Frame] = loop.create_future()
+        result: asyncio.Future[T] = loop.create_future()
+        known = updates_of is not None and self.has(updates_of)
 
         def on_event(event: IndiEvent) -> None:
             if result.done():
                 return
             match event:
-                case PropertyUpdated(property=prop) if prop.device == self.name:
+                case PropertyDefined(property=prop) if known and prop.name == updates_of:
+                    pass  # re-sent for some client's getProperties
+                case PropertyUpdated(property=prop) | PropertyDefined(property=prop) if (
+                    prop.device == self.name
+                ):
                     if prop.name == "CCD_EXPOSURE" and prop.state is PropertyState.ALERT:
                         detail = f": {prop.message}" if prop.message else ""
                         result.set_exception(DeviceError(f"{self.name} exposure failed{detail}"))
-                    elif prop.name == "CCD1":
-                        blob = prop.elements.get("CCD1")
-                        if isinstance(blob, BlobElement) and blob.data is not None:
-                            result.set_result(Frame(blob.data, blob.format, seconds))
-                            blob.data = None  # do not keep tens of MB in the property mirror
+                    elif (value := result_of(prop)) is not None:
+                        result.set_result(value)
                 case ConnectionLost(reason=reason):
                     result.set_exception(DeviceError(f"lost connection to indiserver: {reason}"))
                 case _:

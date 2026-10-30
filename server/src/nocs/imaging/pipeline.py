@@ -1,0 +1,207 @@
+"""From a FITS frame to a phone-sized preview and quality metrics (ADR 0012).
+
+Runs in the imaging worker process, never on the event loop: everything here is
+CPU-bound and blocking. Choices come from the Pi 5 spike: OpenCV for debayer,
+downscale and JPEG; statistics on subsamples; ``sep`` on a 2x2-binned frame for
+stars when it is large.
+"""
+
+from __future__ import annotations
+
+import os
+import tempfile
+import time
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+import cv2
+import numpy as np
+import sep  # pyright: ignore[reportMissingTypeStubs]
+from astropy.io import fits  # pyright: ignore[reportMissingTypeStubs]
+from numpy.typing import NDArray
+
+# astropy.io.fits and sep carry no usable type information. They are used only
+# through these explicitly untyped handles, and every value taken from them is
+# converted to a typed one at once.
+_fits: Any = fits
+_sep: Any = sep
+
+PREVIEW_WIDTH = 1920
+JPEG_QUALITY = 85
+BIN_STARS_ABOVE = 4_000_000
+"""Frames with more pixels than this are 2x2 binned for star detection."""
+HISTOGRAM_BINS = 256
+
+# FITS BAYERPAT -> OpenCV code producing BGR. OpenCV names patterns by a different
+# corner: an RGGB sensor is OpenCV's "BG".
+_DEBAYER: dict[str, int] = {
+    "RGGB": cv2.COLOR_BayerBG2BGR,
+    "BGGR": cv2.COLOR_BayerRG2BGR,
+    "GRBG": cv2.COLOR_BayerGB2BGR,
+    "GBRG": cv2.COLOR_BayerGR2BGR,
+}
+
+type Mono16 = NDArray[np.uint16]
+type Image = NDArray[np.float32]
+
+
+@dataclass(frozen=True, slots=True)
+class FrameAnalysis:
+    preview: str
+    """Path of the JPEG written."""
+    width: int
+    height: int
+    color: bool
+    stars: int
+    hfr: float | None
+    """Median half-flux radius in unbinned pixels; None without stars."""
+    histogram: list[int]
+    """Counts of the linear data in equal bins over the 16-bit range (sampled)."""
+    seconds: float
+    """Processing time."""
+
+
+def warm_up() -> None:
+    """Nothing to do: importing this module in the worker loads OpenCV, sep and astropy."""
+
+
+def analyze(fits_path: str, preview_path: str, bayer: str | None = None) -> FrameAnalysis:
+    """Write a stretched JPEG preview of a FITS frame and measure its stars.
+
+    ``bayer`` is used when the file does not say (``BAYERPAT``); no pattern at
+    all means mono.
+    """
+    start = time.perf_counter()
+    data, header_bayer, bottom_up = load(fits_path)
+    pattern = (header_bayer or bayer or "").upper() or None
+    if pattern is not None and pattern not in _DEBAYER:
+        raise ValueError(f"unsupported Bayer pattern {pattern}")
+
+    histogram = _histogram(data)
+    stars, hfr = measure_stars(data, binned=pattern is not None or data.size > BIN_STARS_ABOVE)
+
+    image: NDArray[np.uint16] = (
+        np.asarray(cv2.cvtColor(data, _DEBAYER[pattern]), dtype=np.uint16)
+        if pattern is not None
+        else data
+    )
+    stretched = stretch(_downscale(image))
+    if bottom_up:
+        stretched = np.ascontiguousarray(stretched[::-1])
+    _write_jpeg(Path(preview_path), stretched)
+    return FrameAnalysis(
+        preview=preview_path,
+        width=int(stretched.shape[1]),
+        height=int(stretched.shape[0]),
+        color=pattern is not None,
+        stars=stars,
+        hfr=hfr,
+        histogram=histogram,
+        seconds=round(time.perf_counter() - start, 3),
+    )
+
+
+def load(path: str) -> tuple[Mono16, str | None, bool]:
+    """Pixels as 16-bit, the Bayer pattern if the header has one, and whether rows are bottom-up."""
+    with _fits.open(path, memmap=False) as hdul:
+        hdu = hdul[0]
+        raw = np.asarray(hdu.data)
+        bayer = str(hdu.header.get("BAYERPAT", "")).strip()
+        row_order = str(hdu.header.get("ROWORDER", "TOP-DOWN")).strip().upper()
+    if raw.ndim != 2:
+        raise ValueError(f"expected a 2-D image, got shape {raw.shape}")
+    # 8-bit frames are scaled to 16 bits so one code path handles every camera.
+    if raw.dtype == np.uint8:
+        data: Mono16 = raw.astype(np.uint16) * np.uint16(256)
+    else:
+        data = np.clip(raw, 0, 65535).astype(np.uint16)
+    return data, bayer or None, row_order == "BOTTOM-UP"
+
+
+def stretch(
+    image: Image, target_background: float = 0.25, shadows_sigma: float = -2.8
+) -> NDArray[np.uint8]:
+    """Automatic midtones-transfer stretch to 8 bits, each channel on its own.
+
+    The usual "screen stretch": clip shadows a few MADs below the median and map
+    the median to ``target_background``. Statistics come from a subsample.
+    """
+    channels = image[..., np.newaxis] if image.ndim == 2 else image
+    out = np.empty(channels.shape, dtype=np.uint8)
+    for c in range(channels.shape[2]):
+        data = channels[..., c] / np.float32(65535.0)
+        sample = data[::2, ::2]
+        median = float(np.median(sample))
+        mad = float(np.median(np.abs(sample - median))) * 1.4826
+        shadows = min(max(median + shadows_sigma * mad, 0.0), 1.0)
+        scale = max(1.0 - shadows, 1e-6)
+        x = (median - shadows) / scale
+        midtones = (
+            x * (target_background - 1) / ((2 * target_background - 1) * x - target_background)
+            if 0 < x < 1
+            else 0.5
+        )
+        normalized = np.clip((data - shadows) / scale, 0.0, 1.0)
+        mapped = (midtones - 1) * normalized / ((2 * midtones - 1) * normalized - midtones)
+        out[..., c] = (np.clip(mapped, 0.0, 1.0) * 255).astype(np.uint8)
+    return out[..., 0] if image.ndim == 2 else out
+
+
+def measure_stars(data: Mono16, *, binned: bool) -> tuple[int, float | None]:
+    """Star count and median HFR in unbinned pixels.
+
+    A 2x2 bin is cheaper on large frames, and turns a Bayer mosaic into luminance.
+    """
+    image = data.astype(np.float32)
+    factor = 1
+    if binned:
+        h, w = image.shape[0] // 2 * 2, image.shape[1] // 2 * 2
+        image = image[:h, :w].reshape(h // 2, 2, w // 2, 2).sum(axis=(1, 3), dtype=np.float32)
+        factor = 2
+    image = np.ascontiguousarray(image)
+
+    background = _sep.Background(image)
+    subtracted: Image = image - np.asarray(background.back(), dtype=np.float32)
+    _sep.set_extract_pixstack(2_000_000)
+    objects = _sep.extract(subtracted, 5.0, err=float(background.globalrms), minarea=5)
+    count = len(objects)
+    if count == 0:
+        return 0, None
+    radii, _ = _sep.flux_radius(
+        subtracted, objects["x"], objects["y"], 6.0 * objects["a"], 0.5, subpix=5
+    )
+    values = np.asarray(radii, dtype=np.float64)
+    values = values[np.isfinite(values) & (values > 0)]
+    if values.size == 0:
+        return count, None
+    return count, round(float(np.median(values)) * factor, 3)
+
+
+def _histogram(data: Mono16) -> list[int]:
+    counts, _ = np.histogram(data[::4, ::4], bins=HISTOGRAM_BINS, range=(0, 65536))
+    return [int(c) for c in counts]
+
+
+def _downscale(image: NDArray[np.uint16]) -> Image:
+    height, width = image.shape[:2]
+    pixels = image.astype(np.float32)
+    if width <= PREVIEW_WIDTH:
+        return pixels
+    size = (PREVIEW_WIDTH, max(1, round(height * PREVIEW_WIDTH / width)))
+    return np.asarray(cv2.resize(pixels, size, interpolation=cv2.INTER_AREA), dtype=np.float32)
+
+
+def _write_jpeg(path: Path, image: NDArray[np.uint8]) -> None:
+    ok, encoded = cv2.imencode(".jpg", image, [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY])
+    if not ok:
+        raise ValueError("JPEG encoding failed")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.")
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(encoded.tobytes())
+        os.replace(tmp, path)
+    except BaseException:
+        os.unlink(tmp)
+        raise

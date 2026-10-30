@@ -28,6 +28,11 @@ class Settings(BaseSettings):
     """indiserver's driver FIFO (``indiserver -f``); without it, drivers cannot be started."""
     indi_drivers_dir: Path = Path("/usr/share/indi")
     """Where the INDI driver catalog (``drivers.xml`` and third-party XML files) lives."""
+    indi_upload_dir: Path | None = None
+    """Where camera drivers save frames themselves (UPLOAD_LOCAL), as indiserver sees it.
+    Without it, frames arrive as BLOBs (ADR 0012)."""
+    indi_upload_dir_local: Path | None = None
+    """The same directory as nocsd sees it, when that differs (indiserver in a container)."""
     config_dir: Path = Field(default_factory=_default_config_dir)
     data_dir: Path = Field(default_factory=_default_data_dir)
     """Where frames are saved until storage destinations exist (phase 2.4)."""

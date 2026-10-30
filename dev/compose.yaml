@@ -9,8 +9,9 @@ services:
     ports:
       - "127.0.0.1:7624:7624"
     volumes:
-      # Driver FIFO and catalog for nocsd: NOCS_INDI_FIFO=dev/.run/fifo,
-      # NOCS_INDI_DRIVERS_DIR=dev/.run/drivers (paths from the repo root).
+      # Driver FIFO, catalog and frame uploads for nocsd (paths from the repo root):
+      # NOCS_INDI_FIFO=dev/.run/fifo NOCS_INDI_DRIVERS_DIR=dev/.run/drivers
+      # NOCS_INDI_UPLOAD_DIR=/run/indi/uploads NOCS_INDI_UPLOAD_DIR_LOCAL=dev/.run/uploads
       - ./.run:/run/indi
     restart: unless-stopped
 

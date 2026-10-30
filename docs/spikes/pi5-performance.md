@@ -170,3 +170,23 @@ is in nocsd's hands; "lag" is how late a 10 ms sleep on nocsd's event loop wakes
   container needs a shared directory) and the driver writes where it is told.
 - To decide in ADR 0012 (phase 2.3): `UPLOAD_LOCAL` when indiserver is local,
   BLOBs received off the event loop (the preview worker) otherwise.
+
+### Preview pipeline in nocsd (phase 2.3)
+
+The same camera through nocsd with `UPLOAD_LOCAL` into a directory on the microSD
+and the imaging worker (ADR 0012), 26 MP color frames, 1 s exposures:
+
+| step | time |
+|---|---|
+| driver saves the FITS (after the exposure ends) | 0.67 s |
+| worker: load, debayer, 1920 px preview, stretch, JPEG, stars (2x2), histogram | 1.35–1.45 s |
+| request → preview published | 3.1–3.2 s |
+| loop at 1 s | ~1 preview every 2 s |
+| `/api/health` while frames arrive | median 6 ms, max ~120 ms |
+
+- **ext4 flushes a file renamed over an existing one** (`auto_da_alloc`): moving a
+  fresh 52 MB frame onto a placeholder took 1.8 s on the microSD, onto a new name
+  0.1 ms. Never rename onto an existing file in the frame path.
+- The worker is now the largest part of the latency; a superpixel debayer for the
+  preview (half resolution, no full-size color image) is the obvious next saving.
+

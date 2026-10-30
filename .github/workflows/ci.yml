@@ -30,6 +30,7 @@ jobs:
         env:
           NOCS_TEST_INDI: 127.0.0.1:7624
           NOCS_TEST_INDI_FIFO: ../dev/.run/fifo
+          NOCS_TEST_INDI_UPLOADS: ../dev/.run/uploads
       - name: indiserver log
         if: failure()
         working-directory: .

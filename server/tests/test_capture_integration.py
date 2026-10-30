@@ -47,13 +47,30 @@ def finished(job_id: str) -> Callable[[dict[str, Any]], bool]:
     return lambda s: s["jobs"][job_id]["state"] != "running"
 
 
+# The dev container's frame upload directory, as indiserver sees it.
+DRIVER_UPLOADS = "/run/indi/uploads"
+
+
+@pytest.fixture(scope="module", params=["blob", "local"])
+def transfer(request: pytest.FixtureRequest) -> Path | None:
+    """How frames reach nocsd (ADR 0012); ``local`` needs NOCS_TEST_INDI_UPLOADS."""
+    if request.param == "blob":
+        return None
+    value = os.environ.get("NOCS_TEST_INDI_UPLOADS")
+    if not value:
+        pytest.skip("NOCS_TEST_INDI_UPLOADS not set (e.g. ../dev/.run/uploads)")
+    return Path(value)
+
+
 @pytest.fixture(scope="module")
-def data_dir(tmp_path_factory: pytest.TempPathFactory) -> Path:
+def data_dir(tmp_path_factory: pytest.TempPathFactory, transfer: Path | None) -> Path:
     return tmp_path_factory.mktemp("data")
 
 
 @pytest.fixture(scope="module")
-def api(tmp_path_factory: pytest.TempPathFactory, data_dir: Path) -> Iterator[TestClient]:
+def api(
+    tmp_path_factory: pytest.TempPathFactory, data_dir: Path, transfer: Path | None
+) -> Iterator[TestClient]:
     value = os.environ.get("NOCS_TEST_INDI")
     if not value:
         pytest.skip("NOCS_TEST_INDI not set")
@@ -63,6 +80,8 @@ def api(tmp_path_factory: pytest.TempPathFactory, data_dir: Path) -> Iterator[Te
         indi_port=int(port),
         config_dir=tmp_path_factory.mktemp("config"),
         data_dir=data_dir,
+        indi_upload_dir=Path(DRIVER_UPLOADS) if transfer else None,
+        indi_upload_dir_local=transfer,
     )
     profile = {**SIMULATORS, "devices": dict(SIMULATORS["devices"])}
     profile["devices"].pop("power_box")  # needs the FIFO; not relevant here
@@ -148,6 +167,16 @@ def test_expose_and_save(api: TestClient, data_dir: Path) -> None:
         path.stat().st_size,
     )
     assert camera(api)["last_frame"] == frame
+    preview = camera(api)["preview"]
+    assert (preview["exposure"], preview["frame_type"]) == (1, "light")
+    assert (preview["width"], preview["height"]) == (320, 240)
+    assert len(preview["histogram"]) == 256
+    response = api.get(preview["url"])
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/jpeg"
+    assert response.content.startswith(b"\xff\xd8")  # JPEG
+    assert "immutable" in response.headers["cache-control"]
+    assert api.get("/api/previews/" + "0" * 32 + ".jpg").status_code == 404
 
 
 def test_busy_camera_refuses_commands_and_cancel_aborts(api: TestClient) -> None:
@@ -184,3 +213,38 @@ def test_cooling(api: TestClient) -> None:
     assert api.post("/api/cameras/main_camera/cooling", json={"on": True}).status_code == 422
     assert api.post("/api/cameras/main_camera/cooling", json={"on": False}).status_code == 204
     assert camera(api)["target"] is None
+
+
+def test_loop_makes_previews_and_keeps_nothing(
+    api: TestClient, data_dir: Path, transfer: Path | None
+) -> None:
+    api.post("/api/cameras/main_camera/settings", json={"region": SMALL, "binning": 1})
+    before = camera(api)["preview"]
+    saved = sorted((data_dir / "frames").rglob("*.fits"))
+    response = api.post("/api/cameras/main_camera/loop", json={"exposure": 0.2})
+    assert response.status_code == 202, response.text
+    job_id = response.json()["job"]
+    seen: set[str] = set()
+
+    def new_previews(s: dict[str, Any]) -> bool:
+        preview = s["cameras"]["main_camera"]["preview"]
+        if preview is not None and preview != before:
+            seen.add(preview["url"])
+        return len(seen) >= 3
+
+    wait(api, new_previews)
+    assert job(api, job_id)["message"].startswith("frame ")
+    assert api.post("/api/cameras/main_camera/expose", json={"exposure": 1}).status_code == 409
+    assert api.post(f"/api/jobs/{job_id}/cancel").status_code == 202
+    wait(api, finished(job_id))
+    assert job(api, job_id)["state"] == "cancelled"
+    # Loop frames are analysed and then deleted, never kept. A driver may still save
+    # the frame that was downloading when the loop stopped; the next exposure of
+    # that camera clears it.
+    time.sleep(1)
+    assert sorted((data_dir / "frames").rglob("*.fits")) == saved
+    last = api.post("/api/cameras/main_camera/expose", json={"exposure": 0.1, "save": False})
+    wait(api, finished(last.json()["job"]))
+    for directory in (data_dir / "incoming", transfer):
+        if directory is not None:
+            assert not list(directory.glob("main_camera_*")), directory

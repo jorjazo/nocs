@@ -139,6 +139,20 @@ class FrameInfo(StateModel):
     path: str | None = Field(description="Where it was saved; None if it was not.")
 
 
+class Preview(StateModel):
+    url: str = Field(description="JPEG, at most 1920 px wide; immutable.")
+    width: int
+    height: int
+    color: bool
+    stars: int
+    hfr: float | None = Field(description="Median half-flux radius, unbinned pixels.")
+    histogram: list[int] = Field(description="256 bins over the 16-bit range, linear data.")
+    exposure: float
+    frame_type: FrameTypeName
+    time: str = Field(description="UTC, ISO 8601, when the frame arrived.")
+    seconds: float = Field(description="Time the worker took.")
+
+
 class CameraState(StateModel):
     device: str
     exposing: bool
@@ -159,6 +173,7 @@ class CameraState(StateModel):
     sensor: SensorInfo
     bayer: str | None = Field(description="Color filter pattern (e.g. RGGB); None for mono.")
     last_frame: FrameInfo | None
+    preview: Preview | None = Field(description="Latest preview, from any exposure or loop.")
 
 
 class JobInfo(StateModel):
@@ -244,6 +259,15 @@ class ExposeRequest(BaseModel):
         default=None, description="Defaults to the camera's current frame type."
     )
     save: bool = True
+
+
+class LoopRequest(BaseModel):
+    """Expose repeatedly for previews (nothing is saved) until the job is cancelled."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    exposure: float = Field(ge=0, le=600, description="Seconds.")
+    frame_type: FrameTypeName | None = None
 
 
 class JobStarted(WireModel):

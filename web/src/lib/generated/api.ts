@@ -98,6 +98,10 @@ export interface CameraState {
   offset: number | null;
   offset_range: ValueRange | null;
   /**
+   * Latest preview, from any exposure or loop.
+   */
+  preview: Preview | null;
+  /**
    * Cooling rate limit, °C/min; 0 = unlimited.
    */
   ramp: number | null;
@@ -147,6 +151,38 @@ export interface FrameInfo {
    * UTC, ISO 8601, when the image arrived.
    */
   time: string;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "Preview".
+ */
+export interface Preview {
+  color: boolean;
+  exposure: number;
+  frame_type: FrameTypeName;
+  height: number;
+  /**
+   * Median half-flux radius, unbinned pixels.
+   */
+  hfr: number | null;
+  /**
+   * 256 bins over the 16-bit range, linear data.
+   */
+  histogram: number[];
+  /**
+   * Time the worker took.
+   */
+  seconds: number;
+  stars: number;
+  /**
+   * UTC, ISO 8601, when the frame arrived.
+   */
+  time: string;
+  /**
+   * JPEG, at most 1920 px wide; immutable.
+   */
+  url: string;
+  width: number;
 }
 /**
  * Part of the sensor, in unbinned pixels.
@@ -447,6 +483,19 @@ export interface Hello {
  */
 export interface JobStarted {
   job: string;
+}
+/**
+ * Expose repeatedly for previews (nothing is saved) until the job is cancelled.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "LoopRequest".
+ */
+export interface LoopRequest {
+  /**
+   * Seconds.
+   */
+  exposure: number;
+  frame_type?: FrameTypeName | null;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema

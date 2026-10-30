@@ -1,8 +1,15 @@
 <script lang="ts">
-  import { connectProfile, disconnectEquipment } from "./lib/api";
+  import { cancelJob, connectProfile, disconnectEquipment, expose, loop } from "./lib/api";
   import { live } from "./lib/live.svelte";
   import Property from "./lib/Property.svelte";
-  import type { EquipmentState, IndiDevice, IndiProperty, IndiState } from "./lib/types";
+  import type {
+    CameraState,
+    EquipmentState,
+    IndiDevice,
+    IndiProperty,
+    IndiState,
+    JobInfo,
+  } from "./lib/types";
 
   let night = $state(false);
   $effect(() => {
@@ -21,7 +28,16 @@
     if (!selected) selected = equipment?.active ?? profiles[0]?.[0] ?? "";
   });
 
-  async function equipmentAction(action: () => Promise<void>): Promise<void> {
+  const camera = $derived(
+    (live.state.cameras as Record<string, CameraState> | undefined)?.main_camera,
+  );
+  const jobs = $derived((live.state.jobs ?? {}) as unknown as Record<string, JobInfo>);
+  const cameraJob = $derived(
+    Object.entries(jobs).find(([, j]) => j.state === "running" && j.resources.includes("main_camera")),
+  );
+  let exposure = $state(1);
+
+  async function equipmentAction(action: () => Promise<unknown>): Promise<void> {
     equipmentError = "";
     try {
       await action();
@@ -96,6 +112,32 @@
           </li>
         {/each}
       </ul>
+    </section>
+  {/if}
+
+  {#if camera}
+    <section class="device equipment">
+      <div class="row">
+        <span class="device-name">Main camera</span>
+        <span class="muted">{camera.device}</span>
+        <label class="muted">exposure (s) <input type="number" min="0" step="0.1" bind:value={exposure} /></label>
+        {#if cameraJob}
+          <button type="button" onclick={() => equipmentAction(() => cancelJob(cameraJob[0]))}>
+            Stop {cameraJob[1].kind}
+          </button>
+          <span class="muted">{cameraJob[1].message ?? ""}</span>
+        {:else}
+          <button type="button" onclick={() => equipmentAction(() => expose("main_camera", exposure))}>Expose</button>
+          <button type="button" onclick={() => equipmentAction(() => loop("main_camera", exposure))}>Loop</button>
+        {/if}
+      </div>
+      {#if camera.preview}
+        <p class="muted mono">
+          {camera.preview.stars} stars · HFR {camera.preview.hfr ?? "–"} px · {camera.preview.width}×{camera.preview.height}
+          · {camera.preview.exposure} s {camera.preview.frame_type} · worker {camera.preview.seconds} s
+        </p>
+        <img class="preview" src={camera.preview.url} alt="Latest preview" />
+      {/if}
     </section>
   {/if}
 
@@ -222,6 +264,12 @@
     flex-wrap: wrap;
     align-items: center;
     gap: 10px;
+  }
+  .preview {
+    display: block;
+    max-width: 100%;
+    margin-top: 8px;
+    border-radius: 10px;
   }
   .roles {
     margin: 8px 0 0;

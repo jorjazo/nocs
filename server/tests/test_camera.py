@@ -162,3 +162,72 @@ async def test_cancelled_exposure_is_aborted() -> None:
     with pytest.raises(asyncio.CancelledError):
         await task
     assert client.sent[-1] == ("Cam", "CCD_ABORT_EXPOSURE", {"ABORT": True})
+
+
+async def test_driver_saves_the_image_itself() -> None:
+    client = camera_client()
+    settings = Property("Cam", "UPLOAD_SETTINGS", PropertyType.TEXT, state=PropertyState.IDLE)
+    for name, value in (("UPLOAD_DIR", "/home"), ("UPLOAD_PREFIX", "IMAGE_XXX")):
+        settings.elements[name] = TextElement(name, name, value)
+    client.define(settings)
+    modes = {"UPLOAD_CLIENT": True, "UPLOAD_LOCAL": False, "UPLOAD_BOTH": False}
+    client.define(switch_property("Cam", "UPLOAD_MODE", **modes))
+
+    def respond(device: str, name: str, values: Mapping[str, str | float | bool]) -> None:
+        loop = asyncio.get_running_loop()
+        if name == "CCD_EXPOSURE":
+            saved = Property("Cam", "CCD_FILE_PATH", PropertyType.TEXT, state=PropertyState.OK)
+            saved.elements["FILE_PATH"] = TextElement("FILE_PATH", "", "/run/up/NOCS_001.fits")
+            loop.call_later(0.01, client.define, saved)
+        else:
+            update = {
+                k: ("On" if v else "Off") if isinstance(v, bool) else str(v)
+                for k, v in values.items()
+            }
+            loop.call_soon(client.update, device, name, PropertyState.OK, update)
+
+    client.responder = respond
+    camera = Camera(client, "Cam")
+    path = await camera.expose_to_file(1, directory="/run/up", prefix="NOCS_XXX")
+    assert path == "/run/up/NOCS_001.fits"
+    assert [name for _, name, _ in client.sent] == [
+        "UPLOAD_SETTINGS",
+        "UPLOAD_MODE",
+        "CCD_EXPOSURE",
+    ]
+    mode = client.get_property("Cam", "UPLOAD_MODE")
+    assert mode is not None
+    assert mode.switch("UPLOAD_LOCAL")
+
+
+async def test_a_path_resent_mid_exposure_is_not_the_new_frame() -> None:
+    client = camera_client()
+    settings = Property("Cam", "UPLOAD_SETTINGS", PropertyType.TEXT, state=PropertyState.OK)
+    for name, value in (("UPLOAD_DIR", "/run/up"), ("UPLOAD_PREFIX", "NOCS_XXX")):
+        settings.elements[name] = TextElement(name, name, value)
+    client.define(settings)
+    modes = {"UPLOAD_CLIENT": False, "UPLOAD_LOCAL": True, "UPLOAD_BOTH": False}
+    client.define(switch_property("Cam", "UPLOAD_MODE", **modes))
+
+    def path(value: str) -> Property:
+        prop = Property("Cam", "CCD_FILE_PATH", PropertyType.TEXT, state=PropertyState.OK)
+        prop.elements["FILE_PATH"] = TextElement("FILE_PATH", "", value)
+        return prop
+
+    client.define(path("/run/up/NOCS_001.fits"))  # the previous frame
+
+    def respond(device: str, name: str, values: Mapping[str, str | float | bool]) -> None:
+        loop = asyncio.get_running_loop()
+        # Another client connects: indiserver re-sends the definition, mid-exposure.
+        loop.call_later(0.01, client.define, path("/run/up/NOCS_001.fits"))
+        # The driver saves the new frame (reusing the name) and updates the property.
+        new = {"FILE_PATH": "/run/up/NOCS_001.fits"}
+        loop.call_later(0.03, client.update, "Cam", "CCD_FILE_PATH", PropertyState.OK, new)
+
+    client.responder = respond
+    camera = Camera(client, "Cam")
+    events: list[str] = []
+    client.add_listener(lambda e: events.append(type(e).__name__))
+    written = await camera.expose_to_file(1, directory="/run/up", prefix="NOCS_XXX")
+    assert written == "/run/up/NOCS_001.fits"
+    assert events[-1] == "PropertyUpdated"  # it waited for the update, not the re-send

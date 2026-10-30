@@ -50,7 +50,9 @@ with INDI installed from `ppa:mutlaqja/ppa` (`indi-bin indi-3rdparty-drivers`):
 ```sh
 sudo cp dev/pi/indiserver@.service /etc/systemd/system/
 sudo systemctl enable --now indiserver@$USER   # port 7624, FIFO /run/indi/fifo
-NOCS_INDI_FIFO=/run/indi/fifo uv run --project server nocsd
+# Drivers save frames themselves where nocsd can read them (ADR 0012).
+NOCS_INDI_FIFO=/run/indi/fifo NOCS_INDI_UPLOAD_DIR=$HOME/.local/share/nocs/uploads \
+  uv run --project server nocsd
 ```
 
 It conflicts with the dev containers on port 7624: stop them first

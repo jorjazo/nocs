@@ -3,12 +3,16 @@ name = "nocs"
 version = "0.0.1"
 description = "NOCS core daemon (nocsd): web-first control of astrophotography rigs over INDI"
 license = "AGPL-3.0-or-later"
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.14"  # sep has no arm64 wheels for 3.14 yet
 dependencies = [
     "anyio>=4.6",
+    "astropy>=6.1",
     "fastapi>=0.115",
+    "numpy>=2.0",
+    "opencv-python-headless>=4.10",
     "pydantic>=2.9",
     "pydantic-settings>=2.6",
+    "sep>=1.4",
     "uvicorn[standard]>=0.32",
 ]
 

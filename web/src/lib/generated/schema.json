@@ -262,6 +262,17 @@
             }
           ]
         },
+        "preview": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Preview"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Latest preview, from any exposure or loop."
+        },
         "ramp": {
           "anyOf": [
             {
@@ -332,7 +343,8 @@
         "frame_type",
         "sensor",
         "bayer",
-        "last_frame"
+        "last_frame",
+        "preview"
       ],
       "title": "CameraState",
       "type": "object"
@@ -1048,6 +1060,34 @@
       ],
       "type": "string"
     },
+    "LoopRequest": {
+      "additionalProperties": false,
+      "description": "Expose repeatedly for previews (nothing is saved) until the job is cancelled.",
+      "properties": {
+        "exposure": {
+          "description": "Seconds.",
+          "maximum": 600,
+          "minimum": 0,
+          "type": "number"
+        },
+        "frame_type": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FrameTypeName"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "exposure"
+      ],
+      "title": "LoopRequest",
+      "type": "object"
+    },
     "Optics": {
       "additionalProperties": false,
       "properties": {
@@ -1132,6 +1172,74 @@
         "value"
       ],
       "title": "PatchOp",
+      "type": "object"
+    },
+    "Preview": {
+      "additionalProperties": false,
+      "properties": {
+        "color": {
+          "type": "boolean"
+        },
+        "exposure": {
+          "type": "number"
+        },
+        "frame_type": {
+          "$ref": "#/$defs/FrameTypeName"
+        },
+        "height": {
+          "type": "integer"
+        },
+        "hfr": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Median half-flux radius, unbinned pixels."
+        },
+        "histogram": {
+          "description": "256 bins over the 16-bit range, linear data.",
+          "items": {
+            "type": "integer"
+          },
+          "type": "array"
+        },
+        "seconds": {
+          "description": "Time the worker took.",
+          "type": "number"
+        },
+        "stars": {
+          "type": "integer"
+        },
+        "time": {
+          "description": "UTC, ISO 8601, when the frame arrived.",
+          "type": "string"
+        },
+        "url": {
+          "description": "JPEG, at most 1920 px wide; immutable.",
+          "type": "string"
+        },
+        "width": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "url",
+        "width",
+        "height",
+        "color",
+        "stars",
+        "hfr",
+        "histogram",
+        "exposure",
+        "frame_type",
+        "time",
+        "seconds"
+      ],
+      "title": "Preview",
       "type": "object"
     },
     "Profile": {

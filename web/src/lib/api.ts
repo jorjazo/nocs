@@ -1,3 +1,5 @@
+import type { JobStarted } from "./types";
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -7,7 +9,7 @@ export class ApiError extends Error {
   }
 }
 
-async function post(url: string, body?: unknown): Promise<void> {
+async function post(url: string, body?: unknown): Promise<unknown> {
   const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -17,6 +19,7 @@ async function post(url: string, body?: unknown): Promise<void> {
     const body = (await response.json().catch(() => ({}))) as { detail?: unknown };
     throw new ApiError(response.status, String(body.detail ?? response.statusText));
   }
+  return response.status === 204 ? null : ((await response.json()) as unknown);
 }
 
 export async function setIndiProperty(
@@ -34,4 +37,18 @@ export async function connectProfile(profile: string): Promise<void> {
 
 export async function disconnectEquipment(): Promise<void> {
   await post("/api/equipment/disconnect");
+}
+
+export async function expose(role: string, exposure: number): Promise<string> {
+  const started = (await post(`/api/cameras/${role}/expose`, { exposure })) as JobStarted;
+  return started.job;
+}
+
+export async function loop(role: string, exposure: number): Promise<string> {
+  const started = (await post(`/api/cameras/${role}/loop`, { exposure })) as JobStarted;
+  return started.job;
+}
+
+export async function cancelJob(job: string): Promise<void> {
+  await post(`/api/jobs/${job}/cancel`);
 }
