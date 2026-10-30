@@ -1,0 +1,83 @@
+# NOCS — notes for Claude
+
+NOCS is a web-first control system for astrophotography rigs on top of INDI.
+Read [docs/design.md](docs/design.md), [docs/roadmap.md](docs/roadmap.md) and the
+[ADRs](docs/adr/) before planning work; [docs/ux.md](docs/ux.md) for UI work;
+[docs/spikes/](docs/spikes/) for measured facts (PHD2 headless, Pi 5 performance).
+
+## Working with the maintainer
+
+- Talk in **Spanish**. Code, comments, docs and commit messages in **English**.
+- One maintainer, 5–10 h/week: keep phases small and every step testable.
+- **Commit and push only when asked.** Commits are signed off (`git commit -s`,
+  DCO) and end with the Co-Authored-By line. After a push, check that CI passes.
+- Propose a plan in stages before large changes; record significant decisions as
+  a new ADR rather than editing an accepted one.
+
+## Layout
+
+```
+server/   Python package `nocs` (nocsd): indi/ (protocol + async client),
+          devices/ (typed facades), state/ (versioned store), services/
+          (indi_bridge), api/ (FastAPI REST + WebSocket, schemas, schema export)
+web/      Svelte 5 + TypeScript PWA (currently a dev shell, not the real UI)
+dev/      compose.yaml (INDI simulators + GSC catalog, headless PHD2), bench/,
+          spikes/, pi/ (lab Pi flashing and setup)
+docs/     design, roadmap, ux, adr/, spikes/
+```
+
+## Commands
+
+```sh
+docker compose -f dev/compose.yaml up -d      # INDI simulators :7624, PHD2 :4400
+cd server && uv sync
+uv run ruff check . && uv run ruff format --check . && uv run pyright   # strict
+NOCS_TEST_INDI=localhost:7624 uv run pytest   # integration tests need it set
+cd web && pnpm install && pnpm check && pnpm build
+pnpm gen:types        # after changing server/src/nocs/api/schemas.py (CI checks)
+NOCS_WEB_DIR=web/dist uv run --project server nocsd   # http://127.0.0.1:8000
+```
+
+CI runs all of the above (INDI simulators included) on every push to `main`.
+
+## Conventions and decisions to respect
+
+- **pyright strict** and ruff are mandatory; no `Any` leaking from libraries
+  without a narrow `pyright: ignore` and a reason.
+- **State goes through `StateStore`**; clients get snapshot + patches with an
+  epoch. Document new state in `api/schemas.py` (tests validate the live state
+  against it) and regenerate the TS types.
+- **Device code goes through `nocs.devices` facades**, not raw INDI properties.
+  Commands complete on the driver's `Ok` and fail on `Alert`.
+- **Concurrency in the API uses anyio** (task groups, `move_on_after`), the ASGI
+  server's own model: mixing asyncio TaskGroups with it lost cancellations and
+  caused flaky WebSocket tests.
+- **Imaging pipeline** (from the Pi 5 spike): JPEG previews (not WebP), OpenCV
+  for debayer and downscale, star metrics (`sep`) in a worker process, never on
+  the event loop. ASTAP downsampling must be chosen from star size, not `-z 0`.
+- **Python runtime:** nocsd should run on a uv-managed Python (3.12/3.13), not
+  the system interpreter: scientific deps lack arm64 wheels for Ubuntu 26.04's
+  Python 3.14.
+- **Target platform:** Ubuntu 26.04 LTS; INDI from `ppa:mutlaqja/ppa` (only
+  publishes for the current release; third-party drivers in
+  `indi-3rdparty-drivers`), PHD2 from `ppa:pch/phd2`.
+
+## INDI gotchas (all bit us already)
+
+- Drivers define most properties only **after** CONNECT, and some first with
+  placeholder values (e.g. `CCD_INFO` at 0×0): wait for readiness
+  (`Device.not_ready()`), never assume.
+- Right after (re)connecting to indiserver, devices appear gradually; wait for
+  `CONNECTION` before using a device.
+- Property state conventions vary: tracking reports `Busy` = on, `Idle` = off.
+- Expat ≥ 2.6 defers small trailing chunks: the stream parser must `flush()`.
+- The simulators render real stars only with the GSC catalog (in the dev image);
+  their stars are very sharp (HFR < 1 px).
+
+## Lab hardware
+
+- Lab Pi 5 (Ubuntu 26.04, Docker, uv, ASTAP + D50 in `/opt/astap`):
+  `ssh jorjazo@nocs-lab.local`. Its `~/nocs` may not be a clean checkout.
+- Reference rig for Phase 2 device priority: ZWO cooled camera, ZWO EFW, ZWO
+  EAF, ZWO AM5, Pegasus Pocket Powerbox Advance Gen2, ZWO guide camera; then
+  AM7 and iOptron GEM45G. Canon DSLR later.
