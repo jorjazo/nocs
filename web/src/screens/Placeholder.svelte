@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Tabs whose content comes in later stages (2.7 Live, phases 3–5).
+  // Tabs whose content comes in later phases (3–5).
   import Button from "../components/Button.svelte";
   import EmptyState from "../components/EmptyState.svelte";
   import RigStatus from "../components/RigStatus.svelte";
@@ -8,7 +8,7 @@
   import { live } from "../lib/live.svelte";
   import { router } from "../lib/router.svelte";
 
-  let { tab }: { tab: "tonight" | "live" | "plan" | "session" } = $props();
+  let { tab }: { tab: "tonight" | "plan" | "session" } = $props();
 
   const t = $derived(i18n.t);
   const connected = $derived(live.app.equipment?.connection === "connected");

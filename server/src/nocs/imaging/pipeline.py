@@ -8,6 +8,7 @@ stars when it is large.
 
 from __future__ import annotations
 
+import math
 import os
 import tempfile
 import time
@@ -32,6 +33,10 @@ JPEG_QUALITY = 85
 BIN_STARS_ABOVE = 4_000_000
 """Frames with more pixels than this are 2x2 binned for star detection."""
 HISTOGRAM_BINS = 256
+HISTOGRAM_TAIL = 0.005
+"""Fraction of the data at each end (hot pixels, say) left out when choosing the range."""
+HISTOGRAM_MARGIN = 0.3
+"""Room at each side of the histogram's range, as a fraction of it."""
 
 # FITS BAYERPAT -> OpenCV code producing BGR. OpenCV names patterns by a different
 # corner: an RGGB sensor is OpenCV's "BG".
@@ -47,6 +52,20 @@ type Image = NDArray[np.float32]
 
 
 @dataclass(frozen=True, slots=True)
+class Histogram:
+    """Counts of the linear data (sampled) in equal bins over where the data is."""
+
+    counts: list[int]
+    start: int
+    """Value (ADU) at the lower edge of the first bin."""
+    step: int
+    """Values per bin: a whole multiple of the data's quantization (16 for a 12-bit camera)."""
+    minimum: int
+    maximum: int
+    """Darkest and brightest sampled values, which may lie outside the bins."""
+
+
+@dataclass(frozen=True, slots=True)
 class FrameAnalysis:
     preview: str
     """Path of the JPEG written."""
@@ -56,8 +75,7 @@ class FrameAnalysis:
     stars: int
     hfr: float | None
     """Median half-flux radius in unbinned pixels; None without stars."""
-    histogram: list[int]
-    """Counts of the linear data in equal bins over the 16-bit range (sampled)."""
+    histogram: Histogram
     seconds: float
     """Processing time."""
 
@@ -78,7 +96,7 @@ def analyze(fits_path: str, preview_path: str, bayer: str | None = None) -> Fram
     if pattern is not None and pattern not in _DEBAYER:
         raise ValueError(f"unsupported Bayer pattern {pattern}")
 
-    histogram = _histogram(data)
+    histogram = measure_histogram(data)
     stars, hfr = measure_stars(data, binned=pattern is not None or data.size > BIN_STARS_ABOVE)
 
     image: NDArray[np.uint16] = (
@@ -178,9 +196,36 @@ def measure_stars(data: Mono16, *, binned: bool) -> tuple[int, float | None]:
     return count, round(float(np.median(values)) * factor, 3)
 
 
-def _histogram(data: Mono16) -> list[int]:
-    counts, _ = np.histogram(data[::4, ::4], bins=HISTOGRAM_BINS, range=(0, 65536))
-    return [int(c) for c in counts]
+def measure_histogram(data: Mono16) -> Histogram:
+    """Bins over the data's range rather than the whole 16-bit one.
+
+    A sky fills a few hundred ADU of 65536: equal bins over the full range would
+    put it all in one or two. The range runs from the 0.5 % to the 99.5 % point
+    with a margin at each side, so hot pixels and saturated stars do not stretch
+    it; bins are a whole number of quantization steps wide, so scaled 12- and
+    14-bit data has no empty bins between its values.
+    """
+    per_value = np.bincount(data[::4, ::4].ravel(), minlength=65536)
+    present = np.flatnonzero(per_value)
+    if present.size == 0:  # an empty frame
+        return Histogram([0] * HISTOGRAM_BINS, 0, 1, 0, 0)
+    minimum, maximum = int(present[0]), int(present[-1])
+    step = int(np.gcd.reduce(present)) if maximum > 0 else 1
+    cumulative = np.cumsum(per_value)
+    total = int(cumulative[-1])
+    low = int(np.searchsorted(cumulative, total * HISTOGRAM_TAIL, side="right"))
+    high = int(np.searchsorted(cumulative, total * (1 - HISTOGRAM_TAIL)))
+    margin = (high - low + 1) * HISTOGRAM_MARGIN
+    start = max(0.0, low - margin)
+    end = min(65536.0, high + 1 + margin)
+    width = max(step, math.ceil((end - start) / HISTOGRAM_BINS / step) * step)
+    first = int(start) // step * step
+    first = max(0, min(first, 65536 - width * HISTOGRAM_BINS))
+    window = np.zeros(width * HISTOGRAM_BINS, dtype=np.int64)
+    available = per_value[first : first + window.size]
+    window[: available.size] = available
+    counts = window.reshape(HISTOGRAM_BINS, width).sum(axis=1)
+    return Histogram([int(c) for c in counts], first, width, minimum, maximum)
 
 
 def _downscale(image: NDArray[np.uint16]) -> Image:

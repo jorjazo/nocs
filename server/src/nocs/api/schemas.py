@@ -149,7 +149,13 @@ class Preview(StateModel):
     color: bool
     stars: int
     hfr: float | None = Field(description="Median half-flux radius, unbinned pixels.")
-    histogram: list[int] = Field(description="256 bins over the 16-bit range, linear data.")
+    histogram: list[int] = Field(
+        description="256 equal bins of the linear data (sampled), over where most of it is."
+    )
+    histogram_start: int = Field(description="ADU at the lower edge of the first bin.")
+    histogram_step: int = Field(description="ADU per bin.")
+    minimum: int = Field(description="Darkest sampled value, ADU; may be below the bins.")
+    maximum: int = Field(description="Brightest sampled value, ADU; may be above the bins.")
     exposure: float
     frame_type: FrameTypeName
     time: str = Field(description="UTC, ISO 8601, when the frame arrived.")

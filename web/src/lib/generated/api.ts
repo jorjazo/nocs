@@ -180,9 +180,25 @@ export interface Preview {
    */
   hfr: number | null;
   /**
-   * 256 bins over the 16-bit range, linear data.
+   * 256 equal bins of the linear data (sampled), over where most of it is.
    */
   histogram: number[];
+  /**
+   * ADU at the lower edge of the first bin.
+   */
+  histogram_start: number;
+  /**
+   * ADU per bin.
+   */
+  histogram_step: number;
+  /**
+   * Brightest sampled value, ADU; may be above the bins.
+   */
+  maximum: number;
+  /**
+   * Darkest sampled value, ADU; may be below the bins.
+   */
+  minimum: number;
   /**
    * Time the worker took.
    */

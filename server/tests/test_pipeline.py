@@ -10,7 +10,7 @@ import pytest
 from astropy.io import fits  # pyright: ignore[reportMissingTypeStubs]
 from numpy.typing import NDArray
 
-from nocs.imaging.pipeline import PREVIEW_WIDTH, analyze, measure_stars
+from nocs.imaging.pipeline import PREVIEW_WIDTH, analyze, measure_histogram, measure_stars
 
 _fits: Any = fits  # untyped library; see nocs.imaging.pipeline
 
@@ -67,6 +67,40 @@ def test_no_stars() -> None:
     assert measure_stars(flat, binned=False) == (0, None)
 
 
+def test_histogram_follows_the_data() -> None:
+    rng = np.random.default_rng(3)
+    sky = rng.normal(2000, 40, (400, 400))
+    sky[::50, ::50] = 65535  # hot pixels: 0.16 % of the every-4th-pixel sample
+    histogram = measure_histogram(np.clip(sky, 0, 65535).astype(np.uint16))
+    assert histogram.maximum == 65535
+    assert histogram.minimum < 2000
+    # Hot pixels do not stretch the range: the sky keeps most of the bins.
+    span = 256 * histogram.step
+    assert histogram.start <= 2000 - 120
+    assert 2000 + 120 <= histogram.start + span < 4000
+    assert sum(count > 0 for count in histogram.counts) > 100
+
+
+def test_histogram_bins_follow_quantization() -> None:
+    # 12-bit data scaled to 16 bits: only multiples of 16 occur.
+    rng = np.random.default_rng(4)
+    raw = np.clip(rng.normal(300, 4, (400, 400)), 0, 4095).astype(np.uint16) * np.uint16(16)
+    histogram = measure_histogram(raw)
+    assert histogram.step % 16 == 0
+    assert histogram.start % 16 == 0
+    # No empty bins between values that occur (the core of the distribution).
+    for i, count in enumerate(histogram.counts):
+        low = histogram.start + i * histogram.step
+        if 296 * 16 <= low < 304 * 16:
+            assert count > 0
+
+
+def test_histogram_of_an_empty_frame() -> None:
+    histogram = measure_histogram(np.zeros((64, 64), dtype=np.uint16))
+    assert (histogram.minimum, histogram.maximum) == (0, 0)
+    assert histogram.counts[0] == sum(histogram.counts) == 16 * 16
+
+
 def test_mono_preview(tmp_path: Path) -> None:
     source = write_fits(tmp_path / "frame.fits", star_field(2400, 1600, 30))
     result = analyze(source, str(tmp_path / "preview.jpg"))
@@ -76,8 +110,14 @@ def test_mono_preview(tmp_path: Path) -> None:
     assert not result.color
     assert result.stars >= 25  # 3.8 MP: measured at full resolution
     assert result.hfr == pytest.approx(GAUSSIAN_HFR, rel=0.15)
-    assert len(result.histogram) == 256
-    assert sum(result.histogram) == 600 * 400  # every 4th pixel each way
+    histogram = result.histogram
+    assert len(histogram.counts) == 256
+    # Every 4th pixel each way; only the faintest and brightest 0.5 % may fall outside.
+    assert 0.99 * 600 * 400 <= sum(histogram.counts) <= 600 * 400
+    # The sky (1000 ± 10) spreads over the bins instead of filling one.
+    assert histogram.start < 1000 - 30 < 1000 + 30 < histogram.start + 256 * histogram.step
+    assert sum(count > 0 for count in histogram.counts) > 50
+    assert histogram.minimum < 1000 < histogram.maximum
     # The stretch puts the background near 25 % grey.
     assert 40 < float(np.median(image)) < 90
 

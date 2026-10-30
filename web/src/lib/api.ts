@@ -3,7 +3,10 @@
 
 import type {
   AuthStatus,
+  CameraRoleName,
+  CameraSettingsRequest,
   ConnectRequest,
+  CoolingRequest,
   ExposeRequest,
   JobStarted,
   LoopRequest,
@@ -129,13 +132,23 @@ export function setIndiProperty(
 
 // -- Cameras and jobs -----------------------------------------------------------
 
-export async function expose(role: string, exposure: number): Promise<string> {
-  const body: ExposeRequest = { exposure };
+export function setCameraSettings(role: CameraRoleName, body: CameraSettingsRequest): Promise<void> {
+  return request("POST", `/api/cameras/${role}/settings`, body);
+}
+
+export function setCooling(role: CameraRoleName, body: CoolingRequest): Promise<void> {
+  return request("POST", `/api/cameras/${role}/cooling`, body);
+}
+
+// The frame type is the camera's current one; `save` defaults to the server's
+// choice (the main camera saves, the guide camera never does).
+export async function expose(role: CameraRoleName, exposure: number, save?: boolean): Promise<string> {
+  const body: ExposeRequest = save === undefined ? { exposure } : { exposure, save };
   const started = await request<JobStarted>("POST", `/api/cameras/${role}/expose`, body);
   return started.job;
 }
 
-export async function loop(role: string, exposure: number): Promise<string> {
+export async function loop(role: CameraRoleName, exposure: number): Promise<string> {
   const body: LoopRequest = { exposure };
   const started = await request<JobStarted>("POST", `/api/cameras/${role}/loop`, body);
   return started.job;

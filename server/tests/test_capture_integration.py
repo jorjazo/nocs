@@ -194,6 +194,8 @@ def test_expose_and_save(api: TestClient, data_dir: Path) -> None:
     assert (preview["exposure"], preview["frame_type"]) == (1, "light")
     assert (preview["width"], preview["height"]) == (320, 240)
     assert len(preview["histogram"]) == 256
+    assert preview["histogram_step"] >= 1
+    assert preview["minimum"] <= preview["maximum"]
     response = api.get(preview["url"])
     assert response.status_code == 200
     assert response.headers["content-type"] == "image/jpeg"

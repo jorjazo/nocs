@@ -12,6 +12,7 @@
   import { router } from "./lib/router.svelte";
   import AuthScreen from "./screens/AuthScreen.svelte";
   import Dev from "./screens/dev/Dev.svelte";
+  import Live from "./screens/live/Live.svelte";
   import Placeholder from "./screens/Placeholder.svelte";
   import Rig from "./screens/Rig.svelte";
 
@@ -51,6 +52,8 @@
   });
 
   const offline = $derived(live.synced && live.status !== "open");
+  // Live view uses the whole width: the preview is edge to edge.
+  const full = $derived(router.route.screen === "live");
 </script>
 
 {#if view === "loading"}
@@ -67,7 +70,7 @@
   <AuthScreen mode={view} />
 {:else}
   <NavBar />
-  <main class="content">
+  <main class="content" class:full>
     {#if offline}
       <div class="banner"><Banner icon="offline" tone="warning">{t.link.offline}</Banner></div>
     {/if}
@@ -83,6 +86,8 @@
     {/if}
     {#if router.route.screen === "rig"}
       <Rig />
+    {:else if router.route.screen === "live"}
+      <Live />
     {:else if router.route.screen === "dev"}
       <Dev />
     {:else}
@@ -111,11 +116,23 @@
     z-index: 5;
     margin-top: var(--space-3);
   }
+  .full {
+    max-width: none;
+    padding: 0 0 calc(var(--tabbar-height) + env(safe-area-inset-bottom));
+  }
+  .full .banner {
+    margin: 0;
+    padding: var(--space-2) var(--margin) 0;
+  }
   @media (min-width: 768px) {
     .content {
       padding: var(--space-4) var(--space-8) var(--space-8);
       margin-left: max(var(--rail-width), calc((100vw - 760px) / 2));
       margin-right: auto;
+    }
+    .full {
+      padding: 0;
+      margin-left: var(--rail-width);
     }
   }
 </style>

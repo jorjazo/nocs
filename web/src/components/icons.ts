@@ -34,6 +34,17 @@ export const ICONS = {
   chevronLeft: ["M14.5 6.5L9 12l5.5 5.5"],
   offline: ["M3 3l18 18", "M8.5 16.3a5 5 0 0 1 7 0", "M5 12.6a10 10 0 0 1 3.8-2.3M19 12.6a10 10 0 0 0-3.2-2", "M2 9a14.5 14.5 0 0 1 4.2-2.7M22 9a14.5 14.5 0 0 0-9-3.6", "M12 20h.01"],
   alert: [circle(12, 12, 9), "M12 7.5v5.5M12 16.5h.01"],
+  loop: ["M16.5 3.5l3 3-3 3", "M19.5 6.5H8.5A4.5 4.5 0 0 0 4 11v.5", "M7.5 20.5l-3-3 3-3", "M4.5 17.5h11A4.5 4.5 0 0 0 20 13v-.5"],
+  save: [
+    "M5.5 4h10l4 4v10.5a1.5 1.5 0 0 1-1.5 1.5H5.5A1.5 1.5 0 0 1 4 18.5v-13A1.5 1.5 0 0 1 5.5 4z",
+    "M8 4v4h7V4",
+    "M8 20v-6h8v6",
+  ],
+  expand: ["M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"],
+  shrink: ["M9 4v5H4M20 9h-5V4M15 20v-5h5M4 15h5v5"],
+  close: ["M6 6l12 12M18 6L6 18"],
+  plus: ["M12 5v14M5 12h14"],
+  minus: ["M5 12h14"],
 } satisfies Record<string, string[]>;
 
 export type IconName = keyof typeof ICONS;

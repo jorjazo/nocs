@@ -1676,11 +1676,27 @@
           "description": "Median half-flux radius, unbinned pixels."
         },
         "histogram": {
-          "description": "256 bins over the 16-bit range, linear data.",
+          "description": "256 equal bins of the linear data (sampled), over where most of it is.",
           "items": {
             "type": "integer"
           },
           "type": "array"
+        },
+        "histogram_start": {
+          "description": "ADU at the lower edge of the first bin.",
+          "type": "integer"
+        },
+        "histogram_step": {
+          "description": "ADU per bin.",
+          "type": "integer"
+        },
+        "maximum": {
+          "description": "Brightest sampled value, ADU; may be above the bins.",
+          "type": "integer"
+        },
+        "minimum": {
+          "description": "Darkest sampled value, ADU; may be below the bins.",
+          "type": "integer"
         },
         "seconds": {
           "description": "Time the worker took.",
@@ -1709,6 +1725,10 @@
         "stars",
         "hfr",
         "histogram",
+        "histogram_start",
+        "histogram_step",
+        "minimum",
+        "maximum",
         "exposure",
         "frame_type",
         "time",

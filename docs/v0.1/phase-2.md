@@ -31,6 +31,14 @@ the exit.
 
 After the exit: AM7 and iOptron GEM45G (profiles and driver quirks).
 
+Pending, without a stage yet:
+
+- **Save a preview after the fact.** Live view (2.7) decides before the exposure
+  whether a frame is saved (a Save toggle next to the shutter); loop and preview
+  frames are discarded once analysed. The server should keep the FITS behind the
+  latest preview of each camera, with the facts read when it was taken (gain,
+  temperature, filter, target), so the phone can save it later.
+
 ## Decisions taken for this phase
 
 - No privileged operations yet (they belong to nocs-system, phase 6): USB drives

@@ -1,7 +1,7 @@
 // English messages: the source of truth for every other language. Messages
 // with parameters are functions; es.ts must match this shape exactly.
 
-import type { ConnectionName, DeviceStatusName, Role } from "../types";
+import type { ConnectionName, DeviceStatusName, FrameTypeName, Role } from "../types";
 
 export const en = {
   tabs: {
@@ -70,10 +70,6 @@ export const en = {
       title: "Tonight starts here",
       body: "The night window, conditions and the get-ready checklist will appear here.",
       connect: "For now, connect your equipment in Rig.",
-    },
-    live: {
-      title: "Live view is on its way",
-      body: "Preview, exposure settings and capture arrive in the next update.",
     },
     plan: {
       title: "Planning comes later",
@@ -150,6 +146,80 @@ export const en = {
   },
   prefs: {
     title: "This screen",
+  },
+  live: {
+    title: "Live view",
+    noCamera: "No camera connected",
+    noCameraBody: "Connect your equipment in Rig to see previews and take frames here.",
+    camera: "Camera",
+    preview: "Preview",
+    previewLabel: (device: string) => `Latest preview from ${device}`,
+    noPreview: "No preview yet",
+    noPreviewBody: "Take a frame or start a loop.",
+    controls: "Exposure and capture",
+    expand: "Enlarge the preview",
+    shrink: "Back to the controls",
+    stars: (count: number) => (count === 1 ? "1 star" : `${count} stars`),
+    status: {
+      exposing: (elapsed: string, total: string) => `Exposing ${elapsed} / ${total} s`,
+      left: (seconds: string) => `Exposing · ${seconds} s left`,
+      loopLeft: (seconds: string) => `Looping · ${seconds} s left`,
+      looping: "Looping",
+      processing: "Processing",
+      failed: "Failed",
+    },
+    histogram: "Histogram of the latest frame",
+    autoStretch: "Auto stretch",
+    histogramMin: (value: string) => `Min ${value}`,
+    histogramMax: (value: string) => `Max ${value}`,
+    filter: "Filter",
+    slot: (slot: number) => `Slot ${slot}`,
+    filterMoving: "Changing filter…",
+    exposure: "Exposure",
+    seconds: "Seconds",
+    presets: "Common exposure times",
+    gain: "Gain",
+    offset: "Offset",
+    binning: "Binning",
+    frame: "Frame",
+    frameTypes: {
+      light: "Light",
+      dark: "Dark",
+      flat: "Flat",
+      bias: "Bias",
+    } satisfies Record<FrameTypeName, string>,
+    cooler: "Cooler",
+    coolerOff: "Off",
+    coolerNone: "None",
+    cooling: {
+      title: "Cooling",
+      sensor: "Sensor",
+      power: "Power",
+      on: "Cooler on",
+      target: "Target temperature",
+      ramp: "Ramp",
+      rampHint: "Most degrees per minute; 0 = no limit.",
+    },
+    region: (width: number, height: number) => `Region ${width} × ${height}`,
+    fullFrame: "Use full frame",
+    locked: "Settings are locked while the camera is busy.",
+    loop: "Loop",
+    loopMax: (max: string) => `Loop exposures can be at most ${max}.`,
+    capture: "Take a frame",
+    captureSave: "Take and save a frame",
+    stop: "Stop",
+    save: "Save",
+    willSave: "Frames are saved",
+    wontSave: "Preview only, frames are not saved",
+    saved: (path: string) => `Saved: ${path}`,
+    dismiss: "Dismiss",
+    apply: "Apply",
+    close: "Close",
+    invalid: "Enter a number.",
+    outOfRange: (min: string, max: string) => `Enter a value from ${min} to ${max}.`,
+    range: (min: string, max: string) => `From ${min} to ${max}.`,
+    decrease: (label: string) => `Decrease ${label.toLowerCase()}`,
+    increase: (label: string) => `Increase ${label.toLowerCase()}`,
   },
 };
 

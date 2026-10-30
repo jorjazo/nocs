@@ -122,12 +122,39 @@ Icons: 24 px, 1.8 px stroke, round caps and joins, drawn in-house.
   phone's time and location to the mount stage (no API yet; geolocation needs a
   secure context, ADR 0014). The hotspot name waits for nocs-system.
 
+Live view (stage 2.7):
+
+- The shutter is the screen's one primary action: it takes a frame, and while
+  the camera is busy it stops the job, with the exposure's progress on its ring.
+  Loop and Save are toggles on either side; Save decides before the frame
+  whether it is kept (only the main camera saves). Saving a preview after the
+  fact needs server support (phase 2 plan, pending).
+- On phones the actions and their errors stay docked above the tab bar while the
+  settings scroll; wide screens put the preview on the left and the controls in
+  a column on the right.
+- The preview is drawn on a canvas. In Night mode the client maps its luminance
+  to the red channel only (green and blue are zero), so no star is ever white.
+- Pinch or wheel to zoom, drag to pan, double tap to switch between fitting the
+  frame and its pixels at full size; the zoom is kept for new frames of the same
+  size (focusing). Enlarging the preview is done in the page, not with the
+  Fullscreen API, which iPhones do not offer.
+- Over the image, the top label is the camera as it is now (device, sensor
+  temperature, current filter); the bottom row describes the preview (HFR,
+  stars, exposure) and the job status.
+- The histogram's 256 bins cover where the data is (0.5 % to 99.5 % with a 30 %
+  margin each side, whole quantization steps wide), not the whole 16-bit range,
+  where a sky fills one or two bins; dotted lines and labels give the darkest
+  and brightest values, so clipping still shows when it lies outside.
+- Settings that live on the server are locked while the camera runs a job; the
+  exposure time and the save choice are kept per device in the browser.
+
 ## 8. Open UX questions
 
 - Persistent "session running" indicator on non-session screens (banner vs.
   tab badge).
 - How to expose the full sequence tree editor (advanced) without cluttering the
   template view.
-- Image interaction on phones: pinch-zoom, star inspection, FITS header view.
+- Image interaction on phones: star inspection, FITS header view (pinch-zoom is
+  in Live view since stage 2.7).
 - Spanish copy review: text lengths in Spanish are ~20–30 % longer; layouts must
   be checked with both languages.

@@ -27,15 +27,20 @@
 </div>
 
 <style>
+  /* Many options (a filter wheel's slots) scroll sideways rather than shrink
+     below the touch size. */
   .segmented {
     display: flex;
     gap: var(--space-1);
     padding: var(--space-1);
     border-radius: var(--radius-button);
     background: var(--raised);
+    overflow-x: auto;
+    scrollbar-width: none;
   }
   button {
-    flex: 1 1 0;
+    flex: 1 0 auto;
+    min-width: var(--touch);
     min-height: var(--touch);
     padding: 0 var(--space-3);
     border: 0;

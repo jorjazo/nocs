@@ -72,3 +72,26 @@ export function formatBytes(bytes: number, locale: string): string {
 export function formatDateTime(iso: string, locale: string): string {
   return new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(new Date(iso));
 }
+
+// Plain numbers in the interface (gain, offset, ranges), without grouping.
+export function formatPlain(value: number, locale: string, maxDigits = 3): string {
+  const text = new Intl.NumberFormat(locale, { maximumFractionDigits: maxDigits, useGrouping: false }).format(value);
+  return text.replace("-", MINUS);
+}
+
+// Exposure times as typed: "0.5 s", "120 s", never "120.0 s".
+export function formatSeconds(seconds: number, locale: string): string {
+  return `${formatPlain(seconds, locale)} s`;
+}
+
+export function formatTemperature(celsius: number, locale: string, digits = 1): string {
+  return `${formatDecimal(celsius, locale, digits)} °C`;
+}
+
+// Numbers typed by hand, with either decimal separator; null if not a number.
+export function parseNumber(text: string): number | null {
+  const cleaned = text.trim().replace(",", ".").replace(MINUS, "-");
+  if (cleaned === "") return null;
+  const value = Number(cleaned);
+  return Number.isFinite(value) ? value : null;
+}
