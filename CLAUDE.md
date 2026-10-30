@@ -19,8 +19,10 @@ Read [docs/design.md](docs/design.md), [docs/roadmap.md](docs/roadmap.md) and th
 ```
 server/   Python package `nocs` (nocsd): indi/ (protocol + async client, driver
           FIFO + catalog), devices/ (typed facades), equipment/ (profiles,
-          roles, connect service), state/ (versioned store), services/
-          (indi_bridge), api/ (FastAPI REST + WebSocket, schemas, schema export)
+          roles, connect service), imaging/ (capture, preview worker),
+          storage/ (destinations, layout, FITS headers, SQLite catalog),
+          state/ (versioned store), services/ (indi_bridge), api/ (FastAPI
+          REST + WebSocket, schemas, schema export)
 web/      Svelte 5 + TypeScript PWA (currently a dev shell, not the real UI)
 dev/      compose.yaml (INDI simulators + GSC catalog + driver FIFO in dev/.run,
           headless PHD2), profiles/ (simulator rig), tools/ (indi_record),

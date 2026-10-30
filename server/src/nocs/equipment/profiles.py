@@ -120,7 +120,7 @@ class ProfileStore:
 
     def put(self, profile_id: str, profile: Profile) -> None:
         data = json.dumps(profile.model_dump(mode="json", exclude_none=True), indent=2) + "\n"
-        _write_atomic(self._path(profile_id), data)
+        write_atomic(self._path(profile_id), data)
 
     def delete(self, profile_id: str) -> bool:
         try:
@@ -143,13 +143,13 @@ class ProfileStore:
         if profile_id is None:
             self._active_file.unlink(missing_ok=True)
         else:
-            _write_atomic(self._active_file, check_id(profile_id) + "\n")
+            write_atomic(self._active_file, check_id(profile_id) + "\n")
 
     def _path(self, profile_id: str) -> Path:
         return self._dir / f"{check_id(profile_id)}.json"
 
 
-def _write_atomic(path: Path, data: str) -> None:
+def write_atomic(path: Path, data: str) -> None:
     """Write through a temporary file, so a crash never leaves half a file behind."""
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.")

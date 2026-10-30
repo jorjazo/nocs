@@ -8,8 +8,8 @@ State layout under ``("cameras",)``, one entry per connected camera role::
 
 Frames come either saved by the driver into a directory nocsd can read
 (``UPLOAD_LOCAL``) or as BLOBs (ADR 0012); either way each becomes a file that is
-kept under ``frames/`` when saved, analysed in the imaging worker, and deleted
-afterwards when it was only for a preview (loop mode).
+handed to storage when saved (main camera only, ADR 0013), analysed in the imaging
+worker, and deleted afterwards when it was only for a preview (loop mode).
 
 Each camera gets its own INDI connection for images (BLOB only, for that device),
 opened at the first exposure, so a frame of tens of megabytes never holds up
@@ -19,7 +19,6 @@ the connection that carries the state of every device.
 from __future__ import annotations
 
 import asyncio
-import dataclasses
 import logging
 import os
 import shutil
@@ -34,19 +33,23 @@ from typing import Any
 
 import anyio
 
-from nocs.devices import Camera, DeviceError, Frame, FrameType
+from nocs.devices import Camera, DeviceError, FilterWheel, Frame, FrameType
 from nocs.devices.camera import Region
 from nocs.equipment import EquipmentService, Role
 from nocs.equipment.service import IndiConnection
+from nocs.imaging.pipeline import FrameAnalysis
 from nocs.imaging.worker import ImageWorker
 from nocs.indi import BlobMode, IndiClient, IndiEvent, PropertyDefined, PropertyUpdated
 from nocs.jobs import JobContext, JobManager
 from nocs.state import Json, Path, StateStore
+from nocs.storage import FrameFacts, StorageError, StorageService
 
 log = logging.getLogger(__name__)
 
 ROOT: Path = ("cameras",)
 CAMERA_ROLES = (Role.MAIN_CAMERA, Role.GUIDE_CAMERA)
+SAVING_ROLES = (Role.MAIN_CAMERA,)
+"""Guide camera frames are only previews; PHD2 takes its own (ADR 0013)."""
 
 FRAME_TYPES: dict[str, FrameType] = {
     "light": FrameType.LIGHT,
@@ -182,6 +185,7 @@ class CaptureService:
         bridge: IndiConnection,
         connect_images: ImageConnector,
         worker: ImageWorker,
+        storage: StorageService,
         data_dir: FsPath,
         uploads: UploadDirs | None = None,
     ) -> None:
@@ -190,8 +194,8 @@ class CaptureService:
         self._equipment = equipment
         self._connect_images = connect_images
         self._worker = worker
+        self._storage = storage
         self._uploads = uploads
-        self._frames_dir = data_dir / "frames"
         self._incoming_dir = data_dir / "incoming"
         self._client: IndiClient | None = bridge.client
         self._remove_listener = lambda: None
@@ -202,7 +206,7 @@ class CaptureService:
         self._last_frames: dict[Role, Json] = {}
         self._previews: dict[Role, Json] = {}
         self._images: dict[Role, IndiClient] = {}
-        self._tasks: set[asyncio.Task[None]] = set()
+        self._tasks: set[asyncio.Task[object]] = set()
 
         # Frames left by a previous run (stopped mid-exposure) are of no use now.
         for leftover in self._incoming_dir.glob("*"):
@@ -265,11 +269,23 @@ class CaptureService:
         self._publish(role)
 
     def expose(
-        self, role: Role, seconds: float, frame_type: FrameType | None = None, save: bool = True
+        self,
+        role: Role,
+        seconds: float,
+        frame_type: FrameType | None = None,
+        save: bool | None = None,
     ) -> str:
-        """Start an exposure job; returns its id."""
+        """Start an exposure job; returns its id.
+
+        Frames of the main camera are saved unless ``save`` is false; those of the
+        guide camera never are.
+        """
         if seconds < 0:
             raise ValueError("exposure must not be negative")
+        if save is None:
+            save = role in SAVING_ROLES
+        elif save and role not in SAVING_ROLES:
+            raise ValueError(f"frames of the {role.value} are not saved, only previewed")
         self.camera(role)  # fail now, not inside the job, if it is not connected
 
         async def run(context: JobContext) -> Json:
@@ -322,17 +338,65 @@ class CaptureService:
             "format": shot.path.suffix,
             "size": shot.size,
             "time": shot.taken.isoformat(timespec="seconds"),
+            "id": None,
             "path": None,
+            "destination": None,
         }
+        frame_id: int | None = None
         if save:
             context.progress(None, "saving")
-            shot = await anyio.to_thread.run_sync(self._keep, shot, role)
-            result["path"] = str(shot.path)
+            facts = self._facts(role, shot)
+            try:
+                saved = await anyio.to_thread.run_sync(self._storage.save, facts)
+            except Exception as e:
+                kept = await anyio.to_thread.run_sync(self._storage.keep_unsaved, shot.path)
+                if isinstance(e, StorageError) and kept is not None:
+                    raise StorageError(f"{e} (the frame was kept in {kept})") from e
+                raise
+            shot = Shot(saved.path, shot.size, shot.frame_type, shot.taken, seconds, shot.bayer)
+            frame_id = saved.id
+            result |= {
+                "id": saved.id,
+                "path": str(saved.relative),
+                "destination": saved.destination,
+            }
         self._last_frames[role] = result
         self._publish(role)
         context.progress(None, "making the preview")
-        await self._preview(role, shot, discard=not save)
+        analysis = await self._preview(role, shot, discard=not save)
+        if frame_id is not None and analysis is not None:
+            await anyio.to_thread.run_sync(
+                self._storage.set_metrics, frame_id, analysis.stars, analysis.hfr
+            )
         return result
+
+    def _facts(self, role: Role, shot: Shot) -> FrameFacts:
+        """What storage needs to know about a frame, read now from the devices and profile."""
+        camera = self.camera(role)
+        filter: str | None = None
+        wheel = self._equipment.ready_device(Role.FILTER_WHEEL)
+        if wheel is not None and self._client is not None:
+            try:
+                filter = FilterWheel(self._client, wheel).filter
+            except (DeviceError, KeyError) as e:
+                log.debug("no filter name for the frame: %s", e)
+        profile = self._equipment.active_profile
+        return FrameFacts(
+            source=shot.path,
+            frame_type=FRAME_TYPE_NAMES[shot.frame_type],
+            exposure=shot.exposure,
+            arrived=shot.taken,
+            camera=camera.name,
+            gain=camera.gain,
+            offset=camera.offset,
+            binning=camera.binning[0],
+            temperature=camera.temperature,
+            cooler_target=self._targets.get(role),
+            filter=filter,
+            profile=self._equipment.active,
+            site=profile.site if profile is not None else None,
+            optics=profile.imaging if profile is not None else None,
+        )
 
     async def _take(
         self,
@@ -402,7 +466,7 @@ class CaptureService:
         used_type = frame_type if frame_type is not None else camera.frame_type
         return Shot(path, size, used_type, datetime.now(UTC), seconds, camera.bayer_pattern)
 
-    async def _preview(self, role: Role, shot: Shot, *, discard: bool) -> None:
+    async def _preview(self, role: Role, shot: Shot, *, discard: bool) -> FrameAnalysis | None:
         """Analyse a frame in the worker and publish its preview; never raises."""
         try:
             analysis = await self._worker.analyze(role.value, str(shot.path), shot.bayer)
@@ -415,7 +479,7 @@ class CaptureService:
             if discard:
                 await anyio.to_thread.run_sync(lambda: shot.path.unlink(missing_ok=True))
         if analysis is None:
-            return  # failed, or a newer frame replaced it
+            return None  # failed, or a newer frame replaced it
         self._previews[role] = {
             "url": f"/api/previews/{FsPath(analysis.preview).name}",
             "width": analysis.width,
@@ -430,6 +494,7 @@ class CaptureService:
             "seconds": analysis.seconds,
         }
         self._publish(role)
+        return analysis
 
     def _claim(self, path: FsPath, role: Role) -> FsPath:
         """Move a frame the driver saved out of the upload directory (blocking).
@@ -468,22 +533,8 @@ class CaptureService:
             f.write(frame.data)
         return FsPath(name)
 
-    def _keep(self, shot: Shot, role: Role) -> Shot:
-        """Move a frame under ``frames/<date>/``; never overwrites (blocking: run in a thread)."""
-        directory = self._frames_dir / shot.taken.strftime("%Y-%m-%d")
-        directory.mkdir(parents=True, exist_ok=True)
-        frame_type = FRAME_TYPE_NAMES[shot.frame_type]
-        stem = f"{shot.taken:%Y%m%d-%H%M%S}_{role.value}_{frame_type}_{shot.exposure:g}s"
-        for attempt in range(1000):
-            suffix = f"_{attempt}" if attempt else ""
-            target = directory / f"{stem}{suffix}{shot.path.suffix}"
-            if not target.exists():
-                shutil.move(shot.path, target)
-                return dataclasses.replace(shot, path=target)
-        raise OSError(f"cannot find a free file name for {stem}")
-
-    def _background(self, coro: Coroutine[Any, Any, None]) -> None:
-        task = asyncio.get_running_loop().create_task(coro)
+    def _background(self, coro: Coroutine[Any, Any, object]) -> None:
+        task: asyncio.Task[object] = asyncio.get_running_loop().create_task(coro)
         self._tasks.add(task)  # keep a reference until it is done
         task.add_done_callback(self._tasks.discard)
 

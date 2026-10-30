@@ -224,12 +224,14 @@ frame is downloaded. To be validated early.
 
 ## 8. Storage
 
-- **Recommended destination:** a USB SSD. The microSD card is used for the
-  OS only; writing imaging data to it is discouraged (slow, wears out). The UI
-  warns when the destination is the microSD.
-- Default layout: `<destination>/NOCS/<target>/<date>/<frame type>/<filter>/`
-  with configurable filename templates.
-- SQLite catalog: sessions, targets, frames, metrics, events.
+- **Destinations:** the internal storage (the microSD on the Pi) is supported
+  and used when no external drive is mounted; an external USB SSD is preferred
+  automatically and recommended for speed and card wear, never required. NOCS
+  keeps a free-space reserve so the OS disk never fills up.
+- Default layout: `<destination>/NOCS/<night>/Light/<target>/<filter>/`,
+  `Flat/<filter>/`, `Dark/`, `Bias/`, with configurable filename templates
+  ([ADR 0013](adr/0013-storage-and-catalog.md)).
+- SQLite catalog: nights, targets, frames, metrics, events.
 - Access: download through the web app; SMB share for desktop access (later).
 
 ## 9. Workflows

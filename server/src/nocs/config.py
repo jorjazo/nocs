@@ -35,6 +35,8 @@ class Settings(BaseSettings):
     """The same directory as nocsd sees it, when that differs (indiserver in a container)."""
     config_dir: Path = Field(default_factory=_default_config_dir)
     data_dir: Path = Field(default_factory=_default_data_dir)
-    """Where frames are saved until storage destinations exist (phase 2.4)."""
+    """The server's own data: frame catalog, previews, frames on their way."""
+    storage_dir: Path | None = None
+    """The internal storage destination (ADR 0013); defaults to the data directory."""
     web_dir: Path | None = None
     log_level: str = "info"

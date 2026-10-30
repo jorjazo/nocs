@@ -14,6 +14,7 @@ dependencies = [
     "pydantic-settings>=2.6",
     "sep>=1.4",
     "uvicorn[standard]>=0.32",
+    "zipstream-ng>=1.8",
 ]
 
 [project.scripts]

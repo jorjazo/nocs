@@ -9,10 +9,19 @@ from collections.abc import AsyncGenerator, Generator
 from contextlib import asynccontextmanager
 from dataclasses import asdict, dataclass
 from pathlib import Path, PurePosixPath
+from typing import Annotated
 
 import anyio
-from fastapi import FastAPI, HTTPException, Response, WebSocket, WebSocketDisconnect, status
-from fastapi.responses import FileResponse
+from fastapi import (
+    FastAPI,
+    HTTPException,
+    Query,
+    Response,
+    WebSocket,
+    WebSocketDisconnect,
+    status,
+)
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 
@@ -22,18 +31,25 @@ from nocs.api.schemas import (
     CameraSettingsRequest,
     ConnectRequest,
     CoolingRequest,
+    DestinationRequest,
     Driver,
     ExposeRequest,
+    FrameRecord,
+    FrameTypeName,
     Health,
     Hello,
     JobStarted,
     LoopRequest,
+    NightGroup,
+    NightInfo,
     PatchMessage,
     SerialPortInfo,
     ServerMessage,
     SetPropertyRequest,
     SnapshotMessage,
     StateSnapshot,
+    TargetRequest,
+    TemplateRequest,
 )
 from nocs.config import Settings
 from nocs.devices import DeviceError
@@ -60,6 +76,15 @@ from nocs.indi.drivers import DriverFifo, load_catalog
 from nocs.jobs import JobManager, ResourceBusyError
 from nocs.services.indi_bridge import IndiBridge, NotConnectedError
 from nocs.state import Resync, StateStore
+from nocs.storage import (
+    FrameFilter,
+    FrameUnavailableError,
+    Located,
+    NightRow,
+    StorageError,
+    StorageService,
+)
+from nocs.storage.layout import clean
 
 log = logging.getLogger(__name__)
 
@@ -85,6 +110,14 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
         assert services.capture is not None
         return services.capture
 
+    def storage() -> StorageService:
+        assert services.storage is not None
+        return services.storage
+
+    def site_longitude() -> float | None:
+        profile = equipment().active_profile
+        return profile.site.longitude if profile is not None and profile.site else None
+
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncGenerator[None]:
         services.jobs = JobManager(store)
@@ -93,6 +126,14 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
         )
         services.worker = ImageWorker(settings.data_dir / "previews")
         services.worker.start()
+        services.storage = StorageService(
+            store,
+            settings.config_dir,
+            settings.data_dir,
+            settings.storage_dir or settings.data_dir,
+            site_longitude,
+        )
+        await services.storage.start()
         services.capture = CaptureService(
             store,
             services.jobs,
@@ -100,6 +141,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
             bridge,
             image_connector(settings.indi_host, settings.indi_port),
             services.worker,
+            services.storage,
             settings.data_dir,
             _upload_dirs(settings),
         )
@@ -110,6 +152,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
             await jobs().close()
             await capture().close()
             await equipment().close()
+            await storage().close()
             services.worker.close()
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
@@ -252,6 +295,88 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
         headers = {"Cache-Control": "public, max-age=31536000, immutable"}
         return FileResponse(path, media_type="image/jpeg", headers=headers)
 
+    @app.put("/api/storage/destination", status_code=status.HTTP_204_NO_CONTENT)
+    async def storage_destination(  # pyright: ignore[reportUnusedFunction]
+        request: DestinationRequest,
+    ) -> Response:
+        try:
+            await storage().choose(request.destination)
+        except StorageError as e:
+            raise HTTPException(status.HTTP_409_CONFLICT, str(e)) from e
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    @app.put("/api/storage/target", status_code=status.HTTP_204_NO_CONTENT)
+    async def storage_target(request: TargetRequest) -> Response:  # pyright: ignore[reportUnusedFunction]
+        try:
+            await storage().set_target(request.target)
+        except ValueError as e:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e)) from e
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    @app.put("/api/storage/template", status_code=status.HTTP_204_NO_CONTENT)
+    async def storage_template(  # pyright: ignore[reportUnusedFunction]
+        request: TemplateRequest,
+    ) -> Response:
+        try:
+            await storage().set_template(request.template)
+        except ValueError as e:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e)) from e
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    @app.get("/api/nights")
+    async def nights() -> list[NightInfo]:  # pyright: ignore[reportUnusedFunction]
+        with _catalog_errors():
+            rows = await anyio.to_thread.run_sync(storage().nights)
+        return [_night_info(row) for row in rows]
+
+    @app.get("/api/frames")
+    async def frames(  # pyright: ignore[reportUnusedFunction]
+        night: int | None = None,
+        target: str | None = None,
+        type: FrameTypeName | None = None,
+        filter: str | None = None,
+        before: int | None = None,
+        limit: Annotated[int, Query(ge=1, le=1000)] = 100,
+    ) -> list[FrameRecord]:
+        query = FrameFilter(night, target, type, filter, before, limit)
+        with _catalog_errors():
+            found = await anyio.to_thread.run_sync(storage().frames, query)
+        return [_frame_record(frame) for frame in found]
+
+    @app.get("/api/frames/{frame_id}/file")
+    async def frame_file(frame_id: int) -> FileResponse:  # pyright: ignore[reportUnusedFunction]
+        with _catalog_errors():
+            _, path = await anyio.to_thread.run_sync(storage().frame_file, frame_id)
+        # Starlette answers range requests, so interrupted downloads can resume.
+        return FileResponse(path, media_type="application/fits", filename=path.name)
+
+    @app.get("/api/nights/{night_id}/zip")
+    async def night_zip(  # pyright: ignore[reportUnusedFunction]
+        night_id: int,
+        target: str | None = None,
+        type: FrameTypeName | None = None,
+        filter: str | None = None,
+    ) -> StreamingResponse:
+        service = storage()
+        with _catalog_errors():
+            found = await anyio.to_thread.run_sync(service.nights, night_id)
+            if not found:
+                raise KeyError(night_id)
+            query = FrameFilter(night=night_id, target=target, frame_type=type, filter=filter)
+            frames = await anyio.to_thread.run_sync(service.frames, query)
+            size, chunks = await anyio.to_thread.run_sync(service.zip, frames)
+        name = "_".join(
+            part
+            for part in ("NOCS", found[0].night, type, clean(target or ""), clean(filter or ""))
+            if part
+        )
+        headers = {
+            "Content-Length": str(size),
+            "Content-Disposition": f'attachment; filename="{name}.zip"',
+        }
+        # A plain iterator: Starlette reads it in a worker thread, off the event loop.
+        return StreamingResponse(chunks, media_type="application/zip", headers=headers)
+
     @app.get("/api/indi/drivers")
     async def drivers() -> list[Driver]:  # pyright: ignore[reportUnusedFunction]
         catalog = await anyio.to_thread.run_sync(load_catalog, settings.indi_drivers_dir)
@@ -287,6 +412,7 @@ class _Services:
     jobs: JobManager | None = None
     equipment: EquipmentService | None = None
     capture: CaptureService | None = None
+    storage: StorageService | None = None
 
 
 def _upload_dirs(settings: Settings) -> UploadDirs | None:
@@ -311,6 +437,74 @@ def _camera_errors() -> Generator[None]:
     except (DeviceError, ConnectionError) as e:
         # The device (or indiserver) failed or refused: an upstream error.
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(e)) from e
+
+
+@contextlib.contextmanager
+def _catalog_errors() -> Generator[None]:
+    """Map failures of catalog queries and downloads to HTTP errors."""
+    try:
+        yield
+    except KeyError as e:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"not in the catalog: {e}") from e
+    except FileNotFoundError as e:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(e)) from e
+    except FrameUnavailableError as e:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(e)) from e
+    except StorageError as e:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(e)) from e
+
+
+def _night_info(row: NightRow) -> NightInfo:
+    groups = [
+        NightGroup(
+            frame_type=group.frame_type,  # pyright: ignore[reportArgumentType]
+            target=group.target,
+            filter=group.filter,
+            frames=group.frames,
+            size=group.size,
+            exposure=group.exposure,
+        )
+        for group in row.groups
+    ]
+    return NightInfo(
+        id=row.id,
+        night=row.night,
+        site=row.site,
+        first_frame=row.first_frame,
+        last_frame=row.last_frame,
+        frames=sum(g.frames for g in groups),
+        size=sum(g.size for g in groups),
+        groups=groups,
+        zip_url=f"/api/nights/{row.id}/zip",
+    )
+
+
+def _frame_record(frame: Located) -> FrameRecord:
+    row = frame.row
+    return FrameRecord(
+        id=row.id,
+        night=row.night,
+        target=row.target,
+        frame_type=row.frame_type,  # pyright: ignore[reportArgumentType]
+        filter=row.filter,
+        exposure=row.exposure,
+        started=row.started,
+        size=row.size,
+        path=str(row.path),
+        volume=row.volume_label,
+        available=frame.path is not None,
+        url=f"/api/frames/{row.id}/file",
+        camera=row.camera,
+        profile=row.profile,
+        gain=row.gain,
+        offset=row.offset,
+        binning=row.binning,
+        temperature=row.temperature,
+        width=row.width,
+        height=row.height,
+        stars=row.stars,
+        hfr=row.hfr,
+    )
 
 
 async def _stream_state(websocket: WebSocket, store: StateStore, since: int | None) -> None:

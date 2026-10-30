@@ -58,6 +58,17 @@
           ],
           "default": null,
           "description": "Running jobs and the most recent finished ones."
+        },
+        "storage": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StorageState"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "title": "AppState",
@@ -410,6 +421,21 @@
       "title": "CoolingRequest",
       "type": "object"
     },
+    "DestinationRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "destination": {
+          "description": "\"auto\", \"internal\" or the id of a mounted destination.",
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "destination"
+      ],
+      "title": "DestinationRequest",
+      "type": "object"
+    },
     "DeviceConfig": {
       "additionalProperties": false,
       "properties": {
@@ -571,8 +597,16 @@
           "description": "Defaults to the camera's current frame type."
         },
         "save": {
-          "default": true,
-          "type": "boolean"
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Defaults to true for the main camera; the guide camera never saves."
         }
       },
       "required": [
@@ -584,6 +618,17 @@
     "FrameInfo": {
       "additionalProperties": false,
       "properties": {
+        "destination": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Id of the destination it was saved to."
+        },
         "exposure": {
           "type": "number"
         },
@@ -594,6 +639,17 @@
         "frame_type": {
           "$ref": "#/$defs/FrameTypeName"
         },
+        "id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Catalog id of the saved frame; None if it was not saved."
+        },
         "path": {
           "anyOf": [
             {
@@ -603,7 +659,7 @@
               "type": "null"
             }
           ],
-          "description": "Where it was saved; None if it was not."
+          "description": "Where it was saved, below <destination>/NOCS/."
         },
         "size": {
           "description": "Bytes.",
@@ -620,9 +676,189 @@
         "format",
         "size",
         "time",
-        "path"
+        "id",
+        "path",
+        "destination"
       ],
       "title": "FrameInfo",
+      "type": "object"
+    },
+    "FrameRecord": {
+      "properties": {
+        "available": {
+          "description": "Its drive is mounted now.",
+          "type": "boolean"
+        },
+        "binning": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "camera": {
+          "type": "string"
+        },
+        "exposure": {
+          "type": "number"
+        },
+        "filter": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "frame_type": {
+          "$ref": "#/$defs/FrameTypeName"
+        },
+        "gain": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "height": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "hfr": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "id": {
+          "type": "integer"
+        },
+        "night": {
+          "type": "string"
+        },
+        "offset": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "path": {
+          "description": "Below <destination>/NOCS/.",
+          "type": "string"
+        },
+        "profile": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "size": {
+          "type": "integer"
+        },
+        "stars": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "started": {
+          "description": "UTC, ISO 8601, exposure start.",
+          "type": "string"
+        },
+        "target": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "temperature": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "url": {
+          "description": "Download URL.",
+          "type": "string"
+        },
+        "volume": {
+          "description": "Label of the drive it is on.",
+          "type": "string"
+        },
+        "width": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "night",
+        "target",
+        "frame_type",
+        "filter",
+        "exposure",
+        "started",
+        "size",
+        "path",
+        "volume",
+        "available",
+        "url",
+        "camera",
+        "profile",
+        "gain",
+        "offset",
+        "binning",
+        "temperature",
+        "width",
+        "height",
+        "stars",
+        "hfr"
+      ],
+      "title": "FrameRecord",
       "type": "object"
     },
     "FrameTypeName": {
@@ -1088,6 +1324,113 @@
       "title": "LoopRequest",
       "type": "object"
     },
+    "NightGroup": {
+      "properties": {
+        "exposure": {
+          "description": "Total exposure, seconds.",
+          "type": "number"
+        },
+        "filter": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "frame_type": {
+          "$ref": "#/$defs/FrameTypeName"
+        },
+        "frames": {
+          "type": "integer"
+        },
+        "size": {
+          "description": "Bytes.",
+          "type": "integer"
+        },
+        "target": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "frame_type",
+        "target",
+        "filter",
+        "frames",
+        "size",
+        "exposure"
+      ],
+      "title": "NightGroup",
+      "type": "object"
+    },
+    "NightInfo": {
+      "properties": {
+        "first_frame": {
+          "description": "UTC, ISO 8601, exposure start.",
+          "type": "string"
+        },
+        "frames": {
+          "type": "integer"
+        },
+        "groups": {
+          "description": "Frames by type, target and filter.",
+          "items": {
+            "$ref": "#/$defs/NightGroup"
+          },
+          "type": "array"
+        },
+        "id": {
+          "type": "integer"
+        },
+        "last_frame": {
+          "type": "string"
+        },
+        "night": {
+          "description": "YYYY-MM-DD, the date at the start of the night.",
+          "type": "string"
+        },
+        "site": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "size": {
+          "description": "Bytes.",
+          "type": "integer"
+        },
+        "zip_url": {
+          "description": "All its frames as one zip (add ?type=&target=&filter=).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "night",
+        "site",
+        "first_frame",
+        "last_frame",
+        "frames",
+        "size",
+        "groups",
+        "zip_url"
+      ],
+      "title": "NightInfo",
+      "type": "object"
+    },
     "Optics": {
       "additionalProperties": false,
       "properties": {
@@ -1549,6 +1892,163 @@
         "state"
       ],
       "title": "StateSnapshot",
+      "type": "object"
+    },
+    "StorageDestination": {
+      "additionalProperties": false,
+      "properties": {
+        "free": {
+          "description": "Bytes available to nocsd.",
+          "type": "integer"
+        },
+        "fs": {
+          "description": "Filesystem type, e.g. ext4 or exfat.",
+          "type": "string"
+        },
+        "id": {
+          "description": "\"internal\", or the volume's filesystem UUID (or mount:<path>).",
+          "type": "string"
+        },
+        "internal": {
+          "type": "boolean"
+        },
+        "label": {
+          "type": "string"
+        },
+        "path": {
+          "description": "Directory frames are saved below, as NOCS/\u2026.",
+          "type": "string"
+        },
+        "sd": {
+          "description": "On an SD card (slower, wears out sooner; still supported).",
+          "type": "boolean"
+        },
+        "system": {
+          "description": "On the same disk as the operating system.",
+          "type": "boolean"
+        },
+        "total": {
+          "description": "Bytes.",
+          "type": "integer"
+        },
+        "writable": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "path",
+        "fs",
+        "total",
+        "free",
+        "writable",
+        "system",
+        "sd",
+        "internal"
+      ],
+      "title": "StorageDestination",
+      "type": "object"
+    },
+    "StorageState": {
+      "additionalProperties": false,
+      "properties": {
+        "choice": {
+          "description": "\"auto\" (an external drive if any, else internal) or an id.",
+          "type": "string"
+        },
+        "destination": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Where the next frame would go; None if nowhere."
+        },
+        "destinations": {
+          "description": "Internal, then mounted drives.",
+          "items": {
+            "$ref": "#/$defs/StorageDestination"
+          },
+          "type": "array"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Why frames cannot be saved right now."
+        },
+        "target": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Target name for lights."
+        },
+        "template": {
+          "description": "File name template.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "destinations",
+        "choice",
+        "destination",
+        "error",
+        "target",
+        "template"
+      ],
+      "title": "StorageState",
+      "type": "object"
+    },
+    "TargetRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "target": {
+          "anyOf": [
+            {
+              "maxLength": 80,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "None to clear it."
+        }
+      },
+      "required": [
+        "target"
+      ],
+      "title": "TargetRequest",
+      "type": "object"
+    },
+    "TemplateRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "template": {
+          "description": "Fields: {target} {night} {type} {filter} {exposure} {gain} {offset} {temperature} {binning} {camera} {datetime} {seq}.",
+          "maxLength": 200,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "template"
+      ],
+      "title": "TemplateRequest",
       "type": "object"
     },
     "ValueRange": {

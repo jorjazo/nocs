@@ -65,6 +65,7 @@ export interface AppState {
   jobs?: {
     [k: string]: JobInfo;
   } | null;
+  storage?: StorageState | null;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -133,6 +134,10 @@ export interface ValueRange {
  * via the `definition` "FrameInfo".
  */
 export interface FrameInfo {
+  /**
+   * Id of the destination it was saved to.
+   */
+  destination: string | null;
   exposure: number;
   /**
    * File extension sent by the driver, e.g. .fits.
@@ -140,7 +145,11 @@ export interface FrameInfo {
   format: string;
   frame_type: FrameTypeName;
   /**
-   * Where it was saved; None if it was not.
+   * Catalog id of the saved frame; None if it was not saved.
+   */
+  id: number | null;
+  /**
+   * Where it was saved, below <destination>/NOCS/.
    */
   path: string | null;
   /**
@@ -370,6 +379,73 @@ export interface JobInfo {
   state: JobStateName;
 }
 /**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "StorageState".
+ */
+export interface StorageState {
+  /**
+   * "auto" (an external drive if any, else internal) or an id.
+   */
+  choice: string;
+  /**
+   * Where the next frame would go; None if nowhere.
+   */
+  destination: string | null;
+  /**
+   * Internal, then mounted drives.
+   */
+  destinations: StorageDestination[];
+  /**
+   * Why frames cannot be saved right now.
+   */
+  error: string | null;
+  /**
+   * Target name for lights.
+   */
+  target: string | null;
+  /**
+   * File name template.
+   */
+  template: string;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "StorageDestination".
+ */
+export interface StorageDestination {
+  /**
+   * Bytes available to nocsd.
+   */
+  free: number;
+  /**
+   * Filesystem type, e.g. ext4 or exfat.
+   */
+  fs: string;
+  /**
+   * "internal", or the volume's filesystem UUID (or mount:<path>).
+   */
+  id: string;
+  internal: boolean;
+  label: string;
+  /**
+   * Directory frames are saved below, as NOCS/….
+   */
+  path: string;
+  /**
+   * On an SD card (slower, wears out sooner; still supported).
+   */
+  sd: boolean;
+  /**
+   * On the same disk as the operating system.
+   */
+  system: boolean;
+  /**
+   * Bytes.
+   */
+  total: number;
+  writable: boolean;
+}
+/**
  * Only the fields present are changed.
  *
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -406,6 +482,16 @@ export interface CoolingRequest {
    * °C; needed to cool.
    */
   target?: number | null;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "DestinationRequest".
+ */
+export interface DestinationRequest {
+  /**
+   * "auto", "internal" or the id of a mounted destination.
+   */
+  destination: string;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -455,7 +541,53 @@ export interface ExposeRequest {
    * Defaults to the camera's current frame type.
    */
   frame_type?: FrameTypeName | null;
-  save?: boolean;
+  /**
+   * Defaults to true for the main camera; the guide camera never saves.
+   */
+  save?: boolean | null;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "FrameRecord".
+ */
+export interface FrameRecord {
+  /**
+   * Its drive is mounted now.
+   */
+  available: boolean;
+  binning: number | null;
+  camera: string;
+  exposure: number;
+  filter: string | null;
+  frame_type: FrameTypeName;
+  gain: number | null;
+  height: number | null;
+  hfr: number | null;
+  id: number;
+  night: string;
+  offset: number | null;
+  /**
+   * Below <destination>/NOCS/.
+   */
+  path: string;
+  profile: string | null;
+  size: number;
+  stars: number | null;
+  /**
+   * UTC, ISO 8601, exposure start.
+   */
+  started: string;
+  target: string | null;
+  temperature: number | null;
+  /**
+   * Download URL.
+   */
+  url: string;
+  /**
+   * Label of the drive it is on.
+   */
+  volume: string;
+  width: number | null;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -496,6 +628,54 @@ export interface LoopRequest {
    */
   exposure: number;
   frame_type?: FrameTypeName | null;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "NightGroup".
+ */
+export interface NightGroup {
+  /**
+   * Total exposure, seconds.
+   */
+  exposure: number;
+  filter: string | null;
+  frame_type: FrameTypeName;
+  frames: number;
+  /**
+   * Bytes.
+   */
+  size: number;
+  target: string | null;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "NightInfo".
+ */
+export interface NightInfo {
+  /**
+   * UTC, ISO 8601, exposure start.
+   */
+  first_frame: string;
+  frames: number;
+  /**
+   * Frames by type, target and filter.
+   */
+  groups: NightGroup[];
+  id: number;
+  last_frame: string;
+  /**
+   * YYYY-MM-DD, the date at the start of the night.
+   */
+  night: string;
+  site: string | null;
+  /**
+   * Bytes.
+   */
+  size: number;
+  /**
+   * All its frames as one zip (add ?type=&target=&filter=).
+   */
+  zip_url: string;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -617,4 +797,24 @@ export interface StateSnapshot {
     [k: string]: unknown;
   };
   version: number;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "TargetRequest".
+ */
+export interface TargetRequest {
+  /**
+   * None to clear it.
+   */
+  target: string | null;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "TemplateRequest".
+ */
+export interface TemplateRequest {
+  /**
+   * Fields: {target} {night} {type} {filter} {exposure} {gain} {offset} {temperature} {binning} {camera} {datetime} {seq}.
+   */
+  template: string;
 }

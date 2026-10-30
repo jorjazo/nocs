@@ -18,5 +18,6 @@ that supersedes the old one.
 | [0010](0010-privileged-system-helper.md) | Separate privileged system helper | Accepted |
 | [0011](0011-equipment-profiles-and-driver-management.md) | Equipment profiles and indiserver driver management | Accepted |
 | [0012](0012-image-pipeline.md) | Image transfer and preview pipeline | Proposed |
+| [0013](0013-storage-and-catalog.md) | Storage destinations, file layout and frame catalog | Accepted |
 
 Template: Context → Decision → Consequences.

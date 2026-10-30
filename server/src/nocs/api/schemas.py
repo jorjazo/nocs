@@ -136,7 +136,9 @@ class FrameInfo(StateModel):
     format: str = Field(description="File extension sent by the driver, e.g. .fits.")
     size: int = Field(description="Bytes.")
     time: str = Field(description="UTC, ISO 8601, when the image arrived.")
-    path: str | None = Field(description="Where it was saved; None if it was not.")
+    id: int | None = Field(description="Catalog id of the saved frame; None if it was not saved.")
+    path: str | None = Field(description="Where it was saved, below <destination>/NOCS/.")
+    destination: str | None = Field(description="Id of the destination it was saved to.")
 
 
 class Preview(StateModel):
@@ -188,6 +190,28 @@ class JobInfo(StateModel):
     finished: str | None
 
 
+class StorageDestination(StateModel):
+    id: str = Field(description='"internal", or the volume\'s filesystem UUID (or mount:<path>).')
+    label: str
+    path: str = Field(description="Directory frames are saved below, as NOCS/….")
+    fs: str = Field(description="Filesystem type, e.g. ext4 or exfat.")
+    total: int = Field(description="Bytes.")
+    free: int = Field(description="Bytes available to nocsd.")
+    writable: bool
+    system: bool = Field(description="On the same disk as the operating system.")
+    sd: bool = Field(description="On an SD card (slower, wears out sooner; still supported).")
+    internal: bool
+
+
+class StorageState(StateModel):
+    destinations: list[StorageDestination] = Field(description="Internal, then mounted drives.")
+    choice: str = Field(description='"auto" (an external drive if any, else internal) or an id.')
+    destination: str | None = Field(description="Where the next frame would go; None if nowhere.")
+    error: str | None = Field(description="Why frames cannot be saved right now.")
+    target: str | None = Field(description="Target name for lights.")
+    template: str = Field(description="File name template.")
+
+
 class AppState(StateModel):
     """The whole state tree sent in snapshots and modified by patches."""
 
@@ -199,6 +223,7 @@ class AppState(StateModel):
     jobs: dict[str, JobInfo] | None = Field(
         default=None, description="Running jobs and the most recent finished ones."
     )
+    storage: StorageState | None = None
 
 
 # -- HTTP --------------------------------------------------------------------
@@ -258,7 +283,10 @@ class ExposeRequest(BaseModel):
     frame_type: FrameTypeName | None = Field(
         default=None, description="Defaults to the camera's current frame type."
     )
-    save: bool = True
+    save: bool | None = Field(
+        default=None,
+        description="Defaults to true for the main camera; the guide camera never saves.",
+    )
 
 
 class LoopRequest(BaseModel):
@@ -268,6 +296,77 @@ class LoopRequest(BaseModel):
 
     exposure: float = Field(ge=0, le=600, description="Seconds.")
     frame_type: FrameTypeName | None = None
+
+
+class DestinationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    destination: str = Field(
+        min_length=1, description='"auto", "internal" or the id of a mounted destination.'
+    )
+
+
+class TargetRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    target: str | None = Field(max_length=80, description="None to clear it.")
+
+
+class TemplateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    template: str = Field(
+        min_length=1,
+        max_length=200,
+        description="Fields: {target} {night} {type} {filter} {exposure} {gain} {offset} "
+        "{temperature} {binning} {camera} {datetime} {seq}.",
+    )
+
+
+class NightGroup(WireModel):
+    frame_type: FrameTypeName
+    target: str | None
+    filter: str | None
+    frames: int
+    size: int = Field(description="Bytes.")
+    exposure: float = Field(description="Total exposure, seconds.")
+
+
+class NightInfo(WireModel):
+    id: int
+    night: str = Field(description="YYYY-MM-DD, the date at the start of the night.")
+    site: str | None
+    first_frame: str = Field(description="UTC, ISO 8601, exposure start.")
+    last_frame: str
+    frames: int
+    size: int = Field(description="Bytes.")
+    groups: list[NightGroup] = Field(description="Frames by type, target and filter.")
+    zip_url: str = Field(description="All its frames as one zip (add ?type=&target=&filter=).")
+
+
+class FrameRecord(WireModel):
+    id: int
+    night: str
+    target: str | None
+    frame_type: FrameTypeName
+    filter: str | None
+    exposure: float
+    started: str = Field(description="UTC, ISO 8601, exposure start.")
+    size: int
+    path: str = Field(description="Below <destination>/NOCS/.")
+    volume: str = Field(description="Label of the drive it is on.")
+    available: bool = Field(description="Its drive is mounted now.")
+    url: str = Field(description="Download URL.")
+    camera: str
+    profile: str | None
+    gain: float | None
+    offset: float | None
+    binning: int | None
+    temperature: float | None
+    width: int | None
+    height: int | None
+    stars: int | None
+    hfr: float | None
 
 
 class JobStarted(WireModel):
