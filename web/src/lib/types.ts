@@ -38,6 +38,7 @@ export interface IndiProperty {
 }
 
 export interface IndiDevice {
+  interfaces?: string[];
   properties: Record<string, IndiProperty>;
 }
 

@@ -118,16 +118,15 @@ async def _stream_state(websocket: WebSocket, store: StateStore, since: int | No
         while True:
             await websocket.receive_text()
 
-    tasks = [asyncio.create_task(sender()), asyncio.create_task(receiver())]
+    # A TaskGroup (not bare tasks) so that cancellation of this handler, e.g. by the
+    # server on shutdown, propagates correctly and both halves always stop together.
     try:
-        done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-        for task in done:
-            if (error := task.exception()) is not None and not isinstance(
-                error, WebSocketDisconnect
-            ):
-                log.warning("websocket closed with error: %r", error)
+        async with asyncio.TaskGroup() as group:
+            group.create_task(sender())
+            group.create_task(receiver())
+    except* WebSocketDisconnect:
+        pass
+    except* Exception as errors:
+        log.warning("websocket closed with error: %r", errors.exceptions)
     finally:
         subscription.close()
-        for task in tasks:
-            task.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)

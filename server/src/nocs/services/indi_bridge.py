@@ -3,7 +3,7 @@
 State layout under ``("indi",)``::
 
     server:  {host, port, connected, error}
-    devices: {<device>: {properties: {<name>: <property>}}}
+    devices: {<device>: {interfaces: [...], properties: {<name>: <property>}}}
     messages: last driver messages (newest last)
 """
 
@@ -13,6 +13,7 @@ import asyncio
 import logging
 from collections.abc import Mapping
 
+from nocs.devices import DeviceInterface
 from nocs.indi import (
     BlobElement,
     ConnectionLost,
@@ -72,6 +73,15 @@ def property_to_json(prop: Property) -> dict[str, Json]:
         "message": prop.message,
         "elements": {name: element_to_json(el) for name, el in prop.elements.items()},
     }
+
+
+def interface_names(prop: Property) -> list[Json]:
+    """Lower-case names of the interfaces declared in a ``DRIVER_INFO`` property."""
+    try:
+        flags = DeviceInterface(int(prop.text("DRIVER_INTERFACE")))
+    except (KeyError, TypeError, ValueError):
+        return []
+    return [flag.name.lower() for flag in DeviceInterface if flag and flag in flags and flag.name]
 
 
 class NotConnectedError(Exception):
@@ -147,13 +157,22 @@ class IndiBridge:
         match event:
             case PropertyDefined(property=prop):
                 path = (*devices, prop.device, "properties", prop.name)
-                self._store.set(path, property_to_json(prop))
+                with self._store.transaction():
+                    self._store.set(path, property_to_json(prop))
+                    if prop.name == "DRIVER_INFO":
+                        self._store.set(
+                            (*devices, prop.device, "interfaces"), interface_names(prop)
+                        )
             case PropertyUpdated(property=prop, elements=changed):
                 path = (*devices, prop.device, "properties", prop.name)
                 with self._store.transaction():
                     self._store.set((*path, "state"), prop.state.value)
                     self._store.set((*path, "timestamp"), prop.timestamp)
                     self._store.set((*path, "message"), prop.message)
+                    if prop.name == "DRIVER_INFO":
+                        self._store.set(
+                            (*devices, prop.device, "interfaces"), interface_names(prop)
+                        )
                     for name in changed:
                         element = prop.elements[name]
                         if isinstance(element, NumberElement):

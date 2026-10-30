@@ -53,7 +53,9 @@
         <span class="chip" class:good={isConnected(device)}>
           {isConnected(device) ? "connected" : "disconnected"}
         </span>
-        <span class="muted count">{Object.keys(device.properties).length} properties</span>
+        <span class="muted count">
+          {[...(device.interfaces ?? []), `${Object.keys(device.properties).length} properties`].join(" · ")}
+        </span>
       </summary>
       {#each groups(device) as [group, properties] (group)}
         <section>
