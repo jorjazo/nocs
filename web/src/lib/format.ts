@@ -39,3 +39,36 @@ export function formatNumber(value: number, format = "%g"): string {
       return Number(value.toPrecision(precision || 6)).toString();
   }
 }
+
+// Locale-aware formatting for the interface (INDI's own formats stay above).
+
+const MINUS = "−";
+
+export function formatDecimal(value: number, locale: string, digits = 1): string {
+  const text = new Intl.NumberFormat(locale, {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  }).format(value);
+  return text.replace("-", MINUS);
+}
+
+const BYTE_UNITS = ["byte", "kilobyte", "megabyte", "gigabyte", "terabyte"] as const;
+
+// Decimal units, as drives are sold: 1 TB = 10^12 bytes.
+export function formatBytes(bytes: number, locale: string): string {
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1000 && unit < BYTE_UNITS.length - 1) {
+    value /= 1000;
+    unit += 1;
+  }
+  return new Intl.NumberFormat(locale, {
+    style: "unit",
+    unit: BYTE_UNITS[unit],
+    maximumFractionDigits: value < 10 && unit > 0 ? 1 : 0,
+  }).format(value);
+}
+
+export function formatDateTime(iso: string, locale: string): string {
+  return new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(new Date(iso));
+}

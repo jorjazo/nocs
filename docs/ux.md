@@ -107,7 +107,22 @@ altitude, histogram).
 
 Icons: 24 px, 1.8 px stroke, round caps and joins, drawn in-house.
 
-## 7. Open UX questions
+## 7. Implementation notes (stage 2.6)
+
+- Screen headers on phones: title and the theme button on the first line, the
+  screen's own controls (status chip, profile picker) on the next. Spanish titles
+  and chips do not fit side by side at 375 px. Wide screens use one line and the
+  navigation rail carries the theme button.
+- Status chips tint their background with the status color (14 % in Dusk, 6 % in
+  Night, where `ok` equals `muted` and a stronger tint drops below 4.5:1).
+- Destructive actions (unpair, revoke) ask for a second tap instead of a browser
+  dialog, which would flash white in Night mode.
+- Spanish tab names: Esta noche · En vivo · Plan · Sesión · Equipo.
+- First run asks for this device's name instead of a rig name, and leaves the
+  phone's time and location to the mount stage (no API yet; geolocation needs a
+  secure context, ADR 0014). The hotspot name waits for nocs-system.
+
+## 8. Open UX questions
 
 - Persistent "session running" indicator on non-session screens (banner vs.
   tab badge).

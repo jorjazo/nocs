@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { setIndiProperty } from "./api";
-  import { formatNumber } from "./format";
+  import { setIndiProperty } from "../../lib/api";
+  import { formatNumber } from "../../lib/format";
   import StateDot from "./StateDot.svelte";
-  import type { IndiElement, IndiProperty } from "./types";
+  import type { IndiElement, IndiProperty } from "../../lib/types";
 
   let { device, name, prop }: { device: string; name: string; prop: IndiProperty } = $props();
 

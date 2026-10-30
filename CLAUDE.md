@@ -23,7 +23,9 @@ server/   Python package `nocs` (nocsd): indi/ (protocol + async client, driver
           storage/ (destinations, layout, FITS headers, SQLite catalog),
           state/ (versioned store), services/ (indi_bridge), api/ (FastAPI
           REST + WebSocket, schemas, schema export)
-web/      Svelte 5 + TypeScript PWA (currently a dev shell, not the real UI)
+web/      Svelte 5 + TypeScript PWA: styles/ (tokens), lib/ (api, live state,
+          auth, router, i18n/ with en.ts as the source, prefs), components/,
+          screens/ (dev/ is the old INDI property browser at #/dev)
 dev/      compose.yaml (INDI simulators + GSC catalog + driver FIFO in dev/.run,
           headless PHD2), profiles/ (simulator rig), tools/ (indi_record),
           bench/, spikes/, pi/ (lab Pi flashing and setup)

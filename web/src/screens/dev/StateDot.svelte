@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { PropertyState } from "./types";
+  import type { PropertyState } from "../../lib/types";
 
   let { state }: { state: PropertyState } = $props();
 </script>

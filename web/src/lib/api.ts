@@ -1,79 +1,146 @@
-import type { AuthStatus, JobStarted, PairedDevice } from "./types";
+// Typed REST client over the generated wire types. Every failure is an
+// ApiError: status 0 means the request never reached nocsd.
+
+import type {
+  AuthStatus,
+  ConnectRequest,
+  ExposeRequest,
+  JobStarted,
+  LoopRequest,
+  ObserverRequest,
+  PairedDevice,
+  PairRequest,
+  Profile,
+} from "./types";
 
 export class ApiError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    // Seconds, from Retry-After (throttled passphrase attempts).
+    readonly retryAfter: number | null = null,
   ) {
     super(message);
   }
-}
 
-async function post(url: string, body?: unknown): Promise<unknown> {
-  return request("POST", url, body);
-}
-
-async function request(method: string, url: string, body?: unknown): Promise<unknown> {
-  const response = await fetch(url, {
-    method,
-    headers: { "Content-Type": "application/json" },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-  if (!response.ok) {
-    const body = (await response.json().catch(() => ({}))) as { detail?: unknown };
-    throw new ApiError(response.status, String(body.detail ?? response.statusText));
+  get network(): boolean {
+    return this.status === 0;
   }
-  return response.status === 204 ? null : ((await response.json()) as unknown);
 }
 
-export async function setIndiProperty(
+type Unauthorized = () => void;
+let onUnauthorized: Unauthorized = () => {};
+
+// Called on any 401: this device is no longer (or not yet) paired.
+export function setUnauthorizedHandler(handler: Unauthorized): void {
+  onUnauthorized = handler;
+}
+
+// FastAPI puts a string in `detail`, or a list of validation errors.
+function detailText(detail: unknown, fallback: string): string {
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    const messages = detail.map((item: unknown) =>
+      typeof item === "object" && item !== null && "msg" in item ? String(item.msg) : String(item),
+    );
+    return messages.join("; ");
+  }
+  return fallback;
+}
+
+async function request<T>(method: string, url: string, body?: unknown): Promise<T> {
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method,
+      headers: body === undefined ? {} : { "Content-Type": "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+  } catch (e) {
+    throw new ApiError(0, e instanceof Error ? e.message : String(e));
+  }
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => ({}))) as { detail?: unknown };
+    const retry = Number(response.headers.get("Retry-After"));
+    const error = new ApiError(
+      response.status,
+      detailText(payload.detail, response.statusText),
+      Number.isFinite(retry) && retry > 0 ? retry : null,
+    );
+    if (response.status === 401) onUnauthorized();
+    throw error;
+  }
+  if (response.status === 204 || response.headers.get("Content-Length") === "0") {
+    return undefined as T;
+  }
+  const text = await response.text();
+  return (text ? JSON.parse(text) : undefined) as T;
+}
+
+// -- Authentication (ADR 0014) ------------------------------------------------
+
+export function getAuth(): Promise<AuthStatus> {
+  return request("GET", "/api/auth");
+}
+
+// Setting up the passphrase also pairs this device.
+export function setUp(body: PairRequest): Promise<PairedDevice> {
+  return request("POST", "/api/auth/setup", body);
+}
+
+export function pair(body: PairRequest): Promise<PairedDevice> {
+  return request("POST", "/api/auth/pair", body);
+}
+
+export function listDevices(): Promise<PairedDevice[]> {
+  return request("GET", "/api/auth/devices");
+}
+
+export function revokeDevice(id: string): Promise<void> {
+  return request("DELETE", `/api/auth/devices/${encodeURIComponent(id)}`);
+}
+
+export function setObserver(enabled: boolean): Promise<void> {
+  return request("PUT", "/api/auth/observer", { enabled } satisfies ObserverRequest);
+}
+
+// -- Equipment ----------------------------------------------------------------
+
+export function getProfile(id: string): Promise<Profile> {
+  return request("GET", `/api/profiles/${encodeURIComponent(id)}`);
+}
+
+export function connectProfile(profile: string): Promise<void> {
+  return request("POST", "/api/equipment/connect", { profile } satisfies ConnectRequest);
+}
+
+export function disconnectEquipment(): Promise<void> {
+  return request("POST", "/api/equipment/disconnect");
+}
+
+export function setIndiProperty(
   device: string,
   name: string,
   values: Record<string, string | number | boolean>,
 ): Promise<void> {
   const url = `/api/indi/devices/${encodeURIComponent(device)}/properties/${encodeURIComponent(name)}`;
-  await post(url, { values });
+  return request("POST", url, { values });
 }
 
-export async function connectProfile(profile: string): Promise<void> {
-  await post("/api/equipment/connect", { profile });
-}
-
-export async function disconnectEquipment(): Promise<void> {
-  await post("/api/equipment/disconnect");
-}
+// -- Cameras and jobs -----------------------------------------------------------
 
 export async function expose(role: string, exposure: number): Promise<string> {
-  const started = (await post(`/api/cameras/${role}/expose`, { exposure })) as JobStarted;
+  const body: ExposeRequest = { exposure };
+  const started = await request<JobStarted>("POST", `/api/cameras/${role}/expose`, body);
   return started.job;
 }
 
 export async function loop(role: string, exposure: number): Promise<string> {
-  const started = (await post(`/api/cameras/${role}/loop`, { exposure })) as JobStarted;
+  const body: LoopRequest = { exposure };
+  const started = await request<JobStarted>("POST", `/api/cameras/${role}/loop`, body);
   return started.job;
 }
 
-export async function cancelJob(job: string): Promise<void> {
-  await post(`/api/jobs/${job}/cancel`);
-}
-
-export async function getAuth(): Promise<AuthStatus> {
-  return (await request("GET", "/api/auth")) as AuthStatus;
-}
-
-// Setting up the passphrase also pairs this device (ADR 0014).
-export async function setUp(passphrase: string, name: string): Promise<PairedDevice> {
-  return (await post("/api/auth/setup", { passphrase, name })) as PairedDevice;
-}
-
-export async function pair(passphrase: string, name: string): Promise<PairedDevice> {
-  return (await post("/api/auth/pair", { passphrase, name })) as PairedDevice;
-}
-
-export async function revokeDevice(id: string): Promise<void> {
-  await request("DELETE", `/api/auth/devices/${encodeURIComponent(id)}`);
-}
-
-export async function setObserver(enabled: boolean): Promise<void> {
-  await request("PUT", "/api/auth/observer", { enabled });
+export function cancelJob(job: string): Promise<void> {
+  return request("POST", `/api/jobs/${job}/cancel`);
 }

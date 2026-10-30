@@ -32,3 +32,6 @@ dev/bench/results/*/samples/
 
 # Runtime files shared with the dev containers (driver FIFO)
 dev/.run/
+
+# Scratch files (mockups, notes)
+/tmp/

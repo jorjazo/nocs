@@ -1,0 +1,156 @@
+// English messages: the source of truth for every other language. Messages
+// with parameters are functions; es.ts must match this shape exactly.
+
+import type { ConnectionName, DeviceStatusName, Role } from "../types";
+
+export const en = {
+  tabs: {
+    label: "Main",
+    tonight: "Tonight",
+    live: "Live",
+    plan: "Plan",
+    session: "Session",
+    rig: "Rig",
+  },
+  theme: {
+    label: "Theme",
+    dusk: "Dusk",
+    night: "Night",
+    toggle: "Night mode",
+  },
+  language: {
+    label: "Language",
+  },
+  link: {
+    connecting: "Connecting to NOCS…",
+    offline: "No connection to NOCS. Reconnecting…",
+    observer: "Watching, read only",
+    pair: "Pair",
+  },
+  boot: {
+    loading: "Connecting to NOCS…",
+    unreachable: "Can't reach NOCS",
+    unreachableBody: "Check that this device is on the rig's network and that NOCS is running.",
+    retry: "Try again",
+  },
+  errors: {
+    network: "No connection to NOCS. Check the network and try again.",
+    server: (status: number) => `NOCS answered with an error (${status}).`,
+  },
+  passphrase: {
+    label: "Owner passphrase",
+    show: "Show passphrase",
+    hide: "Hide passphrase",
+    tooShort: "Use at least 8 characters.",
+    wrong: "That passphrase is not right.",
+    locked: (seconds: number) => `Too many attempts. Try again in ${seconds} s.`,
+  },
+  device: {
+    name: "This device's name",
+    nameHint: "Shown in the list of paired devices, so you can tell them apart.",
+    suggestion: (browser: string, system: string) => `${browser} on ${system}`,
+    fallback: "My device",
+  },
+  firstRun: {
+    title: "Welcome",
+    body: "This rig has no owner yet. Set it up from this device: it takes a minute and you only do it once.",
+    passphraseHint: "At least 8 characters. Needed to pair new phones or computers; paired devices stay signed in.",
+    submit: "Create owner and pair this device",
+  },
+  pair: {
+    title: "Pair this device",
+    body: "This rig already has an owner. Enter the owner passphrase to control it from this device.",
+    submit: "Pair this device",
+    watch: "Watch without pairing",
+    revoked: "This device was unpaired. Pair it again to keep using it.",
+  },
+  empty: {
+    openRig: "Open Rig",
+    tonight: {
+      title: "Tonight starts here",
+      body: "The night window, conditions and the get-ready checklist will appear here.",
+      connect: "For now, connect your equipment in Rig.",
+    },
+    live: {
+      title: "Live view is on its way",
+      body: "Preview, exposure settings and capture arrive in the next update.",
+    },
+    plan: {
+      title: "Planning comes later",
+      body: "Target search, framing and sequences arrive in a later version.",
+    },
+    session: {
+      title: "No session running",
+      body: "When a sequence runs, its progress, guiding and events will show here.",
+    },
+  },
+  roles: {
+    main_camera: "Main camera",
+    guide_camera: "Guide camera",
+    mount: "Mount",
+    focuser: "Focuser",
+    filter_wheel: "Filter wheel",
+    power_box: "Power box",
+  } satisfies Record<Role, string>,
+  deviceStatus: {
+    waiting: "Waiting",
+    connecting: "Connecting",
+    ready: "Online",
+    error: "Error",
+    disconnected: "Offline",
+  } satisfies Record<DeviceStatusName, string>,
+  connection: {
+    disconnected: "Disconnected",
+    connecting: "Connecting",
+    connected: "Connected",
+    disconnecting: "Disconnecting",
+  } satisfies Record<ConnectionName, string>,
+  rig: {
+    title: "Rig",
+    profile: "Profile",
+    online: (ready: number, total: number) => `${ready}/${total} online`,
+    equipment: "Connection",
+    connect: "Connect equipment",
+    disconnect: "Disconnect",
+    retry: "Try again",
+    noProfiles: "No equipment profiles yet",
+    noProfilesBody: "Profiles are files in ~/.config/nocs/profiles/ on the rig. The profile editor arrives in a later update.",
+    imagingTrain: "Imaging train",
+    guidingTrain: "Guiding train",
+    devices: "Devices",
+    noDevices: "This profile has no devices.",
+    indiServer: "INDI server",
+    indiConnected: "Connected",
+    indiOffline: "Offline",
+    storage: "Storage",
+    storageFree: (free: string, total: string) => `${free} free of ${total}`,
+    storageAuto: "Chosen automatically",
+    storageInternal: "Internal storage",
+    storageSd: "SD card",
+    storageSystem: "System disk",
+    storageReadOnly: "Not writable",
+    storageNone: "Nowhere to save frames",
+    advanced: "INDI properties",
+    advancedHint: "Every property of every driver, for troubleshooting.",
+  },
+  access: {
+    title: "Access",
+    thisDevice: "This device",
+    pairedSince: (date: string) => `Paired ${date}`,
+    lastUsed: (date: string) => `Last used ${date}`,
+    unpair: "Unpair",
+    confirmUnpair: "Tap again to unpair",
+    revoke: "Revoke",
+    confirmRevoke: "Tap again to revoke",
+    observers: "Let others watch",
+    observersHint: "Anyone on this network can see the rig's status without pairing, but cannot control it.",
+    devices: "Other paired devices",
+    noDevices: "No other devices.",
+    observerNote: "You are watching without pairing. Pair this device to control the rig.",
+  },
+  prefs: {
+    title: "This screen",
+  },
+};
+
+export type Messages = typeof en;

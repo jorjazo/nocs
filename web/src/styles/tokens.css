@@ -1,0 +1,98 @@
+/* Design tokens from docs/ux.md. Dusk is the default; Night is a separate
+   red-only palette, not a filter over Dusk. */
+:root {
+  --bg: #0a0d13;
+  --surface: #121722;
+  --raised: #1a2130;
+  --line: #263044;
+  --text: #e7eaf0;
+  --muted: #98a2b6;
+  --accent: #7db7ff;
+  --on-accent: #06101c;
+  --ok: #4fd1a5;
+  --warning: #f5b04c;
+  --error: #ff6b5e;
+  --guide-ra: #7db7ff;
+  --guide-dec: #f5a04c;
+  /* How much of a status color tints its chip; chip text stays above 4.5:1. */
+  --tint: 14%;
+
+  --font-sans: "IBM Plex Sans", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+
+  /* 4 px grid */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --margin: 20px;
+
+  --radius-tile: 10px;
+  --radius-button: 12px;
+  --radius-card: 16px;
+  --radius-full: 999px;
+
+  --touch: 44px;
+  --primary-height: 52px;
+  --tabbar-height: 64px;
+  --rail-width: 96px;
+
+  color-scheme: dark;
+}
+
+:root[data-theme="night"] {
+  --bg: #000000;
+  --surface: #0e0303;
+  --raised: #170505;
+  --line: #3a0b0b;
+  --text: #ff6a5c;
+  --muted: #e0473b;
+  --accent: #ff6a5c;
+  --on-accent: #000000;
+  --ok: #e0473b;
+  --warning: #ff8a7a;
+  --error: #ffb0a6;
+  --guide-ra: #ff6a5c;
+  --guide-dec: #b8382e;
+  --tint: 6%;
+}
+
+/* Type scale (size / line-height, weight) */
+.display {
+  font-size: 32px;
+  line-height: 38px;
+  font-weight: 600;
+}
+.title {
+  font-size: 22px;
+  line-height: 28px;
+  font-weight: 600;
+}
+.heading {
+  font-size: 17px;
+  line-height: 24px;
+  font-weight: 600;
+}
+.label {
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 500;
+}
+.caption {
+  font-size: 12px;
+  line-height: 16px;
+}
+.readout {
+  font-family: var(--font-mono);
+  font-size: 28px;
+  line-height: 32px;
+  font-weight: 500;
+}
+.data,
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
