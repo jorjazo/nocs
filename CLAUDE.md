@@ -59,6 +59,8 @@ CI runs all of the above (INDI simulators included) on every push to `main`.
 - **Imaging pipeline** (from the Pi 5 spike): JPEG previews (not WebP), OpenCV
   for debayer and downscale, star metrics (`sep`) in a worker process, never on
   the event loop. ASTAP downsampling must be chosen from star size, not `-z 0`.
+  Receiving a 26 MP frame as a BLOB blocks the event loop ~0.3 s on the Pi
+  (base64 decode); `UPLOAD_LOCAL` avoids it (spike follow-up, ADR 0012 pending).
 - **Python runtime:** nocsd should run on a uv-managed Python (3.12/3.13), not
   the system interpreter: scientific deps lack arm64 wheels for Ubuntu 26.04's
   Python 3.14.

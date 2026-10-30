@@ -4,6 +4,24 @@
       "additionalProperties": false,
       "description": "The whole state tree sent in snapshots and modified by patches.",
       "properties": {
+        "cameras": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/CameraState"
+              },
+              "propertyNames": {
+                "$ref": "#/$defs/CameraRoleName"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Connected camera roles."
+        },
         "equipment": {
           "anyOf": [
             {
@@ -25,6 +43,21 @@
             }
           ],
           "default": null
+        },
+        "jobs": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/JobInfo"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Running jobs and the most recent finished ones."
         }
       },
       "title": "AppState",
@@ -47,6 +80,263 @@
       "title": "BlobInfo",
       "type": "object"
     },
+    "CameraRoleName": {
+      "enum": [
+        "main_camera",
+        "guide_camera"
+      ],
+      "type": "string"
+    },
+    "CameraSettingsRequest": {
+      "additionalProperties": false,
+      "description": "Only the fields present are changed.",
+      "properties": {
+        "binning": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "frame_type": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FrameTypeName"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "gain": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "offset": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "region": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Region"
+            },
+            {
+              "const": "full",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A readout region, or \"full\" for the whole sensor."
+        }
+      },
+      "title": "CameraSettingsRequest",
+      "type": "object"
+    },
+    "CameraState": {
+      "additionalProperties": false,
+      "properties": {
+        "bayer": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Color filter pattern (e.g. RGGB); None for mono."
+        },
+        "binning": {
+          "items": {
+            "type": "integer"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array"
+        },
+        "cooler": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Cooler on; None if the camera has none."
+        },
+        "cooler_power": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "As reported by the driver; units vary."
+        },
+        "device": {
+          "type": "string"
+        },
+        "exposing": {
+          "type": "boolean"
+        },
+        "frame_type": {
+          "$ref": "#/$defs/FrameTypeName"
+        },
+        "gain": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "gain_range": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ValueRange"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "last_frame": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FrameInfo"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "max_binning": {
+          "type": "integer"
+        },
+        "offset": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "offset_range": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ValueRange"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ramp": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Cooling rate limit, \u00b0C/min; 0 = unlimited."
+        },
+        "region": {
+          "$ref": "#/$defs/Region"
+        },
+        "remaining": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Seconds left in the current exposure."
+        },
+        "sensor": {
+          "$ref": "#/$defs/SensorInfo"
+        },
+        "target": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Cooling target set through NOCS, \u00b0C."
+        },
+        "temperature": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Sensor temperature, \u00b0C; None if unknown."
+        }
+      },
+      "required": [
+        "device",
+        "exposing",
+        "remaining",
+        "temperature",
+        "cooler",
+        "cooler_power",
+        "target",
+        "ramp",
+        "gain",
+        "gain_range",
+        "offset",
+        "offset_range",
+        "binning",
+        "max_binning",
+        "region",
+        "frame_type",
+        "sensor",
+        "bayer",
+        "last_frame"
+      ],
+      "title": "CameraState",
+      "type": "object"
+    },
     "ConnectRequest": {
       "properties": {
         "profile": {
@@ -67,6 +357,46 @@
         "disconnecting"
       ],
       "type": "string"
+    },
+    "CoolingRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "on": {
+          "type": "boolean"
+        },
+        "ramp": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "\u00b0C/min; 0 = unlimited."
+        },
+        "target": {
+          "anyOf": [
+            {
+              "maximum": 40,
+              "minimum": -60,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "\u00b0C; needed to cool."
+        }
+      },
+      "required": [
+        "on"
+      ],
+      "title": "CoolingRequest",
+      "type": "object"
     },
     "DeviceConfig": {
       "additionalProperties": false,
@@ -206,6 +536,91 @@
       ],
       "title": "EquipmentState",
       "type": "object"
+    },
+    "ExposeRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "exposure": {
+          "description": "Seconds.",
+          "maximum": 7200,
+          "minimum": 0,
+          "type": "number"
+        },
+        "frame_type": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FrameTypeName"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Defaults to the camera's current frame type."
+        },
+        "save": {
+          "default": true,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "exposure"
+      ],
+      "title": "ExposeRequest",
+      "type": "object"
+    },
+    "FrameInfo": {
+      "additionalProperties": false,
+      "properties": {
+        "exposure": {
+          "type": "number"
+        },
+        "format": {
+          "description": "File extension sent by the driver, e.g. .fits.",
+          "type": "string"
+        },
+        "frame_type": {
+          "$ref": "#/$defs/FrameTypeName"
+        },
+        "path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Where it was saved; None if it was not."
+        },
+        "size": {
+          "description": "Bytes.",
+          "type": "integer"
+        },
+        "time": {
+          "description": "UTC, ISO 8601, when the image arrived.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "exposure",
+        "frame_type",
+        "format",
+        "size",
+        "time",
+        "path"
+      ],
+      "title": "FrameInfo",
+      "type": "object"
+    },
+    "FrameTypeName": {
+      "enum": [
+        "light",
+        "dark",
+        "bias",
+        "flat"
+      ],
+      "type": "string"
     },
     "Health": {
       "properties": {
@@ -534,6 +949,105 @@
       "title": "IndiValueElement",
       "type": "object"
     },
+    "JobInfo": {
+      "additionalProperties": false,
+      "properties": {
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "finished": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "kind": {
+          "type": "string"
+        },
+        "message": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "progress": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "0 to 1; None while unknown."
+        },
+        "resources": {
+          "description": "Equipment roles the job locks.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "result": {
+          "description": "Kind-specific; for exposures, a FrameInfo."
+        },
+        "started": {
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/$defs/JobStateName"
+        }
+      },
+      "required": [
+        "kind",
+        "resources",
+        "state",
+        "progress",
+        "message",
+        "error",
+        "result",
+        "started",
+        "finished"
+      ],
+      "title": "JobInfo",
+      "type": "object"
+    },
+    "JobStarted": {
+      "properties": {
+        "job": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "job"
+      ],
+      "title": "JobStarted",
+      "type": "object"
+    },
+    "JobStateName": {
+      "enum": [
+        "running",
+        "succeeded",
+        "failed",
+        "cancelled"
+      ],
+      "type": "string"
+    },
     "Optics": {
       "additionalProperties": false,
       "properties": {
@@ -701,6 +1215,36 @@
       ],
       "type": "string"
     },
+    "Region": {
+      "additionalProperties": false,
+      "description": "Part of the sensor, in unbinned pixels.",
+      "properties": {
+        "height": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "width": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "x": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "y": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "width",
+        "height"
+      ],
+      "title": "Region",
+      "type": "object"
+    },
     "Role": {
       "enum": [
         "main_camera",
@@ -751,6 +1295,32 @@
         "error"
       ],
       "title": "RoleState",
+      "type": "object"
+    },
+    "SensorInfo": {
+      "additionalProperties": false,
+      "properties": {
+        "bits": {
+          "type": "integer"
+        },
+        "height": {
+          "type": "integer"
+        },
+        "pixel_size": {
+          "description": "Micrometres.",
+          "type": "number"
+        },
+        "width": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "width",
+        "height",
+        "pixel_size",
+        "bits"
+      ],
+      "title": "SensorInfo",
       "type": "object"
     },
     "SerialPortInfo": {
@@ -871,6 +1441,23 @@
         "state"
       ],
       "title": "StateSnapshot",
+      "type": "object"
+    },
+    "ValueRange": {
+      "additionalProperties": false,
+      "properties": {
+        "max": {
+          "type": "number"
+        },
+        "min": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "min",
+        "max"
+      ],
+      "title": "ValueRange",
       "type": "object"
     }
   },

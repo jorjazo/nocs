@@ -20,9 +20,10 @@ def indi_address() -> tuple[str, int]:
 
 @pytest.fixture(autouse=True)
 def config_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Keep every Settings() of a test away from the user's real configuration."""
+    """Keep every Settings() of a test away from the user's real configuration and data."""
     path = tmp_path / "config"
     monkeypatch.setenv("NOCS_CONFIG_DIR", str(path))
+    monkeypatch.setenv("NOCS_DATA_DIR", str(tmp_path / "data"))
     return path
 
 

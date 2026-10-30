@@ -87,14 +87,14 @@ class IndiClient:
     def connected(self) -> bool:
         return self._writer is not None and not self._writer.is_closing()
 
-    async def connect(self, timeout: float = 5.0) -> None:
-        """Open the connection and request all properties."""
+    async def connect(self, timeout: float = 5.0, device: str | None = None) -> None:
+        """Open the connection and request the properties of every device, or of one."""
         self._reader, self._writer = await asyncio.wait_for(
             asyncio.open_connection(self.host, self.port), timeout
         )
         self._devices.clear()
         self._read_task = asyncio.create_task(self._read_loop(), name="indi-read")
-        await self._send(encode_get_properties())
+        await self._send(encode_get_properties(device))
 
     async def close(self) -> None:
         if self._read_task is not None:

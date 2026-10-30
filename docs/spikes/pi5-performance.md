@@ -148,3 +148,25 @@ the solved scale (3.102″/px) matches the optics exactly.
 Still open: microSD vs USB SSD for frame storage (load time is the only stage
 it affects: 140–160 ms per frame on microSD), and USB bandwidth with real
 cameras attached.
+
+## Follow-up: image transfer modes with a real camera (2026-10-30)
+
+Phase 2.2 measurement with [`dev/bench/blob_bench.py`](../../dev/bench/blob_bench.py)
+on the lab Pi 5: ZWO ASI2600MC Duo (26 MP, 52 MB FITS), INDI 2.2.5 from the PPA,
+1 s exposures, 4 runs each. "Ready" is how long after the exposure ends the frame
+is in nocsd's hands; "lag" is how late a 10 ms sleep on nocsd's event loop wakes up.
+
+| mode | ready after exposure | event-loop lag (max) |
+|---|---|---|
+| BLOB on a connection of its own (what nocsd does now) | 1.49 s | ~310 ms, one block per frame |
+| `UPLOAD_LOCAL`: the driver writes the FITS and sends its path | 0.72 s | ~2 ms |
+
+- With BLOBs, decoding the base64 image (~70 MB of XML text) freezes nocsd's event
+  loop for ~0.3 s per frame: WebSocket patches and any watchdog wait for it. A
+  separate connection keeps other devices' state from queuing behind the image on
+  the wire, but not this CPU cost, which stays in-process.
+- `UPLOAD_LOCAL` halves the latency and leaves the event loop alone, but needs
+  indiserver and nocsd on the same filesystem (always the case on the Pi; the dev
+  container needs a shared directory) and the driver writes where it is told.
+- To decide in ADR 0012 (phase 2.3): `UPLOAD_LOCAL` when indiserver is local,
+  BLOBs received off the event loop (the preview worker) otherwise.

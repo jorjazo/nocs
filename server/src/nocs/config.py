@@ -10,6 +10,11 @@ def _default_config_dir() -> Path:
     return Path(base) / "nocs"
 
 
+def _default_data_dir() -> Path:
+    base = os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share"
+    return Path(base) / "nocs"
+
+
 class Settings(BaseSettings):
     """nocsd configuration, read from ``NOCS_*`` environment variables."""
 
@@ -24,5 +29,7 @@ class Settings(BaseSettings):
     indi_drivers_dir: Path = Path("/usr/share/indi")
     """Where the INDI driver catalog (``drivers.xml`` and third-party XML files) lives."""
     config_dir: Path = Field(default_factory=_default_config_dir)
+    data_dir: Path = Field(default_factory=_default_data_dir)
+    """Where frames are saved until storage destinations exist (phase 2.4)."""
     web_dir: Path | None = None
     log_level: str = "info"

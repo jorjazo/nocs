@@ -2,6 +2,11 @@
 
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "FrameTypeName".
+ */
+export type FrameTypeName = "light" | "dark" | "bias" | "flat";
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "ConnectionName".
  */
 export type ConnectionName = "disconnected" | "connecting" | "connected" | "disconnecting";
@@ -15,6 +20,16 @@ export type DeviceStatusName = "waiting" | "connecting" | "ready" | "error" | "d
  * via the `definition` "PropertyStateName".
  */
 export type PropertyStateName = "Idle" | "Ok" | "Busy" | "Alert";
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "JobStateName".
+ */
+export type JobStateName = "running" | "succeeded" | "failed" | "cancelled";
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "CameraRoleName".
+ */
+export type CameraRoleName = "main_camera" | "guide_camera";
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "DriverName".
@@ -36,8 +51,127 @@ export interface NOCSAPI {
  * via the `definition` "AppState".
  */
 export interface AppState {
+  /**
+   * Connected camera roles.
+   */
+  cameras?: {
+    [k: string]: CameraState;
+  } | null;
   equipment?: EquipmentState | null;
   indi?: IndiState | null;
+  /**
+   * Running jobs and the most recent finished ones.
+   */
+  jobs?: {
+    [k: string]: JobInfo;
+  } | null;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "CameraState".
+ */
+export interface CameraState {
+  /**
+   * Color filter pattern (e.g. RGGB); None for mono.
+   */
+  bayer: string | null;
+  /**
+   * @minItems 2
+   * @maxItems 2
+   */
+  binning: [number, number];
+  /**
+   * Cooler on; None if the camera has none.
+   */
+  cooler: boolean | null;
+  /**
+   * As reported by the driver; units vary.
+   */
+  cooler_power: number | null;
+  device: string;
+  exposing: boolean;
+  frame_type: FrameTypeName;
+  gain: number | null;
+  gain_range: ValueRange | null;
+  last_frame: FrameInfo | null;
+  max_binning: number;
+  offset: number | null;
+  offset_range: ValueRange | null;
+  /**
+   * Cooling rate limit, °C/min; 0 = unlimited.
+   */
+  ramp: number | null;
+  region: Region;
+  /**
+   * Seconds left in the current exposure.
+   */
+  remaining: number | null;
+  sensor: SensorInfo;
+  /**
+   * Cooling target set through NOCS, °C.
+   */
+  target: number | null;
+  /**
+   * Sensor temperature, °C; None if unknown.
+   */
+  temperature: number | null;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "ValueRange".
+ */
+export interface ValueRange {
+  max: number;
+  min: number;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "FrameInfo".
+ */
+export interface FrameInfo {
+  exposure: number;
+  /**
+   * File extension sent by the driver, e.g. .fits.
+   */
+  format: string;
+  frame_type: FrameTypeName;
+  /**
+   * Where it was saved; None if it was not.
+   */
+  path: string | null;
+  /**
+   * Bytes.
+   */
+  size: number;
+  /**
+   * UTC, ISO 8601, when the image arrived.
+   */
+  time: string;
+}
+/**
+ * Part of the sensor, in unbinned pixels.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "Region".
+ */
+export interface Region {
+  height: number;
+  width: number;
+  x: number;
+  y: number;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "SensorInfo".
+ */
+export interface SensorInfo {
+  bits: number;
+  height: number;
+  /**
+   * Micrometres.
+   */
+  pixel_size: number;
+  width: number;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -175,10 +309,67 @@ export interface IndiServer {
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "JobInfo".
+ */
+export interface JobInfo {
+  error: string | null;
+  finished: string | null;
+  kind: string;
+  message: string | null;
+  /**
+   * 0 to 1; None while unknown.
+   */
+  progress: number | null;
+  /**
+   * Equipment roles the job locks.
+   */
+  resources: string[];
+  /**
+   * Kind-specific; for exposures, a FrameInfo.
+   */
+  result: {
+    [k: string]: unknown;
+  };
+  started: string;
+  state: JobStateName;
+}
+/**
+ * Only the fields present are changed.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "CameraSettingsRequest".
+ */
+export interface CameraSettingsRequest {
+  binning?: number | null;
+  frame_type?: FrameTypeName | null;
+  gain?: number | null;
+  offset?: number | null;
+  /**
+   * A readout region, or "full" for the whole sensor.
+   */
+  region?: Region | "full" | null;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "ConnectRequest".
  */
 export interface ConnectRequest {
   profile: string;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "CoolingRequest".
+ */
+export interface CoolingRequest {
+  on: boolean;
+  /**
+   * °C/min; 0 = unlimited.
+   */
+  ramp?: number | null;
+  /**
+   * °C; needed to cool.
+   */
+  target?: number | null;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -217,6 +408,21 @@ export interface Driver {
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "ExposeRequest".
+ */
+export interface ExposeRequest {
+  /**
+   * Seconds.
+   */
+  exposure: number;
+  /**
+   * Defaults to the camera's current frame type.
+   */
+  frame_type?: FrameTypeName | null;
+  save?: boolean;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "Health".
  */
 export interface Health {
@@ -234,6 +440,13 @@ export interface Hello {
   epoch?: string | null;
   since?: number | null;
   type?: "hello";
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "JobStarted".
+ */
+export interface JobStarted {
+  job: string;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema

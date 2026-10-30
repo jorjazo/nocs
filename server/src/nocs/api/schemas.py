@@ -81,6 +81,7 @@ class IndiState(StateModel):
     messages: list[IndiMessage] = Field(default_factory=list[IndiMessage])
 
 
+type CameraRoleName = Literal["main_camera", "guide_camera"]
 type ConnectionName = Literal["disconnected", "connecting", "connected", "disconnecting"]
 type DeviceStatusName = Literal["waiting", "connecting", "ready", "error", "disconnected"]
 
@@ -104,11 +105,85 @@ class EquipmentState(StateModel):
     devices: dict[Role, RoleState] = Field(description="Roles of the active profile.")
 
 
+type FrameTypeName = Literal["light", "dark", "bias", "flat"]
+type JobStateName = Literal["running", "succeeded", "failed", "cancelled"]
+
+
+class ValueRange(StateModel):
+    min: float
+    max: float
+
+
+class Region(StateModel):
+    """Part of the sensor, in unbinned pixels."""
+
+    x: int = Field(ge=0)
+    y: int = Field(ge=0)
+    width: int = Field(ge=1)
+    height: int = Field(ge=1)
+
+
+class SensorInfo(StateModel):
+    width: int
+    height: int
+    pixel_size: float = Field(description="Micrometres.")
+    bits: int
+
+
+class FrameInfo(StateModel):
+    exposure: float
+    frame_type: FrameTypeName
+    format: str = Field(description="File extension sent by the driver, e.g. .fits.")
+    size: int = Field(description="Bytes.")
+    time: str = Field(description="UTC, ISO 8601, when the image arrived.")
+    path: str | None = Field(description="Where it was saved; None if it was not.")
+
+
+class CameraState(StateModel):
+    device: str
+    exposing: bool
+    remaining: float | None = Field(description="Seconds left in the current exposure.")
+    temperature: float | None = Field(description="Sensor temperature, °C; None if unknown.")
+    cooler: bool | None = Field(description="Cooler on; None if the camera has none.")
+    cooler_power: float | None = Field(description="As reported by the driver; units vary.")
+    target: float | None = Field(description="Cooling target set through NOCS, °C.")
+    ramp: float | None = Field(description="Cooling rate limit, °C/min; 0 = unlimited.")
+    gain: float | None
+    gain_range: ValueRange | None
+    offset: float | None
+    offset_range: ValueRange | None
+    binning: list[int] = Field(min_length=2, max_length=2)
+    max_binning: int
+    region: Region
+    frame_type: FrameTypeName
+    sensor: SensorInfo
+    bayer: str | None = Field(description="Color filter pattern (e.g. RGGB); None for mono.")
+    last_frame: FrameInfo | None
+
+
+class JobInfo(StateModel):
+    kind: str
+    resources: list[str] = Field(description="Equipment roles the job locks.")
+    state: JobStateName
+    progress: float | None = Field(description="0 to 1; None while unknown.")
+    message: str | None
+    error: str | None
+    result: Any = Field(description="Kind-specific; for exposures, a FrameInfo.")
+    started: str
+    finished: str | None
+
+
 class AppState(StateModel):
     """The whole state tree sent in snapshots and modified by patches."""
 
     indi: IndiState | None = None
     equipment: EquipmentState | None = None
+    cameras: dict[CameraRoleName, CameraState] | None = Field(
+        default=None, description="Connected camera roles."
+    )
+    jobs: dict[str, JobInfo] | None = Field(
+        default=None, description="Running jobs and the most recent finished ones."
+    )
 
 
 # -- HTTP --------------------------------------------------------------------
@@ -137,6 +212,42 @@ class SetPropertyRequest(BaseModel):
 
 class ConnectRequest(BaseModel):
     profile: str
+
+
+class CameraSettingsRequest(BaseModel):
+    """Only the fields present are changed."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    gain: float | None = None
+    offset: float | None = None
+    binning: int | None = Field(default=None, ge=1)
+    region: Region | Literal["full"] | None = Field(
+        default=None, description='A readout region, or "full" for the whole sensor.'
+    )
+    frame_type: FrameTypeName | None = None
+
+
+class CoolingRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    on: bool
+    target: float | None = Field(default=None, ge=-60, le=40, description="°C; needed to cool.")
+    ramp: float | None = Field(default=None, ge=0, description="°C/min; 0 = unlimited.")
+
+
+class ExposeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    exposure: float = Field(ge=0, le=7200, description="Seconds.")
+    frame_type: FrameTypeName | None = Field(
+        default=None, description="Defaults to the camera's current frame type."
+    )
+    save: bool = True
+
+
+class JobStarted(WireModel):
+    job: str
 
 
 class Driver(WireModel):

@@ -3,8 +3,8 @@
 from collections.abc import Callable, Mapping
 
 from nocs.devices import DeviceInterface
-from nocs.indi import IndiClient, Property, PropertyState, PropertyType
-from nocs.indi.properties import NumberElement, SwitchElement, TextElement
+from nocs.indi import IndiClient, Property, PropertyState, PropertyType, PropertyUpdated
+from nocs.indi.properties import BlobElement, NumberElement, SwitchElement, TextElement
 from nocs.indi.protocol import DefineProperty, DeleteProperty, ElementValue, SetProperty
 
 type Responder = Callable[[str, str, Mapping[str, str | float | bool]], object]
@@ -46,6 +46,16 @@ class FakeClient(IndiClient):
             values={k: ElementValue(v, {}) for k, v in (values or {}).items()},
         )
         self._handle(update)  # pyright: ignore[reportPrivateUsage]
+
+    def deliver_blob(self, device: str, name: str, data: bytes, fmt: str = ".fits") -> None:
+        """An image arriving in a BLOB property."""
+        prop = self.get_property(device, name)
+        assert prop is not None
+        element = prop.elements[name]
+        assert isinstance(element, BlobElement)
+        element.format, element.size, element.data = fmt, len(data), data
+        prop.state = PropertyState.OK
+        self._emit(PropertyUpdated(prop, (name,)))  # pyright: ignore[reportPrivateUsage]
 
     def delete(self, device: str, name: str | None = None) -> None:
         self._handle(DeleteProperty(device, name, None, None))  # pyright: ignore[reportPrivateUsage]

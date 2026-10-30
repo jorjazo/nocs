@@ -141,6 +141,8 @@ class EquipmentService:
         self._started: set[str] = set()
         """Drivers NOCS started, and therefore stops on disconnect."""
         self._locks: defaultdict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
+        self._status: dict[Role, DeviceStatus] = {}
+        self._listeners: list[Callable[[], None]] = []
 
         with store.transaction():
             self._publish_profiles()
@@ -158,6 +160,21 @@ class EquipmentService:
     @property
     def active(self) -> str | None:
         return self._profile_id
+
+    @property
+    def active_profile(self) -> Profile | None:
+        return self._profile
+
+    def ready_device(self, role: Role) -> str | None:
+        """The INDI device playing ``role``, if it is connected and ready."""
+        if self._status.get(role) is not DeviceStatus.READY:
+            return None
+        return self._resolved.get(role)
+
+    def add_listener(self, listener: Callable[[], None]) -> Callable[[], None]:
+        """Call ``listener`` whenever the status of a role changes."""
+        self._listeners.append(listener)
+        return lambda: self._listeners.remove(listener)
 
     # -- profiles ---------------------------------------------------------
 
@@ -236,6 +253,7 @@ class EquipmentService:
             async with anyio.create_task_group() as group:
                 for role in pending:
                     group.start_soon(self._connect_role, client, role, profile.devices[role])
+            await self._configure_cameras(client, profile)
         except Exception as e:
             log.exception("connecting %s failed", self._profile_id)
             self._publish_connection(Connection.CONNECTING, f"connecting failed: {e}")
@@ -337,6 +355,30 @@ class EquipmentService:
         else:
             self._publish_role(role, status=DeviceStatus.READY)
 
+    async def _configure_cameras(self, client: IndiClient, profile: Profile) -> None:
+        """Point the cameras at the rig's other devices and optics, for their FITS headers."""
+
+        def name(role: Role) -> str:
+            return self.ready_device(role) or ""
+
+        cameras = [
+            (Role.MAIN_CAMERA, name(Role.FILTER_WHEEL), name(Role.FOCUSER), profile.imaging),
+            (Role.GUIDE_CAMERA, "", "", profile.guiding),
+        ]
+        for role, filter_wheel, focuser, optics in cameras:
+            device = self.ready_device(role)
+            if device is None:
+                continue
+            camera = Camera(client, device)
+            try:
+                await camera.set_snooped_devices(
+                    mount=name(Role.MOUNT), focuser=focuser, filter_wheel=filter_wheel
+                )
+                if optics is not None:
+                    await camera.set_optics(optics.focal_length * optics.reducer, optics.aperture)
+            except (DeviceError, ConnectionError, KeyError) as e:
+                log.warning("cannot configure %s (%s): %s", role.value, device, e)
+
     async def _resolve(self, client: IndiClient, role: Role, config: DeviceConfig) -> str:
         try:
             await client.wait_for(lambda c: bool(candidates(c, role, config)), self._driver_timeout)
@@ -432,10 +474,19 @@ class EquipmentService:
             self._store.set((*ROOT, "connection"), connection.value)
             self._store.set((*ROOT, "error"), error)
 
+    def _notify(self) -> None:
+        for listener in list(self._listeners):
+            try:
+                listener()
+            except Exception:
+                log.exception("equipment listener failed")
+
     def _publish_roles(self, status: DeviceStatus) -> None:
         roles: dict[str, Json] = {}
+        self._status = {}
         if self._profile is not None:
             for role, config in self._profile.devices.items():
+                self._status[role] = status
                 roles[role.value] = {
                     "driver": config.driver,
                     "device": self._resolved.get(role, config.device),
@@ -443,6 +494,7 @@ class EquipmentService:
                     "error": None,
                 }
         self._store.set((*ROOT, "devices"), roles)
+        self._notify()
 
     def _publish_role(
         self,
@@ -458,3 +510,5 @@ class EquipmentService:
                 self._store.set((*path, "device"), device)
             self._store.set((*path, "status"), status.value)
             self._store.set((*path, "error"), error)
+        self._status[role] = status
+        self._notify()
