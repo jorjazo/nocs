@@ -26,6 +26,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 
 from nocs import __version__
+from nocs.api.auth import REVOKED, AuthMiddleware, Sockets, auth_router, identity
 from nocs.api.schemas import (
     CameraRoleName,
     CameraSettingsRequest,
@@ -51,6 +52,7 @@ from nocs.api.schemas import (
     TargetRequest,
     TemplateRequest,
 )
+from nocs.auth import AuthStore
 from nocs.config import Settings
 from nocs.devices import DeviceError
 from nocs.devices.camera import Region
@@ -95,6 +97,8 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
     store = store if store is not None else StateStore()
     bridge = IndiBridge(store, settings.indi_host, settings.indi_port)
     fifo = DriverFifo(settings.indi_fifo) if settings.indi_fifo is not None else None
+    auth = AuthStore(settings.config_dir / "auth.json")
+    sockets = Sockets()
     # Created in the lifespan: they publish to the store and spawn tasks on its loop.
     services = _Services()
 
@@ -159,6 +163,8 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
                 await task
 
     app = FastAPI(title="NOCS", version=__version__, lifespan=lifespan)
+    app.add_middleware(AuthMiddleware, auth=auth)
+    app.include_router(auth_router(auth, sockets))
 
     @app.get("/api/health")
     async def health() -> Health:  # pyright: ignore[reportUnusedFunction]
@@ -291,8 +297,8 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
         path = services.worker.preview_path(name) if services.worker is not None else None
         if path is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "no such preview")
-        # Each preview has a name of its own and never changes.
-        headers = {"Cache-Control": "public, max-age=31536000, immutable"}
+        # Each preview has a name of its own and never changes; only clients may keep it.
+        headers = {"Cache-Control": "private, max-age=31536000, immutable"}
         return FileResponse(path, media_type="image/jpeg", headers=headers)
 
     @app.put("/api/storage/destination", status_code=status.HTTP_204_NO_CONTENT)
@@ -388,17 +394,18 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
 
     @app.websocket("/api/ws")
     async def ws(websocket: WebSocket) -> None:  # pyright: ignore[reportUnusedFunction]
-        await websocket.accept()
-        hello = Hello()
-        try:
-            with anyio.move_on_after(_HELLO_TIMEOUT):
-                hello = Hello.model_validate_json(await websocket.receive_text())
-        except ValidationError:
-            pass
-        except WebSocketDisconnect:
-            return
-        since = hello.since if hello.epoch == store.epoch else None
-        await _stream_state(websocket, store, since)
+        with sockets.track(identity(websocket)) as revoked:
+            await websocket.accept()
+            hello = Hello()
+            try:
+                with anyio.move_on_after(_HELLO_TIMEOUT):
+                    hello = Hello.model_validate_json(await websocket.receive_text())
+            except ValidationError:
+                pass
+            except WebSocketDisconnect:
+                return
+            since = hello.since if hello.epoch == store.epoch else None
+            await _stream_state(websocket, store, since, revoked)
 
     if settings.web_dir is not None and settings.web_dir.is_dir():
         app.mount("/", StaticFiles(directory=settings.web_dir, html=True), name="web")
@@ -507,8 +514,10 @@ def _frame_record(frame: Located) -> FrameRecord:
     )
 
 
-async def _stream_state(websocket: WebSocket, store: StateStore, since: int | None) -> None:
-    """Send the client what it is missing, then every change as it happens."""
+async def _stream_state(
+    websocket: WebSocket, store: StateStore, since: int | None, revoked: anyio.Event
+) -> None:
+    """Send the client what it is missing, then every change as it happens, until revoked."""
     subscription = store.subscribe()
 
     async def send(message: ServerMessage) -> None:
@@ -546,11 +555,20 @@ async def _stream_state(websocket: WebSocket, store: StateStore, since: int | No
                         await websocket.receive_text()
                 group.cancel_scope.cancel()
 
+            async def watcher() -> None:
+                await revoked.wait()
+                group.cancel_scope.cancel()
+
             group.start_soon(sender)
             group.start_soon(receiver)
+            group.start_soon(watcher)
     except* WebSocketDisconnect:
         pass  # the client went away while we were sending
     except* Exception as errors:
         log.warning("websocket closed with error: %r", errors.exceptions)
     finally:
         subscription.close()
+    if revoked.is_set():
+        # The client may be gone already; then there is nobody to tell.
+        with contextlib.suppress(WebSocketDisconnect, RuntimeError):
+            await websocket.close(REVOKED, "revoked")

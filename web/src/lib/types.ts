@@ -6,6 +6,7 @@ import type * as Api from "./generated/api";
 
 export type {
   AppState,
+  AuthStatus,
   BlobInfo,
   CameraState,
   EquipmentState,
@@ -20,6 +21,7 @@ export type {
   IndiValueElement,
   JobInfo,
   JobStarted,
+  PairedDevice,
   PropertyStateName as PropertyState,
   RoleState,
   SetPropertyRequest,

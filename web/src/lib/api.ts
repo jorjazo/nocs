@@ -1,4 +1,4 @@
-import type { JobStarted } from "./types";
+import type { AuthStatus, JobStarted, PairedDevice } from "./types";
 
 export class ApiError extends Error {
   constructor(
@@ -10,8 +10,12 @@ export class ApiError extends Error {
 }
 
 async function post(url: string, body?: unknown): Promise<unknown> {
+  return request("POST", url, body);
+}
+
+async function request(method: string, url: string, body?: unknown): Promise<unknown> {
   const response = await fetch(url, {
-    method: "POST",
+    method,
     headers: { "Content-Type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
@@ -51,4 +55,25 @@ export async function loop(role: string, exposure: number): Promise<string> {
 
 export async function cancelJob(job: string): Promise<void> {
   await post(`/api/jobs/${job}/cancel`);
+}
+
+export async function getAuth(): Promise<AuthStatus> {
+  return (await request("GET", "/api/auth")) as AuthStatus;
+}
+
+// Setting up the passphrase also pairs this device (ADR 0014).
+export async function setUp(passphrase: string, name: string): Promise<PairedDevice> {
+  return (await post("/api/auth/setup", { passphrase, name })) as PairedDevice;
+}
+
+export async function pair(passphrase: string, name: string): Promise<PairedDevice> {
+  return (await post("/api/auth/pair", { passphrase, name })) as PairedDevice;
+}
+
+export async function revokeDevice(id: string): Promise<void> {
+  await request("DELETE", `/api/auth/devices/${encodeURIComponent(id)}`);
+}
+
+export async function setObserver(enabled: boolean): Promise<void> {
+  await request("PUT", "/api/auth/observer", { enabled });
 }

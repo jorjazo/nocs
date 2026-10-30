@@ -14,6 +14,7 @@ from typing import Any
 import pytest
 from astropy.io import fits  # pyright: ignore[reportMissingTypeStubs]
 from fastapi.testclient import TestClient
+from owner import pair_owner
 
 from nocs.api import create_app
 from nocs.api.schemas import AppState
@@ -91,6 +92,7 @@ def api(
     profile = {**SIMULATORS, "devices": dict(SIMULATORS["devices"]), "site": SITE}
     profile["devices"].pop("power_box")  # needs the FIFO; not relevant here
     with TestClient(create_app(settings)) as client:
+        pair_owner(client)
         # Never a drive that happens to be mounted on the test machine.
         response = client.put("/api/storage/destination", json={"destination": "internal"})
         assert response.status_code == 204, response.text

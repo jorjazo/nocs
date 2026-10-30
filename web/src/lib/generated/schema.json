@@ -74,6 +74,48 @@
       "title": "AppState",
       "type": "object"
     },
+    "AuthStatus": {
+      "properties": {
+        "device": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PairedDevice"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "This client's device, when paired."
+        },
+        "observer": {
+          "description": "Whether unpaired clients may watch (read only).",
+          "type": "boolean"
+        },
+        "role": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ClientRole"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "None: pair to do anything."
+        },
+        "setup_required": {
+          "description": "No owner passphrase yet: set one up first.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "setup_required",
+        "role",
+        "device",
+        "observer"
+      ],
+      "title": "AuthStatus",
+      "type": "object"
+    },
     "BlobInfo": {
       "additionalProperties": false,
       "properties": {
@@ -359,6 +401,13 @@
       ],
       "title": "CameraState",
       "type": "object"
+    },
+    "ClientRole": {
+      "enum": [
+        "owner",
+        "observer"
+      ],
+      "type": "string"
     },
     "ConnectRequest": {
       "properties": {
@@ -1431,6 +1480,19 @@
       "title": "NightInfo",
       "type": "object"
     },
+    "ObserverRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "enabled"
+      ],
+      "title": "ObserverRequest",
+      "type": "object"
+    },
     "Optics": {
       "additionalProperties": false,
       "properties": {
@@ -1463,6 +1525,76 @@
         "focal_length"
       ],
       "title": "Optics",
+      "type": "object"
+    },
+    "PairRequest": {
+      "additionalProperties": false,
+      "description": "Set up the owner passphrase (``/api/auth/setup``) or pair with it (``/api/auth/pair``).",
+      "properties": {
+        "name": {
+          "description": "What the device is, e.g. \"Pixel 8\".",
+          "type": "string"
+        },
+        "passphrase": {
+          "description": "At least 8 characters.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "passphrase",
+        "name"
+      ],
+      "title": "PairRequest",
+      "type": "object"
+    },
+    "PairedDevice": {
+      "properties": {
+        "created": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "current": {
+          "description": "The device making the request.",
+          "type": "boolean"
+        },
+        "id": {
+          "type": "string"
+        },
+        "last_used": {
+          "description": "To the hour.",
+          "format": "date-time",
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "created",
+        "last_used",
+        "current"
+      ],
+      "title": "PairedDevice",
+      "type": "object"
+    },
+    "PassphraseRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "current": {
+          "type": "string"
+        },
+        "new": {
+          "description": "At least 8 characters.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "current",
+        "new"
+      ],
+      "title": "PassphraseRequest",
       "type": "object"
     },
     "PatchMessage": {

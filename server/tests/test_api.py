@@ -8,6 +8,7 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from owner import pair_owner
 
 from nocs.api import create_app
 from nocs.config import Settings
@@ -27,6 +28,7 @@ def store() -> StateStore:
 @pytest.fixture
 def client(store: StateStore) -> Iterator[TestClient]:
     with TestClient(create_app(unreachable_indi(), store)) as client:
+        pair_owner(client)
         yield client
 
 
@@ -106,6 +108,7 @@ def test_websocket_ignores_versions_from_another_epoch(
 def test_connect_simulator_through_api(indi_address: tuple[str, int]) -> None:
     host, port = indi_address
     with TestClient(create_app(Settings(indi_host=host, indi_port=port))) as client:
+        pair_owner(client)
         deadline = time.monotonic() + 10
         while True:
             state = client.get("/api/state").json()["state"]

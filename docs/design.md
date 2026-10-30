@@ -287,9 +287,13 @@ parks the mount. Observatory devices will plug into this later.
 
 - **First-run setup** sets an owner passphrase.
 - Clients **pair** once with the passphrase and receive a long-lived device
-  token; tokens can be listed and revoked.
-- Optional **observer** role: read-only access without pairing, for showing
-  the session to others.
+  token (an `HttpOnly` cookie); tokens can be listed and revoked.
+- Optional **observer** role, off by default: read-only access without pairing
+  (state and previews), for showing the session to others.
+- Commands and WebSockets are refused from other origins (CSRF).
+- Until HTTPS (phase 6) the web app runs without geolocation, offline
+  installation and wake lock, which browsers keep for secure contexts. Details
+  in [ADR 0014](adr/0014-authentication-and-pairing.md).
 - Authentication exists from the first release because remote access is a
   long-term goal; local-only operation must still be frictionless.
 
@@ -299,6 +303,10 @@ parks the mount. Observatory devices will plug into this later.
   web app is reachable at a fixed address and at `nocs.local` (mDNS).
 - Station mode to join home Wi-Fi; Ethernet supported.
 - If the station network is lost, fall back to access point automatically.
+- Several NOCS boxes may share a network (two rigs at home): the host name and
+  its mDNS name are configurable (a nocs-system operation), so each box is
+  reachable as e.g. `nocs-west.local`. A pairing belongs to the name the client
+  used (ADR 0014).
 
 ## 12. Deployment
 

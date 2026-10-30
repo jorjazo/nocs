@@ -6,6 +6,7 @@ import time
 
 import pytest
 from fastapi.testclient import TestClient
+from owner import pair_owner
 
 from nocs.api import create_app
 from nocs.api.schema import build
@@ -67,6 +68,7 @@ def test_schema_export_has_every_wire_type() -> None:
 def test_live_state_matches_schema(indi_address: tuple[str, int]) -> None:
     host, port = indi_address
     with TestClient(create_app(Settings(indi_host=host, indi_port=port))) as client:
+        pair_owner(client)
         deadline = time.monotonic() + 10
         while True:
             state = client.get("/api/state").json()["state"]

@@ -38,9 +38,19 @@ class Live {
   #epoch: string | null = null;
   #socket: WebSocket | null = null;
   #attempt = 0;
+  #running = false;
 
   start(): void {
+    if (this.#running) return;
+    this.#running = true;
     this.#connect();
+  }
+
+  // Stop reconnecting, e.g. once this device is no longer allowed in.
+  stop(): void {
+    this.#running = false;
+    this.#socket?.close();
+    this.status = "closed";
   }
 
   #connect(): void {
@@ -60,6 +70,7 @@ class Live {
     };
     socket.onclose = () => {
       this.status = "closed";
+      if (!this.#running) return;
       const delay = BACKOFF_MS[Math.min(this.#attempt, BACKOFF_MS.length - 1)];
       this.#attempt += 1;
       setTimeout(() => this.#connect(), delay);

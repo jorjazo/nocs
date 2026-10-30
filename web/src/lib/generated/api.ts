@@ -27,6 +27,11 @@ export type PropertyStateName = "Idle" | "Ok" | "Busy" | "Alert";
 export type JobStateName = "running" | "succeeded" | "failed" | "cancelled";
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "ClientRole".
+ */
+export type ClientRole = "owner" | "observer";
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "CameraRoleName".
  */
 export type CameraRoleName = "main_camera" | "guide_camera";
@@ -446,6 +451,45 @@ export interface StorageDestination {
   writable: boolean;
 }
 /**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "AuthStatus".
+ */
+export interface AuthStatus {
+  /**
+   * This client's device, when paired.
+   */
+  device: PairedDevice | null;
+  /**
+   * Whether unpaired clients may watch (read only).
+   */
+  observer: boolean;
+  /**
+   * None: pair to do anything.
+   */
+  role: ClientRole | null;
+  /**
+   * No owner passphrase yet: set one up first.
+   */
+  setup_required: boolean;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "PairedDevice".
+ */
+export interface PairedDevice {
+  created: string;
+  /**
+   * The device making the request.
+   */
+  current: boolean;
+  id: string;
+  /**
+   * To the hour.
+   */
+  last_used: string;
+  name: string;
+}
+/**
  * Only the fields present are changed.
  *
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -679,6 +723,13 @@ export interface NightInfo {
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "ObserverRequest".
+ */
+export interface ObserverRequest {
+  enabled: boolean;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "Optics".
  */
 export interface Optics {
@@ -694,6 +745,33 @@ export interface Optics {
    * Reducer or barlow factor.
    */
   reducer?: number;
+}
+/**
+ * Set up the owner passphrase (``/api/auth/setup``) or pair with it (``/api/auth/pair``).
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "PairRequest".
+ */
+export interface PairRequest {
+  /**
+   * What the device is, e.g. "Pixel 8".
+   */
+  name: string;
+  /**
+   * At least 8 characters.
+   */
+  passphrase: string;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "PassphraseRequest".
+ */
+export interface PassphraseRequest {
+  current: string;
+  /**
+   * At least 8 characters.
+   */
+  new: string;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema

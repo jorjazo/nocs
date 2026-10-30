@@ -10,6 +10,7 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from owner import pair_owner
 
 from nocs.api import create_app
 from nocs.api.schemas import AppState
@@ -30,6 +31,7 @@ def api(indi_address: tuple[str, int], indi_fifo: Path) -> Iterator[TestClient]:
     host, port = indi_address
     settings = Settings(indi_host=host, indi_port=port, indi_fifo=indi_fifo)
     with TestClient(create_app(settings)) as client:
+        pair_owner(client)
         yield client
 
 
@@ -87,5 +89,6 @@ def test_driver_catalog(indi_address: tuple[str, int], indi_fifo: Path) -> None:
         indi_host=host, indi_port=port, indi_drivers_dir=indi_fifo.parent / "drivers"
     )
     with TestClient(create_app(settings)) as api:
+        pair_owner(api)
         drivers = {d["driver"] for d in api.get("/api/indi/drivers").json()}
     assert {"indi_simulator_ccd", "indi_lx200am5", "indi_pegasus_ppba"} <= drivers

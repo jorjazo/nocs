@@ -44,6 +44,10 @@ NOCS_WEB_DIR=web/dist NOCS_INDI_FIFO=dev/.run/fifo NOCS_INDI_DRIVERS_DIR=dev/.ru
   NOCS_INDI_UPLOAD_DIR=/run/indi/uploads NOCS_INDI_UPLOAD_DIR_LOCAL=dev/.run/uploads \
   uv run --project server nocsd               # http://127.0.0.1:8000
 # profiles live in ~/.config/nocs/profiles/ (NOCS_CONFIG_DIR); dev/profiles/ has the simulators
+# the first visit sets the owner passphrase and pairs that browser (ADR 0014);
+# rm ~/.config/nocs/auth.json and restart nocsd to start over. From a shell:
+curl -c jar -H 'Content-Type: application/json' -d '{"passphrase": "…", "name": "curl"}' \
+  localhost:8000/api/auth/pair && curl -b jar localhost:8000/api/state
 ```
 
 CI runs all of the above (INDI simulators included) on every push to `main`.
@@ -55,6 +59,10 @@ CI runs all of the above (INDI simulators included) on every push to `main`.
 - **State goes through `StateStore`**; clients get snapshot + patches with an
   epoch. Document new state in `api/schemas.py` (tests validate the live state
   against it) and regenerate the TS types.
+- **Every `/api` endpoint needs the paired owner** unless it is listed as public
+  or for observers in `api/auth.py` (ADR 0014); never put secrets in the state,
+  which observers see. API tests pair their client with `pair_owner(client)`
+  (`tests/owner.py`).
 - **Device code goes through `nocs.devices` facades**, not raw INDI properties.
   Commands complete on the driver's `Ok` and fail on `Alert`.
 - **Concurrency in the API uses anyio** (task groups, `move_on_after`), the ASGI

@@ -19,5 +19,6 @@ that supersedes the old one.
 | [0011](0011-equipment-profiles-and-driver-management.md) | Equipment profiles and indiserver driver management | Accepted |
 | [0012](0012-image-pipeline.md) | Image transfer and preview pipeline | Proposed |
 | [0013](0013-storage-and-catalog.md) | Storage destinations, file layout and frame catalog | Accepted |
+| [0014](0014-authentication-and-pairing.md) | Authentication and device pairing | Proposed |
 
 Template: Context → Decision → Consequences.

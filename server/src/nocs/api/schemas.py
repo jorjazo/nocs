@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -384,6 +385,48 @@ class Driver(WireModel):
 class SerialPortInfo(WireModel):
     path: str = Field(description="Stable /dev/serial/by-id/ name.")
     device: str = Field(description="Device node it points to now.")
+
+
+# -- Authentication (ADR 0014) ---------------------------------------------------
+
+type ClientRole = Literal["owner", "observer"]
+
+
+class PairRequest(BaseModel):
+    """Set up the owner passphrase (``/api/auth/setup``) or pair with it (``/api/auth/pair``)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    passphrase: str = Field(description="At least 8 characters.")
+    name: str = Field(description='What the device is, e.g. "Pixel 8".')
+
+
+class PassphraseRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    current: str
+    new: str = Field(description="At least 8 characters.")
+
+
+class ObserverRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool
+
+
+class PairedDevice(WireModel):
+    id: str
+    name: str
+    created: datetime
+    last_used: datetime = Field(description="To the hour.")
+    current: bool = Field(description="The device making the request.")
+
+
+class AuthStatus(WireModel):
+    setup_required: bool = Field(description="No owner passphrase yet: set one up first.")
+    role: ClientRole | None = Field(description="None: pair to do anything.")
+    device: PairedDevice | None = Field(description="This client's device, when paired.")
+    observer: bool = Field(description="Whether unpaired clients may watch (read only).")
 
 
 # -- WebSocket ---------------------------------------------------------------

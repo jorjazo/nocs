@@ -34,3 +34,9 @@ def indi_fifo(indi_address: tuple[str, int]) -> Path:
     if not value:
         pytest.skip("NOCS_TEST_INDI_FIFO not set")
     return Path(value)
+
+
+@pytest.fixture(autouse=True)
+def cheap_scrypt(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Hash test passphrases in a millisecond instead of a fifth of a second."""
+    monkeypatch.setattr("nocs.auth.store.SCRYPT_N", 2**10)
