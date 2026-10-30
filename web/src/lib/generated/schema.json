@@ -4,6 +4,17 @@
       "additionalProperties": false,
       "description": "The whole state tree sent in snapshots and modified by patches.",
       "properties": {
+        "equipment": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EquipmentState"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "indi": {
           "anyOf": [
             {
@@ -34,6 +45,166 @@
         "size"
       ],
       "title": "BlobInfo",
+      "type": "object"
+    },
+    "ConnectRequest": {
+      "properties": {
+        "profile": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "profile"
+      ],
+      "title": "ConnectRequest",
+      "type": "object"
+    },
+    "ConnectionName": {
+      "enum": [
+        "disconnected",
+        "connecting",
+        "connected",
+        "disconnecting"
+      ],
+      "type": "string"
+    },
+    "DeviceConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "device": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "INDI device name. When omitted, the device of this driver that offers the role's interface is used; required when there are several."
+        },
+        "driver": {
+          "$ref": "#/$defs/DriverName",
+          "description": "INDI driver executable, e.g. indi_asi_ccd."
+        },
+        "port": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Serial port for DEVICE_PORT, preferably a /dev/serial/by-id/ path."
+        }
+      },
+      "required": [
+        "driver"
+      ],
+      "title": "DeviceConfig",
+      "type": "object"
+    },
+    "DeviceStatusName": {
+      "enum": [
+        "waiting",
+        "connecting",
+        "ready",
+        "error",
+        "disconnected"
+      ],
+      "type": "string"
+    },
+    "Driver": {
+      "properties": {
+        "driver": {
+          "description": "Executable, e.g. indi_asi_ccd.",
+          "type": "string"
+        },
+        "group": {
+          "type": "string"
+        },
+        "label": {
+          "description": "Device model the entry is for (one driver, many models).",
+          "type": "string"
+        },
+        "manufacturer": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "driver",
+        "name",
+        "label",
+        "manufacturer",
+        "group"
+      ],
+      "title": "Driver",
+      "type": "object"
+    },
+    "DriverName": {
+      "pattern": "^[A-Za-z0-9_.+-]{1,128}$",
+      "type": "string"
+    },
+    "EquipmentState": {
+      "additionalProperties": false,
+      "properties": {
+        "active": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Id of the selected profile."
+        },
+        "connection": {
+          "$ref": "#/$defs/ConnectionName"
+        },
+        "devices": {
+          "additionalProperties": {
+            "$ref": "#/$defs/RoleState"
+          },
+          "description": "Roles of the active profile.",
+          "propertyNames": {
+            "$ref": "#/$defs/Role"
+          },
+          "type": "object"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Why the profile cannot be connected right now."
+        },
+        "profiles": {
+          "additionalProperties": {
+            "$ref": "#/$defs/ProfileSummary"
+          },
+          "type": "object"
+        }
+      },
+      "required": [
+        "profiles",
+        "active",
+        "connection",
+        "error",
+        "devices"
+      ],
+      "title": "EquipmentState",
       "type": "object"
     },
     "Health": {
@@ -363,6 +534,40 @@
       "title": "IndiValueElement",
       "type": "object"
     },
+    "Optics": {
+      "additionalProperties": false,
+      "properties": {
+        "aperture": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Aperture in mm."
+        },
+        "focal_length": {
+          "description": "Native focal length in mm.",
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "reducer": {
+          "default": 1.0,
+          "description": "Reducer or barlow factor.",
+          "exclusiveMinimum": 0,
+          "type": "number"
+        }
+      },
+      "required": [
+        "focal_length"
+      ],
+      "title": "Optics",
+      "type": "object"
+    },
     "PatchMessage": {
       "properties": {
         "ops": {
@@ -415,6 +620,78 @@
       "title": "PatchOp",
       "type": "object"
     },
+    "Profile": {
+      "additionalProperties": false,
+      "properties": {
+        "devices": {
+          "additionalProperties": {
+            "$ref": "#/$defs/DeviceConfig"
+          },
+          "propertyNames": {
+            "$ref": "#/$defs/Role"
+          },
+          "type": "object"
+        },
+        "guiding": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Optics"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optics of the guiding train (guide scope or OAG)."
+        },
+        "imaging": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Optics"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optics of the imaging train."
+        },
+        "name": {
+          "maxLength": 80,
+          "minLength": 1,
+          "type": "string"
+        },
+        "site": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Site"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "Profile",
+      "type": "object"
+    },
+    "ProfileSummary": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "ProfileSummary",
+      "type": "object"
+    },
     "PropertyStateName": {
       "enum": [
         "Idle",
@@ -423,6 +700,76 @@
         "Alert"
       ],
       "type": "string"
+    },
+    "Role": {
+      "enum": [
+        "main_camera",
+        "guide_camera",
+        "mount",
+        "focuser",
+        "filter_wheel",
+        "power_box"
+      ],
+      "title": "Role",
+      "type": "string"
+    },
+    "RoleState": {
+      "additionalProperties": false,
+      "properties": {
+        "device": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "INDI device name, once known."
+        },
+        "driver": {
+          "type": "string"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "status": {
+          "$ref": "#/$defs/DeviceStatusName"
+        }
+      },
+      "required": [
+        "driver",
+        "device",
+        "status",
+        "error"
+      ],
+      "title": "RoleState",
+      "type": "object"
+    },
+    "SerialPortInfo": {
+      "properties": {
+        "device": {
+          "description": "Device node it points to now.",
+          "type": "string"
+        },
+        "path": {
+          "description": "Stable /dev/serial/by-id/ name.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "device"
+      ],
+      "title": "SerialPortInfo",
+      "type": "object"
     },
     "SetPropertyRequest": {
       "properties": {
@@ -448,6 +795,38 @@
         "values"
       ],
       "title": "SetPropertyRequest",
+      "type": "object"
+    },
+    "Site": {
+      "additionalProperties": false,
+      "properties": {
+        "elevation": {
+          "default": 0.0,
+          "description": "Metres above sea level.",
+          "type": "number"
+        },
+        "latitude": {
+          "description": "Degrees, north positive.",
+          "maximum": 90,
+          "minimum": -90,
+          "type": "number"
+        },
+        "longitude": {
+          "description": "Degrees, east positive.",
+          "maximum": 180,
+          "minimum": -180,
+          "type": "number"
+        },
+        "name": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "required": [
+        "latitude",
+        "longitude"
+      ],
+      "title": "Site",
       "type": "object"
     },
     "SnapshotMessage": {

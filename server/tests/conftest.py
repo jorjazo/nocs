@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 import pytest
 
@@ -15,3 +16,20 @@ def indi_address() -> tuple[str, int]:
         pytest.skip("NOCS_TEST_INDI not set")
     host, _, port = value.rpartition(":")
     return host, int(port)
+
+
+@pytest.fixture(autouse=True)
+def config_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Keep every Settings() of a test away from the user's real configuration."""
+    path = tmp_path / "config"
+    monkeypatch.setenv("NOCS_CONFIG_DIR", str(path))
+    return path
+
+
+@pytest.fixture
+def indi_fifo(indi_address: tuple[str, int]) -> Path:
+    """indiserver's driver FIFO, from NOCS_TEST_INDI_FIFO (``../dev/.run/fifo`` with compose)."""
+    value = os.environ.get("NOCS_TEST_INDI_FIFO")
+    if not value:
+        pytest.skip("NOCS_TEST_INDI_FIFO not set")
+    return Path(value)

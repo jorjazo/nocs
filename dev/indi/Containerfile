@@ -16,11 +16,14 @@ RUN apt-get update \
     && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*
 
-# The base image already ships an unprivileged "ubuntu" user (uid 1000).
-USER ubuntu
+# The entrypoint drops to the unprivileged "ubuntu" user (uid 1000) of the base
+# image after preparing the driver FIFO shared with the host.
+COPY entrypoint.sh /usr/local/bin/nocs-indiserver
 WORKDIR /home/ubuntu
 
 EXPOSE 7624
 
-ENTRYPOINT ["indiserver", "-v"]
+ENTRYPOINT ["nocs-indiserver"]
+# Simulators preloaded for the integration tests; nocsd adopts them and starts
+# any other driver through the FIFO.
 CMD ["indi_simulator_telescope", "indi_simulator_ccd", "indi_simulator_guide", "indi_simulator_focus", "indi_simulator_wheel"]

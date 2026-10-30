@@ -127,6 +127,9 @@ Goal: anyone can flash an image and use NOCS.
 
 - nocs-system: Wi-Fi access point / station / fallback, USB storage manager,
   health monitoring, reboot/shutdown.
+- indiserver supervision: systemd restarts it when it dies, but nothing yet
+  detects an indiserver or driver that hangs without exiting. Design the
+  detection and recovery then (see ADR 0011).
 - mDNS (`nocs.local`), first-boot experience.
 - Raspberry Pi 5 image (Ubuntu Server LTS) with INDI, PHD2, ASTAP database
   and NOCS; boot from USB SSD supported.

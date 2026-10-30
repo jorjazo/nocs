@@ -7,6 +7,7 @@ import type * as Api from "./generated/api";
 export type {
   AppState,
   BlobInfo,
+  EquipmentState,
   Health,
   Hello,
   IndiDevice,
@@ -17,6 +18,7 @@ export type {
   IndiState,
   IndiValueElement,
   PropertyStateName as PropertyState,
+  RoleState,
   SetPropertyRequest,
 } from "./generated/api";
 

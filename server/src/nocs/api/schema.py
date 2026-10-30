@@ -12,13 +12,17 @@ from pydantic.json_schema import models_json_schema
 
 from nocs.api.schemas import (
     AppState,
+    ConnectRequest,
+    Driver,
     Health,
     Hello,
     PatchMessage,
+    SerialPortInfo,
     SetPropertyRequest,
     SnapshotMessage,
     StateSnapshot,
 )
+from nocs.equipment import Profile
 
 type Mode = Literal["validation", "serialization"]
 
@@ -26,6 +30,10 @@ type Mode = Literal["validation", "serialization"]
 MODELS: list[tuple[type[BaseModel], Mode]] = [
     (Hello, "validation"),
     (SetPropertyRequest, "validation"),
+    (ConnectRequest, "validation"),
+    (Profile, "validation"),
+    (Driver, "serialization"),
+    (SerialPortInfo, "serialization"),
     (SnapshotMessage, "serialization"),
     (PatchMessage, "serialization"),
     (Health, "serialization"),

@@ -7,23 +7,36 @@ import contextlib
 import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from dataclasses import asdict
 
 import anyio
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, status
+from fastapi import FastAPI, HTTPException, Response, WebSocket, WebSocketDisconnect, status
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 
 from nocs import __version__
 from nocs.api.schemas import (
+    ConnectRequest,
+    Driver,
     Health,
     Hello,
     PatchMessage,
+    SerialPortInfo,
     ServerMessage,
     SetPropertyRequest,
     SnapshotMessage,
     StateSnapshot,
 )
 from nocs.config import Settings
+from nocs.equipment import (
+    EquipmentBusyError,
+    EquipmentService,
+    Profile,
+    ProfileError,
+    ProfileStore,
+    serial_ports,
+)
+from nocs.indi.drivers import DriverFifo, load_catalog
 from nocs.services.indi_bridge import IndiBridge, NotConnectedError
 from nocs.state import Resync, StateStore
 
@@ -35,13 +48,23 @@ _HELLO_TIMEOUT = 5.0
 def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
     store = store if store is not None else StateStore()
     bridge = IndiBridge(store, settings.indi_host, settings.indi_port)
+    fifo = DriverFifo(settings.indi_fifo) if settings.indi_fifo is not None else None
+    # Created in the lifespan: it publishes to the store and spawns tasks on its loop.
+    services: dict[str, EquipmentService] = {}
+
+    def equipment() -> EquipmentService:
+        return services["equipment"]
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncGenerator[None]:
+        services["equipment"] = EquipmentService(
+            store, ProfileStore(settings.config_dir), bridge, fifo
+        )
         task = asyncio.create_task(bridge.run(), name="indi-bridge")
         try:
             yield
         finally:
+            await equipment().close()
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await task
@@ -67,7 +90,65 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
         except KeyError as e:
             raise HTTPException(status.HTTP_404_NOT_FOUND, str(e.args[0])) from e
         except ValueError as e:
-            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(e)) from e
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e)) from e
+
+    @app.get("/api/profiles")
+    async def list_profiles() -> dict[str, Profile]:  # pyright: ignore[reportUnusedFunction]
+        return equipment().profiles()
+
+    @app.get("/api/profiles/{profile_id}")
+    async def get_profile(profile_id: str) -> Profile:  # pyright: ignore[reportUnusedFunction]
+        try:
+            profile = equipment().profile(profile_id)
+        except ProfileError as e:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, str(e)) from e
+        if profile is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, f"no profile {profile_id}")
+        return profile
+
+    @app.put("/api/profiles/{profile_id}", status_code=status.HTTP_204_NO_CONTENT)
+    async def put_profile(  # pyright: ignore[reportUnusedFunction]
+        profile_id: str, profile: Profile
+    ) -> Response:
+        try:
+            equipment().save_profile(profile_id, profile)
+        except ProfileError as e:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e)) from e
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    @app.delete("/api/profiles/{profile_id}", status_code=status.HTTP_204_NO_CONTENT)
+    async def delete_profile(profile_id: str) -> Response:  # pyright: ignore[reportUnusedFunction]
+        try:
+            deleted = equipment().delete_profile(profile_id)
+        except ProfileError as e:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, str(e)) from e
+        except EquipmentBusyError as e:
+            raise HTTPException(status.HTTP_409_CONFLICT, str(e)) from e
+        if not deleted:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, f"no profile {profile_id}")
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    @app.post("/api/equipment/connect", status_code=status.HTTP_202_ACCEPTED)
+    async def connect(request: ConnectRequest) -> None:  # pyright: ignore[reportUnusedFunction]
+        try:
+            equipment().connect(request.profile)
+        except (KeyError, ProfileError) as e:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, f"no profile {request.profile}") from e
+        except EquipmentBusyError as e:
+            raise HTTPException(status.HTTP_409_CONFLICT, str(e)) from e
+
+    @app.post("/api/equipment/disconnect", status_code=status.HTTP_202_ACCEPTED)
+    async def disconnect() -> None:  # pyright: ignore[reportUnusedFunction]
+        equipment().disconnect()
+
+    @app.get("/api/indi/drivers")
+    async def drivers() -> list[Driver]:  # pyright: ignore[reportUnusedFunction]
+        catalog = await anyio.to_thread.run_sync(load_catalog, settings.indi_drivers_dir)
+        return [Driver(**asdict(entry)) for entry in catalog]
+
+    @app.get("/api/system/serial-ports")
+    async def ports() -> list[SerialPortInfo]:  # pyright: ignore[reportUnusedFunction]
+        return [SerialPortInfo(path=p.path, device=p.device) for p in serial_ports()]
 
     @app.websocket("/api/ws")
     async def ws(websocket: WebSocket) -> None:  # pyright: ignore[reportUnusedFunction]

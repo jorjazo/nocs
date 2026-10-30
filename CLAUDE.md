@@ -17,25 +17,29 @@ Read [docs/design.md](docs/design.md), [docs/roadmap.md](docs/roadmap.md) and th
 ## Layout
 
 ```
-server/   Python package `nocs` (nocsd): indi/ (protocol + async client),
-          devices/ (typed facades), state/ (versioned store), services/
+server/   Python package `nocs` (nocsd): indi/ (protocol + async client, driver
+          FIFO + catalog), devices/ (typed facades), equipment/ (profiles,
+          roles, connect service), state/ (versioned store), services/
           (indi_bridge), api/ (FastAPI REST + WebSocket, schemas, schema export)
 web/      Svelte 5 + TypeScript PWA (currently a dev shell, not the real UI)
-dev/      compose.yaml (INDI simulators + GSC catalog, headless PHD2), bench/,
-          spikes/, pi/ (lab Pi flashing and setup)
+dev/      compose.yaml (INDI simulators + GSC catalog + driver FIFO in dev/.run,
+          headless PHD2), profiles/ (simulator rig), tools/ (indi_record),
+          bench/, spikes/, pi/ (lab Pi flashing and setup)
 docs/     design, roadmap, ux, adr/, spikes/
 ```
 
 ## Commands
 
 ```sh
-docker compose -f dev/compose.yaml up -d      # INDI simulators :7624, PHD2 :4400
+docker compose -f dev/compose.yaml up -d --build  # INDI simulators :7624, PHD2 :4400
 cd server && uv sync
 uv run ruff check . && uv run ruff format --check . && uv run pyright   # strict
-NOCS_TEST_INDI=localhost:7624 uv run pytest   # integration tests need it set
+NOCS_TEST_INDI=localhost:7624 NOCS_TEST_INDI_FIFO=../dev/.run/fifo uv run pytest
 cd web && pnpm install && pnpm check && pnpm build
 pnpm gen:types        # after changing server/src/nocs/api/schemas.py (CI checks)
-NOCS_WEB_DIR=web/dist uv run --project server nocsd   # http://127.0.0.1:8000
+NOCS_WEB_DIR=web/dist NOCS_INDI_FIFO=dev/.run/fifo NOCS_INDI_DRIVERS_DIR=dev/.run/drivers \
+  uv run --project server nocsd               # http://127.0.0.1:8000
+# profiles live in ~/.config/nocs/profiles/ (NOCS_CONFIG_DIR); dev/profiles/ has the simulators
 ```
 
 CI runs all of the above (INDI simulators included) on every push to `main`.
@@ -69,7 +73,10 @@ CI runs all of the above (INDI simulators included) on every push to `main`.
   (`Device.not_ready()`), never assume.
 - Right after (re)connecting to indiserver, devices appear gradually; wait for
   `CONNECTION` before using a device.
-- Property state conventions vary: tracking reports `Busy` = on, `Idle` = off.
+- Property state conventions vary: tracking reports `Busy` = on, `Idle` = off;
+  a disconnected `CONNECTION` is `Idle`, not `Ok`.
+- indiserver does not create its `-f` FIFO, and keeps restarting (`-r`) a driver
+  that cannot be executed instead of reporting it.
 - Expat ≥ 2.6 defers small trailing chunks: the stream parser must `flush()`.
 - The simulators render real stars only with the GSC catalog (in the dev image);
   their stars are very sharp (HFR < 1 px).

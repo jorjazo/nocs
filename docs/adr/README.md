@@ -16,5 +16,6 @@ that supersedes the old one.
 | [0008](0008-agpl-license-and-dco.md) | AGPL-3.0 license and DCO | Accepted |
 | [0009](0009-monorepo-and-english.md) | Monorepo, English for code and docs | Accepted |
 | [0010](0010-privileged-system-helper.md) | Separate privileged system helper | Accepted |
+| [0011](0011-equipment-profiles-and-driver-management.md) | Equipment profiles and indiserver driver management | Accepted |
 
 Template: Context → Decision → Consequences.

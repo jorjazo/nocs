@@ -2,9 +2,29 @@
 
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "ConnectionName".
+ */
+export type ConnectionName = "disconnected" | "connecting" | "connected" | "disconnecting";
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "DeviceStatusName".
+ */
+export type DeviceStatusName = "waiting" | "connecting" | "ready" | "error" | "disconnected";
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "PropertyStateName".
  */
 export type PropertyStateName = "Idle" | "Ok" | "Busy" | "Alert";
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "DriverName".
+ */
+export type DriverName = string;
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "Role".
+ */
+export type Role = "main_camera" | "guide_camera" | "mount" | "focuser" | "filter_wheel" | "power_box";
 
 export interface NOCSAPI {
   [k: string]: unknown;
@@ -16,7 +36,52 @@ export interface NOCSAPI {
  * via the `definition` "AppState".
  */
 export interface AppState {
+  equipment?: EquipmentState | null;
   indi?: IndiState | null;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "EquipmentState".
+ */
+export interface EquipmentState {
+  /**
+   * Id of the selected profile.
+   */
+  active: string | null;
+  connection: ConnectionName;
+  /**
+   * Roles of the active profile.
+   */
+  devices: {
+    [k: string]: RoleState;
+  };
+  /**
+   * Why the profile cannot be connected right now.
+   */
+  error: string | null;
+  profiles: {
+    [k: string]: ProfileSummary;
+  };
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "RoleState".
+ */
+export interface RoleState {
+  /**
+   * INDI device name, once known.
+   */
+  device: string | null;
+  driver: string;
+  error: string | null;
+  status: DeviceStatusName;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "ProfileSummary".
+ */
+export interface ProfileSummary {
+  name: string;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -110,6 +175,48 @@ export interface IndiServer {
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "ConnectRequest".
+ */
+export interface ConnectRequest {
+  profile: string;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "DeviceConfig".
+ */
+export interface DeviceConfig {
+  /**
+   * INDI device name. When omitted, the device of this driver that offers the role's interface is used; required when there are several.
+   */
+  device?: string | null;
+  /**
+   * INDI driver executable, e.g. indi_asi_ccd.
+   */
+  driver: string;
+  /**
+   * Serial port for DEVICE_PORT, preferably a /dev/serial/by-id/ path.
+   */
+  port?: string | null;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "Driver".
+ */
+export interface Driver {
+  /**
+   * Executable, e.g. indi_asi_ccd.
+   */
+  driver: string;
+  group: string;
+  /**
+   * Device model the entry is for (one driver, many models).
+   */
+  label: string;
+  manufacturer: string;
+  name: string;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "Health".
  */
 export interface Health {
@@ -130,6 +237,24 @@ export interface Hello {
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "Optics".
+ */
+export interface Optics {
+  /**
+   * Aperture in mm.
+   */
+  aperture?: number | null;
+  /**
+   * Native focal length in mm.
+   */
+  focal_length: number;
+  /**
+   * Reducer or barlow factor.
+   */
+  reducer?: number;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "PatchMessage".
  */
 export interface PatchMessage {
@@ -147,6 +272,58 @@ export interface PatchOp {
   value: {
     [k: string]: unknown;
   };
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "Profile".
+ */
+export interface Profile {
+  devices?: {
+    [k: string]: DeviceConfig;
+  };
+  /**
+   * Optics of the guiding train (guide scope or OAG).
+   */
+  guiding?: Optics | null;
+  /**
+   * Optics of the imaging train.
+   */
+  imaging?: Optics | null;
+  name: string;
+  site?: Site | null;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "Site".
+ */
+export interface Site {
+  /**
+   * Metres above sea level.
+   */
+  elevation?: number;
+  /**
+   * Degrees, north positive.
+   */
+  latitude: number;
+  /**
+   * Degrees, east positive.
+   */
+  longitude: number;
+  name?: string;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "SerialPortInfo".
+ */
+export interface SerialPortInfo {
+  /**
+   * Device node it points to now.
+   */
+  device: string;
+  /**
+   * Stable /dev/serial/by-id/ name.
+   */
+  path: string;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema

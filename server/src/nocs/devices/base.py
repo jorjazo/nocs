@@ -128,6 +128,8 @@ class Device:
             {"CONNECT": False, "DISCONNECT": True},
             timeout=timeout,
             done=lambda p: p.switch("DISCONNECT"),
+            # Drivers report a closed connection as Idle, not Ok.
+            accept=frozenset({PropertyState.OK, PropertyState.IDLE}),
         )
 
     # -- helpers for subclasses ------------------------------------------

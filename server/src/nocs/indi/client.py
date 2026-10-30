@@ -214,6 +214,10 @@ class IndiClient:
     def _handle(self, message: IndiMessage) -> None:
         match message:
             case DefineProperty(property=prop):
+                if not prop.device or not prop.name:
+                    # Some drivers (indi_pegasus_ppba 2.2) define empty placeholder vectors.
+                    log.debug("ignoring property without device or name: %r", prop)
+                    return
                 self._devices.setdefault(prop.device, {})[prop.name] = prop
                 self._emit(PropertyDefined(prop))
             case SetProperty():

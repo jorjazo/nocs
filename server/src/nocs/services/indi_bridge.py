@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 
 from nocs.devices import DeviceInterface
 from nocs.indi import (
@@ -95,10 +95,16 @@ class IndiBridge:
         self._port = port
         self._client: IndiClient | None = None
         self._messages: list[Json] = []
+        self._watchers: list[Callable[[IndiClient | None], None]] = []
 
     @property
     def client(self) -> IndiClient | None:
         return self._client if self._client is not None and self._client.connected else None
+
+    def watch(self, watcher: Callable[[IndiClient | None], None]) -> Callable[[], None]:
+        """Call ``watcher`` with each new connected client, and with ``None`` when it is lost."""
+        self._watchers.append(watcher)
+        return lambda: self._watchers.remove(watcher)
 
     async def run(self) -> None:
         """Connect and stay connected until cancelled, retrying with backoff."""
@@ -125,10 +131,12 @@ class IndiBridge:
                 self._client = client
                 self._publish_server(connected=True)
                 log.info("connected to indiserver at %s:%s", self._host, self._port)
+                self._notify(client)
                 try:
                     await lost.wait()
                 finally:
                     self._client = None
+                    self._notify(None)
                     await client.close()
                 log.warning("lost connection to indiserver")
             delay = _BACKOFF[min(attempt, len(_BACKOFF) - 1)]
@@ -142,6 +150,13 @@ class IndiBridge:
         if client is None:
             raise NotConnectedError("not connected to indiserver")
         await client.send(device, name, values)
+
+    def _notify(self, client: IndiClient | None) -> None:
+        for watcher in list(self._watchers):
+            try:
+                watcher(client)
+            except Exception:
+                log.exception("indiserver connection watcher failed")
 
     def _publish_server(self, *, connected: bool, error: str | None = None) -> None:
         with self._store.transaction():

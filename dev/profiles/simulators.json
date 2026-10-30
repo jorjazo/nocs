@@ -1,0 +1,13 @@
+{
+  "name": "Simulators",
+  "devices": {
+    "main_camera": { "driver": "indi_simulator_ccd" },
+    "guide_camera": { "driver": "indi_simulator_guide" },
+    "mount": { "driver": "indi_simulator_telescope" },
+    "focuser": { "driver": "indi_simulator_focus" },
+    "filter_wheel": { "driver": "indi_simulator_wheel" },
+    "power_box": { "driver": "indi_simulator_weather" }
+  },
+  "imaging": { "focal_length": 250, "aperture": 50 },
+  "guiding": { "focal_length": 120, "aperture": 30 }
+}

@@ -8,6 +8,10 @@ services:
     image: nocs-dev-indi
     ports:
       - "127.0.0.1:7624:7624"
+    volumes:
+      # Driver FIFO and catalog for nocsd: NOCS_INDI_FIFO=dev/.run/fifo,
+      # NOCS_INDI_DRIVERS_DIR=dev/.run/drivers (paths from the repo root).
+      - ./.run:/run/indi
     restart: unless-stopped
 
   phd2:

@@ -29,6 +29,7 @@ jobs:
         run: uv run pytest -v
         env:
           NOCS_TEST_INDI: 127.0.0.1:7624
+          NOCS_TEST_INDI_FIFO: ../dev/.run/fifo
       - name: indiserver log
         if: failure()
         working-directory: .

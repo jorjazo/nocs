@@ -6,6 +6,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from nocs.equipment import Role
 from nocs.state import Patch
 
 # -- State -------------------------------------------------------------------
@@ -80,10 +81,34 @@ class IndiState(StateModel):
     messages: list[IndiMessage] = Field(default_factory=list[IndiMessage])
 
 
+type ConnectionName = Literal["disconnected", "connecting", "connected", "disconnecting"]
+type DeviceStatusName = Literal["waiting", "connecting", "ready", "error", "disconnected"]
+
+
+class ProfileSummary(StateModel):
+    name: str
+
+
+class RoleState(StateModel):
+    driver: str
+    device: str | None = Field(description="INDI device name, once known.")
+    status: DeviceStatusName
+    error: str | None
+
+
+class EquipmentState(StateModel):
+    profiles: dict[str, ProfileSummary]
+    active: str | None = Field(description="Id of the selected profile.")
+    connection: ConnectionName
+    error: str | None = Field(description="Why the profile cannot be connected right now.")
+    devices: dict[Role, RoleState] = Field(description="Roles of the active profile.")
+
+
 class AppState(StateModel):
     """The whole state tree sent in snapshots and modified by patches."""
 
     indi: IndiState | None = None
+    equipment: EquipmentState | None = None
 
 
 # -- HTTP --------------------------------------------------------------------
@@ -108,6 +133,23 @@ class StateSnapshot(WireModel):
 
 class SetPropertyRequest(BaseModel):
     values: dict[str, str | float | bool] = Field(min_length=1)
+
+
+class ConnectRequest(BaseModel):
+    profile: str
+
+
+class Driver(WireModel):
+    driver: str = Field(description="Executable, e.g. indi_asi_ccd.")
+    name: str
+    label: str = Field(description="Device model the entry is for (one driver, many models).")
+    manufacturer: str
+    group: str
+
+
+class SerialPortInfo(WireModel):
+    path: str = Field(description="Stable /dev/serial/by-id/ name.")
+    device: str = Field(description="Device node it points to now.")
 
 
 # -- WebSocket ---------------------------------------------------------------
