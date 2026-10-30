@@ -47,6 +47,13 @@ class Camera(Device):
     INTERFACE = DeviceInterface.CCD
     REQUIRED = ("CCD_INFO", "CCD_EXPOSURE", "CCD_FRAME_TYPE", "CCD1")
 
+    def not_ready(self) -> list[str]:
+        # Drivers define CCD_INFO first and fill in the sensor size a moment later.
+        missing = super().not_ready()
+        if not missing and self.prop("CCD_INFO").number("CCD_MAX_X") <= 0:
+            missing.append("sensor size (CCD_INFO)")
+        return missing
+
     @property
     def sensor(self) -> SensorInfo:
         info = self.prop("CCD_INFO")

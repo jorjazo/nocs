@@ -110,14 +110,15 @@ class Device:
             )
         await self.wait_ready(timeout)
 
-    async def wait_ready(self, timeout: float = DEFAULT_TIMEOUT) -> None:
-        def missing() -> list[str]:
-            return [name for name in self.REQUIRED if not self.has(name)]
+    def not_ready(self) -> list[str]:
+        """What the facade still waits for; subclasses add checks on values."""
+        return [name for name in self.REQUIRED if not self.has(name)]
 
+    async def wait_ready(self, timeout: float = DEFAULT_TIMEOUT) -> None:
         try:
-            await self.client.wait_for(lambda _: not missing(), timeout)
+            await self.client.wait_for(lambda _: not self.not_ready(), timeout)
         except TimeoutError as e:
-            raise DeviceError(f"{self.name} is missing {', '.join(missing())}") from e
+            raise DeviceError(f"{self.name} is not ready: {', '.join(self.not_ready())}") from e
 
     async def disconnect(self, timeout: float = DEFAULT_TIMEOUT) -> None:
         if not self.connected:

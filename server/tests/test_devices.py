@@ -6,6 +6,7 @@ from collections.abc import Callable, Mapping
 import pytest
 
 from nocs.devices import (
+    Camera,
     Device,
     DeviceError,
     DeviceInterface,
@@ -179,6 +180,19 @@ def test_switch_helpers_type_check() -> None:
     assert prop.switch("CONNECT")
     with pytest.raises(TypeError):
         prop.number("CONNECT")
+
+
+async def test_camera_waits_for_sensor_size(client: FakeClient) -> None:
+    for name in ("CCD_EXPOSURE", "CCD_FRAME_TYPE", "CCD1", "CONNECTION"):
+        client.define(Property("Cam", name, PropertyType.SWITCH))
+    client.define(number_property("Cam", "CCD_INFO", CCD_MAX_X=0))
+    camera = Camera(client, "Cam")
+    assert camera.not_ready() == ["sensor size (CCD_INFO)"]
+    asyncio.get_running_loop().call_later(
+        0.01, client.update, "Cam", "CCD_INFO", PropertyState.OK, {"CCD_MAX_X": "6248"}
+    )
+    await camera.wait_ready(timeout=1)
+    assert camera.not_ready() == []
 
 
 async def test_connect_unknown_device_fails_fast(client: FakeClient) -> None:
