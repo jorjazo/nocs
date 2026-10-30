@@ -8,6 +8,7 @@ import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
+import anyio
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, status
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
@@ -71,11 +72,12 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
     @app.websocket("/api/ws")
     async def ws(websocket: WebSocket) -> None:  # pyright: ignore[reportUnusedFunction]
         await websocket.accept()
+        hello = Hello()
         try:
-            raw = await asyncio.wait_for(websocket.receive_text(), _HELLO_TIMEOUT)
-            hello = Hello.model_validate_json(raw)
-        except (TimeoutError, ValidationError):
-            hello = Hello()
+            with anyio.move_on_after(_HELLO_TIMEOUT):
+                hello = Hello.model_validate_json(await websocket.receive_text())
+        except ValidationError:
+            pass
         except WebSocketDisconnect:
             return
         since = hello.since if hello.epoch == store.epoch else None
@@ -113,19 +115,23 @@ async def _stream_state(websocket: WebSocket, store: StateStore, since: int | No
                 await send(PatchMessage.from_patch(item))
                 last = item.version
 
-    async def receiver() -> None:
-        # Clients have nothing more to say yet; this only detects disconnection.
-        while True:
-            await websocket.receive_text()
-
-    # A TaskGroup (not bare tasks) so that cancellation of this handler, e.g. by the
-    # server on shutdown, propagates correctly and both halves always stop together.
+    # Structured with an anyio task group, the concurrency model of the ASGI server
+    # itself: cancellation of this handler (shutdown, client gone) then propagates
+    # exactly as the server expects, and both halves always stop together.
     try:
-        async with asyncio.TaskGroup() as group:
-            group.create_task(sender())
-            group.create_task(receiver())
+        async with anyio.create_task_group() as group:
+
+            async def receiver() -> None:
+                # Clients have nothing more to say yet; this only detects disconnection.
+                with contextlib.suppress(WebSocketDisconnect):
+                    while True:
+                        await websocket.receive_text()
+                group.cancel_scope.cancel()
+
+            group.start_soon(sender)
+            group.start_soon(receiver)
     except* WebSocketDisconnect:
-        pass
+        pass  # the client went away while we were sending
     except* Exception as errors:
         log.warning("websocket closed with error: %r", errors.exceptions)
     finally:

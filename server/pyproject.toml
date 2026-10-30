@@ -5,6 +5,7 @@ description = "NOCS core daemon (nocsd): web-first control of astrophotography r
 license = "AGPL-3.0-or-later"
 requires-python = ">=3.12"
 dependencies = [
+    "anyio>=4.6",
     "fastapi>=0.115",
     "pydantic>=2.9",
     "pydantic-settings>=2.6",
