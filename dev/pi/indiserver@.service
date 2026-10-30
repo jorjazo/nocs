@@ -1,0 +1,25 @@
+# indiserver for the lab Pi, as ADR 0011 expects it: an independent service
+# with a driver FIFO that nocsd writes to. The instance name is the user it runs
+# as (the user nocsd runs as too, so it can write the FIFO):
+#
+#   sudo cp dev/pi/indiserver@.service /etc/systemd/system/
+#   sudo systemctl enable --now indiserver@$USER
+#
+# Drivers are started by nocsd when it connects a profile. The user needs the
+# dialout group for serial devices (mounts, power boxes).
+[Unit]
+Description=INDI server for NOCS (runs as %i)
+After=network.target
+
+[Service]
+User=%i
+SupplementaryGroups=dialout plugdev
+RuntimeDirectory=indi
+RuntimeDirectoryMode=0750
+ExecStartPre=/usr/bin/mkfifo -m 0660 /run/indi/fifo
+ExecStart=/usr/bin/indiserver -v -p 7624 -f /run/indi/fifo
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

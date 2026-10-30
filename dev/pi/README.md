@@ -41,3 +41,19 @@ journalctl -u nocs-lab-setup    # its progress / errors
 
 The Wi-Fi password ends up in plain text on the card's boot partition, as with
 Ubuntu's own Raspberry Pi setup.
+
+## indiserver
+
+NOCS expects indiserver as a service with a driver FIFO (ADR 0011). On the lab Pi,
+with INDI installed from `ppa:mutlaqja/ppa` (`indi-bin indi-3rdparty-drivers`):
+
+```sh
+sudo cp dev/pi/indiserver@.service /etc/systemd/system/
+sudo systemctl enable --now indiserver@$USER   # port 7624, FIFO /run/indi/fifo
+NOCS_INDI_FIFO=/run/indi/fifo uv run --project server nocsd
+```
+
+It conflicts with the dev containers on port 7624: stop them first
+(`docker stop dev-indi-1 dev-phd2-1`). The user needs the `dialout` group for
+serial devices (mounts, power boxes).
+
