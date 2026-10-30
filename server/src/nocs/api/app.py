@@ -163,7 +163,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
                 await task
 
     app = FastAPI(title="NOCS", version=__version__, lifespan=lifespan)
-    app.add_middleware(AuthMiddleware, auth=auth)
+    app.add_middleware(AuthMiddleware, auth=auth, hostnames=settings.hostnames)
     app.include_router(auth_router(auth, sockets))
 
     @app.get("/api/health")

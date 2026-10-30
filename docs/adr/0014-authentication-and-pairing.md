@@ -1,6 +1,6 @@
 # 0014. Authentication and device pairing
 
-Date: 2026-10-30 · Status: Accepted
+Date: 2026-10-30 · Status: Accepted · Amended: 2026-10-30 (host names, see below)
 
 ## Context
 
@@ -105,13 +105,24 @@ Constraints:
   else under `/api` requires the owner**, so an endpoint added later is protected
   even if its author forgets about authentication. A test walks all registered
   routes and checks that each one outside the table refuses anonymous requests.
-  Refusals are `401` (no valid device) or `403` (bad origin); a refused WebSocket
-  handshake is closed before it is accepted.
+  Refusals are `421` (unknown host name), `401` (no valid device) or `403` (bad
+  origin); a refused WebSocket handshake is closed before it is accepted.
 - The middleware stores the request's role and device in the ASGI scope, where
   endpoints that need them (`/api/auth`, revoking the current device) read them.
 - A WebSocket keeps the role it had at the handshake. When its device is revoked,
   or observer access is switched off, the server closes it with code 4401; the
   client then asks `GET /api/auth` and shows pairing.
+- **Host name check (DNS rebinding)**, *added 2026-10-30*: every HTTP request
+  and WebSocket handshake, public ones and the web app's static files included,
+  must name the server by an IP address (v4 or v6, with or without a port),
+  `localhost`, an mDNS name ending in `.local`, or a name listed in
+  `NOCS_HOSTNAMES` (comma-separated; e.g. a router's `nocs.lan`). Anything
+  else, or no `Host` at all, gets `421` with a message naming the setting.
+  Without it, a page on an attacker's domain whose DNS is rebound to the box's
+  address is same-origin with itself: it would pass the Origin check, could
+  claim a box in setup mode or pair with a phished passphrase, and its cookie
+  would be stored under the attacker's name. Public DNS cannot answer for IP
+  literals or `.local` names, so those cannot be rebound from the internet.
 - **Origin check (CSRF and cross-site WebSocket hijacking):** every request with
   an unsafe method (`POST`, `PUT`, `PATCH`, `DELETE`) and every WebSocket
   handshake that carries an `Origin` header must come from the server's own
@@ -139,7 +150,16 @@ Constraints:
   renamed (or if mDNS renames it to `nocs-2.local` after a name clash). Each name
   needs its own pairing. Several NOCS boxes on one network each keep their own
   cookie as long as their names differ, which they need anyway (design §11).
-- DNS rebinding can reach observer endpoints when observer access is on (the
-  cookie is never sent to the rebinding site's name, so owner endpoints stay
-  closed); a `Host` allowlist can close it with HTTPS in phase 6.
+- DNS rebinding is closed by the host name check, without HTTPS (this replaces
+  the original consequence, which left it open for observers until phase 6 and
+  missed that a rebound page could claim a box in setup mode). The cost: a box
+  reached by any other name (a router's DNS name, a reverse proxy) needs that
+  name in `NOCS_HOSTNAMES`.
 - Tests of the API pair their client first; a helper does it.
+
+## Amendments
+
+- 2026-10-30: host name check added to the enforcement, after a review found
+  that a page using DNS rebinding passed the Origin check and could set the
+  passphrase of a box in setup mode, then command it. Amended in place rather
+  than superseded: the ADR had just been accepted and nothing else changes.

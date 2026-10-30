@@ -16,7 +16,7 @@ from owner import PASSPHRASE, pair_owner
 from starlette.websockets import WebSocketDisconnect
 
 from nocs.api import create_app
-from nocs.api.auth import COOKIE, REVOKED, required_access
+from nocs.api.auth import COOKIE, REVOKED, allowed_host, required_access
 from nocs.auth import AuthStore, ThrottledError, WrongPassphraseError
 from nocs.config import Settings
 
@@ -288,6 +288,69 @@ def test_cross_origin_setup_is_refused(client: TestClient) -> None:
     )
     assert response.status_code == 403
     assert client.get("/api/auth").json()["setup_required"] is True
+
+
+# -- Host names (DNS rebinding) ------------------------------------------------------------
+
+EVIL = "http://evil.example.com:8000"
+
+
+def test_rebound_name_cannot_claim_or_command() -> None:
+    """A page whose name the attacker rebinds to the box passes the Origin check."""
+    with TestClient(create_app(unreachable_indi()), base_url=EVIL) as evil:
+        headers = {"origin": EVIL}
+        body = {"passphrase": PASSPHRASE, "name": "attacker"}
+        response = evil.post("/api/auth/setup", json=body, headers=headers)
+        assert response.status_code == 421
+        assert "NOCS_HOSTNAMES" in response.json()["detail"]
+        assert evil.get("/api/auth").status_code == 421
+        assert evil.get("/").status_code == 421  # the web app too
+        with pytest.raises(WebSocketDisconnect), evil.websocket_connect("/api/ws"):
+            pass
+
+        # Even with a stolen pairing, the rebound name gets nowhere.
+        local = evil.post("http://testserver/api/auth/setup", json=body)
+        assert local.status_code == 201
+        token = local.cookies[COOKIE]
+        command = evil.post("/api/equipment/disconnect", headers={**headers, **as_device(token)})
+        assert command.status_code == 421
+
+
+@pytest.mark.parametrize(
+    "host",
+    [
+        "192.168.4.1",
+        "192.168.4.1:8000",
+        "[fe80::1]:8000",
+        "[::1]",
+        "localhost:5173",
+        "nocs.local",
+        "NOCS-West.local.",
+        "nocs.local:8000",
+    ],
+)
+def test_hosts_allowed_by_default(host: str) -> None:
+    assert allowed_host(host)
+
+
+@pytest.mark.parametrize(
+    "host",
+    [None, "", "evil.example.com", "nocs.local.evil.com", "localhost.evil.com", "testserver", "["],
+)
+def test_hosts_refused_by_default(host: str | None) -> None:
+    assert not allowed_host(host)
+
+
+def test_configured_hostnames(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("NOCS_HOSTNAMES", " rig.lan, Nocs.Fritz.Box ,")
+    settings = Settings(indi_host="127.0.0.1", indi_port=9)
+    assert settings.hostnames == ["rig.lan", "Nocs.Fritz.Box"]
+    with TestClient(create_app(settings), base_url="http://nocs.fritz.box:8000") as client:
+        assert client.get("/api/auth").status_code == 200
+        pair_owner(client)
+        assert client.get("/api/state").status_code == 200
+    with TestClient(create_app(settings), base_url="http://testserver") as client:
+        assert client.get("/api/auth").status_code == 421
 
 
 # -- Store ------------------------------------------------------------------------------

@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import contextlib
+import ipaddress
 import math
-from collections.abc import Generator
+from collections.abc import Generator, Iterable
 from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Literal
@@ -86,17 +87,25 @@ def identity(connection: HTTPConnection) -> Identity:
 
 
 class AuthMiddleware:
-    """Checks the origin and role of every request before routing it."""
+    """Checks the host name, origin and role of every request before routing it."""
 
-    def __init__(self, app: ASGIApp, auth: AuthStore) -> None:
+    def __init__(self, app: ASGIApp, auth: AuthStore, hostnames: Iterable[str] = ()) -> None:
         self._app = app
         self._auth = auth
+        self._hostnames = frozenset(_normalize(name) for name in hostnames)
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] not in ("http", "websocket"):
             await self._app(scope, receive, send)
             return
         connection = HTTPConnection(scope)
+        host = connection.headers.get("host")
+        if not allowed_host(host, self._hostnames):
+            # A name we do not know may be an attacker's, rebound to this address (DNS
+            # rebinding): its pages would pass the Origin check and get their own cookie.
+            detail = f"unknown host name {host!r}: add it to NOCS_HOSTNAMES to use it"
+            await _deny(scope, receive, send, status.HTTP_421_MISDIRECTED_REQUEST, detail)
+            return
         websocket = scope["type"] == "websocket"
         method: str = "WEBSOCKET" if websocket else scope["method"]
         if (websocket or method not in _SAFE_METHODS) and not _same_origin(connection):
@@ -121,6 +130,30 @@ class AuthMiddleware:
         if device is not None:
             return Identity(role="owner", device=device, token=token)
         return Identity(role="observer") if self._auth.observer else ANONYMOUS
+
+
+def allowed_host(host: str | None, hostnames: frozenset[str] = frozenset()) -> bool:
+    """Whether ``host`` (a Host header) names this server without trusting public DNS:
+    an IP address, ``localhost``, an mDNS ``.local`` name, or one of ``hostnames``."""
+    if not host:
+        return False
+    try:
+        name = urlsplit(f"//{host}").hostname
+    except ValueError:
+        return False
+    if not name:
+        return False
+    name = _normalize(name)
+    try:
+        ipaddress.ip_address(name)
+        return True
+    except ValueError:
+        pass
+    return name == "localhost" or name.endswith(".local") or name in hostnames
+
+
+def _normalize(name: str) -> str:
+    return name.strip().lower().rstrip(".")
 
 
 def _same_origin(connection: HTTPConnection) -> bool:

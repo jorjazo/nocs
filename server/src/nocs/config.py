@@ -1,8 +1,9 @@
 import os
 from pathlib import Path
+from typing import Annotated
 
-from pydantic import Field
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field, field_validator
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 def _default_config_dir() -> Path:
@@ -22,6 +23,9 @@ class Settings(BaseSettings):
 
     host: str = "127.0.0.1"
     port: int = 8000
+    hostnames: Annotated[list[str], NoDecode] = Field(default_factory=list[str])
+    """Names clients may reach nocsd by besides IP addresses, ``localhost`` and ``*.local``
+    (comma-separated in ``NOCS_HOSTNAMES``); any other ``Host`` is refused (ADR 0014)."""
     indi_host: str = "localhost"
     indi_port: int = 7624
     indi_fifo: Path | None = None
@@ -40,3 +44,10 @@ class Settings(BaseSettings):
     """The internal storage destination (ADR 0013); defaults to the data directory."""
     web_dir: Path | None = None
     log_level: str = "info"
+
+    @field_validator("hostnames", mode="before")
+    @classmethod
+    def _split_hostnames(cls, value: object) -> object:
+        if isinstance(value, str):
+            return [name.strip() for name in value.split(",") if name.strip()]
+        return value

@@ -48,6 +48,8 @@ NOCS_WEB_DIR=web/dist NOCS_INDI_FIFO=dev/.run/fifo NOCS_INDI_DRIVERS_DIR=dev/.ru
 # rm ~/.config/nocs/auth.json and restart nocsd to start over. From a shell:
 curl -c jar -H 'Content-Type: application/json' -d '{"passphrase": "…", "name": "curl"}' \
   localhost:8000/api/auth/pair && curl -b jar localhost:8000/api/state
+# other host names than IPs, localhost and *.local are refused (DNS rebinding):
+# NOCS_HOSTNAMES=nocs.lan,rig.example lists extra ones; tests add `testserver`
 ```
 
 CI runs all of the above (INDI simulators included) on every push to `main`.

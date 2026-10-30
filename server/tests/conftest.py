@@ -1,4 +1,5 @@
 import os
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -16,6 +17,17 @@ def indi_address() -> tuple[str, int]:
         pytest.skip("NOCS_TEST_INDI not set")
     host, _, port = value.rpartition(":")
     return host, int(port)
+
+
+@pytest.fixture(autouse=True, scope="session")
+def test_hostname() -> Iterator[None]:
+    """Let TestClient's ``Host: testserver`` in, as NOCS_HOSTNAMES would (ADR 0014).
+
+    Session-scoped so that module-scoped apps get it too; not a default of nocsd.
+    """
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setenv("NOCS_HOSTNAMES", "testserver")
+        yield
 
 
 @pytest.fixture(autouse=True)

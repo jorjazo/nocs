@@ -291,6 +291,8 @@ parks the mount. Observatory devices will plug into this later.
 - Optional **observer** role, off by default: read-only access without pairing
   (state and previews), for showing the session to others.
 - Commands and WebSockets are refused from other origins (CSRF).
+- Requests by host names other than IP addresses, `localhost`, `*.local` or
+  configured ones are refused (DNS rebinding).
 - Until HTTPS (phase 6) the web app runs without geolocation, offline
   installation and wake lock, which browsers keep for secure contexts. Details
   in [ADR 0014](adr/0014-authentication-and-pairing.md).
