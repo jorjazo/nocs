@@ -59,7 +59,8 @@ Goal: decide what NOCS looks and feels like before building screens.
 
 ## Phase 2 — Connect & capture (manual imaging)
 
-Goal: replace the laptop for manual imaging sessions.
+Goal: replace the laptop for manual imaging sessions. Stage plan and status:
+[v0.1/phase-2.md](v0.1/phase-2.md).
 
 - Equipment profiles and optical trains; managed `indiserver` driver
   lifecycle.

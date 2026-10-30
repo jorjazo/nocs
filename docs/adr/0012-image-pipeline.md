@@ -1,6 +1,6 @@
 # 0012. Image transfer and preview pipeline
 
-Date: 2026-10-30 · Status: Proposed
+Date: 2026-10-30 · Status: Accepted
 
 ## Context
 
@@ -60,5 +60,10 @@ on the lab Pi 5 ([spike](../spikes/pi5-performance.md)):
 - Scientific dependencies (numpy, OpenCV, sep, astropy) become part of nocsd,
   pinning it to a Python with arm64 wheels for them (3.12/3.13, see the Pi spike).
 - Autofocus (phase 5) reuses the same worker for HFR, without previews.
+- `UPLOAD_MODE` belongs to the device and is shared by every INDI client: a camera
+  in `UPLOAD_LOCAL` sends no BLOBs to anyone. PHD2 receives the guide camera's
+  frames as BLOBs, so before guiding (phase 4) the guide camera must stay in
+  `UPLOAD_CLIENT` (its frames are small; preferred) or use `UPLOAD_BOTH`. The same
+  applies to any other client sharing a camera, such as KStars.
 - Measured on the Pi with a 26 MP color camera: preview published ~2.1 s after
   the exposure ends (0.7 s driver, 1.4 s worker), with the event loop free.

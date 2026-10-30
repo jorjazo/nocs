@@ -1,0 +1,54 @@
+# Phase 2 plan — Connect & capture
+
+Status: in progress · Last updated: 2026-10-30 · Roadmap: [Phase 2](../roadmap.md#phase-2--connect--capture-manual-imaging)
+
+Goal: replace the laptop for manual imaging sessions, controlled only from a phone.
+
+**Exit (field test):** with AM5 + ZWO camera + EFW + EAF + PPBA on the Pi 5, take
+a set of manual sub-frames controlled only from a phone.
+
+The phase is split into small stages, each testable against the INDI simulators
+and leaving something usable. Server stages come first; the UI follows the
+phase 1 design ([ux.md](../ux.md)). Device work follows the lab priority: ZWO
+cooled camera, EFW, EAF, AM5, PPBA, guide camera; AM7 and iOptron GEM45G after
+the exit.
+
+## Stages
+
+| # | Stage | Contents | Lab check | Status |
+|---|---|---|---|---|
+| 2.1 | Equipment profiles and drivers | Profiles as JSON (roles → driver, device, port; optics; site); indiserver driver FIFO; connect/disconnect a profile with per-role status; driver catalog, serial ports; property recorder ([ADR 0011](../adr/0011-equipment-profiles-and-driver-management.md)) | Whole rig connected; recording | Done |
+| 2.2 | Jobs, locks and capture | Job model with resource locks; cameras by role (gain/offset, binning, region, frame type, cooling with ramp); exposures as jobs; cameras snoop mount/focuser/wheel for FITS headers | Real frame from the ASI2600MC Duo | Done |
+| 2.3 | Image pipeline | `UPLOAD_LOCAL` transfer; worker process: debayer, stretch, JPEG preview, stars and HFR, histogram; loop mode ([ADR 0012](../adr/0012-image-pipeline.md)) | Preview 3.1 s after a 1 s exposure | Done |
+| 2.4 | Storage and catalog | Destinations (mounted drives, microSD warning), file layout, NOCS FITS headers, SQLite catalog, frame list and downloads ([ADR 0013](../adr/0013-storage-and-catalog.md)) | Frames on a USB drive | Done |
+| 2.5 | Authentication and pairing | First-run passphrase, device pairing with revocable tokens, read-only observer, Origin checks; plain HTTP limits ([ADR 0014](../adr/0014-authentication-and-pairing.md)) | — | Done |
+| 2.6 | Web app foundation | Design tokens and themes, navigation, router, i18n (en/es), typed API client, first run and pairing screens, Rig status and connect | Pair and connect from a phone | |
+| 2.7 | Live view | Preview with zoom, metrics, histogram, exposure settings, loop / capture / save, cooling; night mode tints previews | ZWO camera from the phone | |
+| 2.8 | Focuser, filter wheel, profile editor | EAF (absolute/relative moves, temperature), EFW (filter names from the profile), profile editor (devices, roles, optics, ports) | EFW and EAF | |
+| 2.9 | Mount | Slew pad with a server-side dead man's switch, go to coordinates (J2000 → JNow), tracking, park/unpark, home; time and site from the client to the mount | AM5 | |
+| 2.10 | Power box | PPBA power outputs, adjustable output, dew heaters and auto-dew, environment readings (tested against recorded properties: no simulator exists) | PPBA | |
+| 2.11 | Guide camera and field test | Guide camera role with previews (guiding is phase 4); FITS header review on real frames; field test | Exit criterion | |
+
+After the exit: AM7 and iOptron GEM45G (profiles and driver quirks).
+
+## Decisions taken for this phase
+
+- No privileged operations yet (they belong to nocs-system, phase 6): USB drives
+  are mounted by the OS (fstab on the lab Pi), the system clock is not set;
+  time and site go to the mount from the client.
+- indiserver runs as its own service with a driver FIFO (ADR 0011); on the lab
+  Pi, `dev/pi/indiserver@.service`.
+- Mockups live on a private design canvas; [ux.md](../ux.md) is the reference for
+  the UI stages.
+- Before guiding (phase 4) the guide camera must not use `UPLOAD_LOCAL`, which
+  would stop PHD2's BLOBs (ADR 0012).
+- Until HTTPS (phase 6) the web app has no geolocation, service worker or wake
+  lock: the site is entered by hand, time comes from the client (ADR 0014).
+- To review in phase 6: an indiserver or driver that hangs without exiting is
+  not detected yet.
+
+## Measured on the lab Pi 5
+
+See [spikes/pi5-performance.md](../spikes/pi5-performance.md): a 26 MP color
+frame is saved by the driver 0.7 s after the exposure; its preview takes 1.4 s in
+the worker; the event loop stays free.
