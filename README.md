@@ -28,6 +28,31 @@ The goal: the ease of use of a dedicated appliance, without the vendor lock-in.
 - [Architecture decision records](docs/adr/)
 - [Roadmap](docs/roadmap.md)
 
+## Development
+
+Requirements: Docker, [uv](https://docs.astral.sh/uv/), Node.js 24 and pnpm.
+
+```sh
+# INDI server with simulated mount, cameras, focuser and filter wheel (localhost:7624)
+docker compose -f dev/compose.yaml up -d
+
+# Server: tests (unit + integration against the simulators), lint, types
+cd server
+uv sync
+NOCS_TEST_INDI=localhost:7624 uv run pytest
+uv run ruff check . && uv run pyright
+
+# Web client, built and served by nocsd at http://127.0.0.1:8000
+cd ../web
+pnpm install && pnpm build
+cd .. && NOCS_WEB_DIR=web/dist uv run --project server nocsd
+```
+
+For live-reloading UI work, run `pnpm dev` in `web/` while nocsd runs; Vite
+proxies `/api` to it. nocsd is configured with `NOCS_*` environment variables
+(see `server/src/nocs/config.py`). It has no authentication yet and listens on
+127.0.0.1 by default.
+
 ## License
 
 NOCS is licensed under the [GNU Affero General Public License v3.0](LICENSE).

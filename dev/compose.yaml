@@ -1,0 +1,11 @@
+# Development services. Start with:
+#   docker compose -f dev/compose.yaml up -d
+services:
+  indi:
+    build:
+      context: indi
+      dockerfile: Containerfile
+    image: nocs-dev-indi
+    ports:
+      - "127.0.0.1:7624:7624"
+    restart: unless-stopped

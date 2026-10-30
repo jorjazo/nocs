@@ -1,0 +1,24 @@
+# INDI server with the full driver set from the official INDI PPA, used for
+# development and CI. Runs the simulators by default (see compose.yaml).
+# The PPA only publishes for the current Ubuntu release (26.04 LTS as of 2026-10).
+FROM ubuntu:26.04
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends software-properties-common gpg-agent \
+    && add-apt-repository -y ppa:mutlaqja/ppa \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends indi-bin \
+    && apt-get purge -y software-properties-common gpg-agent \
+    && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/*
+
+# The base image already ships an unprivileged "ubuntu" user (uid 1000).
+USER ubuntu
+WORKDIR /home/ubuntu
+
+EXPOSE 7624
+
+ENTRYPOINT ["indiserver", "-v"]
+CMD ["indi_simulator_telescope", "indi_simulator_ccd", "indi_simulator_guide", "indi_simulator_focus", "indi_simulator_wheel"]

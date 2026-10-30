@@ -365,5 +365,6 @@ Reference hardware (lab):
 - **Preview performance** on Pi 5 for large sensors (26 MP and up).
 - **AM5 / AM7 driver behavior** in INDI: meridian flip limits, homing, parking.
 - **USB bandwidth** on Pi 5 with main camera + guide camera + EAF + EFW + PPBA.
-- **Ubuntu release:** which LTS the INDI PPA supports best at the time of the
-  first image build.
+- ~~**Ubuntu release**~~ — resolved (2026-10): the INDI PPA publishes only for the
+  current Ubuntu release, now 26.04 LTS, with third-party drivers bundled in
+  `indi-3rdparty-drivers` for amd64 and arm64. NOCS follows the current LTS.

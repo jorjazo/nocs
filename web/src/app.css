@@ -1,0 +1,80 @@
+/* Design tokens from docs/ux.md. Dusk is the default; Night is red-only. */
+:root {
+  --bg: #0a0d13;
+  --surface: #121722;
+  --raised: #1a2130;
+  --line: #263044;
+  --text: #e7eaf0;
+  --muted: #98a2b6;
+  --accent: #7db7ff;
+  --on-accent: #06101c;
+  --ok: #4fd1a5;
+  --warning: #f5b04c;
+  --error: #ff6b5e;
+  --font-sans: "IBM Plex Sans", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+  color-scheme: dark;
+}
+
+:root[data-theme="night"] {
+  --bg: #000000;
+  --surface: #0e0303;
+  --raised: #170505;
+  --line: #3a0b0b;
+  --text: #ff6a5c;
+  --muted: #e0473b;
+  --accent: #ff6a5c;
+  --on-accent: #000000;
+  --ok: #e0473b;
+  --warning: #ff8a7a;
+  --error: #ffb0a6;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 22px;
+}
+
+button,
+input {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--raised);
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+input {
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+.muted {
+  color: var(--muted);
+}

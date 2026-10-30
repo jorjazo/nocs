@@ -19,6 +19,9 @@ node_modules/
 *.swp
 .DS_Store
 
+# Local tool configuration
+/.claude/
+
 # Local data
 *.fits
 *.fit
