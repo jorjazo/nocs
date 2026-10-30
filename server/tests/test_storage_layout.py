@@ -199,6 +199,20 @@ def test_header_that_outgrows_its_blocks_is_written_once_at_the_target(tmp_path:
         assert int(hdus[0].data[1, 2]) == (64 + 2) * 13  # scaling untouched
 
 
+def test_read_only_frame_is_copied_with_its_new_header(tmp_path: Path) -> None:
+    # As when indiserver runs as another user and saved the frame itself.
+    source = tmp_path / "in.fits"
+    pixels = write_fits(source)
+    source.chmod(0o444)
+    header = Header(source)
+    header.apply([Card("OBJECT", "M31", "")], overwrite=frozenset())
+    target = tmp_path / "frame.fits"
+    place(source, header, target)
+    assert not source.exists()
+    assert read_header(target)["OBJECT"] == "M31"
+    assert target.read_bytes()[BLOCK:] == pixels
+
+
 def test_place_never_overwrites(tmp_path: Path) -> None:
     source, target = tmp_path / "in.fits", tmp_path / "taken.fits"
     write_fits(source)

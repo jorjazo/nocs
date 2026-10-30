@@ -102,17 +102,23 @@ def place(source: Path, header: Header, target: Path) -> None:
 
     When the new header fits in the blocks of the old one (INDI leaves padding),
     it is written in place and the file is moved: a rename on the same filesystem.
-    Otherwise the frame is written once at its target with the larger header.
+    Otherwise, or when nocsd may not write the file (a driver saved it as another
+    user), the frame is written once at its target with the new header.
     Never renames over an existing file: ext4 would flush it first (ADR 0012).
     """
     if target.exists():
         raise FileExistsError(target)
     encoded = header.encode()
     if len(encoded) == header.length:
-        with open(source, "r+b") as f:
-            f.write(encoded)
-        shutil.move(source, target)
-        return
+        try:
+            f = open(source, "r+b")  # noqa: SIM115 (closed below; only the open may fail)
+        except PermissionError:
+            pass
+        else:
+            with f:
+                f.write(encoded)
+            shutil.move(source, target)
+            return
     with open(source, "rb") as src, open(target, "xb") as dst:
         try:
             dst.write(encoded)
