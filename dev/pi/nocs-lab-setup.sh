@@ -21,9 +21,27 @@ getent hosts archive.ubuntu.com >/dev/null || { echo "no network yet"; exit 1; }
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-apt-get install -y avahi-daemon curl docker-compose-v2 docker.io git python3 unzip
+apt-get install -y avahi-daemon curl docker-compose-v2 docker.io git iw python3 unzip
 apt-get upgrade -y
 usermod -aG docker "$PI_USER"
+
+# Wi-Fi power saving makes the Pi miss incoming frames (ARP requests among them),
+# so phones and laptops lose it over Wi-Fi while its own traffic still works.
+cat > /etc/systemd/system/wifi-powersave-off.service <<'UNIT'
+[Unit]
+Description=Disable Wi-Fi power saving on wlan0
+After=sys-subsystem-net-devices-wlan0.device
+BindsTo=sys-subsystem-net-devices-wlan0.device
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/iw dev wlan0 set power_save off
+
+[Install]
+WantedBy=sys-subsystem-net-devices-wlan0.device
+UNIT
+systemctl daemon-reload
+systemctl enable --now wifi-powersave-off.service
 
 [[ -x $home/.local/bin/uv ]] || as_user sh -c 'curl -LsSf https://astral.sh/uv/install.sh | sh'
 [[ -d $home/nocs/.git ]] || as_user git clone "$NOCS_REPO" "$home/nocs"
