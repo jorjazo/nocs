@@ -22,7 +22,7 @@ the exit.
 | 2.3 | Image pipeline | `UPLOAD_LOCAL` transfer; worker process: debayer, stretch, JPEG preview, stars and HFR, histogram; loop mode ([ADR 0012](../adr/0012-image-pipeline.md)) | Preview 3.1 s after a 1 s exposure | Done |
 | 2.4 | Storage and catalog | Destinations (mounted drives, microSD warning), file layout, NOCS FITS headers, SQLite catalog, frame list and downloads ([ADR 0013](../adr/0013-storage-and-catalog.md)) | Frames on a USB drive | Done |
 | 2.5 | Authentication and pairing | First-run passphrase, device pairing with revocable tokens, read-only observer, Origin checks; plain HTTP limits ([ADR 0014](../adr/0014-authentication-and-pairing.md)) | — | Done |
-| 2.6 | Web app foundation | Design tokens and themes, navigation, router, i18n (en/es), typed API client, first run and pairing screens, Rig status and connect | Pair and connect from a phone | |
+| 2.6 | Web app foundation | Design tokens and themes, navigation, router, i18n (en/es), typed API client, first run and pairing screens, Rig status and connect | Pair and connect from a phone | Done |
 | 2.7 | Live view | Preview with zoom, metrics, histogram, exposure settings, loop / capture / save, cooling; night mode tints previews | ZWO camera from the phone | |
 | 2.8 | Focuser, filter wheel, profile editor | EAF (absolute/relative moves, temperature), EFW (filter names from the profile), profile editor (devices, roles, optics, ports) | EFW and EAF | |
 | 2.9 | Mount | Slew pad with a server-side dead man's switch, go to coordinates (J2000 → JNow), tracking, park/unpark, home; time and site from the client to the mount | AM5 | |
