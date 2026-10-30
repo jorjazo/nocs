@@ -1,0 +1,78 @@
+{
+  "machine": "aarch64",
+  "python": "3.13.18",
+  "opencv_threads": 4,
+  "files": [
+    {
+      "file": "smc.fits",
+      "bayer": false,
+      "load_ms": 162.19844500028557,
+      "shape": [
+        4176,
+        6248
+      ],
+      "downscale_opencv_ms": 86.05341899965424,
+      "downscale_numpy_ms": 153.9607499998965,
+      "stretch_ms": 105.45766999985062,
+      "encode_webp_ms": 538.6307759999909,
+      "encode_jpeg_ms": 13.459678000799613,
+      "webp_kb": 789,
+      "jpeg_kb": 923,
+      "stars_full_ms": 855.6793570005539,
+      "stars_full": 404,
+      "hfr_full_px": 0.6732919610334296,
+      "stars_bin2_ms": 546.8770440002118,
+      "stars_bin2": 389,
+      "hfr_bin2_px": 0.998035573050325,
+      "pipeline_preview_ms": 367
+    },
+    {
+      "file": "m42.fits",
+      "bayer": false,
+      "load_ms": 136.52647500020976,
+      "shape": [
+        4176,
+        6248
+      ],
+      "downscale_opencv_ms": 65.73624499924335,
+      "downscale_numpy_ms": 160.31393299999763,
+      "stretch_ms": 105.88500199992268,
+      "encode_webp_ms": 532.3086119997242,
+      "encode_jpeg_ms": 13.272789999973611,
+      "webp_kb": 789,
+      "jpeg_kb": 923,
+      "stars_full_ms": 883.815838999908,
+      "stars_full": 426,
+      "hfr_full_px": 0.6683292780739585,
+      "stars_bin2_ms": 539.4942170005379,
+      "stars_bin2": 422,
+      "hfr_bin2_px": 0.9831711066967763,
+      "pipeline_preview_ms": 321
+    },
+    {
+      "file": "m31_bayer.fits",
+      "bayer": true,
+      "load_ms": 140.65253599983407,
+      "shape": [
+        4176,
+        6248
+      ],
+      "debayer_superpixel_ms": 232.40310300025158,
+      "debayer_opencv_ms": 140.62103500054945,
+      "downscale_opencv_ms": 67.94120099948486,
+      "downscale_numpy_ms": 354.55614300008165,
+      "stretch_ms": 338.25240100031806,
+      "encode_webp_ms": 543.6415369995302,
+      "encode_jpeg_ms": 30.0197719998323,
+      "webp_kb": 723,
+      "jpeg_kb": 768,
+      "stars_full_ms": 787.9052480002429,
+      "stars_full": 670,
+      "hfr_full_px": 0.6655319670637546,
+      "stars_bin2_ms": 501.9963779996033,
+      "stars_bin2": 670,
+      "hfr_bin2_px": 0.957960741700189,
+      "pipeline_preview_ms": 809
+    }
+  ]
+}

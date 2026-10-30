@@ -1,0 +1,48 @@
+[
+  {
+    "file": "smc.fits",
+    "mode": "hinted z0",
+    "seconds": 0.85,
+    "returncode": 1,
+    "solved": false
+  },
+  {
+    "file": "smc.fits",
+    "mode": "blind z0",
+    "seconds": 3.87,
+    "returncode": 0,
+    "solved": true,
+    "error_arcmin": 9.09,
+    "scale_arcsec_px": 3.102
+  },
+  {
+    "file": "m42.fits",
+    "mode": "hinted z0",
+    "seconds": 0.85,
+    "returncode": 1,
+    "solved": false
+  },
+  {
+    "file": "m42.fits",
+    "mode": "blind z0",
+    "seconds": 180.02,
+    "returncode": null,
+    "solved": false
+  },
+  {
+    "file": "m31_bayer.fits",
+    "mode": "hinted z0",
+    "seconds": 0.86,
+    "returncode": 1,
+    "solved": false
+  },
+  {
+    "file": "m31_bayer.fits",
+    "mode": "blind z0",
+    "seconds": 4.3,
+    "returncode": 0,
+    "solved": true,
+    "error_arcmin": 19.22,
+    "scale_arcsec_px": 3.102
+  }
+]

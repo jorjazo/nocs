@@ -1,0 +1,3 @@
+{"file": "smc.fits", "ra_hours": 0.877, "dec_deg": -72.8, "fov_deg": 5.384, "fov_height_deg": 3.599, "bayer": false, "bytes": 52191360, "expose_to_received_s": 6.01, "exposure_s": 5.0}
+{"file": "m42.fits", "ra_hours": 5.588, "dec_deg": -5.39, "fov_deg": 5.384, "fov_height_deg": 3.599, "bayer": false, "bytes": 52191360, "expose_to_received_s": 6.04, "exposure_s": 5.0}
+{"file": "m31_bayer.fits", "ra_hours": 0.712, "dec_deg": 41.27, "fov_deg": 5.384, "fov_height_deg": 3.599, "bayer": true, "bytes": 52191360, "expose_to_received_s": 5.98, "exposure_s": 5.0}

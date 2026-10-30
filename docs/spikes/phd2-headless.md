@@ -101,7 +101,8 @@ uv run --project server python dev/spikes/phd2_probe.py guide
 
 ## Open points
 
-- Pi 5 resource use and Xvfb overhead (measure on the real device).
+- ~~Pi 5 resource use~~ — measured: 2.9 % CPU average, 126 MiB including Xvfb
+  ([pi5-performance](pi5-performance.md)).
 - Behavior when indiserver restarts mid-guiding (expect `Alert`/`StarLost`;
   verify recovery).
 - Dark library and defect map: no JSON-RPC methods; decide whether NOCS needs

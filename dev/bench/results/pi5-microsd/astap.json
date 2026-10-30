@@ -1,0 +1,56 @@
+[
+  {
+    "file": "smc.fits",
+    "mode": "hinted z1",
+    "seconds": 1.36,
+    "returncode": 0,
+    "solved": true,
+    "error_arcmin": 9.09,
+    "scale_arcsec_px": 3.102
+  },
+  {
+    "file": "smc.fits",
+    "mode": "blind z1",
+    "seconds": 3.81,
+    "returncode": 0,
+    "solved": true,
+    "error_arcmin": 9.09,
+    "scale_arcsec_px": 3.102
+  },
+  {
+    "file": "m42.fits",
+    "mode": "hinted z1",
+    "seconds": 1.34,
+    "returncode": 0,
+    "solved": true,
+    "error_arcmin": 20.11,
+    "scale_arcsec_px": 3.102
+  },
+  {
+    "file": "m42.fits",
+    "mode": "blind z1",
+    "seconds": 3.96,
+    "returncode": 0,
+    "solved": true,
+    "error_arcmin": 20.12,
+    "scale_arcsec_px": 3.102
+  },
+  {
+    "file": "m31_bayer.fits",
+    "mode": "hinted z1",
+    "seconds": 0.88,
+    "returncode": 0,
+    "solved": true,
+    "error_arcmin": 19.22,
+    "scale_arcsec_px": 3.102
+  },
+  {
+    "file": "m31_bayer.fits",
+    "mode": "blind z1",
+    "seconds": 3.82,
+    "returncode": 0,
+    "solved": true,
+    "error_arcmin": 19.22,
+    "scale_arcsec_px": 3.102
+  }
+]

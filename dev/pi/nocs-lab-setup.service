@@ -1,0 +1,15 @@
+[Unit]
+Description=NOCS lab Pi setup (retries until it completes once)
+Wants=network-online.target
+After=network-online.target
+ConditionPathExists=!/var/lib/nocs-lab/ready
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/nocs-lab-setup
+Restart=on-failure
+RestartSec=60
+TimeoutStartSec=1h
+
+[Install]
+WantedBy=multi-user.target

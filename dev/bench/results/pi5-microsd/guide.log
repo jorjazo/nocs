@@ -1,0 +1,33 @@
+mount at RA 5.600 h, Dec -5.40°
+  [03:45:44] event Version: {"Event": "Version", "Timestamp": 1793342744.556, "Host": "47e74da273fc", "Inst": 1, "PHDVersion": "2.6.14", "PHDSubver": "", "OverlapSupport": true, "MsgVersion": 1}
+  [03:45:44] event AppState: {"Event": "AppState", "Timestamp": 1793342744.556, "Host": "47e74da273fc", "Inst": 1, "State": "Stopped"}
+  [03:45:45] event ConfigurationChange: {"Event": "ConfigurationChange", "Timestamp": 1793342745.184, "Host": "47e74da273fc", "Inst": 1}
+set_connected([true]) -> 0
+get_current_equipment() -> {"camera": {"name": "INDI Camera [Guide Simulator]", "connected": true}, "mount": {"name": "INDI Mount [Telescope Simulator]", "connected": true}}
+  [03:45:45] event GuideParamChange: {"Event": "GuideParamChange", "Timestamp": 1793342745.507, "Host": "47e74da273fc", "Inst": 1, "Name": "Exposure", "Value": "2000 ms"}
+  [03:45:45] event ConfigurationChange: {"Event": "ConfigurationChange", "Timestamp": 1793342745.507, "Host": "47e74da273fc", "Inst": 1}
+set_exposure([2000]) -> 0
+clear_calibration(["both"]) -> 0
+loop() -> 0
+  [03:45:50] event ConfigurationChange: {"Event": "ConfigurationChange", "Timestamp": 1793342750.774, "Host": "47e74da273fc", "Inst": 1}
+  [03:45:50] event LockPositionSet: {"Event": "LockPositionSet", "Timestamp": 1793342750.775, "Host": "47e74da273fc", "Inst": 1, "X": 1164.18, "Y": 524.599}
+  [03:45:50] event StarSelected: {"Event": "StarSelected", "Timestamp": 1793342750.775, "Host": "47e74da273fc", "Inst": 1, "X": 1164.18, "Y": 524.599}
+find_star() -> [1164.18, 524.6]
+  [03:45:50] event StartCalibration: {"Event": "StartCalibration", "Timestamp": 1793342750.814, "Host": "47e74da273fc", "Inst": 1, "Mount": "INDI Mount [Telescope Simulator]"}
+guide({"settle": {"pixels": 1.5, "time": 8, "timeout": 90}, "recalibrate": true}) -> 0
+  [03:47:00] event ConfigurationChange: {"Event": "ConfigurationChange", "Timestamp": 1793342820.463, "Host": "47e74da273fc", "Inst": 1}
+  [03:47:00] event CalibrationComplete: {"Event": "CalibrationComplete", "Timestamp": 1793342820.465, "Host": "47e74da273fc", "Inst": 1, "Mount": "INDI Mount [Telescope Simulator]"}
+  [03:47:00] event StartGuiding: {"Event": "StartGuiding", "Timestamp": 1793342820.467, "Host": "47e74da273fc", "Inst": 1}
+  [03:47:00] event SettleBegin: {"Event": "SettleBegin", "Timestamp": 1793342820.484, "Host": "47e74da273fc", "Inst": 1}
+  [03:47:11] event SettleDone: {"Event": "SettleDone", "Timestamp": 1793342831.491, "Host": "47e74da273fc", "Inst": 1, "Status": 0, "TotalFrames": 5, "DroppedFrames": 0}
+guiding settled after 86 s: {'Event': 'SettleDone', 'Timestamp': 1793342831.491, 'Host': '47e74da273fc', 'Inst': 1, 'Status': 0, 'TotalFrames': 5, 'DroppedFrames': 0}
+last guide step: RA 0.579 Dec -0.198 px
+get_calibration_data(["Mount"]) -> {"calibrated": true, "xAngle": -178.4, "xRate": 5.527, "xParity": "+", "yAngle": -87.7, "yRate": 5.937, "yParity": "+", "declination": -5.39908}
+  [03:47:31] event LockPositionSet: {"Event": "LockPositionSet", "Timestamp": 1793342851.496, "Host": "47e74da273fc", "Inst": 1, "X": 1164.861, "Y": 522.919}
+  [03:47:31] event GuidingDithered: {"Event": "GuidingDithered", "Timestamp": 1793342851.497, "Host": "47e74da273fc", "Inst": 1, "dx": -0.634, "dy": 1.699}
+  [03:47:31] event SettleBegin: {"Event": "SettleBegin", "Timestamp": 1793342851.497, "Host": "47e74da273fc", "Inst": 1}
+dither({"amount": 3, "raOnly": false, "settle": {"pixels": 1.5, "time": 8, "timeout": 90}}) -> 0
+  [03:47:45] event SettleDone: {"Event": "SettleDone", "Timestamp": 1793342865.536, "Host": "47e74da273fc", "Inst": 1, "Status": 0, "TotalFrames": 6, "DroppedFrames": 0}
+dither settled: {'Event': 'SettleDone', 'Timestamp': 1793342865.536, 'Host': '47e74da273fc', 'Inst': 1, 'Status': 0, 'TotalFrames': 6, 'DroppedFrames': 0}
+stop_capture() -> 0
+event counts: {"Version": 1, "AppState": 1, "ConfigurationChange": 4, "GuideParamChange": 1, "LoopingExposures": 3, "LockPositionSet": 2, "StarSelected": 1, "StartCalibration": 1, "Calibrating": 23, "CalibrationComplete": 1, "StartGuiding": 1, "SettleBegin": 2, "Settling": 9, "GuideStep": 19, "SettleDone": 2, "GuidingDithered": 1}
