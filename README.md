@@ -24,6 +24,7 @@ The goal: the ease of use of a dedicated appliance, without the vendor lock-in.
 ## Documentation
 
 - [Product and architecture design](docs/design.md)
+- [UX and design system](docs/ux.md)
 - [Architecture decision records](docs/adr/)
 - [Roadmap](docs/roadmap.md)
 
