@@ -24,6 +24,7 @@ that supersedes the old one.
 | [0016](0016-settings-per-physical-device.md) | Settings per physical device: filter names by serial number | Accepted |
 | [0017](0017-roles-by-capability-power-and-weather.md) | Roles by capability: power and weather, and what each output feeds | Accepted |
 | [0018](0018-plate-solving-with-astap.md) | Plate solving with ASTAP | Proposed |
+| [0019](0019-bundled-catalogs-and-their-licences.md) | Bundled catalogs and their licences | Proposed |
 | [0021](0021-autofocus.md) | Autofocus: V-curve sweep with a hyperbolic fit | Proposed |
 | [0022](0022-phd2-as-a-managed-service.md) | PHD2 as a service configured by nocsd | Proposed |
 | [0023](0023-guide-camera-and-mount-shared-with-phd2.md) | Guide camera and mount shared with PHD2 | Proposed |

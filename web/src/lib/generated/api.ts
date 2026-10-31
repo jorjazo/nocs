@@ -77,6 +77,30 @@ export type ClientRole = "owner" | "observer";
 export type CameraRoleName = "main_camera" | "guide_camera";
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "TargetType".
+ */
+export type TargetType =
+  | "star"
+  | "double_star"
+  | "asterism"
+  | "open_cluster"
+  | "globular_cluster"
+  | "cluster_nebula"
+  | "galaxy"
+  | "galaxy_pair"
+  | "galaxy_triplet"
+  | "galaxy_group"
+  | "planetary_nebula"
+  | "hii_region"
+  | "dark_nebula"
+  | "emission_nebula"
+  | "nebula"
+  | "reflection_nebula"
+  | "supernova_remnant"
+  | "nova"
+  | "other";
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "Condition".
  */
 export type Condition = UntilTime;
@@ -2092,6 +2116,86 @@ export interface CameraSettingsRequest {
    * A readout region, or "full" for the whole sensor.
    */
   region?: Region | "full" | null;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "CatalogMatch".
+ */
+export interface CatalogMatch {
+  /**
+   * The designation or name the query matched.
+   */
+  matched: string;
+  object: CatalogObject;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "CatalogObject".
+ */
+export interface CatalogObject {
+  /**
+   * Other designations, Messier and Caldwell first.
+   */
+  aliases: string[];
+  /**
+   * IAU abbreviation, e.g. Ori.
+   */
+  constellation: string | null;
+  /**
+   * J2000, degrees.
+   */
+  dec: number;
+  /**
+   * Designation in its source catalog, e.g. NGC 1976.
+   */
+  id: string;
+  /**
+   * How people call it: its Messier number, else its id.
+   */
+  label: string;
+  /**
+   * The brighter of the visual and blue ones.
+   */
+  magnitude: number | null;
+  /**
+   * Arcminutes.
+   */
+  major_axis: number | null;
+  /**
+   * Arcminutes.
+   */
+  minor_axis: number | null;
+  /**
+   * Common names in English.
+   */
+  names: string[];
+  /**
+   * Common names in Spanish, where they differ.
+   */
+  names_es: string[];
+  /**
+   * Of the major axis, degrees east of north.
+   */
+  position_angle: number | null;
+  /**
+   * J2000, hours.
+   */
+  ra: number;
+  type: TargetType;
+}
+/**
+ * Where the bundled catalog comes from; its licence asks to show the attribution.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "CatalogSource".
+ */
+export interface CatalogSource {
+  attribution: string;
+  license: string;
+  license_url: string;
+  name: string;
+  url: string;
+  version: string;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema

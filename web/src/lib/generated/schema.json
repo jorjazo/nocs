@@ -1454,6 +1454,172 @@
       "title": "CameraState",
       "type": "object"
     },
+    "CatalogMatch": {
+      "properties": {
+        "matched": {
+          "description": "The designation or name the query matched.",
+          "type": "string"
+        },
+        "object": {
+          "$ref": "#/$defs/CatalogObject"
+        }
+      },
+      "required": [
+        "object",
+        "matched"
+      ],
+      "title": "CatalogMatch",
+      "type": "object"
+    },
+    "CatalogObject": {
+      "properties": {
+        "aliases": {
+          "description": "Other designations, Messier and Caldwell first.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "constellation": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "IAU abbreviation, e.g. Ori."
+        },
+        "dec": {
+          "description": "J2000, degrees.",
+          "type": "number"
+        },
+        "id": {
+          "description": "Designation in its source catalog, e.g. NGC 1976.",
+          "type": "string"
+        },
+        "label": {
+          "description": "How people call it: its Messier number, else its id.",
+          "type": "string"
+        },
+        "magnitude": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The brighter of the visual and blue ones."
+        },
+        "major_axis": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Arcminutes."
+        },
+        "minor_axis": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Arcminutes."
+        },
+        "names": {
+          "description": "Common names in English.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "names_es": {
+          "description": "Common names in Spanish, where they differ.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "position_angle": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Of the major axis, degrees east of north."
+        },
+        "ra": {
+          "description": "J2000, hours.",
+          "type": "number"
+        },
+        "type": {
+          "$ref": "#/$defs/TargetType"
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "type",
+        "ra",
+        "dec",
+        "constellation",
+        "magnitude",
+        "major_axis",
+        "minor_axis",
+        "position_angle",
+        "aliases",
+        "names",
+        "names_es"
+      ],
+      "title": "CatalogObject",
+      "type": "object"
+    },
+    "CatalogSource": {
+      "description": "Where the bundled catalog comes from; its licence asks to show the attribution.",
+      "properties": {
+        "attribution": {
+          "type": "string"
+        },
+        "license": {
+          "type": "string"
+        },
+        "license_url": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "version",
+        "url",
+        "license",
+        "license_url",
+        "attribution"
+      ],
+      "title": "CatalogSource",
+      "type": "object"
+    },
     "CenterRequest": {
       "additionalProperties": false,
       "properties": {
@@ -7128,6 +7294,30 @@
       ],
       "title": "TargetRequest",
       "type": "object"
+    },
+    "TargetType": {
+      "enum": [
+        "star",
+        "double_star",
+        "asterism",
+        "open_cluster",
+        "globular_cluster",
+        "cluster_nebula",
+        "galaxy",
+        "galaxy_pair",
+        "galaxy_triplet",
+        "galaxy_group",
+        "planetary_nebula",
+        "hii_region",
+        "dark_nebula",
+        "emission_nebula",
+        "nebula",
+        "reflection_nebula",
+        "supernova_remnant",
+        "nova",
+        "other"
+      ],
+      "type": "string"
     },
     "TargetVisibility": {
       "properties": {

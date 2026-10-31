@@ -1,0 +1,151 @@
+# Common names NOCS adds to OpenNGC's (ADR 0019), merged by dev/catalog/build.py.
+# <OpenNGC name> TAB <en|es> TAB <name>[, <name>…]
+# English: names OpenNGC lacks. Spanish: names that differ from the English ones.
+# Licensed CC BY-SA 4.0, like the data it is merged into.
+NGC0224	es	Galaxia de Andrómeda
+NGC0253	en	Sculptor Galaxy
+NGC0253	es	Galaxia del Escultor, Moneda de Plata
+NGC0292	es	Pequeña Nube de Magallanes
+ESO056-115	es	Gran Nube de Magallanes
+NGC0104	en	47 Tucanae
+NGC0598	es	Galaxia del Triángulo
+NGC1976	es	Gran Nebulosa de Orión, Nebulosa de Orión
+NGC1982	es	Nebulosa de De Mairan
+NGC1977	es	Nebulosa del Hombre Corriendo
+NGC1952	es	Nebulosa del Cangrejo
+NGC2024	en	Flame Nebula
+NGC2024	es	Nebulosa de la Llama
+IC0434	es	Nebulosa de la Llama
+B033	es	Nebulosa Cabeza de Caballo
+IC0405	es	Nebulosa de la Estrella Llameante
+NGC1909	es	Nebulosa Cabeza de Bruja
+NGC1499	es	Nebulosa de California
+NGC1432	es	Nebulosa de Maia
+NGC1435	es	Nebulosa de Mérope
+Mel022	es	Pléyades, Las Siete Hermanas
+C041	es	Híades
+NGC2070	es	Nebulosa de la Tarántula
+NGC2237	es	Nebulosa Roseta
+NGC2238	es	Nebulosa Roseta
+NGC2174	es	Nebulosa Cabeza de Mono
+NGC2261	es	Nebulosa Variable de Hubble
+NGC1555	es	Nebulosa Variable de Hind
+NGC2264	es	Cúmulo del Árbol de Navidad
+NGC2392	es	Nebulosa del Esquimal
+IC0443	en	Jellyfish Nebula
+IC0443	es	Nebulosa de la Medusa
+IC2177	en	Seagull Nebula
+IC2177	es	Nebulosa de la Gaviota
+NGC2359	en	Thor's Helmet
+NGC2359	es	Casco de Thor
+NGC2632	es	El Pesebre, Cúmulo de la Colmena
+NGC2516	en	Southern Beehive
+NGC2516	es	Colmena del Sur
+IC2602	en	Southern Pleiades
+IC2602	es	Pléyades del Sur
+NGC2736	es	Nebulosa del Lápiz
+NGC3372	es	Nebulosa de Carina, Nebulosa de Eta Carinae
+NGC3324	en	Gabriela Mistral Nebula
+NGC3324	es	Nebulosa Gabriela Mistral
+NGC3576	en	Statue of Liberty Nebula
+NGC3576	es	Nebulosa Estatua de la Libertad
+IC2944	en	Running Chicken Nebula
+IC2944	es	Nebulosa del Pollo Corredor
+NGC3532	es	Cúmulo del Pozo de los Deseos
+NGC3132	en	Southern Ring Nebula
+NGC3132	es	Nebulosa del Anillo del Sur
+NGC3242	es	Fantasma de Júpiter
+NGC3918	es	Planetaria Azul
+NGC4755	es	Joyero, Caja de Joyas, Cúmulo de Kappa Crucis
+C099	es	Saco de Carbón
+NGC3031	es	Galaxia de Bode
+NGC3034	es	Galaxia del Cigarro
+NGC3115	es	Galaxia del Huso
+NGC3587	es	Nebulosa del Búho
+NGC3628	en	Hamburger Galaxy
+NGC3628	es	Galaxia Hamburguesa
+NGC4038	es	Galaxias Antena
+NGC4039	es	Galaxias Antena
+NGC4486	en	Virgo A
+NGC4565	es	Galaxia de la Aguja
+NGC4567	es	Galaxias Mariposa, Gemelas Siamesas
+NGC4568	es	Galaxias Mariposa, Gemelas Siamesas
+NGC4594	es	Galaxia del Sombrero
+NGC4631	es	Galaxia de la Ballena
+NGC4676	es	Galaxias de los Ratones
+NGC4736	en	Cat's Eye Galaxy, Croc's Eye Galaxy
+NGC4736	es	Galaxia Ojo de Cocodrilo
+NGC4826	es	Galaxia del Ojo Negro
+NGC5055	es	Galaxia del Girasol
+NGC5194	es	Galaxia del Remolino
+NGC5236	es	Galaxia del Molinete Austral
+NGC5457	en	Pinwheel Galaxy
+NGC5457	es	Galaxia del Molinete
+NGC5907	en	Splinter Galaxy
+NGC5907	es	Galaxia Astilla
+NGC1365	en	Great Barred Spiral Galaxy
+NGC1365	es	Gran Galaxia Espiral Barrada
+NGC2442	en	Meathook Galaxy
+NGC2442	es	Galaxia del Gancho
+NGC6822	es	Galaxia de Barnard
+NGC6946	es	Galaxia de los Fuegos Artificiales
+ESO097-013	es	Galaxia del Compás
+HCG092	es	Quinteto de Stephan
+HCG079	es	Sexteto de Seyfert
+NGC6205	es	Gran Cúmulo de Hércules
+NGC6405	es	Cúmulo de la Mariposa
+NGC6475	es	Cúmulo de Ptolomeo
+NGC6705	es	Cúmulo del Pato Salvaje
+IC4715	en	Sagittarius Star Cloud
+IC4715	es	Pequeña Nube Estelar de Sagitario
+NGC6514	es	Nebulosa Trífida
+NGC6523	es	Nebulosa de la Laguna
+NGC6611	es	Nebulosa del Águila
+IC4703	es	Nebulosa del Águila
+NGC6618	es	Nebulosa Omega, Nebulosa del Cisne, Nebulosa de la Langosta
+NGC6188	en	Fighting Dragons of Ara
+NGC6188	es	Dragones de Ara
+NGC6334	en	Cat's Paw Nebula
+NGC6334	es	Nebulosa Pata de Gato
+NGC6357	es	Nebulosa Guerra y Paz
+IC4628	en	Prawn Nebula
+IC4628	es	Nebulosa de la Gamba
+IC4592	en	Blue Horsehead Nebula
+IC4592	es	Nebulosa Cabeza de Caballo Azul
+NGC6302	es	Nebulosa de la Mariposa, Nebulosa del Insecto
+NGC6537	es	Nebulosa Araña Roja
+NGC6543	es	Nebulosa Ojo de Gato
+NGC6720	es	Nebulosa del Anillo
+NGC6826	es	Planetaria Parpadeante
+NGC6853	es	Nebulosa Dumbbell, Nebulosa de la Haltera
+NGC0650	es	Pequeña Dumbbell
+NGC6888	es	Nebulosa Creciente, Nebulosa Media Luna
+NGC6960	en	Witch's Broom Nebula
+NGC6960	es	Velo Occidental, Nebulosa del Velo, Escoba de Bruja
+NGC6992	es	Velo Oriental, Nebulosa del Velo
+NGC6995	es	Velo Oriental, Nebulosa del Velo
+NGC7000	es	Nebulosa Norteamérica
+IC5070	es	Nebulosa del Pelícano
+IC5146	es	Nebulosa del Capullo
+NGC7009	es	Nebulosa de Saturno
+NGC7023	es	Nebulosa del Iris
+NGC7293	es	Nebulosa de la Hélice
+NGC7635	es	Nebulosa de la Burbuja
+NGC7662	es	Bola de Nieve Azul
+NGC0040	es	Nebulosa Pajarita
+NGC0246	en	Skull Nebula
+NGC0246	es	Nebulosa de la Calavera
+NGC0281	en	Pacman Nebula
+NGC0281	es	Nebulosa Pacman
+NGC0457	es	Cúmulo del Búho
+C014	es	Doble Cúmulo de Perseo
+Cl399	es	Cúmulo de la Percha
+Mel111	es	Cúmulo de Coma Berenices
+IC1396	en	Elephant's Trunk Nebula
+IC1396	es	Nebulosa Trompa de Elefante
+IC1805	en	Heart Nebula
+IC1805	es	Nebulosa del Corazón
+IC1848	en	Soul Nebula
+IC1848	es	Nebulosa del Alma
+NGC0292	en	SMC
+ESO056-115	en	LMC

@@ -30,6 +30,7 @@ server/   Python package `nocs` (nocsd): indi/ (protocol + async client, driver
           guide steps and RMS),
           solving/ (ASTAP, fields of view), pointing/ (solve and sync, centre),
           sky/ (a night's almanac at the site, targets' visibility),
+          targets/ (bundled OpenNGC catalog and its search, ADR 0019),
           system/ (nocs-system, the root helper: stdlib + anyio only, ADR 0027),
           state/ (versioned store), services/ (indi_bridge), api/ (FastAPI
           REST + WebSocket, schemas, schema export)
@@ -38,6 +39,7 @@ web/      Svelte 5 + TypeScript PWA: styles/ (tokens), lib/ (api, live state,
           screens/ (dev/ is the old INDI property browser at #/dev)
 dev/      compose.yaml (INDI simulators + GSC catalog + driver FIFO in dev/.run,
           headless PHD2), astap/ (solver install), profiles/ (simulator rig),
+          catalog/ (builds the bundled target catalog),
           tools/ (indi_record, phd2_record, fake_ppba),
           bench/, spikes/, pi/ (lab Pi flashing and setup)
 packaging/ deb/ (the nocs .deb: build.sh, test.sh), image/ (the Pi 5 image, arm64 only; ADR 0025, 0026)

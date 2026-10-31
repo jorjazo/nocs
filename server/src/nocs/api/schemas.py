@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from nocs.equipment import Role, Site
 from nocs.state import Patch
+from nocs.targets import TargetType
 
 # -- State -------------------------------------------------------------------
 # These models document the shape of the state tree for clients (and generate the
@@ -1320,6 +1321,41 @@ class Driver(WireModel):
 class SerialPortInfo(WireModel):
     path: str = Field(description="Stable /dev/serial/by-id/ name.")
     device: str = Field(description="Device node it points to now.")
+
+
+# -- Target catalog (ADR 0019) ---------------------------------------------------
+
+
+class CatalogObject(WireModel):
+    id: str = Field(description="Designation in its source catalog, e.g. NGC 1976.")
+    label: str = Field(description="How people call it: its Messier number, else its id.")
+    type: TargetType
+    ra: float = Field(description="J2000, hours.")
+    dec: float = Field(description="J2000, degrees.")
+    constellation: str | None = Field(description="IAU abbreviation, e.g. Ori.")
+    magnitude: float | None = Field(description="The brighter of the visual and blue ones.")
+    major_axis: float | None = Field(description="Arcminutes.")
+    minor_axis: float | None = Field(description="Arcminutes.")
+    position_angle: float | None = Field(description="Of the major axis, degrees east of north.")
+    aliases: list[str] = Field(description="Other designations, Messier and Caldwell first.")
+    names: list[str] = Field(description="Common names in English.")
+    names_es: list[str] = Field(description="Common names in Spanish, where they differ.")
+
+
+class CatalogMatch(WireModel):
+    object: CatalogObject
+    matched: str = Field(description="The designation or name the query matched.")
+
+
+class CatalogSource(WireModel):
+    """Where the bundled catalog comes from; its licence asks to show the attribution."""
+
+    name: str
+    version: str
+    url: str
+    license: str
+    license_url: str
+    attribution: str
 
 
 # -- Authentication (ADR 0014) ---------------------------------------------------

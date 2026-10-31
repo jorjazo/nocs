@@ -67,6 +67,7 @@ from nocs.api.sequences import sequences_router
 from nocs.api.sky import sky_router
 from nocs.api.solver import solver_router
 from nocs.api.system import system_router
+from nocs.api.targets import targets_router
 from nocs.auth import AuthStore
 from nocs.clock import Clock
 from nocs.config import Settings
@@ -367,6 +368,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
     app.include_router(accessories_router(focuser, filter_wheel, autofocus))
     app.include_router(sequences_router(sequences))
     app.include_router(sky_router(saved_site, clock))
+    app.include_router(targets_router())
 
     @app.get("/api/autofocus/runs")
     async def focus_runs(  # pyright: ignore[reportUnusedFunction]
