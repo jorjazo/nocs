@@ -34,6 +34,12 @@ jobs:
           cache-dependency-path: web/pnpm-lock.yaml
       - name: Build
         run: packaging/deb/build.sh
+      # PHD2's GTK loads icons through glycin, which sandboxes its loaders with
+      # bwrap in a user namespace. The runner's AppArmor allows that only to its own
+      # bwrap and glycin binaries, not to the container's, and PHD2 aborts. A Pi
+      # runs them on the host, where Ubuntu's profiles allow it.
+      - name: Allow user namespaces for the container's bwrap
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - name: Install and start on Ubuntu 26.04
         run: packaging/deb/test.sh packaging/out/nocs_*_${{ matrix.arch }}.deb
       - uses: actions/upload-artifact@v4
