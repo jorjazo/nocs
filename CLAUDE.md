@@ -22,7 +22,8 @@ server/   Python package `nocs` (nocsd): indi/ (protocol + async client, driver
           roles, connect service), imaging/ (capture, preview worker),
           storage/ (destinations, layout, FITS headers, SQLite catalog),
           mount/, focus/, filters/ (services by role; filter names per wheel),
-          guiding/ (PHD2: service, settings it imports, JSON-RPC client),
+          guiding/ (PHD2: service, settings it imports, JSON-RPC client,
+          guide steps and RMS),
           solving/ (ASTAP, fields of view),
           system/ (nocs-system, the root helper: stdlib + anyio only, ADR 0027),
           state/ (versioned store), services/ (indi_bridge), api/ (FastAPI
@@ -32,7 +33,7 @@ web/      Svelte 5 + TypeScript PWA: styles/ (tokens), lib/ (api, live state,
           screens/ (dev/ is the old INDI property browser at #/dev)
 dev/      compose.yaml (INDI simulators + GSC catalog + driver FIFO in dev/.run,
           headless PHD2), astap/ (solver install), profiles/ (simulator rig),
-          tools/ (indi_record, fake_ppba),
+          tools/ (indi_record, phd2_record, fake_ppba),
           bench/, spikes/, pi/ (lab Pi flashing and setup)
 packaging/ deb/ (the nocs .deb: build.sh, test.sh), later the Pi image (ADR 0025, 0026)
 docs/     design, roadmap, ux, adr/, spikes/

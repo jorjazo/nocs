@@ -614,6 +614,10 @@ export interface GuidingState {
   managed: boolean;
   phd2: Phd2Server;
   /**
+   * Of the guide camera, arcseconds per pixel.
+   */
+  pixel_scale: number | null;
+  /**
    * The PHD2 profile in use.
    */
   profile: string | null;
@@ -625,6 +629,10 @@ export interface GuidingState {
    * PHD2 waits for the star to settle.
    */
   settling: boolean;
+  /**
+   * None until PHD2 guides.
+   */
+  stats: GuidingStats | null;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -674,6 +682,72 @@ export interface Phd2Server {
   host: string;
   port: number;
   version: string | null;
+}
+/**
+ * Over the last 100 steps that were not settling; RMS as PHD2's graph (std. dev.).
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "GuidingStats".
+ */
+export interface GuidingStats {
+  last: GuideEntryModel | null;
+  /**
+   * Frames without the star among the last 100 entries.
+   */
+  lost: number;
+  peak_dec_px: number | null;
+  peak_ra_px: number | null;
+  rms_dec: number | null;
+  rms_dec_px: number | null;
+  /**
+   * Arcseconds; None without the pixel scale.
+   */
+  rms_ra: number | null;
+  rms_ra_px: number | null;
+  rms_total: number | null;
+  rms_total_px: number | null;
+  /**
+   * Of the newest entry.
+   */
+  seq: number;
+  steps: number;
+}
+/**
+ * One entry of the guiding graph (``nocs.guiding.stats``).
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "GuideEntryModel".
+ */
+export interface GuideEntryModel {
+  dec: number | null;
+  /**
+   * Milliseconds, positive towards north.
+   */
+  dec_pulse: number;
+  /**
+   * Pixels.
+   */
+  hfd: number | null;
+  kind: "step" | "lost" | "dither";
+  mass: number | null;
+  /**
+   * Step: raw RA distance, px; dither: the RA move.
+   */
+  ra: number | null;
+  /**
+   * Milliseconds, positive towards west.
+   */
+  ra_pulse: number;
+  /**
+   * Increasing; ask for entries after the last one seen.
+   */
+  seq: number;
+  settling: boolean;
+  snr: number | null;
+  /**
+   * PHD2's timestamp, Unix seconds.
+   */
+  time: number;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -1675,6 +1749,63 @@ export interface FrameRecord {
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "GuideRequest".
+ */
+export interface GuideRequest {
+  /**
+   * Calibrate even if PHD2 has a calibration (after rotating the camera).
+   */
+  recalibrate?: boolean;
+  settle?: SettleRequest;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "SettleRequest".
+ */
+export interface SettleRequest {
+  /**
+   * Within this distance, px…
+   */
+  pixels?: number;
+  /**
+   * …for this long, seconds…
+   */
+  time?: number;
+  /**
+   * …or give up after this.
+   */
+  timeout?: number;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "GuideSteps".
+ */
+export interface GuideSteps {
+  pixel_scale: number | null;
+  steps: GuideEntryModel[];
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "GuidingExposureRequest".
+ */
+export interface GuidingExposureRequest {
+  /**
+   * Seconds.
+   */
+  exposure: number;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "GuidingLoopRequest".
+ */
+export interface GuidingLoopRequest {
+  /**
+   * Seconds; PHD2's current one when omitted.
+   */
+  exposure?: number | null;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "Health".
  */
 export interface Health {
@@ -1751,6 +1882,18 @@ export interface LoopRequest {
 export interface MountMotion1 {
   ns: NorthSouth | null;
   we: WestEast | null;
+}
+/**
+ * Park or home.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "MountMoveRequest".
+ */
+export interface MountMoveRequest {
+  /**
+   * Stop guiding first; refused while guiding otherwise (ADR 0023).
+   */
+  stop_guiding?: boolean;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema

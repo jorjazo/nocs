@@ -204,6 +204,8 @@ class FakePhd2:
                     else:
                         self.connected = request["params"][0]
                         response["result"] = 0
+                elif method == "get_pixel_scale":
+                    response["result"] = 4.13
                 elif method == "get_exposure":
                     response["result"] = self.exposure_ms
                 elif method == "set_exposure":
@@ -286,6 +288,13 @@ class FakePhd2:
             self.event("SettleDone", Status=0, TotalFrames=9, DroppedFrames=0)
         else:
             self.event("SettleDone", Status=1, Error="timed-out waiting for guider to settle")
+
+    def replay(self, path: Path) -> None:
+        """Send events PHD2 recorded (``dev/recordings/``)."""
+        for line in path.read_text().splitlines():
+            event = json.loads(line)
+            if event["Event"] not in ("Version", "AppState"):
+                self.event(event.pop("Event"), **event)
 
     def finish_calibration(self) -> None:
         self._go_on.set()
@@ -842,3 +851,25 @@ async def test_calibration_gives_up_on_a_lost_star(
         assert "lost the guide star" in job(store, job_id)["error"]
         assert "stop_capture" in phd2.calls
         assert guiding(store, "alert")["message"].startswith("star lost")
+
+
+async def test_guiding_statistics_from_a_recorded_session(phd2: FakePhd2, tmp_path: Path) -> None:
+    recording = Path(__file__).parents[2] / "dev" / "recordings"
+    async with applied(phd2, tmp_path) as (service, store, _, _, _):
+        await service.connect()
+        assert guiding(store, "pixel_scale") == 4.13
+        assert guiding(store, "stats") is None
+        phd2.replay(recording / "phd2-simulators-2026-10-31.jsonl")
+        await until(lambda: guiding(store, "app_state") == "Stopped" and guiding(store, "stats"))
+        await until(lambda: guiding(store, "stats", "seq") == service.history.last_seq)
+        stats = guiding(store, "stats")
+        recent = service.history.recent_rms()
+        assert recent is not None
+        assert stats["steps"] == recent.count
+        assert stats["rms_ra_px"] == round(recent.ra, 3)
+        assert stats["rms_ra"] == round(recent.ra * 4.13, 3)
+        assert stats["rms_total"] == round(recent.total * 4.13, 3)
+        assert stats["last"]["kind"] == "step"
+        kinds = [e.kind for e in service.history.after(0)]
+        assert (kinds.count("step"), kinds.count("dither")) == (58, 1)
+        assert not guiding(store, "settling")

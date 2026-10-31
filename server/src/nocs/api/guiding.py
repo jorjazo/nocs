@@ -4,10 +4,18 @@ from __future__ import annotations
 
 import contextlib
 from collections.abc import Callable, Generator
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Response, status
+from fastapi import APIRouter, HTTPException, Query, Response, status
 
-from nocs.api.schemas import GuideRequest, GuidingExposureRequest, GuidingLoopRequest, JobStarted
+from nocs.api.schemas import (
+    GuideEntryModel,
+    GuideRequest,
+    GuideSteps,
+    GuidingExposureRequest,
+    GuidingLoopRequest,
+    JobStarted,
+)
 from nocs.guiding import (
     GuidingNotReadyError,
     GuidingService,
@@ -46,6 +54,19 @@ def guiding_router(guiding: Callable[[], GuidingService]) -> APIRouter:
         with _guiding_errors():
             job = guiding().guide(recalibrate=request.recalibrate, settle=settle)
         return JobStarted(job=job)
+
+    @router.get("/steps")
+    async def steps(  # pyright: ignore[reportUnusedFunction]
+        after: Annotated[int, Query(ge=0)] = 0,
+        limit: Annotated[int, Query(ge=1, le=5000)] = 5000,
+    ) -> GuideSteps:
+        """The guiding run's graph: entries numbered above ``after``, oldest first."""
+        service = guiding()
+        entries = service.history.after(after, limit)
+        return GuideSteps(
+            steps=[GuideEntryModel.model_validate(e.to_json()) for e in entries],
+            pixel_scale=service.pixel_scale,
+        )
 
     @router.post("/stop", status_code=status.HTTP_204_NO_CONTENT)
     async def stop() -> Response:  # pyright: ignore[reportUnusedFunction]

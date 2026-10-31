@@ -2131,6 +2131,147 @@
       ],
       "type": "string"
     },
+    "GuideEntryModel": {
+      "additionalProperties": false,
+      "description": "One entry of the guiding graph (``nocs.guiding.stats``).",
+      "properties": {
+        "dec": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "dec_pulse": {
+          "description": "Milliseconds, positive towards north.",
+          "type": "integer"
+        },
+        "hfd": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Pixels."
+        },
+        "kind": {
+          "enum": [
+            "step",
+            "lost",
+            "dither"
+          ],
+          "type": "string"
+        },
+        "mass": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ra": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Step: raw RA distance, px; dither: the RA move."
+        },
+        "ra_pulse": {
+          "description": "Milliseconds, positive towards west.",
+          "type": "integer"
+        },
+        "seq": {
+          "description": "Increasing; ask for entries after the last one seen.",
+          "type": "integer"
+        },
+        "settling": {
+          "type": "boolean"
+        },
+        "snr": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "time": {
+          "description": "PHD2's timestamp, Unix seconds.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "seq",
+        "kind",
+        "time",
+        "ra",
+        "dec",
+        "ra_pulse",
+        "dec_pulse",
+        "snr",
+        "hfd",
+        "mass",
+        "settling"
+      ],
+      "title": "GuideEntryModel",
+      "type": "object"
+    },
+    "GuideRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "recalibrate": {
+          "default": false,
+          "description": "Calibrate even if PHD2 has a calibration (after rotating the camera).",
+          "type": "boolean"
+        },
+        "settle": {
+          "$ref": "#/$defs/SettleRequest"
+        }
+      },
+      "title": "GuideRequest",
+      "type": "object"
+    },
+    "GuideSteps": {
+      "properties": {
+        "pixel_scale": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "steps": {
+          "items": {
+            "$ref": "#/$defs/GuideEntryModel"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "steps",
+        "pixel_scale"
+      ],
+      "title": "GuideSteps",
+      "type": "object"
+    },
     "GuidingAlert": {
       "additionalProperties": false,
       "properties": {
@@ -2191,6 +2332,41 @@
         "declination"
       ],
       "title": "GuidingCalibration",
+      "type": "object"
+    },
+    "GuidingExposureRequest": {
+      "properties": {
+        "exposure": {
+          "description": "Seconds.",
+          "maximum": 60,
+          "minimum": 0.05,
+          "type": "number"
+        }
+      },
+      "required": [
+        "exposure"
+      ],
+      "title": "GuidingExposureRequest",
+      "type": "object"
+    },
+    "GuidingLoopRequest": {
+      "properties": {
+        "exposure": {
+          "anyOf": [
+            {
+              "maximum": 60,
+              "minimum": 0.05,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Seconds; PHD2's current one when omitted."
+        }
+      },
+      "title": "GuidingLoopRequest",
       "type": "object"
     },
     "GuidingState": {
@@ -2262,6 +2438,17 @@
         "phd2": {
           "$ref": "#/$defs/Phd2Server"
         },
+        "pixel_scale": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Of the guide camera, arcseconds per pixel."
+        },
         "profile": {
           "anyOf": [
             {
@@ -2288,6 +2475,17 @@
         "settling": {
           "description": "PHD2 waits for the star to settle.",
           "type": "boolean"
+        },
+        "stats": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GuidingStats"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "None until PHD2 guides."
         }
       },
       "required": [
@@ -2301,9 +2499,135 @@
         "calibration",
         "settling",
         "alert",
+        "pixel_scale",
+        "stats",
         "error"
       ],
       "title": "GuidingState",
+      "type": "object"
+    },
+    "GuidingStats": {
+      "additionalProperties": false,
+      "description": "Over the last 100 steps that were not settling; RMS as PHD2's graph (std. dev.).",
+      "properties": {
+        "last": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GuideEntryModel"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "lost": {
+          "description": "Frames without the star among the last 100 entries.",
+          "type": "integer"
+        },
+        "peak_dec_px": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "peak_ra_px": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "rms_dec": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "rms_dec_px": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "rms_ra": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Arcseconds; None without the pixel scale."
+        },
+        "rms_ra_px": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "rms_total": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "rms_total_px": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "seq": {
+          "description": "Of the newest entry.",
+          "type": "integer"
+        },
+        "steps": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "seq",
+        "steps",
+        "rms_ra",
+        "rms_dec",
+        "rms_total",
+        "rms_ra_px",
+        "rms_dec_px",
+        "rms_total_px",
+        "peak_ra_px",
+        "peak_dec_px",
+        "lost",
+        "last"
+      ],
+      "title": "GuidingStats",
       "type": "object"
     },
     "Health": {
@@ -2898,6 +3222,19 @@
         "we"
       ],
       "title": "MountMotion",
+      "type": "object"
+    },
+    "MountMoveRequest": {
+      "additionalProperties": false,
+      "description": "Park or home.",
+      "properties": {
+        "stop_guiding": {
+          "default": false,
+          "description": "Stop guiding first; refused while guiding otherwise (ADR 0023).",
+          "type": "boolean"
+        }
+      },
+      "title": "MountMoveRequest",
       "type": "object"
     },
     "MountSite": {
@@ -4176,6 +4513,33 @@
         "values"
       ],
       "title": "SetPropertyRequest",
+      "type": "object"
+    },
+    "SettleRequest": {
+      "properties": {
+        "pixels": {
+          "default": 1.5,
+          "description": "Within this distance, px\u2026",
+          "exclusiveMinimum": 0,
+          "maximum": 20,
+          "type": "number"
+        },
+        "time": {
+          "default": 10,
+          "description": "\u2026for this long, seconds\u2026",
+          "maximum": 300,
+          "minimum": 0,
+          "type": "number"
+        },
+        "timeout": {
+          "default": 60,
+          "description": "\u2026or give up after this.",
+          "exclusiveMinimum": 0,
+          "maximum": 600,
+          "type": "number"
+        }
+      },
+      "title": "SettleRequest",
       "type": "object"
     },
     "ShutdownRequest": {

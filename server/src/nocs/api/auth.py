@@ -51,7 +51,7 @@ _PUBLIC = {
     ("POST", "/api/auth/setup"),
     ("POST", "/api/auth/pair"),
 }
-_OBSERVER = {("GET", "/api/state"), ("WEBSOCKET", "/api/ws")}
+_OBSERVER = {("GET", "/api/state"), ("WEBSOCKET", "/api/ws"), ("GET", "/api/guiding/steps")}
 _OBSERVER_PREFIXES = {("GET", "/api/previews/")}
 _SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 _SCOPE_KEY = "nocs.identity"

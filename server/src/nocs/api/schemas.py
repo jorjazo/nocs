@@ -501,6 +501,39 @@ class GuidingAlert(StateModel):
     time: str = Field(description="UTC, ISO 8601.")
 
 
+class GuideEntryModel(StateModel):
+    """One entry of the guiding graph (``nocs.guiding.stats``)."""
+
+    seq: int = Field(description="Increasing; ask for entries after the last one seen.")
+    kind: Literal["step", "lost", "dither"]
+    time: float = Field(description="PHD2's timestamp, Unix seconds.")
+    ra: float | None = Field(description="Step: raw RA distance, px; dither: the RA move.")
+    dec: float | None
+    ra_pulse: int = Field(description="Milliseconds, positive towards west.")
+    dec_pulse: int = Field(description="Milliseconds, positive towards north.")
+    snr: float | None
+    hfd: float | None = Field(description="Pixels.")
+    mass: float | None
+    settling: bool
+
+
+class GuidingStats(StateModel):
+    """Over the last 100 steps that were not settling; RMS as PHD2's graph (std. dev.)."""
+
+    seq: int = Field(description="Of the newest entry.")
+    steps: int
+    rms_ra: float | None = Field(description="Arcseconds; None without the pixel scale.")
+    rms_dec: float | None
+    rms_total: float | None
+    rms_ra_px: float | None
+    rms_dec_px: float | None
+    rms_total_px: float | None
+    peak_ra_px: float | None
+    peak_dec_px: float | None
+    lost: int = Field(description="Frames without the star among the last 100 entries.")
+    last: GuideEntryModel | None
+
+
 class GuidingState(StateModel):
     phd2: Phd2Server
     managed: bool = Field(description="NOCS writes PHD2's settings from the profile (ADR 0022).")
@@ -519,6 +552,8 @@ class GuidingState(StateModel):
     calibration: GuidingCalibration | None = Field(description="None: PHD2 is not calibrated.")
     settling: bool = Field(description="PHD2 waits for the star to settle.")
     alert: GuidingAlert | None = Field(description="The last thing PHD2 warned about.")
+    pixel_scale: float | None = Field(description="Of the guide camera, arcseconds per pixel.")
+    stats: GuidingStats | None = Field(description="None until PHD2 guides.")
     error: str | None = Field(description="Why PHD2 does not run the profile's settings.")
 
 
@@ -627,6 +662,11 @@ class GuideRequest(BaseModel):
         description="Calibrate even if PHD2 has a calibration (after rotating the camera).",
     )
     settle: SettleRequest = Field(default_factory=SettleRequest)
+
+
+class GuideSteps(WireModel):
+    steps: list[GuideEntryModel]
+    pixel_scale: float | None
 
 
 class GuidingExposureRequest(BaseModel):

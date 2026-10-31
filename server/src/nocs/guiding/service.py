@@ -13,6 +13,8 @@ State layout under ``("guiding",)``::
     calibration: {ra_angle, ra_rate, dec_angle, dec_rate, declination}, or None
     settling:  PHD2 waits for the star to settle (after starting to guide or a dither)
     alert:     {message, kind, time}: the last thing PHD2 warned about, or None
+    pixel_scale: of the guide camera as PHD2 has it, arcseconds per pixel, or None
+    stats:     the guiding RMS (``nocs.guiding.stats``) and the last guide step, or None
     error:     why PHD2 does not run the profile's settings, or None
 
 When nocsd manages the settings, it renders them from the active profile once its
@@ -57,6 +59,7 @@ from nocs.guiding.phd2 import (
     Phd2Message,
 )
 from nocs.guiding.settings import GuideRig, Phd2Settings, render
+from nocs.guiding.stats import GuideEntry, GuideHistory
 from nocs.indi import IndiClient
 from nocs.jobs import JobContext, JobManager, ResourceBusyError
 from nocs.state import Json, Path, StateStore
@@ -179,6 +182,9 @@ class GuidingService:
         self._starting: str | None = None
         """The job starting to guide, while it runs."""
         self._queues: set[asyncio.Queue[Phd2Message]] = set()
+        self._history = GuideHistory()
+        self._settling = False
+        self._pixel_scale: float | None = None
         self._tasks: set[asyncio.Task[None]] = set()
         self._host = host
         self._port = port
@@ -207,6 +213,8 @@ class GuidingService:
                 "calibration": None,
                 "settling": False,
                 "alert": None,
+                "pixel_scale": None,
+                "stats": None,
                 "error": None,
             },
         )
@@ -231,6 +239,15 @@ class GuidingService:
     @property
     def equipment_connected(self) -> bool:
         return self._hold is not None
+
+    @property
+    def history(self) -> GuideHistory:
+        """The guide steps of the current guiding run."""
+        return self._history
+
+    @property
+    def pixel_scale(self) -> float | None:
+        return self._pixel_scale
 
     @property
     def guiding(self) -> bool:
@@ -350,6 +367,7 @@ class GuidingService:
                         self._store.set((*ROOT, "app_state"), None)
                         self._store.set((*ROOT, "profile"), None)
                         self._store.set((*ROOT, "settling"), False)
+                    self._settling = False
                 log.info("lost connection to PHD2")
             restarting = self._status() is SettingsStatus.APPLYING
             if restarting and attempt < RESTART_ATTEMPTS:
@@ -389,6 +407,7 @@ class GuidingService:
                 await self._set_connected(client, True)
             await self._read_exposure(client)
             await self._read_calibration(client)
+            await self._read_pixel_scale(client)
         except BaseException:
             self._release()
             raise
@@ -558,6 +577,12 @@ class GuidingService:
             }
         self._store.set((*ROOT, "calibration"), calibration)
 
+    async def _read_pixel_scale(self, client: Phd2Client) -> None:
+        scale = await client.call("get_pixel_scale")
+        if isinstance(scale, int | float) and not isinstance(scale, bool) and scale > 0:
+            self._pixel_scale = float(scale)
+            self._store.set((*ROOT, "pixel_scale"), round(self._pixel_scale, 4))
+
     async def _set_connected(self, client: Phd2Client, connected: bool) -> None:
         """PHD2 refuses while a capture ends, a moment after it says it stopped: retry."""
         deadline = asyncio.get_running_loop().time() + CAPTURE_ENDING
@@ -665,6 +690,7 @@ class GuidingService:
                 return
             await self._read_exposure(client)
             await self._read_calibration(client)
+            await self._read_pixel_scale(client)
         elif connected is False and self._hold is not None and not self._commands.locked():
             self._release()
 
@@ -762,14 +788,20 @@ class GuidingService:
             case "Alert":
                 self._alert(str(event.data.get("Msg", "")), str(event.data.get("Type", "info")))
             case "SettleBegin" | "Settling":
-                self._store.set((*ROOT, "settling"), True)
+                self._set_settling(True)
             case "SettleDone":
-                self._store.set((*ROOT, "settling"), False)
+                self._set_settling(False)
+            case "StartGuiding":
+                self._history.reset()
+                self._publish_stats(None)
             case "CalibrationFailed":
                 self._alert(f"calibration failed: {event.data.get('Reason', '')}", "error")
                 self._changed.set()
             case _:
                 pass
+        entry = self._history.add(event.name, event.data, settling=self._settling)
+        if entry is not None:
+            self._publish_stats(entry)
         if event.name == "StarLost":
             self._alert(f"star lost: {event.data.get('Status', '')}", "warning")
             if self._app_state == "Guiding":  # while calibrating, PHD2 still calibrates
@@ -780,6 +812,44 @@ class GuidingService:
             self._set_app_state(_STATE_OF_EVENT[event.name])
         elif event.name in _QUERY_EVENTS:
             self._changed.set()  # _sync asks for the state
+
+    def _set_settling(self, settling: bool) -> None:
+        if settling != self._settling:
+            self._settling = settling
+            self._store.set((*ROOT, "settling"), settling)
+
+    def _publish_stats(self, last: GuideEntry | None) -> None:
+        recent = self._history.recent_rms()
+        scale = self._pixel_scale
+
+        def arcsec(pixels: float | None) -> Json:
+            return round(pixels * scale, 3) if pixels is not None and scale else None
+
+        def px(pixels: float | None) -> Json:
+            return round(pixels, 3) if pixels is not None else None
+
+        ra = recent.ra if recent else None
+        dec = recent.dec if recent else None
+        total = recent.total if recent else None
+        peak_ra = recent.peak_ra if recent else None
+        peak_dec = recent.peak_dec if recent else None
+        self._store.set(
+            (*ROOT, "stats"),
+            {
+                "seq": self._history.last_seq,
+                "steps": recent.count if recent else 0,
+                "rms_ra": arcsec(ra),
+                "rms_dec": arcsec(dec),
+                "rms_total": arcsec(total),
+                "rms_ra_px": px(ra),
+                "rms_dec_px": px(dec),
+                "rms_total_px": px(total),
+                "peak_ra_px": px(peak_ra),
+                "peak_dec_px": px(peak_dec),
+                "lost": self._history.lost_count(),
+                "last": last.to_json() if last is not None else None,
+            },
+        )
 
     def _alert(self, message: str, kind: str) -> None:
         when = datetime.now(UTC).isoformat(timespec="seconds")
@@ -802,7 +872,7 @@ class GuidingService:
         self._store.set((*ROOT, "app_state"), state)
         self._sync_mount_hold()
         if state in IDLE_STATES or state in LOOPING_STATES:
-            self._store.set((*ROOT, "settling"), False)
+            self._set_settling(False)
         if wake and was_busy and state in IDLE_STATES:
             self._changed.set()  # pending settings may go in now
 

@@ -177,6 +177,25 @@ def test_calibrate_guide_and_stop_for_the_mount(api: TestClient) -> None:
     assert guiding["app_state"] == "Guiding"
     assert guiding["calibration"] is not None
     assert guiding["calibration"]["ra_rate"] > 0
+    assert guiding["pixel_scale"] == pytest.approx(pixel_scale(2.4, 120), abs=0.05)
+
+    # The graph and its RMS (stage 4.4).
+    def steps(current: dict[str, Any]) -> int:
+        stats = current["guiding"]["stats"]
+        return stats["steps"] if stats else 0
+
+    wait(api, lambda s: steps(s) >= 3, timeout=30)
+    stats = state(api)["guiding"]["stats"]
+    assert stats["rms_total"] is not None
+    assert stats["rms_total"] == pytest.approx(stats["rms_total_px"] * guiding["pixel_scale"], 0.01)
+    graph = api.get("/api/guiding/steps").json()
+    assert graph["pixel_scale"] == guiding["pixel_scale"]
+    seqs = [entry["seq"] for entry in graph["steps"]]
+    assert seqs == sorted(seqs)
+    assert seqs[-1] >= stats["seq"]
+    assert {entry["kind"] for entry in graph["steps"]} <= {"step", "lost", "dither"}
+    newer = api.get("/api/guiding/steps", params={"after": seqs[-1]}).json()["steps"]
+    assert all(entry["seq"] > seqs[-1] for entry in newer)
 
     # The mount is PHD2's while it guides (ADR 0023).
     refused = api.post("/api/mount/park")
