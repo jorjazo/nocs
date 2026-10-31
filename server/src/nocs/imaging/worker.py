@@ -2,7 +2,8 @@
 
 One process, so memory stays bounded on the Pi. Per camera, at most one frame is
 analysed and one waits; a newer frame replaces the waiting one, so a busy
-pipeline drops frames instead of falling behind (loop mode).
+pipeline drops frames instead of falling behind (loop mode). Workflows that need
+every frame's stars and no preview (autofocus) use ``measure``, which never drops.
 """
 
 from __future__ import annotations
@@ -18,7 +19,7 @@ from concurrent.futures.process import BrokenProcessPool
 from pathlib import Path
 
 from nocs.imaging import pipeline
-from nocs.imaging.pipeline import FrameAnalysis
+from nocs.imaging.pipeline import FrameAnalysis, StarMetrics
 
 log = logging.getLogger(__name__)
 
@@ -63,6 +64,18 @@ class ImageWorker:
                 raise
             self._remember(key, preview)
             return result
+
+    async def measure(self, fits_path: str, bayer: str | None) -> StarMetrics:
+        """Star count and HFR of a frame, without a preview; frames queue, none is dropped."""
+        loop = asyncio.get_running_loop()
+        try:
+            return await loop.run_in_executor(
+                self._executor(), pipeline.measure_frame, fits_path, bayer
+            )
+        except BrokenProcessPool:
+            log.error("imaging worker died; starting a new one")
+            self._pool = None
+            raise
 
     def preview_path(self, name: str) -> Path | None:
         """The file of a preview by name, if it is one of ours and still exists."""

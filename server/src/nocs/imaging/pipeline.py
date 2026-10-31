@@ -80,6 +80,15 @@ class FrameAnalysis:
     """Processing time."""
 
 
+@dataclass(frozen=True, slots=True)
+class StarMetrics:
+    stars: int
+    hfr: float | None
+    """Median half-flux radius in unbinned pixels; None without stars."""
+    seconds: float
+    """Processing time."""
+
+
 def warm_up() -> None:
     """Nothing to do: importing this module in the worker loads OpenCV, sep and astropy."""
 
@@ -118,6 +127,15 @@ def analyze(fits_path: str, preview_path: str, bayer: str | None = None) -> Fram
         histogram=histogram,
         seconds=round(time.perf_counter() - start, 3),
     )
+
+
+def measure_frame(fits_path: str, bayer: str | None = None) -> StarMetrics:
+    """Only the stars of a FITS frame, for workflows that need no preview (autofocus)."""
+    start = time.perf_counter()
+    data, header_bayer, _ = load(fits_path)
+    color = bool(header_bayer or bayer)
+    stars, hfr = measure_stars(data, binned=color or data.size > BIN_STARS_ABOVE)
+    return StarMetrics(stars=stars, hfr=hfr, seconds=round(time.perf_counter() - start, 3))
 
 
 def load(path: str) -> tuple[Mono16, str | None, bool]:

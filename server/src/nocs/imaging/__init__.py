@@ -1,4 +1,4 @@
-"""Exposures, frames and (later) previews and star metrics."""
+"""Exposures, frames, previews and star metrics."""
 
 from nocs.imaging.capture import (
     CAMERA_ROLES,
@@ -6,8 +6,10 @@ from nocs.imaging.capture import (
     CameraNotReadyError,
     CameraSettings,
     CaptureService,
+    Shot,
     image_connector,
 )
+from nocs.imaging.pipeline import StarMetrics
 
 __all__ = [
     "CAMERA_ROLES",
@@ -15,5 +17,7 @@ __all__ = [
     "CameraNotReadyError",
     "CameraSettings",
     "CaptureService",
+    "Shot",
+    "StarMetrics",
     "image_connector",
 ]

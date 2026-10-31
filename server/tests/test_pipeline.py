@@ -10,7 +10,13 @@ import pytest
 from astropy.io import fits  # pyright: ignore[reportMissingTypeStubs]
 from numpy.typing import NDArray
 
-from nocs.imaging.pipeline import PREVIEW_WIDTH, analyze, measure_histogram, measure_stars
+from nocs.imaging.pipeline import (
+    PREVIEW_WIDTH,
+    analyze,
+    measure_frame,
+    measure_histogram,
+    measure_stars,
+)
 
 _fits: Any = fits  # untyped library; see nocs.imaging.pipeline
 
@@ -65,6 +71,18 @@ def test_no_stars() -> None:
     rng = np.random.default_rng(2)
     flat = rng.normal(1000, 10, (300, 400)).astype(np.uint16)
     assert measure_stars(flat, binned=False) == (0, None)
+
+
+def test_stars_alone_from_a_file(tmp_path: Path) -> None:
+    """What autofocus measures: the stars, without a preview; Bayer frames are binned."""
+    data = star_field(800, 600, 25)
+    metrics = measure_frame(write_fits(tmp_path / "mono.fits", data))
+    assert (metrics.stars, metrics.hfr) == measure_stars(data, binned=False)
+    assert metrics.seconds >= 0
+    assert list(tmp_path.iterdir()) == [tmp_path / "mono.fits"]
+    color = measure_frame(write_fits(tmp_path / "color.fits", data, BAYERPAT="RGGB"))
+    assert (color.stars, color.hfr) == measure_stars(data, binned=True)
+    assert measure_frame(str(tmp_path / "mono.fits"), bayer="RGGB").hfr == color.hfr
 
 
 def test_histogram_follows_the_data() -> None:

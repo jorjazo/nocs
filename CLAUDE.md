@@ -110,6 +110,9 @@ CI runs all of the above (INDI simulators included) on every push to `main`.
   (~2 s for a 26 MP frame on the Pi's microSD): move frames to new names only.
 - The simulators render real stars only with the GSC catalog (in the dev image);
   their stars are very sharp (HFR < 1 px).
+- The CCD simulator draws its stars with the Focuser Simulator's `FWHM`, a
+  parabola in the position (best ≈ 36667): a usable V-curve needs ~1000 mm of
+  focal length (`SCOPE_INFO`; see `server/tests/simfocus.py`).
 - The ZWO EAF reports `FOCUS_MAX` = 100000, above that property's own maximum
   and the 47814 steps `ABS_FOCUS_POSITION` accepts: limits come from the latter.
 - Drivers save filter names in `$HOME/.indi` and turn `FILTER_NAME` to Alert when

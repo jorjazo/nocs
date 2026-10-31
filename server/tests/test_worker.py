@@ -46,6 +46,12 @@ async def test_newest_frame_replaces_the_waiting_one(worker: ImageWorker, frame:
     assert await worker.analyze("guide_camera", frame, None) is not None
 
 
+async def test_measurements_are_never_dropped(worker: ImageWorker, frame: str) -> None:
+    results = await asyncio.gather(*(worker.measure(frame, None) for _ in range(3)))
+    assert all(r.stars >= 15 for r in results)
+    assert not any(worker.previews_dir.glob("*.jpg"))
+
+
 async def test_old_previews_are_deleted(worker: ImageWorker, frame: str) -> None:
     previews: list[Path] = []
     for _ in range(3):

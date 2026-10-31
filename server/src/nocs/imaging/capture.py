@@ -17,6 +17,9 @@ Frames come either saved by the driver into a directory nocsd can read
 handed to storage when saved (main camera only, ADR 0013), analysed in the imaging
 worker, and deleted afterwards when it was only for a preview (loop mode).
 
+Workflows that run in a job of their own (autofocus, solving) take frames with
+``take`` and measure their stars with ``measure``, without previews or saving.
+
 Each camera gets its own INDI connection for images (BLOB only, for that device),
 opened at the first exposure, so a frame of tens of megabytes never holds up
 the connection that carries the state of every device.
@@ -44,7 +47,7 @@ from nocs.devices import Camera, DeviceError, FilterWheel, Frame, FrameType, Mou
 from nocs.devices.camera import Region
 from nocs.equipment import EquipmentService, Role, Site
 from nocs.equipment.service import IndiConnection
-from nocs.imaging.pipeline import FrameAnalysis
+from nocs.imaging.pipeline import FrameAnalysis, StarMetrics
 from nocs.imaging.worker import ImageWorker
 from nocs.indi import BlobMode, IndiClient, IndiEvent, PropertyDefined, PropertyUpdated
 from nocs.jobs import JobContext, JobManager
@@ -340,7 +343,7 @@ class CaptureService:
             count = 0
             while True:
                 count += 1
-                shot = await self._take(context, role, seconds, frame_type, f"frame {count}: ")
+                shot = await self.take(context, role, seconds, frame_type, f"frame {count}: ")
                 # Analysis overlaps the next exposure; a frame still waiting for the
                 # worker when the next one arrives is skipped.
                 self._background(self._preview(role, shot, discard=True))
@@ -348,6 +351,33 @@ class CaptureService:
         job_id = self._jobs.start("loop", [role.value], run)
         self._set_exposure(role, seconds)
         return job_id
+
+    async def take(
+        self,
+        context: JobContext,
+        role: Role,
+        seconds: float,
+        frame_type: FrameType | None = None,
+        label: str = "",
+    ) -> Shot:
+        """One exposure inside ``context``'s job, left in a file of its own for the caller.
+
+        The job must hold the camera's role. The frame is neither saved nor
+        previewed: the caller measures it (``measure``) or hands it on, and
+        deletes it. Progress goes to the job, each message after ``label``.
+        """
+        _check_exposure(seconds)
+        if self._jobs.holder(role.value) != context.id:
+            raise RuntimeError(f"job {context.id} does not hold the {role.value}")
+        return await self._take(context, role, seconds, frame_type, label)
+
+    async def measure(self, shot: Shot, *, discard: bool = True) -> StarMetrics:
+        """Star count and HFR of a frame from ``take``, deleting its file unless told not to."""
+        try:
+            return await self._worker.measure(str(shot.path), shot.bayer)
+        finally:
+            if discard:
+                await anyio.to_thread.run_sync(lambda: shot.path.unlink(missing_ok=True))
 
     async def close(self) -> None:
         self._unwatch_bridge()
@@ -370,7 +400,7 @@ class CaptureService:
         frame_type: FrameType | None,
         save: bool,
     ) -> Json:
-        shot = await self._take(context, role, seconds, frame_type)
+        shot = await self.take(context, role, seconds, frame_type)
         result: dict[str, Json] = {
             "exposure": seconds,
             "frame_type": FRAME_TYPE_NAMES[shot.frame_type],
