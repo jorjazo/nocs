@@ -215,6 +215,30 @@ Mount (stage 2.9):
   When the Pi's is more than 5 s off, a banner on every screen says by how much
   and that NOCS uses this device's time for frames and the mount.
 
+Autofocus (stage 5.5):
+
+- Autofocus is a full-screen flow at `#/focus`, without the tabs: a close button
+  that returns to the screen that opened it, three steps (settings, sweep,
+  result) as a bar under the title. Live view's focuser and the focuser's sheet
+  open it; Tonight's checklist will once phase 3 builds Tonight.
+- Settings show where the focuser is, its and the ambient temperature, the filter,
+  and the last run with how much the focuser's temperature changed since. Step,
+  points and exposure come from the imaging train's sweep in the profile and are
+  saved back there when "Remember for this rig" is on (under Advanced, with frames
+  per point and the focuser's backlash: approach direction and overshoot).
+- While it runs: the V-curve (points as they are measured; rings on the axis for
+  points without enough stars; where the focuser is now, dotted), readouts (best
+  so far, HFR, stars, focuser temperature), the phase and a progress bar, and
+  Cancel, which says that the focuser goes back to where it started. Any client
+  that opens the screen follows a run that is going on.
+- The result shows the fitted curve with the best focus dashed, HFR before and
+  after and R², and when the fit suggests a step more than 15 % different, offers
+  to keep it for next time. A failure names its cause and the next step for each
+  quality check (no stars, too few stars, a curve that never turns, a bad fit, a
+  worse last frame) and where the focuser went back to.
+- Live view reports only its own exposures and loops as failed; a failed
+  autofocus is reported on its own screen.
+
 ## 8. Open UX questions
 
 - Persistent "session running" indicator on non-session screens (banner vs.

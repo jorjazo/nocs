@@ -3,6 +3,8 @@
 
 import type {
   AuthStatus,
+  AutofocusRequest,
+  AutofocusRun,
   CameraRoleName,
   CameraSettingsRequest,
   ClockReport,
@@ -14,6 +16,7 @@ import type {
   ExposeRequest,
   FilterNamesRequest,
   FilterSelectRequest,
+  FocuserBacklashRequest,
   FocuserMoveRequest,
   HorizontalGoto,
   JobStarted,
@@ -167,6 +170,24 @@ export async function moveFocuser(body: FocuserMoveRequest): Promise<string> {
 
 export function abortFocuser(): Promise<void> {
   return request("POST", "/api/focuser/abort");
+}
+
+export function setFocuserBacklash(body: FocuserBacklashRequest): Promise<void> {
+  return request("PUT", "/api/focuser/backlash", body);
+}
+
+// -- Autofocus (ADR 0021) ---------------------------------------------------------
+
+// What the request leaves out comes from the imaging train's sweep and the
+// focuser's backlash.
+export async function startAutofocus(body: AutofocusRequest): Promise<string> {
+  const started = await request<JobStarted>("POST", "/api/autofocus", body);
+  return started.job;
+}
+
+// Finished runs, newest first.
+export function autofocusRuns(limit = 1): Promise<AutofocusRun[]> {
+  return request("GET", `/api/autofocus/runs?limit=${limit}`);
 }
 
 export async function selectFilter(body: FilterSelectRequest): Promise<string> {

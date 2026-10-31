@@ -14,6 +14,7 @@
   import { formatPlain, formatTemperature } from "../../lib/format";
   import { i18n } from "../../lib/i18n";
   import { live } from "../../lib/live.svelte";
+  import { router } from "../../lib/router.svelte";
   import FocuserNudge from "./FocuserNudge.svelte";
 
   let { onclose }: { onclose: () => void } = $props();
@@ -94,6 +95,8 @@
         {t.focuser.go}
       </Button>
     </div>
+
+    <Button wide onclick={() => router.go({ screen: "focus" })}>{t.autofocus.open}</Button>
 
     {#if locked && auth.owner}<p class="caption muted">{t.focuser.locked}</p>{/if}
     {#if error}<Banner icon="alert" tone="error">{error}</Banner>{/if}

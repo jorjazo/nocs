@@ -19,7 +19,7 @@
   import { i18n } from "../../lib/i18n";
   import { live } from "../../lib/live.svelte";
   import { formatDec, formatRa, mountActivity } from "../../lib/mount.svelte";
-  import { router } from "../../lib/router.svelte";
+  import { href, router } from "../../lib/router.svelte";
   import FilterWheelSheet from "../devices/FilterWheelSheet.svelte";
   import FocuserNudge from "../devices/FocuserNudge.svelte";
   import FocuserSheet from "../devices/FocuserSheet.svelte";
@@ -68,8 +68,14 @@
   });
 
   let dismissed = $state<string | null>(null);
+  // Only this screen's own jobs: workflows that use the camera (autofocus)
+  // report their failures on their own screens.
   const failed = $derived(
-    jobs.latest?.info.state === "failed" && jobs.latest.id !== dismissed ? jobs.latest : null,
+    jobs.latest?.info.state === "failed" &&
+      (jobs.latest.info.kind === "expose" || jobs.latest.info.kind === "loop") &&
+      jobs.latest.id !== dismissed
+      ? jobs.latest
+      : null,
   );
   const savedPath = $derived.by(() => {
     const latest = jobs.latest?.info;
@@ -286,6 +292,10 @@
           </button>
           <FocuserNudge {focuser} disabled={!owner || focuserLocked} run={act} />
         </div>
+        <a class="autofocus" href={href({ screen: "focus" })}>
+          <Icon name="focus" size={20} />
+          {focuserJob?.info.kind === "autofocus" ? t.live.autofocusRunning : t.autofocus.open}
+        </a>
       {/if}
 
       {#if mount}
@@ -536,6 +546,16 @@
     align-items: center;
     gap: var(--space-3);
     padding: var(--space-2) var(--space-2) var(--space-2) 0;
+  }
+  .autofocus {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    align-self: flex-start;
+    min-height: var(--touch);
+    color: var(--accent);
+    font-weight: 600;
+    text-decoration: none;
   }
   .readout-button {
     display: flex;

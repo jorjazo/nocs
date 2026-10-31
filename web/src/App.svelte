@@ -14,6 +14,7 @@
   import { router } from "./lib/router.svelte";
   import AuthScreen from "./screens/AuthScreen.svelte";
   import Dev from "./screens/dev/Dev.svelte";
+  import Focus from "./screens/focus/Focus.svelte";
   import Live from "./screens/live/Live.svelte";
   import Placeholder from "./screens/Placeholder.svelte";
   import ProfileEditor from "./screens/ProfileEditor.svelte";
@@ -79,6 +80,9 @@
   </main>
 {:else if view === "setup" || view === "pair"}
   <AuthScreen mode={view} />
+{:else if router.route.screen === "focus"}
+  <!-- Guided flows take the whole screen, without the tabs (docs/ux.md §1). -->
+  <Focus {offline} />
 {:else}
   <NavBar />
   <main class="content" class:full>

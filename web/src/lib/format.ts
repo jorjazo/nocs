@@ -73,6 +73,10 @@ export function formatDateTime(iso: string, locale: string): string {
   return new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(new Date(iso));
 }
 
+export function formatTime(iso: string, locale: string): string {
+  return new Intl.DateTimeFormat(locale, { timeStyle: "short" }).format(new Date(iso));
+}
+
 // Plain numbers in the interface (gain, offset, ranges), without grouping.
 export function formatPlain(value: number, locale: string, maxDigits = 3): string {
   const text = new Intl.NumberFormat(locale, { maximumFractionDigits: maxDigits, useGrouping: false }).format(value);

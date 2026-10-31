@@ -1,7 +1,10 @@
 // English messages: the source of truth for every other language. Messages
 // with parameters are functions; es.ts must match this shape exactly.
 
-import type { ConnectionName, DeviceStatusName, FrameTypeName, Role } from "../types";
+import type { AutofocusState, ConnectionName, DeviceStatusName, FrameTypeName, Role } from "../types";
+
+type AutofocusPhase = NonNullable<AutofocusState["phase"]>;
+type AutofocusProblem = NonNullable<AutofocusState["problem"]>;
 
 export const en = {
   tabs: {
@@ -191,6 +194,7 @@ export const en = {
     dewNear: "Close to the dew point: dew heaters on?",
   },
   live: {
+    autofocusRunning: "Autofocus running",
     title: "Live view",
     noCamera: "No camera connected",
     noCameraBody: "Connect your equipment in Rig to see previews and take frames here.",
@@ -350,6 +354,75 @@ export const en = {
     go: "Go",
     stop: "Stop",
     locked: "The focuser does not move while the main camera takes a frame.",
+  },
+  autofocus: {
+    title: "Autofocus",
+    open: "Autofocus",
+    close: "Close",
+    steps: ["Settings", "Sweep", "Result"],
+    stepOf: (step: number, total: number) => `Step ${step} of ${total}`,
+    position: "Position",
+    focuser: "Focuser",
+    ambient: "Ambient",
+    filter: "Filter",
+    last: (time: string, position: string) => `Last run at ${time}: focused at ${position}.`,
+    lastFailed: (time: string) => `The last run, at ${time}, did not focus.`,
+    since: (change: string) => `The focuser is ${change} since then.`,
+    warmer: (degrees: string) => `${degrees} warmer`,
+    colder: (degrees: string) => `${degrees} colder`,
+    step: "Step",
+    stepHint: "Focuser steps between points. The ends of the sweep should be clearly out of focus.",
+    points: "Points",
+    exposure: "Exposure",
+    advanced: "Advanced",
+    frames: "Frames per point",
+    direction: "Reach every position moving",
+    outward: "Outward",
+    inward: "Inward",
+    overshoot: "Overshoot",
+    overshootHint: "Steps past a target when moving the other way, to take up backlash. Empty: one step.",
+    remember: "Remember for this rig",
+    rememberHint: "Saved in the profile's imaging train.",
+    start: "Start autofocus",
+    needStep: "Give a step to start.",
+    noRig: "Connect a focuser and the main camera to focus.",
+    busy: "The camera or the focuser is busy with another job.",
+    observer: "Only the paired owner can start autofocus.",
+    phase: {
+      starting: "Checking for stars",
+      sweeping: "Sweeping",
+      moving: "Moving to the best focus",
+      checking: "Checking the focus",
+      restoring: "Going back to the start",
+    } satisfies Record<AutofocusPhase, string>,
+    best: "Best position",
+    hfr: "HFR",
+    stars: "Stars",
+    cancel: "Cancel",
+    cancelHint: "The focuser goes back to where it started.",
+    chart: (points: number) => `V-curve: HFR against focuser position, ${points} points`,
+    chartFit: (position: string) => `, fitted best focus at ${position}`,
+    focused: (position: string) => `Focused at ${position}`,
+    hfrChange: (before: string, after: string) => `HFR ${before} → ${after} px`,
+    fit: (r2: string) => `Fit R² ${r2}`,
+    suggest: (step: string) => `A step of ${step} would put the ends of the sweep further out of focus.`,
+    useStep: "Use it next time",
+    failed: "Not focused",
+    cancelled: "Cancelled",
+    back: (position: string) => `The focuser is back at ${position}.`,
+    problem: {
+      no_stars:
+        "Too few stars where the focuser is: clouds, the cap, or far out of focus. Focus by hand until stars show, then try again.",
+      too_few_stars:
+        "Too many points had too few stars. Try a longer exposure, or a smaller step if the ends lose their stars.",
+      not_turning:
+        "The stars kept shrinking towards one end: focus lies beyond the sweep. Move the focuser that way by hand, or use a larger step.",
+      bad_fit:
+        "The points do not follow a V. Seeing or clouds may have changed during the sweep; try again, perhaps with more frames per point.",
+      worse: "The last frame was worse than the first: conditions may have changed. Try again.",
+    } satisfies Record<AutofocusProblem, string>,
+    again: "Run again",
+    done: "Done",
   },
   wheel: {
     title: "Filter wheel",
