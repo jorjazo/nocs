@@ -52,3 +52,14 @@ def indi_fifo(indi_address: tuple[str, int]) -> Path:
 def cheap_scrypt(monkeypatch: pytest.MonkeyPatch) -> None:
     """Hash test passphrases in a millisecond instead of a fifth of a second."""
     monkeypatch.setattr("nocs.auth.store.SCRYPT_N", 2**10)
+
+
+@pytest.fixture
+def astap_paths() -> tuple[Path, Path | None]:
+    """The ASTAP solver from NOCS_TEST_ASTAP, and its databases from NOCS_TEST_ASTAP_DB
+    (default: next to it). ``dev/astap/install.sh`` installs both in ``dev/.astap``."""
+    value = os.environ.get("NOCS_TEST_ASTAP")
+    if not value:
+        pytest.skip("NOCS_TEST_ASTAP not set (e.g. ../dev/.astap/astap_cli)")
+    database = os.environ.get("NOCS_TEST_ASTAP_DB")
+    return Path(value), Path(database) if database else None

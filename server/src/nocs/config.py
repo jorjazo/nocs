@@ -37,6 +37,10 @@ class Settings(BaseSettings):
     sees it. Without it, and always for the guide camera, frames arrive as BLOBs (ADR 0012)."""
     indi_upload_dir_local: Path | None = None
     """The same directory as nocsd sees it, when that differs (indiserver in a container)."""
+    astap: Path | None = None
+    """The ASTAP command-line solver; by default ``astap_cli`` on the PATH or in /opt/astap."""
+    astap_db: Path | None = None
+    """ASTAP's star databases; by default next to the solver or in /opt/astap."""
     config_dir: Path = Field(default_factory=_default_config_dir)
     data_dir: Path = Field(default_factory=_default_data_dir)
     """The server's own data: frame catalog, previews, frames on their way."""

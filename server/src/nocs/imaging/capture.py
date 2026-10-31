@@ -4,7 +4,10 @@ State layout under ``("cameras",)``, one entry per connected camera role::
 
     {device, exposing, remaining, temperature, can_cool, cooler, cooler_power, target, ramp,
      exposure, gain, gain_range, offset, offset_range, binning, max_binning, region,
-     frame_type, sensor, bayer, last_frame, preview}
+     frame_type, sensor, bayer, field, last_frame, preview}
+
+``field`` is what a frame covers with the role's optical train (the imaging train
+for the main camera, the guiding one for the guide camera), binning and region.
 
 INDI has no exposure time to keep, only the one of each exposure: NOCS keeps it
 per role (the last one set or used), so every client shows the same.
@@ -45,6 +48,7 @@ from nocs.imaging.pipeline import FrameAnalysis
 from nocs.imaging.worker import ImageWorker
 from nocs.indi import BlobMode, IndiClient, IndiEvent, PropertyDefined, PropertyUpdated
 from nocs.jobs import JobContext, JobManager
+from nocs.solving import field_of_view
 from nocs.state import Json, Path, StateStore
 from nocs.storage import FrameFacts, StorageError, StorageService
 
@@ -652,6 +656,28 @@ class CaptureService:
         self._exposures[role] = seconds
         self._publish(role)
 
+    def _field(self, role: Role) -> dict[str, Json] | None:
+        profile = self._equipment.active_profile
+        optics = None
+        if profile is not None:
+            optics = profile.imaging if role is Role.MAIN_CAMERA else profile.guiding
+        if optics is None:
+            return None
+        camera = self.camera(role)
+        binning = max(1, camera.binning[0])
+        region = camera.region
+        field = field_of_view(
+            optics, camera.sensor, binning, (region.width // binning, region.height // binning)
+        )
+        if field is None:
+            return None
+        return {
+            "focal_length": field.focal_length,
+            "scale": field.scale,
+            "width": field.width,
+            "height": field.height,
+        }
+
     def _publish(self, role: Role) -> None:
         try:
             summary = camera_summary(self.camera(role))
@@ -659,6 +685,7 @@ class CaptureService:
             log.debug("camera %s not publishable yet: %s", role.value, e)
             return
         summary["target"] = self._targets.get(role)
+        summary["field"] = self._field(role)
         summary["exposure"] = self._exposures.get(role, EXPOSURE_DEFAULT)
         summary["last_frame"] = self._last_frames.get(role)
         summary["preview"] = self._previews.get(role)

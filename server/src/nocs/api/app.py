@@ -86,6 +86,7 @@ from nocs.jobs import JobManager, ResourceBusyError
 from nocs.mount.service import MountService
 from nocs.power.service import PowerService, WeatherService
 from nocs.services.indi_bridge import IndiBridge, NotConnectedError
+from nocs.solving import Astap, SolverService
 from nocs.state import Resync, StateStore
 from nocs.storage import (
     FrameFilter,
@@ -190,6 +191,8 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
         services.filter_wheel = FilterWheelService(
             store, services.jobs, services.equipment, bridge, WheelStore(settings.config_dir)
         )
+        services.solver = SolverService(store, Astap.find(settings.astap, settings.astap_db))
+        await services.solver.start()
         task = asyncio.create_task(bridge.run(), name="indi-bridge")
         try:
             yield
@@ -476,6 +479,7 @@ class _Services:
     clock: Clock | None = None
     focuser: FocuserService | None = None
     filter_wheel: FilterWheelService | None = None
+    solver: SolverService | None = None
 
 
 def _upload_dirs(settings: Settings) -> UploadDirs | None:

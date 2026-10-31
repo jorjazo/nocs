@@ -162,6 +162,13 @@ class Preview(StateModel):
     seconds: float = Field(description="Time the worker took.")
 
 
+class CameraField(StateModel):
+    focal_length: float = Field(description="Effective focal length (with reducer), mm.")
+    scale: float = Field(description="Arcseconds per binned pixel.")
+    width: float = Field(description="Degrees across a frame (its x axis).")
+    height: float = Field(description="Degrees along a frame's y axis.")
+
+
 class CameraState(StateModel):
     device: str
     exposing: bool
@@ -185,6 +192,10 @@ class CameraState(StateModel):
     frame_type: FrameTypeName
     sensor: SensorInfo
     bayer: str | None = Field(description="Color filter pattern (e.g. RGGB); None for mono.")
+    field: CameraField | None = Field(
+        description="What a frame covers with the current binning and region; None without"
+        " the role's optics in the profile or while the sensor is unknown."
+    )
     last_frame: FrameInfo | None
     preview: Preview | None = Field(description="Latest preview, from any exposure or loop.")
 
@@ -374,6 +385,34 @@ class FilterWheelState(StateModel):
     )
 
 
+class StarDatabase(StateModel):
+    name: str = Field(description="As ASTAP calls it, e.g. D50.")
+    min_fov: float = Field(description="Smallest frame height it solves, degrees.")
+    max_fov: float = Field(description="Largest frame height it solves, degrees.")
+
+
+class SolutionState(StateModel):
+    ra: float = Field(description="Centre of the frame, J2000, hours.")
+    dec: float = Field(description="Centre of the frame, J2000, degrees.")
+    rotation: float = Field(
+        description="Position angle of the top of the image as shown, degrees east of north."
+    )
+    scale: float = Field(description="Arcseconds per pixel of the solved image.")
+    mirrored: bool = Field(description="The image as shown is a mirror view of the sky.")
+    fov: list[float] = Field(min_length=2, max_length=2, description="Degrees across x and y.")
+    hinted: bool = Field(description="Solved near the hint; false: by searching the whole sky.")
+    seconds: float = Field(description="Time ASTAP took.")
+    time: str = Field(description="UTC, ISO 8601, when it was solved.")
+
+
+class SolverState(StateModel):
+    available: bool = Field(description="ASTAP is installed.")
+    version: str | None
+    databases: list[StarDatabase]
+    solving: bool
+    last: SolutionState | None = Field(description="The most recent solution.")
+
+
 class AppState(StateModel):
     """The whole state tree sent in snapshots and modified by patches."""
 
@@ -396,6 +435,7 @@ class AppState(StateModel):
     filter_wheel: FilterWheelState | None = Field(
         default=None, description="None: no filter wheel is ready."
     )
+    solver: SolverState | None = None
 
 
 # -- HTTP --------------------------------------------------------------------

@@ -141,6 +141,17 @@
           "default": null,
           "description": "None: no power box is ready."
         },
+        "solver": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SolverState"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "storage": {
           "anyOf": [
             {
@@ -238,6 +249,35 @@
         "size"
       ],
       "title": "BlobInfo",
+      "type": "object"
+    },
+    "CameraField": {
+      "additionalProperties": false,
+      "properties": {
+        "focal_length": {
+          "description": "Effective focal length (with reducer), mm.",
+          "type": "number"
+        },
+        "height": {
+          "description": "Degrees along a frame's y axis.",
+          "type": "number"
+        },
+        "scale": {
+          "description": "Arcseconds per binned pixel.",
+          "type": "number"
+        },
+        "width": {
+          "description": "Degrees across a frame (its x axis).",
+          "type": "number"
+        }
+      },
+      "required": [
+        "focal_length",
+        "scale",
+        "width",
+        "height"
+      ],
+      "title": "CameraField",
       "type": "object"
     },
     "CameraRoleName": {
@@ -388,6 +428,17 @@
           "description": "Seconds; the last one set or used through NOCS (INDI keeps none).",
           "type": "number"
         },
+        "field": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CameraField"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "What a frame covers with the current binning and region; None without the role's optics in the profile or while the sensor is unknown."
+        },
         "frame_type": {
           "$ref": "#/$defs/FrameTypeName"
         },
@@ -527,6 +578,7 @@
         "frame_type",
         "sensor",
         "bayer",
+        "field",
         "last_frame",
         "preview"
       ],
@@ -3252,6 +3304,137 @@
         "state"
       ],
       "title": "SnapshotMessage",
+      "type": "object"
+    },
+    "SolutionState": {
+      "additionalProperties": false,
+      "properties": {
+        "dec": {
+          "description": "Centre of the frame, J2000, degrees.",
+          "type": "number"
+        },
+        "fov": {
+          "description": "Degrees across x and y.",
+          "items": {
+            "type": "number"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array"
+        },
+        "hinted": {
+          "description": "Solved near the hint; false: by searching the whole sky.",
+          "type": "boolean"
+        },
+        "mirrored": {
+          "description": "The image as shown is a mirror view of the sky.",
+          "type": "boolean"
+        },
+        "ra": {
+          "description": "Centre of the frame, J2000, hours.",
+          "type": "number"
+        },
+        "rotation": {
+          "description": "Position angle of the top of the image as shown, degrees east of north.",
+          "type": "number"
+        },
+        "scale": {
+          "description": "Arcseconds per pixel of the solved image.",
+          "type": "number"
+        },
+        "seconds": {
+          "description": "Time ASTAP took.",
+          "type": "number"
+        },
+        "time": {
+          "description": "UTC, ISO 8601, when it was solved.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ra",
+        "dec",
+        "rotation",
+        "scale",
+        "mirrored",
+        "fov",
+        "hinted",
+        "seconds",
+        "time"
+      ],
+      "title": "SolutionState",
+      "type": "object"
+    },
+    "SolverState": {
+      "additionalProperties": false,
+      "properties": {
+        "available": {
+          "description": "ASTAP is installed.",
+          "type": "boolean"
+        },
+        "databases": {
+          "items": {
+            "$ref": "#/$defs/StarDatabase"
+          },
+          "type": "array"
+        },
+        "last": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SolutionState"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The most recent solution."
+        },
+        "solving": {
+          "type": "boolean"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "available",
+        "version",
+        "databases",
+        "solving",
+        "last"
+      ],
+      "title": "SolverState",
+      "type": "object"
+    },
+    "StarDatabase": {
+      "additionalProperties": false,
+      "properties": {
+        "max_fov": {
+          "description": "Largest frame height it solves, degrees.",
+          "type": "number"
+        },
+        "min_fov": {
+          "description": "Smallest frame height it solves, degrees.",
+          "type": "number"
+        },
+        "name": {
+          "description": "As ASTAP calls it, e.g. D50.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "min_fov",
+        "max_fov"
+      ],
+      "title": "StarDatabase",
       "type": "object"
     },
     "StateSnapshot": {

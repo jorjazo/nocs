@@ -84,6 +84,8 @@ take a set of manual sub-frames controlled only from a phone.
 
 ## Phase 3 — Solve & frame
 
+Stage plan and status: [v0.1/phase-3.md](v0.1/phase-3.md).
+
 - ASTAP integration (hinted and blind solving), FOV from optical train.
 - Solve-and-center workflow; sync mount.
 - Target search from a bundled catalog (Messier, NGC/IC, common names).

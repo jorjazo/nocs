@@ -22,13 +22,15 @@ server/   Python package `nocs` (nocsd): indi/ (protocol + async client, driver
           roles, connect service), imaging/ (capture, preview worker),
           storage/ (destinations, layout, FITS headers, SQLite catalog),
           mount/, focus/, filters/ (services by role; filter names per wheel),
+          solving/ (ASTAP, fields of view),
           state/ (versioned store), services/ (indi_bridge), api/ (FastAPI
           REST + WebSocket, schemas, schema export)
 web/      Svelte 5 + TypeScript PWA: styles/ (tokens), lib/ (api, live state,
           auth, router, i18n/ with en.ts as the source, prefs), components/,
           screens/ (dev/ is the old INDI property browser at #/dev)
 dev/      compose.yaml (INDI simulators + GSC catalog + driver FIFO in dev/.run,
-          headless PHD2), profiles/ (simulator rig), tools/ (indi_record, fake_ppba),
+          headless PHD2), astap/ (solver install), profiles/ (simulator rig),
+          tools/ (indi_record, fake_ppba),
           bench/, spikes/, pi/ (lab Pi flashing and setup)
 docs/     design, roadmap, ux, adr/, spikes/
 ```
@@ -39,8 +41,11 @@ docs/     design, roadmap, ux, adr/, spikes/
 docker compose -f dev/compose.yaml up -d --build  # INDI simulators :7624, PHD2 :4400
 cd server && uv sync
 uv run ruff check . && uv run ruff format --check . && uv run pyright   # strict
+dev/astap/install.sh  # ASTAP + D05 in dev/.astap (slow download; ADR 0018)
 NOCS_TEST_INDI=localhost:7624 NOCS_TEST_INDI_FIFO=../dev/.run/fifo \
-  NOCS_TEST_INDI_UPLOADS=../dev/.run/uploads uv run pytest
+  NOCS_TEST_INDI_UPLOADS=../dev/.run/uploads NOCS_TEST_ASTAP=../dev/.astap/astap_cli uv run pytest
+# real night frames for the solver: NOCS_TEST_FRAMES=<dir of FITS lights>, with D50
+# (NOCS_TEST_ASTAP_DB=<dir>): D05 fails dense Milky Way fields
 cd web && pnpm install && pnpm check && pnpm build
 pnpm gen:types        # after changing server/src/nocs/api/schemas.py (CI checks)
 NOCS_WEB_DIR=web/dist NOCS_INDI_FIFO=dev/.run/fifo NOCS_INDI_DRIVERS_DIR=dev/.run/drivers \

@@ -35,3 +35,9 @@ dev/.run/
 
 # Scratch files (mockups, notes)
 /tmp/
+
+# ASTAP solver and star database for development (dev/astap/install.sh)
+dev/.astap/
+dev/.astap-*/
+# Real frames for the solver tests (NOCS_TEST_FRAMES), usually symlinks
+dev/.frames/

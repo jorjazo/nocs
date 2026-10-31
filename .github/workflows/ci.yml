@@ -21,6 +21,14 @@ jobs:
         run: |
           docker compose -f dev/compose.yaml up -d --build indi
           timeout 60 bash -c 'until (echo > /dev/tcp/127.0.0.1/7624) 2>/dev/null; do sleep 1; done'
+      - name: Cache ASTAP and its D05 star database
+        uses: actions/cache@v4
+        with:
+          path: dev/.astap
+          key: astap-d05-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('dev/astap/install.sh') }}
+      - name: Install ASTAP (SourceForge is slow; cached above)
+        working-directory: .
+        run: dev/astap/install.sh
       - run: uv sync --locked
       - run: uv run ruff check .
       - run: uv run ruff format --check .
@@ -31,6 +39,7 @@ jobs:
           NOCS_TEST_INDI: 127.0.0.1:7624
           NOCS_TEST_INDI_FIFO: ../dev/.run/fifo
           NOCS_TEST_INDI_UPLOADS: ../dev/.run/uploads
+          NOCS_TEST_ASTAP: ../dev/.astap/astap_cli
       - name: indiserver log
         if: failure()
         working-directory: .

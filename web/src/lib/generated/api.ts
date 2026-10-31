@@ -122,6 +122,7 @@ export interface AppState {
    * None: no power box is ready.
    */
   power?: PowerState | null;
+  solver?: SolverState | null;
   storage?: StorageState | null;
   /**
    * None: no weather sensor is ready.
@@ -160,6 +161,10 @@ export interface CameraState {
    * Seconds; the last one set or used through NOCS (INDI keeps none).
    */
   exposure: number;
+  /**
+   * What a frame covers with the current binning and region; None without the role's optics in the profile or while the sensor is unknown.
+   */
+  field: CameraField | null;
   frame_type: FrameTypeName;
   gain: number | null;
   gain_range: ValueRange | null;
@@ -189,6 +194,28 @@ export interface CameraState {
    * Sensor temperature, °C; None if unknown.
    */
   temperature: number | null;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "CameraField".
+ */
+export interface CameraField {
+  /**
+   * Effective focal length (with reducer), mm.
+   */
+  focal_length: number;
+  /**
+   * Degrees along a frame's y axis.
+   */
+  height: number;
+  /**
+   * Arcseconds per binned pixel.
+   */
+  scale: number;
+  /**
+   * Degrees across a frame (its x axis).
+   */
+  width: number;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -736,6 +763,86 @@ export interface PowerOutput {
    * Variable outputs: the voltages it can be set to.
    */
   voltages: number[];
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "SolverState".
+ */
+export interface SolverState {
+  /**
+   * ASTAP is installed.
+   */
+  available: boolean;
+  databases: StarDatabase[];
+  /**
+   * The most recent solution.
+   */
+  last: SolutionState | null;
+  solving: boolean;
+  version: string | null;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "StarDatabase".
+ */
+export interface StarDatabase {
+  /**
+   * Largest frame height it solves, degrees.
+   */
+  max_fov: number;
+  /**
+   * Smallest frame height it solves, degrees.
+   */
+  min_fov: number;
+  /**
+   * As ASTAP calls it, e.g. D50.
+   */
+  name: string;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "SolutionState".
+ */
+export interface SolutionState {
+  /**
+   * Centre of the frame, J2000, degrees.
+   */
+  dec: number;
+  /**
+   * Degrees across x and y.
+   *
+   * @minItems 2
+   * @maxItems 2
+   */
+  fov: [number, number];
+  /**
+   * Solved near the hint; false: by searching the whole sky.
+   */
+  hinted: boolean;
+  /**
+   * The image as shown is a mirror view of the sky.
+   */
+  mirrored: boolean;
+  /**
+   * Centre of the frame, J2000, hours.
+   */
+  ra: number;
+  /**
+   * Position angle of the top of the image as shown, degrees east of north.
+   */
+  rotation: number;
+  /**
+   * Arcseconds per pixel of the solved image.
+   */
+  scale: number;
+  /**
+   * Time ASTAP took.
+   */
+  seconds: number;
+  /**
+   * UTC, ISO 8601, when it was solved.
+   */
+  time: string;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
