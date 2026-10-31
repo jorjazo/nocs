@@ -1427,3 +1427,83 @@ class PadStatusMessage(WireModel):
     rate: str | None
     latched: bool = Field(description="Stopped by NOCS: let go before moving again.")
     message: str | None = Field(description="Why it stopped or refused.")
+
+
+# -- Tonight's sky (phase 3.5) ---------------------------------------------------
+# Times are UTC, ISO 8601. A night runs from local noon to local noon (local mean
+# solar time) and is named after its first date, like the frame catalog's nights.
+# Curves are sampled at ``times``, every 10 minutes from sunset to sunrise.
+
+type DarknessName = Literal["civil", "nautical", "astronomical"]
+
+
+class TimeInterval(WireModel):
+    start: str
+    end: str
+
+
+class MoonNight(WireModel):
+    rise: str | None = Field(description="The night's moonrise (upper limb), if any.")
+    set: str | None
+    up: list[TimeInterval] = Field(description="When the Moon is above the horizon.")
+    fraction: float = Field(description="Illuminated, 0..1, at the middle of the dark window.")
+    phase: float = Field(
+        description="Degrees then: 0 new, 90 first quarter, 180 full, 270 last quarter."
+    )
+    altitude: list[float] = Field(description="Apparent, degrees, at each of times.")
+    azimuth: list[float]
+
+
+class Almanac(WireModel):
+    """``GET /api/sky/tonight``: the night at the active profile's site."""
+
+    night: str = Field(description="YYYY-MM-DD, the date at the start of the night.")
+    site: Site
+    start: str = Field(description="Local noon.")
+    end: str = Field(description="The next local noon.")
+    sunset: str | None = Field(description="None when the Sun does not set this night.")
+    sunrise: str | None
+    civil: TimeInterval | None = Field(
+        description="The Sun below -6°: dusk to dawn, clipped to the night; None if never."
+    )
+    nautical: TimeInterval | None = Field(description="Below -12°.")
+    astronomical: TimeInterval | None = Field(description="Below -18°.")
+    darkness: DarknessName | None = Field(description="The darkest twilight the night reaches.")
+    dark: TimeInterval | None = Field(description="The window of that darkness.")
+    dark_moonless: list[TimeInterval] = Field(description="The dark window without the Moon.")
+    sun_lowest: str
+    sun_lowest_altitude: float = Field(description="Degrees, geometric.")
+    times: list[str]
+    sun_altitude: list[float] = Field(description="Geometric, degrees, at each of times.")
+    moon: MoonNight
+
+
+class TargetVisibility(WireModel):
+    target: str = Field(description="As asked.")
+    ra: float = Field(description="J2000 hours.")
+    dec: float = Field(description="J2000 degrees.")
+    altitude: list[float] = Field(description="Apparent, degrees, at each of times.")
+    azimuth: list[float]
+    horizon: list[float] = Field(description="The horizon profile's altitude at each azimuth.")
+    transit: str = Field(description="The upper culmination closest to the middle of the night.")
+    transit_altitude: float
+    above_minimum: float = Field(description="Seconds of the dark window above min_altitude.")
+    above_horizon: float = Field(description="Seconds of the dark window above the horizon.")
+    windows: list[TimeInterval] = Field(description="Within the dark window, above both.")
+    best: TimeInterval | None = Field(description="The longest of windows.")
+    observable: float = Field(description="Seconds of windows.")
+    moon_separation: float = Field(
+        description="Degrees, at the middle of the best window (or else at transit)."
+    )
+    moon_separation_min: float | None = Field(description="Over the dark window.")
+
+
+class SkyVisibility(WireModel):
+    """``GET /api/sky/visibility``: targets during a night at the active profile's site."""
+
+    night: str
+    min_altitude: float
+    darkness: DarknessName | None
+    dark: TimeInterval | None
+    times: list[str]
+    targets: list[TargetVisibility]

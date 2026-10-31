@@ -106,11 +106,32 @@ class Optics(ProfileModel):
     )
 
 
+class HorizonPoint(ProfileModel):
+    azimuth: float = Field(ge=0, lt=360, description="Degrees from north through east.")
+    altitude: float = Field(ge=-10, le=90, description="Lowest visible altitude, degrees.")
+
+
 class Site(ProfileModel):
     name: str = ""
     latitude: float = Field(ge=-90, le=90, description="Degrees, north positive.")
     longitude: float = Field(ge=-180, le=180, description="Degrees, east positive.")
     elevation: float = Field(default=0.0, description="Metres above sea level.")
+    horizon: list[HorizonPoint] | None = Field(
+        default=None,
+        description="The local horizon (hills, trees, buildings): straight lines between "
+        "points, all round the sky. None: a flat horizon at 0°.",
+    )
+
+    @model_validator(mode="after")
+    def _sorted_horizon(self) -> Self:
+        if self.horizon is not None:
+            if not self.horizon:
+                raise ValueError("a horizon needs at least one point (or none at all)")
+            self.horizon.sort(key=lambda point: point.azimuth)
+            azimuths = [point.azimuth for point in self.horizon]
+            if len(set(azimuths)) != len(azimuths):
+                raise ValueError("the horizon has two points at the same azimuth")
+        return self
 
 
 class Profile(ProfileModel):

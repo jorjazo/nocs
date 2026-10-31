@@ -29,6 +29,7 @@ server/   Python package `nocs` (nocsd): indi/ (protocol + async client, driver
           guiding/ (PHD2: service, settings it imports, JSON-RPC client,
           guide steps and RMS),
           solving/ (ASTAP, fields of view), pointing/ (solve and sync, centre),
+          sky/ (a night's almanac at the site, targets' visibility),
           system/ (nocs-system, the root helper: stdlib + anyio only, ADR 0027),
           state/ (versioned store), services/ (indi_bridge), api/ (FastAPI
           REST + WebSocket, schemas, schema export)

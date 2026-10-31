@@ -64,6 +64,7 @@ from nocs.api.schemas import (
     TemplateRequest,
 )
 from nocs.api.sequences import sequences_router
+from nocs.api.sky import sky_router
 from nocs.api.solver import solver_router
 from nocs.api.system import system_router
 from nocs.auth import AuthStore
@@ -78,9 +79,10 @@ from nocs.equipment import (
     ProfileError,
     ProfileStore,
     Role,
+    Site,
     serial_ports,
 )
-from nocs.equipment.profiles import FocusSweep, Site
+from nocs.equipment.profiles import FocusSweep
 from nocs.filters.service import FilterWheelService
 from nocs.filters.wheels import WheelStore
 from nocs.focus.autofocus import AutofocusService
@@ -223,6 +225,12 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
         profile = equipment().active_profile
         return profile.site.longitude if profile is not None and profile.site else None
 
+    def saved_site() -> Site | None:
+        """From the profile as saved: a new horizon needs no reconnection."""
+        active = equipment().active
+        profile = ProfileStore(settings.config_dir).get(active) if active else None
+        return profile.site if profile else None
+
     def imaging_sweep() -> FocusSweep | None:
         """From the profile as saved: a new sweep needs no reconnection."""
         active = equipment().active
@@ -358,6 +366,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
     app.include_router(solver_router(pointing, centering))
     app.include_router(accessories_router(focuser, filter_wheel, autofocus))
     app.include_router(sequences_router(sequences))
+    app.include_router(sky_router(saved_site, clock))
 
     @app.get("/api/autofocus/runs")
     async def focus_runs(  # pyright: ignore[reportUnusedFunction]

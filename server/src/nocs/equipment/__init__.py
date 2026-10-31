@@ -3,6 +3,7 @@
 from nocs.equipment.ports import SerialPort, serial_ports
 from nocs.equipment.profiles import (
     DeviceConfig,
+    HorizonPoint,
     Optics,
     OutputConfig,
     Profile,
@@ -24,6 +25,7 @@ __all__ = [
     "DeviceStatus",
     "EquipmentBusyError",
     "EquipmentService",
+    "HorizonPoint",
     "Optics",
     "OutputConfig",
     "Profile",

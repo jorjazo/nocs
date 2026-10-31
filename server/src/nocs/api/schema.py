@@ -12,6 +12,7 @@ from pydantic.json_schema import models_json_schema
 
 from nocs.api.schemas import (
     AccessPointRequest,
+    Almanac,
     AppState,
     AuthStatus,
     AutoDewRequest,
@@ -64,6 +65,7 @@ from nocs.api.schemas import (
     SerialPortInfo,
     SetPropertyRequest,
     ShutdownRequest,
+    SkyVisibility,
     SnapshotMessage,
     SolveRequest,
     StateSnapshot,
@@ -125,6 +127,8 @@ MODELS: list[tuple[type[BaseModel], Mode]] = [
     (PadRequest, "validation"),
     (PadStatusMessage, "serialization"),
     (NightInfo, "serialization"),
+    (Almanac, "serialization"),
+    (SkyVisibility, "serialization"),
     (FrameRecord, "serialization"),
     (PairRequest, "validation"),
     (PassphraseRequest, "validation"),

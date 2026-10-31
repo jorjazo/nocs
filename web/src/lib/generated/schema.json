@@ -43,6 +43,153 @@
       "title": "AccessPointRequest",
       "type": "object"
     },
+    "Almanac": {
+      "description": "``GET /api/sky/tonight``: the night at the active profile's site.",
+      "properties": {
+        "astronomical": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TimeInterval"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Below -18\u00b0."
+        },
+        "civil": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TimeInterval"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The Sun below -6\u00b0: dusk to dawn, clipped to the night; None if never."
+        },
+        "dark": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TimeInterval"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The window of that darkness."
+        },
+        "dark_moonless": {
+          "description": "The dark window without the Moon.",
+          "items": {
+            "$ref": "#/$defs/TimeInterval"
+          },
+          "type": "array"
+        },
+        "darkness": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DarknessName"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The darkest twilight the night reaches."
+        },
+        "end": {
+          "description": "The next local noon.",
+          "type": "string"
+        },
+        "moon": {
+          "$ref": "#/$defs/MoonNight"
+        },
+        "nautical": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TimeInterval"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Below -12\u00b0."
+        },
+        "night": {
+          "description": "YYYY-MM-DD, the date at the start of the night.",
+          "type": "string"
+        },
+        "site": {
+          "$ref": "#/$defs/Site"
+        },
+        "start": {
+          "description": "Local noon.",
+          "type": "string"
+        },
+        "sun_altitude": {
+          "description": "Geometric, degrees, at each of times.",
+          "items": {
+            "type": "number"
+          },
+          "type": "array"
+        },
+        "sun_lowest": {
+          "type": "string"
+        },
+        "sun_lowest_altitude": {
+          "description": "Degrees, geometric.",
+          "type": "number"
+        },
+        "sunrise": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sunset": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "None when the Sun does not set this night."
+        },
+        "times": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "night",
+        "site",
+        "start",
+        "end",
+        "sunset",
+        "sunrise",
+        "civil",
+        "nautical",
+        "astronomical",
+        "darkness",
+        "dark",
+        "dark_moonless",
+        "sun_lowest",
+        "sun_lowest_altitude",
+        "times",
+        "sun_altitude",
+        "moon"
+      ],
+      "title": "Almanac",
+      "type": "object"
+    },
     "AltitudeLimits": {
       "additionalProperties": false,
       "properties": {
@@ -1844,6 +1991,14 @@
       "title": "CoolingRequest",
       "type": "object"
     },
+    "DarknessName": {
+      "enum": [
+        "civil",
+        "nautical",
+        "astronomical"
+      ],
+      "type": "string"
+    },
     "DestinationRequest": {
       "additionalProperties": false,
       "properties": {
@@ -3568,6 +3723,29 @@
       "title": "Hello",
       "type": "object"
     },
+    "HorizonPoint": {
+      "additionalProperties": false,
+      "properties": {
+        "altitude": {
+          "description": "Lowest visible altitude, degrees.",
+          "maximum": 90,
+          "minimum": -10,
+          "type": "number"
+        },
+        "azimuth": {
+          "description": "Degrees from north through east.",
+          "exclusiveMaximum": 360,
+          "minimum": 0,
+          "type": "number"
+        }
+      },
+      "required": [
+        "azimuth",
+        "altitude"
+      ],
+      "title": "HorizonPoint",
+      "type": "object"
+    },
     "HorizontalGoto": {
       "additionalProperties": false,
       "description": "Point at a place in the local sky (e.g. the zenith for flats); tracking stops.",
@@ -4076,6 +4254,70 @@
         "limit"
       ],
       "title": "MeridianLimits",
+      "type": "object"
+    },
+    "MoonNight": {
+      "properties": {
+        "altitude": {
+          "description": "Apparent, degrees, at each of times.",
+          "items": {
+            "type": "number"
+          },
+          "type": "array"
+        },
+        "azimuth": {
+          "items": {
+            "type": "number"
+          },
+          "type": "array"
+        },
+        "fraction": {
+          "description": "Illuminated, 0..1, at the middle of the dark window.",
+          "type": "number"
+        },
+        "phase": {
+          "description": "Degrees then: 0 new, 90 first quarter, 180 full, 270 last quarter.",
+          "type": "number"
+        },
+        "rise": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The night's moonrise (upper limb), if any."
+        },
+        "set": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "up": {
+          "description": "When the Moon is above the horizon.",
+          "items": {
+            "$ref": "#/$defs/TimeInterval"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "rise",
+        "set",
+        "up",
+        "fraction",
+        "phase",
+        "altitude",
+        "azimuth"
+      ],
+      "title": "MoonNight",
       "type": "object"
     },
     "MountLimits": {
@@ -6107,6 +6349,21 @@
           "description": "Metres above sea level.",
           "type": "number"
         },
+        "horizon": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/HorizonPoint"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The local horizon (hills, trees, buildings): straight lines between points, all round the sky. None: a flat horizon at 0\u00b0."
+        },
         "latitude": {
           "description": "Degrees, north positive.",
           "maximum": 90,
@@ -6148,6 +6405,59 @@
         "dec"
       ],
       "title": "SkyPosition",
+      "type": "object"
+    },
+    "SkyVisibility": {
+      "description": "``GET /api/sky/visibility``: targets during a night at the active profile's site.",
+      "properties": {
+        "dark": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TimeInterval"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "darkness": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DarknessName"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "min_altitude": {
+          "type": "number"
+        },
+        "night": {
+          "type": "string"
+        },
+        "targets": {
+          "items": {
+            "$ref": "#/$defs/TargetVisibility"
+          },
+          "type": "array"
+        },
+        "times": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "night",
+        "min_altitude",
+        "darkness",
+        "dark",
+        "times",
+        "targets"
+      ],
+      "title": "SkyVisibility",
       "type": "object"
     },
     "Slew": {
@@ -6819,6 +7129,113 @@
       "title": "TargetRequest",
       "type": "object"
     },
+    "TargetVisibility": {
+      "properties": {
+        "above_horizon": {
+          "description": "Seconds of the dark window above the horizon.",
+          "type": "number"
+        },
+        "above_minimum": {
+          "description": "Seconds of the dark window above min_altitude.",
+          "type": "number"
+        },
+        "altitude": {
+          "description": "Apparent, degrees, at each of times.",
+          "items": {
+            "type": "number"
+          },
+          "type": "array"
+        },
+        "azimuth": {
+          "items": {
+            "type": "number"
+          },
+          "type": "array"
+        },
+        "best": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TimeInterval"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The longest of windows."
+        },
+        "dec": {
+          "description": "J2000 degrees.",
+          "type": "number"
+        },
+        "horizon": {
+          "description": "The horizon profile's altitude at each azimuth.",
+          "items": {
+            "type": "number"
+          },
+          "type": "array"
+        },
+        "moon_separation": {
+          "description": "Degrees, at the middle of the best window (or else at transit).",
+          "type": "number"
+        },
+        "moon_separation_min": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Over the dark window."
+        },
+        "observable": {
+          "description": "Seconds of windows.",
+          "type": "number"
+        },
+        "ra": {
+          "description": "J2000 hours.",
+          "type": "number"
+        },
+        "target": {
+          "description": "As asked.",
+          "type": "string"
+        },
+        "transit": {
+          "description": "The upper culmination closest to the middle of the night.",
+          "type": "string"
+        },
+        "transit_altitude": {
+          "type": "number"
+        },
+        "windows": {
+          "description": "Within the dark window, above both.",
+          "items": {
+            "$ref": "#/$defs/TimeInterval"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "target",
+        "ra",
+        "dec",
+        "altitude",
+        "azimuth",
+        "horizon",
+        "transit",
+        "transit_altitude",
+        "above_minimum",
+        "above_horizon",
+        "windows",
+        "best",
+        "observable",
+        "moon_separation",
+        "moon_separation_min"
+      ],
+      "title": "TargetVisibility",
+      "type": "object"
+    },
     "TemperatureRecord": {
       "properties": {
         "ambient": {
@@ -6894,6 +7311,22 @@
         "template"
       ],
       "title": "TemplateRequest",
+      "type": "object"
+    },
+    "TimeInterval": {
+      "properties": {
+        "end": {
+          "type": "string"
+        },
+        "start": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "start",
+        "end"
+      ],
+      "title": "TimeInterval",
       "type": "object"
     },
     "TrackingRequest": {

@@ -24,7 +24,7 @@ shared with polar alignment (phase 4) and re-centring and the meridian flip
 | 3.2 | Solve and sync | `solve` job (`nocs.pointing`): expose with the main camera, HFR from the worker, hinted then blind, offset from the mount, optional sync at mid-exposure; later sync to the last solution if the mount has not moved; failures with a reason; Live view: Solve, Solve and sync, result card, Sync | Lab: AM5/AM7 accept a sync | Implemented |
 | 3.3 | Centre | `center` job (`nocs.pointing.center`, callable from any job holding the camera and the mount): go to → settle → solve → sync, or aim off by the error → repeat until within tolerance (1′) or N frames (5); a frame that does not solve is taken again without moving; `centering` state with every frame's error; Mount sheet: Go and centre; centring card in the sheet and Live view | Simulators with an injected pointing error; lab: one run on the AM7 | Implemented |
 | 3.4 | Target catalog | OpenNGC (CC BY-SA 4.0) bundled by a pinned build script: Messier, NGC/IC, common names in English and Spanish; search API (ADR 0019) | — | |
-| 3.5 | Tonight's sky | Twilights, Moon (altitude, phase), altitude curves, transit, time above a minimum and above a **horizon profile** by azimuth in the site, distance to the Moon | Against an almanac | |
+| 3.5 | Tonight's sky | Twilights, Moon (altitude, phase), altitude curves, transit, time above a minimum and above a **horizon profile** by azimuth in the site, distance to the Moon | Against an almanac | Implemented: `nocs.sky` (ERFA: `epv00`, `moon98`), `Site.horizon`, `GET /api/sky/tonight`, `/visibility?target=RA,Dec` (observers too; a catalog id once 3.4 lands); within a minute of USNO |
 | 3.6 | Plan and Tonight UI | Search, target detail with altitude chart, Go / Go and centre; Tonight: night window and Moon | Phone | |
 | 3.7 | Framing assistant | Canvas chart: offline stars (Tycho-2 to mag ~10) and DSO outlines, sensor field with rotation; the maintainer's own solved frames of the target as background; optional online survey (CDS hips2fits, fetched by the browser); "turn the camera N°" helper (ADR 0020) | Simulators | |
 | 3.8 | Field test | Shares the night with phase 2's | Exit criterion | |
@@ -37,6 +37,13 @@ shared with polar alignment (phase 4) and re-centring and the meridian flip
   user's own frames are the base.
 - The offline star chart uses a Tycho-2 subset (ESA/CDS, no copyleft).
 - The appliance needs D50: D05 does not solve dense Milky Way fields (ADR 0018).
+- Tonight's sky: a night runs from local noon to local noon in local mean solar
+  time, like the frame catalog's nights. Rise and set are the upper limb on a flat
+  horizon with refraction (Saemundsson, at the pressure of the site's elevation),
+  as almanacs give them; no dip of the horizon, since the terrain is the site's
+  horizon profile. ERFA's refraction is not used: it is ~15′ short at the horizon.
+  Visibility counts the darkest window the night has (astronomical, else nautical,
+  else civil) and apparent altitudes against max(minimum, horizon profile).
 
 ## Measured
 
@@ -46,6 +53,14 @@ shared with polar alignment (phase 4) and re-centring and the meridian flip
 - Laptop: six of the maintainer's frames (ASI2600MC, ASI6200MM, ASI482MC; AM5 and
   AM7) solve within 2′ of the mount's position and, where ASIAIR recorded one, 1°
   of its camera angle; the simulator in 0.04 s, within 0.06′.
+- Tonight's sky against USNO (Cerro Tololo, a November and a June night): sunset,
+  sunrise, the three twilights and moonrise and moonset within a minute (USNO
+  gives minutes); the Moon's quarters within ~1 min (0.013° of elongation);
+  Tromsø's midnight sun and polar night. Against astropy: transits of NGC 292 and
+  NGC 253 from Diaguitas to the second, the Sun and the Moon within 10″. Lab Pi 5
+  (Python 3.13): an almanac 73 ms (once per night and site, then cached; in a
+  thread), visibility ~0.9 ms per target (43 ms for 50); laptop 28 ms and 0.4 ms
+  (`dev/sky/measure.py`).
 - D05 does not solve dense Milky Way fields; the appliance needs D50.
 - Lab AM7 (`indi_lx200am5`, INDI 2.2.5): a sync completes in 0.05 s and the mount
   reports the new position at once; 10° from the pole it kept it (a sync 6′ north,

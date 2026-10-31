@@ -2,6 +2,11 @@
 
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "DarknessName".
+ */
+export type DarknessName = "civil" | "nautical" | "astronomical";
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "FrameTypeName".
  */
 export type FrameTypeName = "light" | "dark" | "bias" | "flat";
@@ -127,6 +132,140 @@ export interface AccessPointRequest {
    */
   password?: string | null;
   ssid?: string | null;
+}
+/**
+ * ``GET /api/sky/tonight``: the night at the active profile's site.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "Almanac".
+ */
+export interface Almanac {
+  /**
+   * Below -18°.
+   */
+  astronomical: TimeInterval | null;
+  /**
+   * The Sun below -6°: dusk to dawn, clipped to the night; None if never.
+   */
+  civil: TimeInterval | null;
+  /**
+   * The window of that darkness.
+   */
+  dark: TimeInterval | null;
+  /**
+   * The dark window without the Moon.
+   */
+  dark_moonless: TimeInterval[];
+  /**
+   * The darkest twilight the night reaches.
+   */
+  darkness: DarknessName | null;
+  /**
+   * The next local noon.
+   */
+  end: string;
+  moon: MoonNight;
+  /**
+   * Below -12°.
+   */
+  nautical: TimeInterval | null;
+  /**
+   * YYYY-MM-DD, the date at the start of the night.
+   */
+  night: string;
+  site: Site;
+  /**
+   * Local noon.
+   */
+  start: string;
+  /**
+   * Geometric, degrees, at each of times.
+   */
+  sun_altitude: number[];
+  sun_lowest: string;
+  /**
+   * Degrees, geometric.
+   */
+  sun_lowest_altitude: number;
+  sunrise: string | null;
+  /**
+   * None when the Sun does not set this night.
+   */
+  sunset: string | null;
+  times: string[];
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "TimeInterval".
+ */
+export interface TimeInterval {
+  end: string;
+  start: string;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "MoonNight".
+ */
+export interface MoonNight {
+  /**
+   * Apparent, degrees, at each of times.
+   */
+  altitude: number[];
+  azimuth: number[];
+  /**
+   * Illuminated, 0..1, at the middle of the dark window.
+   */
+  fraction: number;
+  /**
+   * Degrees then: 0 new, 90 first quarter, 180 full, 270 last quarter.
+   */
+  phase: number;
+  /**
+   * The night's moonrise (upper limb), if any.
+   */
+  rise: string | null;
+  set: string | null;
+  /**
+   * When the Moon is above the horizon.
+   */
+  up: TimeInterval[];
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "Site".
+ */
+export interface Site {
+  /**
+   * Metres above sea level.
+   */
+  elevation?: number;
+  /**
+   * The local horizon (hills, trees, buildings): straight lines between points, all round the sky. None: a flat horizon at 0°.
+   */
+  horizon?: HorizonPoint[] | null;
+  /**
+   * Degrees, north positive.
+   */
+  latitude: number;
+  /**
+   * Degrees, east positive.
+   */
+  longitude: number;
+  name?: string;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "HorizonPoint".
+ */
+export interface HorizonPoint {
+  /**
+   * Lowest visible altitude, degrees.
+   */
+  altitude: number;
+  /**
+   * Degrees from north through east.
+   */
+  azimuth: number;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -2645,25 +2784,6 @@ export interface MountSiteRequest {
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
- * via the `definition` "Site".
- */
-export interface Site {
-  /**
-   * Metres above sea level.
-   */
-  elevation?: number;
-  /**
-   * Degrees, north positive.
-   */
-  latitude: number;
-  /**
-   * Degrees, east positive.
-   */
-  longitude: number;
-  name?: string;
-}
-/**
- * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "NetworkForgetRequest".
  */
 export interface NetworkForgetRequest {
@@ -2977,6 +3097,80 @@ export interface SetPropertyRequest {
  */
 export interface ShutdownRequest {
   force?: boolean;
+}
+/**
+ * ``GET /api/sky/visibility``: targets during a night at the active profile's site.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "SkyVisibility".
+ */
+export interface SkyVisibility {
+  dark: TimeInterval | null;
+  darkness: DarknessName | null;
+  min_altitude: number;
+  night: string;
+  targets: TargetVisibility[];
+  times: string[];
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "TargetVisibility".
+ */
+export interface TargetVisibility {
+  /**
+   * Seconds of the dark window above the horizon.
+   */
+  above_horizon: number;
+  /**
+   * Seconds of the dark window above min_altitude.
+   */
+  above_minimum: number;
+  /**
+   * Apparent, degrees, at each of times.
+   */
+  altitude: number[];
+  azimuth: number[];
+  /**
+   * The longest of windows.
+   */
+  best: TimeInterval | null;
+  /**
+   * J2000 degrees.
+   */
+  dec: number;
+  /**
+   * The horizon profile's altitude at each azimuth.
+   */
+  horizon: number[];
+  /**
+   * Degrees, at the middle of the best window (or else at transit).
+   */
+  moon_separation: number;
+  /**
+   * Over the dark window.
+   */
+  moon_separation_min: number | null;
+  /**
+   * Seconds of windows.
+   */
+  observable: number;
+  /**
+   * J2000 hours.
+   */
+  ra: number;
+  /**
+   * As asked.
+   */
+  target: string;
+  /**
+   * The upper culmination closest to the middle of the night.
+   */
+  transit: string;
+  transit_altitude: number;
+  /**
+   * Within the dark window, above both.
+   */
+  windows: TimeInterval[];
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema

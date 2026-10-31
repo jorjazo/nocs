@@ -185,7 +185,13 @@
       guiding_through_imaging: throughImaging,
       site:
         latitude !== null && longitude !== null
-          ? { name: siteName.trim(), latitude, longitude, elevation: elevation ?? 0 }
+          ? {
+              ...original?.site, // keeps the horizon profile, not edited here yet
+              name: siteName.trim(),
+              latitude,
+              longitude,
+              elevation: elevation ?? 0,
+            }
           : null,
     };
   }
