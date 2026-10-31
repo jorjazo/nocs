@@ -255,6 +255,17 @@ class Mount(Device):
         await self._move_to(ra, dec, "SYNC", timeout)
 
     async def set_tracking(self, on: bool, timeout: float = DEFAULT_TIMEOUT) -> None:
+        # INDI's Telescope base class ignores a request that matches the switch as it
+        # stands, and syncs the switch with what the mount does only at its next poll.
+        # Right after an abort the switch can still say on while the mount has stopped
+        # (its coordinates already Idle): asking for on then did nothing, and tracking
+        # went off a moment later (seen with the simulator in CI). Switching off first
+        # makes it a real change.
+        if on and self.tracking and self.prop("EQUATORIAL_EOD_COORD").state is PropertyState.IDLE:
+            await self._track(False, timeout)
+        await self._track(on, timeout)
+
+    async def _track(self, on: bool, timeout: float) -> None:
         await self.command(
             "TELESCOPE_TRACK_STATE",
             {"TRACK_ON": on, "TRACK_OFF": not on},

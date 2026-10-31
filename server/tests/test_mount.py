@@ -82,6 +82,8 @@ class MotionDriver:
         self.refuse = False
         self.fail_stop = False
         self.aborted = 0
+        self.tracking = False
+        """Whether the simulated mount really tracks, whatever its switch says."""
 
     def __call__(self, device: str, name: str, values: Mapping[str, str | float | bool]) -> None:
         loop = asyncio.get_running_loop()
@@ -110,6 +112,15 @@ class MotionDriver:
             "TELESCOPE_TRACK_MODE",
         ):
             loop.call_soon(update, device, name, PropertyState.OK, _str(values))
+        elif name == "TELESCOPE_TRACK_STATE":
+            # As INDI's Telescope base class: a request that matches the switch as it
+            # stands changes nothing, even when the mount itself is not tracking.
+            prop = self.client.get_property(device, name)
+            assert prop is not None
+            if prop.switch("TRACK_ON") != values["TRACK_ON"]:
+                self.tracking = bool(values["TRACK_ON"])
+            state = PropertyState.BUSY if values["TRACK_ON"] else PropertyState.IDLE
+            loop.call_soon(update, device, name, state, _str(values))
 
 
 def _str(values: Mapping[str, str | float | bool]) -> dict[str, str]:
@@ -204,6 +215,32 @@ async def test_slew_rate_and_track_mode(client: FakeClient, driver: MotionDriver
         await mount.set_slew_rate("9x")
     await mount.set_track_mode("lunar")
     assert mount.track_mode == "lunar"
+
+
+async def test_tracking_on_after_an_abort_is_a_real_change(
+    client: FakeClient, driver: MotionDriver
+) -> None:
+    """Right after an abort the switch may still say on while the mount has stopped."""
+    client.define(switch_property(NAME, "TELESCOPE_TRACK_STATE", TRACK_ON=True, TRACK_OFF=False))
+    client.update(NAME, "EQUATORIAL_EOD_COORD", PropertyState.IDLE)
+    mount = Mount(client, NAME)
+    await mount.set_tracking(True)
+    assert driver.tracking
+    assert mount.tracking
+    assert [v for _, n, v in client.sent if n == "TELESCOPE_TRACK_STATE"] == [
+        {"TRACK_ON": False, "TRACK_OFF": True},
+        {"TRACK_ON": True, "TRACK_OFF": False},
+    ]
+
+    # While it tracks (coordinates Ok), asking again is just one request.
+    driver.tracking = True
+    client.update(NAME, "EQUATORIAL_EOD_COORD", PropertyState.OK)
+    client.sent.clear()
+    await mount.set_tracking(True)
+    assert [n for _, n, _ in client.sent] == ["TELESCOPE_TRACK_STATE"]
+    await mount.set_tracking(False)
+    assert not driver.tracking
+    assert not mount.tracking
 
 
 # -- coordinates --------------------------------------------------------------

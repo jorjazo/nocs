@@ -182,7 +182,10 @@ def test_abort_stops_a_goto(api: TestClient) -> None:
 
 
 def test_tracking(api: TestClient) -> None:
+    # Right after test_abort_stops_a_goto: the simulator's switch may still say on.
     assert api.put("/api/mount/tracking", json={"on": True}).status_code == 204
+    assert mount(api)["tracking"]
+    time.sleep(1.5)  # past the driver's next poll, when it syncs the switch
     assert mount(api)["tracking"]
     assert api.put("/api/mount/tracking", json={"mode": "lunar"}).status_code == 204
     assert mount(api)["track_mode"] == "lunar"

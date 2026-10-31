@@ -119,6 +119,10 @@ CI runs all of the above (INDI simulators included) on every push to `main`.
   they cannot write it (the dev image sets `HOME` for the unprivileged user).
 - The ZWO EFW never reports `FILTER_SLOT` Busy while it turns (2–3 s per change):
   a filter change shows only as its job.
+- INDI's Telescope base class ignores a `TELESCOPE_TRACK_STATE` request equal to
+  the switch as it stands, and syncs the switch with the mount only at its next
+  poll: right after an abort it can say on while the mount stopped (coordinates
+  Idle). `Mount.set_tracking` switches off first in that case.
 
 ## Lab hardware
 
