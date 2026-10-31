@@ -22,6 +22,7 @@ server/   Python package `nocs` (nocsd): indi/ (protocol + async client, driver
           roles, connect service), imaging/ (capture, preview worker),
           storage/ (destinations, layout, FITS headers, SQLite catalog),
           mount/, focus/, filters/ (services by role; filter names per wheel),
+          guiding/ (PHD2: service, settings it imports, JSON-RPC client),
           solving/ (ASTAP, fields of view),
           state/ (versioned store), services/ (indi_bridge), api/ (FastAPI
           REST + WebSocket, schemas, schema export)
@@ -43,13 +44,15 @@ cd server && uv sync
 uv run ruff check . && uv run ruff format --check . && uv run pyright   # strict
 dev/astap/install.sh  # ASTAP + D05 in dev/.astap (slow download; ADR 0018)
 NOCS_TEST_INDI=localhost:7624 NOCS_TEST_INDI_FIFO=../dev/.run/fifo \
-  NOCS_TEST_INDI_UPLOADS=../dev/.run/uploads NOCS_TEST_ASTAP=../dev/.astap/astap_cli uv run pytest
+  NOCS_TEST_INDI_UPLOADS=../dev/.run/uploads NOCS_TEST_ASTAP=../dev/.astap/astap_cli \
+  NOCS_TEST_PHD2=localhost:4400 NOCS_TEST_PHD2_SETTINGS=../dev/.run/phd2.phd uv run pytest
 # real night frames for the solver: NOCS_TEST_FRAMES=<dir of FITS lights>, with D50
 # (NOCS_TEST_ASTAP_DB=<dir>): D05 fails dense Milky Way fields
 cd web && pnpm install && pnpm check && pnpm build
 pnpm gen:types        # after changing server/src/nocs/api/schemas.py (CI checks)
 NOCS_WEB_DIR=web/dist NOCS_INDI_FIFO=dev/.run/fifo NOCS_INDI_DRIVERS_DIR=dev/.run/drivers \
   NOCS_INDI_UPLOAD_DIR=/run/indi/uploads NOCS_INDI_UPLOAD_DIR_LOCAL=dev/.run/uploads \
+  NOCS_PHD2_SETTINGS=dev/.run/phd2.phd NOCS_PHD2_INDI_HOST=indi \
   uv run --project server nocsd               # http://127.0.0.1:8000
 # profiles live in ~/.config/nocs/profiles/ (NOCS_CONFIG_DIR); dev/profiles/ has the simulators
 # the first visit sets the owner passphrase and pairs that browser (ADR 0014);
@@ -123,6 +126,17 @@ CI runs all of the above (INDI simulators included) on every push to `main`.
   the switch as it stands, and syncs the switch with the mount only at its next
   poll: right after an abort it can say on while the mount stopped (coordinates
   Idle). `Mount.set_tracking` switches off first in that case.
+
+## PHD2 gotchas
+
+- `phd2 -l` replaces every PHD2 profile, calibration included: import only when the
+  settings change, with `AutoLoadCalibration` on (ADR 0022).
+- `stop_capture` answers at once; PHD2 refuses `set_connected false` until
+  `LoopingExposuresStopped` (or `GuidingStopped`) arrives.
+- Xvfb killed with its lock file left behind refuses to start on that display again,
+  and PHD2's own lock (`~/phd2.1`, a PID) can name a live process after a power cut,
+  leaving PHD2 (even `phd2 -l`) stuck on an invisible dialog: the entrypoint removes
+  both.
 
 ## Lab hardware
 

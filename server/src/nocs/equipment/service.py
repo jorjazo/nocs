@@ -377,7 +377,7 @@ class EquipmentService:
 
         cameras = [
             (Role.MAIN_CAMERA, name(Role.FILTER_WHEEL), name(Role.FOCUSER), profile.imaging),
-            (Role.GUIDE_CAMERA, "", "", profile.guiding),
+            (Role.GUIDE_CAMERA, "", "", profile.guiding_optics),
         ]
         for role, filter_wheel, focuser, optics in cameras:
             device = self.ready_device(role)

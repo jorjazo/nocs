@@ -17,6 +17,11 @@ export type ConnectionName = "disconnected" | "connecting" | "connected" | "disc
 export type DeviceStatusName = "waiting" | "connecting" | "ready" | "error" | "disconnected";
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "Phd2AppState".
+ */
+export type Phd2AppState = "Stopped" | "Selected" | "Calibrating" | "Guiding" | "LostLock" | "Paused" | "Looping";
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "PropertyStateName".
  */
 export type PropertyStateName = "Idle" | "Ok" | "Busy" | "Alert";
@@ -111,6 +116,7 @@ export interface AppState {
    * None: no focuser is ready.
    */
   focuser?: FocuserState | null;
+  guiding?: GuidingState | null;
   indi?: IndiState | null;
   /**
    * Running jobs and the most recent finished ones.
@@ -533,6 +539,47 @@ export interface FocuserState {
    * Its probe, °C; None if it has none.
    */
   temperature: number | null;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "GuidingState".
+ */
+export interface GuidingState {
+  /**
+   * PHD2's state; None while unknown.
+   */
+  app_state: Phd2AppState | null;
+  /**
+   * Why PHD2 does not run the profile's settings.
+   */
+  error: string | null;
+  /**
+   * NOCS writes PHD2's settings from the profile (ADR 0022).
+   */
+  managed: boolean;
+  phd2: Phd2Server;
+  /**
+   * The PHD2 profile in use.
+   */
+  profile: string | null;
+  /**
+   * none: nothing to apply yet (no profile, or its guide camera or mount not ready); pending: waiting for PHD2 to stop; applying: PHD2 restarting with them; user: PHD2 runs the settings its user chose.
+   */
+  settings: "none" | "pending" | "applying" | "applied" | "failed" | "user";
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "Phd2Server".
+ */
+export interface Phd2Server {
+  connected: boolean;
+  /**
+   * Why NOCS cannot reach PHD2.
+   */
+  error: string | null;
+  host: string;
+  port: number;
+  version: string | null;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -1604,9 +1651,13 @@ export interface Profile {
     [k: string]: DeviceConfig;
   };
   /**
-   * Optics of the guiding train (guide scope or OAG).
+   * Optics of the guide scope, when the guide camera has its own.
    */
   guiding?: Optics | null;
+  /**
+   * The guide camera sees through the imaging optics: an off-axis guider, or a guide sensor built into the main camera. Guiding then uses the imaging optics.
+   */
+  guiding_through_imaging?: boolean;
   /**
    * Optics of the imaging train.
    */

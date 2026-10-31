@@ -103,6 +103,17 @@
           "default": null,
           "description": "None: no focuser is ready."
         },
+        "guiding": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GuidingState"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "indi": {
           "anyOf": [
             {
@@ -1743,6 +1754,73 @@
       ],
       "type": "string"
     },
+    "GuidingState": {
+      "additionalProperties": false,
+      "properties": {
+        "app_state": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Phd2AppState"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "PHD2's state; None while unknown."
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Why PHD2 does not run the profile's settings."
+        },
+        "managed": {
+          "description": "NOCS writes PHD2's settings from the profile (ADR 0022).",
+          "type": "boolean"
+        },
+        "phd2": {
+          "$ref": "#/$defs/Phd2Server"
+        },
+        "profile": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The PHD2 profile in use."
+        },
+        "settings": {
+          "description": "none: nothing to apply yet (no profile, or its guide camera or mount not ready); pending: waiting for PHD2 to stop; applying: PHD2 restarting with them; user: PHD2 runs the settings its user chose.",
+          "enum": [
+            "none",
+            "pending",
+            "applying",
+            "applied",
+            "failed",
+            "user"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "phd2",
+        "managed",
+        "settings",
+        "profile",
+        "app_state",
+        "error"
+      ],
+      "title": "GuidingState",
+      "type": "object"
+    },
     "Health": {
       "properties": {
         "indi_connected": {
@@ -3013,6 +3091,62 @@
       "title": "PatchOp",
       "type": "object"
     },
+    "Phd2AppState": {
+      "enum": [
+        "Stopped",
+        "Selected",
+        "Calibrating",
+        "Guiding",
+        "LostLock",
+        "Paused",
+        "Looping"
+      ],
+      "type": "string"
+    },
+    "Phd2Server": {
+      "additionalProperties": false,
+      "properties": {
+        "connected": {
+          "type": "boolean"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Why NOCS cannot reach PHD2."
+        },
+        "host": {
+          "type": "string"
+        },
+        "port": {
+          "type": "integer"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "host",
+        "port",
+        "connected",
+        "version",
+        "error"
+      ],
+      "title": "Phd2Server",
+      "type": "object"
+    },
     "PowerInputState": {
       "additionalProperties": false,
       "properties": {
@@ -3301,7 +3435,12 @@
             }
           ],
           "default": null,
-          "description": "Optics of the guiding train (guide scope or OAG)."
+          "description": "Optics of the guide scope, when the guide camera has its own."
+        },
+        "guiding_through_imaging": {
+          "default": false,
+          "description": "The guide camera sees through the imaging optics: an off-axis guider, or a guide sensor built into the main camera. Guiding then uses the imaging optics.",
+          "type": "boolean"
         },
         "imaging": {
           "anyOf": [

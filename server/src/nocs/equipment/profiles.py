@@ -106,9 +106,19 @@ class Profile(ProfileModel):
     devices: dict[Role, DeviceConfig] = Field(default_factory=dict[Role, DeviceConfig])
     imaging: Optics | None = Field(default=None, description="Optics of the imaging train.")
     guiding: Optics | None = Field(
-        default=None, description="Optics of the guiding train (guide scope or OAG)."
+        default=None, description="Optics of the guide scope, when the guide camera has its own."
+    )
+    guiding_through_imaging: bool = Field(
+        default=False,
+        description="The guide camera sees through the imaging optics: an off-axis guider, or "
+        "a guide sensor built into the main camera. Guiding then uses the imaging optics.",
     )
     site: Site | None = None
+
+    @property
+    def guiding_optics(self) -> Optics | None:
+        """The optics the guide camera sees through."""
+        return self.imaging if self.guiding_through_imaging else self.guiding
 
     @model_validator(mode="before")
     @classmethod

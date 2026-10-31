@@ -455,6 +455,32 @@ class AutofocusState(StateModel):
     )
 
 
+class Phd2Server(StateModel):
+    host: str
+    port: int
+    connected: bool
+    version: str | None
+    error: str | None = Field(description="Why NOCS cannot reach PHD2.")
+
+
+type Phd2AppState = Literal[
+    "Stopped", "Selected", "Calibrating", "Guiding", "LostLock", "Paused", "Looping"
+]
+
+
+class GuidingState(StateModel):
+    phd2: Phd2Server
+    managed: bool = Field(description="NOCS writes PHD2's settings from the profile (ADR 0022).")
+    settings: Literal["none", "pending", "applying", "applied", "failed", "user"] = Field(
+        description="none: nothing to apply yet (no profile, or its guide camera or mount not"
+        " ready); pending: waiting for PHD2 to stop; applying: PHD2 restarting with them;"
+        " user: PHD2 runs the settings its user chose."
+    )
+    profile: str | None = Field(description="The PHD2 profile in use.")
+    app_state: Phd2AppState | None = Field(description="PHD2's state; None while unknown.")
+    error: str | None = Field(description="Why PHD2 does not run the profile's settings.")
+
+
 class AppState(StateModel):
     """The whole state tree sent in snapshots and modified by patches."""
 
@@ -479,6 +505,7 @@ class AppState(StateModel):
     )
     solver: SolverState | None = None
     autofocus: AutofocusState | None = Field(default=None, description="None: never run.")
+    guiding: GuidingState | None = None
 
 
 # -- HTTP --------------------------------------------------------------------

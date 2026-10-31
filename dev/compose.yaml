@@ -22,9 +22,14 @@ services:
     image: nocs-dev-phd2
     init: true
     environment:
-      PHD2_SETTINGS: /etc/phd2/simulators.phd
+      # nocsd writes PHD2's settings into dev/.run (ADR 0022), with
+      # NOCS_PHD2_SETTINGS=dev/.run/phd2.phd NOCS_PHD2_INDI_HOST=indi;
+      # PHD2 runs the simulators' profile until then.
+      PHD2_SETTINGS: /run/nocs/phd2.phd
+      PHD2_SETTINGS_DEFAULT: /etc/phd2/simulators.phd
     volumes:
       - ./phd2/simulators.phd:/etc/phd2/simulators.phd:ro
+      - ./.run:/run/nocs:ro
     depends_on:
       - indi
     ports:

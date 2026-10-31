@@ -25,5 +25,6 @@ that supersedes the old one.
 | [0017](0017-roles-by-capability-power-and-weather.md) | Roles by capability: power and weather, and what each output feeds | Accepted |
 | [0018](0018-plate-solving-with-astap.md) | Plate solving with ASTAP | Proposed |
 | [0021](0021-autofocus.md) | Autofocus: V-curve sweep with a hyperbolic fit | Proposed |
+| [0022](0022-phd2-as-a-managed-service.md) | PHD2 as a service configured by nocsd | Proposed |
 
 Template: Context → Decision → Consequences.

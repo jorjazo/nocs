@@ -98,6 +98,8 @@ it within tolerance.
 
 ## Phase 4 — Guide & align
 
+Stage plan and status of the guiding half: [v0.1/phase-4.md](v0.1/phase-4.md).
+
 - Polar alignment wizard (three-point method, live correction with clear
   knob-turning guidance).
 - PHD2 managed process: profile from guiding train, connect, calibrate,

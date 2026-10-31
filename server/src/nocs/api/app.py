@@ -73,6 +73,7 @@ from nocs.filters.service import FilterWheelService
 from nocs.filters.wheels import WheelStore
 from nocs.focus.autofocus import AutofocusService
 from nocs.focus.service import FocuserService
+from nocs.guiding import GuidingService
 from nocs.imaging import (
     FRAME_TYPES,
     CameraNotReadyError,
@@ -201,10 +202,25 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
         )
         services.solver = SolverService(store, Astap.find(settings.astap, settings.astap_db))
         await services.solver.start()
+        services.guiding = GuidingService(
+            store,
+            services.equipment,
+            bridge,
+            host=settings.phd2_host,
+            port=settings.phd2_port,
+            settings_file=settings.phd2_settings,
+            indi_host=settings.phd2_indi_host or settings.indi_host,
+            indi_port=settings.phd2_indi_port or settings.indi_port,
+        )
         task = asyncio.create_task(bridge.run(), name="indi-bridge")
+        guiding_task = asyncio.create_task(services.guiding.run(), name="phd2")
         try:
             yield
         finally:
+            guiding_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await guiding_task
+            services.guiding.close()
             await mount().close()
             power().close()
             services.weather.close()
@@ -489,6 +505,7 @@ class _Services:
     filter_wheel: FilterWheelService | None = None
     solver: SolverService | None = None
     autofocus: AutofocusService | None = None
+    guiding: GuidingService | None = None
 
 
 def _upload_dirs(settings: Settings) -> UploadDirs | None:

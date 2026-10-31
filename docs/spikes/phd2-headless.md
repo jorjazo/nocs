@@ -107,5 +107,31 @@ uv run --project server python dev/spikes/phd2_probe.py guide
   verify recovery).
 - Dark library and defect map: no JSON-RPC methods; decide whether NOCS needs
   them or relies on PHD2's multi-star guiding without darks.
-- Persisting calibration across sessions (PHD2 stores it per profile;
-  confirm reuse after restarts).
+- ~~Persisting calibration across sessions~~ — checked in stage 4.1 (see below).
+
+## Follow-up (stage 4.1, 2026-10-31)
+
+Checked against the simulators with PHD2 2.6.14, as input for
+[ADR 0022](../adr/0022-phd2-as-a-managed-service.md):
+
+- **`phd2 -l` replaces every profile**: importing a file with profile 2 left no
+  profile 1, and re-importing the same profile dropped its calibration.
+- **Calibration survives restarts** when the profile sets `AutoLoadCalibration`
+  and the file is imported only when it changed: after two restarts,
+  `get_calibrated` was true right after `set_connected`.
+- **`shutdown`** exits PHD2 cleanly. The container's restart policy brings it
+  back in ~3 s, but the second restart failed until the entrypoint removed
+  Xvfb's stale `/tmp/.X99-lock`.
+- After a forced power-off of the host, PHD2 never came back: its single-instance
+  lock `~/phd2.1` held PID 7, which after the restart was the entrypoint script
+  itself, so `phd2 -l` waited on an invisible "already running" dialog. The
+  entrypoint now removes that lock too; a `docker kill` and start recovers.
+- `set_connected false` disconnects PHD2 from indiserver and leaves the camera
+  and the mount connected (also the ZWO ASI220MM Mini and AM7 on the lab Pi). Connecting resets the guide camera's `CCD_FRAME` to
+  the full sensor and changes neither its binning nor its upload mode.
+- While PHD2 loops, another INDI client with BLOBs enabled for the guide camera
+  receives every frame (2.6 MB per 1280×1024 simulator frame).
+- With 1 s exposures, calibration took ~42 s and the settle after it ~12 s.
+- The calibration step that PHD2's assistant computes: 25 px in 12 steps at the
+  guide rate, `ceil(25 · scale / (15 · rate) / 12 s / 50 ms) · 50 ms`, at most
+  the pulse that still gives 6 steps, divided by cos(declination).

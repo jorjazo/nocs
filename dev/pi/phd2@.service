@@ -1,0 +1,25 @@
+# Headless PHD2 for the lab Pi, as ADR 0022 expects it: an independent service
+# that imports the settings nocsd writes and is restarted when nocsd asks PHD2
+# to shut down. The instance name is the user it runs as (nocsd's user):
+#
+#   sudo add-apt-repository ppa:pch/phd2 && sudo apt install phd2 xvfb
+#   sudo install -m 755 dev/phd2/entrypoint.sh /usr/local/bin/nocs-phd2
+#   sudo cp dev/pi/phd2@.service /etc/systemd/system/
+#   sudo systemctl enable --now phd2@$USER
+#
+# Then run nocsd with NOCS_PHD2_SETTINGS=$HOME/.local/share/nocs/phd2.phd.
+[Unit]
+Description=PHD2 guiding for NOCS (runs as %i)
+After=network.target indiserver@%i.service
+
+[Service]
+User=%i
+Environment=HOME=/home/%i
+Environment=PHD2_SETTINGS=/home/%i/.local/share/nocs/phd2.phd
+PrivateTmp=yes
+ExecStart=/usr/local/bin/nocs-phd2
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

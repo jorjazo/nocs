@@ -16,11 +16,12 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
-      - name: Start INDI simulators
+      - name: Start INDI simulators and PHD2
         working-directory: .
         run: |
-          docker compose -f dev/compose.yaml up -d --build indi
+          docker compose -f dev/compose.yaml up -d --build indi phd2
           timeout 60 bash -c 'until (echo > /dev/tcp/127.0.0.1/7624) 2>/dev/null; do sleep 1; done'
+          timeout 60 bash -c 'until (echo > /dev/tcp/127.0.0.1/4400) 2>/dev/null; do sleep 1; done'
       - name: Cache ASTAP and its D05 star database
         uses: actions/cache@v4
         with:
@@ -33,14 +34,16 @@ jobs:
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run pyright
-      - name: Tests (unit and INDI integration)
+      - name: Tests (unit, INDI and PHD2 integration)
         run: uv run pytest -v
         env:
           NOCS_TEST_INDI: 127.0.0.1:7624
           NOCS_TEST_INDI_FIFO: ../dev/.run/fifo
           NOCS_TEST_INDI_UPLOADS: ../dev/.run/uploads
+          NOCS_TEST_PHD2: 127.0.0.1:4400
+          NOCS_TEST_PHD2_SETTINGS: ../dev/.run/phd2.phd
           NOCS_TEST_ASTAP: ../dev/.astap/astap_cli
-      - name: indiserver log
+      - name: indiserver and PHD2 logs
         if: failure()
         working-directory: .
         run: docker compose -f dev/compose.yaml logs --tail 200

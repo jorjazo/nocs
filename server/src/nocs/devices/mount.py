@@ -233,6 +233,20 @@ class Mount(Device):
         )
 
     @property
+    def guide_rate(self) -> float | None:
+        """Speed of guide pulses in right ascension, as a fraction of sidereal.
+
+        The simulator and most drivers say ``GUIDE_RATE_WE``; the ZWO AM5 and AM7
+        have a single ``RATE``.
+        """
+        if not self.has("GUIDE_RATE"):
+            return None
+        prop = self.prop("GUIDE_RATE")
+        name = "GUIDE_RATE_WE" if "GUIDE_RATE_WE" in prop.elements else next(iter(prop.elements))
+        rate = prop.number(name)
+        return rate if rate > 0 else None
+
+    @property
     def meridian_limits(self) -> MeridianLimits | None:
         """Meridian flip settings (ZWO AM5 and AM7)."""
         if not (self.has("MERIDIAN_FLIP") and self.has("MERIDIAN_LIMIT")):

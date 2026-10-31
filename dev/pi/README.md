@@ -59,3 +59,19 @@ It conflicts with the dev containers on port 7624: stop them first
 (`docker stop dev-indi-1 dev-phd2-1`). The user needs the `dialout` group for
 serial devices (mounts, power boxes).
 
+## PHD2
+
+PHD2 runs headless as a service too, and imports the settings nocsd writes from
+the active profile (ADR 0022):
+
+```sh
+sudo add-apt-repository ppa:pch/phd2 && sudo apt install phd2 xvfb
+sudo install -m 755 dev/phd2/entrypoint.sh /usr/local/bin/nocs-phd2
+sudo cp dev/pi/phd2@.service /etc/systemd/system/
+sudo systemctl enable --now phd2@$USER          # JSON-RPC on port 4400
+NOCS_PHD2_SETTINGS=$HOME/.local/share/nocs/phd2.phd NOCS_INDI_FIFO=/run/indi/fifo \
+  NOCS_INDI_UPLOAD_DIR=$HOME/.local/share/nocs/uploads uv run --project server nocsd
+```
+
+It conflicts with the dev PHD2 container on port 4400.
+

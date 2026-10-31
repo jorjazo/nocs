@@ -58,4 +58,5 @@ testpaths = ["tests"]
 filterwarnings = ["ignore:Using `httpx` with `starlette.testclient`"]
 markers = [
     "indi: integration tests that need an indiserver running the simulators (NOCS_TEST_INDI=host:port)",
+    "phd2: integration tests that also need a headless PHD2 (NOCS_TEST_PHD2=host:port)",
 ]

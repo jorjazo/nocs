@@ -1,5 +1,6 @@
 import os
 from collections.abc import Iterator
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
@@ -46,6 +47,32 @@ def indi_fifo(indi_address: tuple[str, int]) -> Path:
     if not value:
         pytest.skip("NOCS_TEST_INDI_FIFO not set")
     return Path(value)
+
+
+@dataclass(frozen=True)
+class Phd2Setup:
+    host: str
+    port: int
+    settings: Path
+    """Where nocsd writes PHD2's settings, which PHD2's service imports."""
+    indi_host: str
+    """indiserver as PHD2 reaches it."""
+
+
+@pytest.fixture
+def phd2(indi_address: tuple[str, int]) -> Phd2Setup:
+    """A headless PHD2 next to the INDI simulators, from NOCS_TEST_PHD2=host:port.
+
+    With compose: ``NOCS_TEST_PHD2=localhost:4400 NOCS_TEST_PHD2_SETTINGS=../dev/.run/phd2.phd``;
+    PHD2 reaches indiserver as ``indi`` (NOCS_TEST_PHD2_INDI_HOST to change it).
+    """
+    value = os.environ.get("NOCS_TEST_PHD2")
+    settings = os.environ.get("NOCS_TEST_PHD2_SETTINGS")
+    if not value or not settings:
+        pytest.skip("NOCS_TEST_PHD2 and NOCS_TEST_PHD2_SETTINGS not set")
+    host, _, port = value.rpartition(":")
+    indi_host = os.environ.get("NOCS_TEST_PHD2_INDI_HOST", "indi")
+    return Phd2Setup(host, int(port), Path(settings), indi_host)
 
 
 @pytest.fixture(autouse=True)

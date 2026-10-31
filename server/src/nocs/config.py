@@ -41,6 +41,15 @@ class Settings(BaseSettings):
     """The ASTAP command-line solver; by default ``astap_cli`` on the PATH or in /opt/astap."""
     astap_db: Path | None = None
     """ASTAP's star databases; by default next to the solver or in /opt/astap."""
+    phd2_host: str = "localhost"
+    phd2_port: int = 4400
+    """PHD2's JSON-RPC event server (ADR 0022)."""
+    phd2_settings: Path | None = None
+    """The settings file PHD2's service imports at start. nocsd writes it from the active
+    profile; without it, nocsd uses PHD2 as the user set it up."""
+    phd2_indi_host: str | None = None
+    """indiserver as PHD2 reaches it, when that differs from ``indi_host`` (containers)."""
+    phd2_indi_port: int | None = None
     config_dir: Path = Field(default_factory=_default_config_dir)
     data_dir: Path = Field(default_factory=_default_data_dir)
     """The server's own data: frame catalog, previews, frames on their way."""
