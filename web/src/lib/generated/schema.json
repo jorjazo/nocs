@@ -156,6 +156,20 @@
           ],
           "default": null
         },
+        "exposure": {
+          "anyOf": [
+            {
+              "maximum": 7200,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Seconds."
+        },
         "frame_type": {
           "anyOf": [
             {
@@ -258,6 +272,10 @@
         },
         "exposing": {
           "type": "boolean"
+        },
+        "exposure": {
+          "description": "Seconds; the last one set or used through NOCS (INDI keeps none).",
+          "type": "number"
         },
         "frame_type": {
           "$ref": "#/$defs/FrameTypeName"
@@ -386,6 +404,7 @@
         "cooler_power",
         "target",
         "ramp",
+        "exposure",
         "gain",
         "gain_range",
         "offset",

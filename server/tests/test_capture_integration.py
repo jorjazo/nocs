@@ -106,7 +106,7 @@ def api(
             # Leave the shared simulator as other tests expect it.
             client.post(
                 "/api/cameras/main_camera/settings",
-                json={"binning": 1, "region": "full", "frame_type": "light"},
+                json={"exposure": 2, "binning": 1, "region": "full", "frame_type": "light"},
             )
             client.post("/api/cameras/main_camera/cooling", json={"on": False})
 
@@ -134,17 +134,25 @@ def test_camera_state(api: TestClient) -> None:
 def test_settings(api: TestClient) -> None:
     response = api.post(
         "/api/cameras/main_camera/settings",
-        json={"gain": 120, "offset": 10, "binning": 2, "region": SMALL, "frame_type": "dark"},
+        json={
+            "exposure": 5,
+            "gain": 120,
+            "offset": 10,
+            "binning": 2,
+            "region": SMALL,
+            "frame_type": "dark",
+        },
     )
     assert response.status_code == 204, response.text
     wait(api, lambda s: s["cameras"]["main_camera"]["region"] == SMALL)
     main = camera(api)
-    assert (main["gain"], main["offset"], main["binning"], main["frame_type"]) == (
-        120,
-        10,
-        [2, 2],
-        "dark",
-    )
+    assert (
+        main["exposure"],
+        main["gain"],
+        main["offset"],
+        main["binning"],
+        main["frame_type"],
+    ) == (5, 120, 10, [2, 2], "dark")
 
 
 def test_invalid_settings(api: TestClient) -> None:
@@ -154,6 +162,7 @@ def test_invalid_settings(api: TestClient) -> None:
     )
     assert api.post("/api/cameras/main_camera/settings", json={"gain": 1e9}).status_code == 422
     assert api.post("/api/cameras/main_camera/settings", json={"binning": 99}).status_code == 422
+    assert api.post("/api/cameras/main_camera/settings", json={"exposure": -1}).status_code == 422
     assert api.post("/api/cameras/telescope/settings", json={}).status_code == 422
 
 
@@ -165,6 +174,8 @@ def test_expose_and_save(api: TestClient, data_dir: Path) -> None:
     )
     assert response.status_code == 202, response.text
     job_id = response.json()["job"]
+    # The exposure used becomes the camera's, for every client to show.
+    assert camera(api)["exposure"] == 1
     wait(api, finished(job_id))
     result = job(api, job_id)
     assert result["state"] == "succeeded", result

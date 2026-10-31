@@ -251,6 +251,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
     ) -> Response:
         region = request.region
         settings = CameraSettings(
+            exposure=request.exposure,
             gain=request.gain,
             offset=request.offset,
             binning=request.binning,

@@ -145,8 +145,10 @@ Live view (stage 2.7):
   margin each side, whole quantization steps wide), not the whole 16-bit range,
   where a sky fills one or two bins; dotted lines and labels give the darkest
   and brightest values, so clipping still shows when it lies outside.
-- Settings that live on the server are locked while the camera runs a job; the
-  exposure time and the save choice are kept per device in the browser.
+- Settings are kept by the server, so every client shows the same, and are
+  locked while the camera runs a job. INDI keeps no exposure time, so the server
+  keeps the last one set or used. Only the save choice and the camera shown are
+  kept per device in the browser.
 
 ## 8. Open UX questions
 

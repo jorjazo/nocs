@@ -96,6 +96,10 @@ export interface CameraState {
   cooler_power: number | null;
   device: string;
   exposing: boolean;
+  /**
+   * Seconds; the last one set or used through NOCS (INDI keeps none).
+   */
+  exposure: number;
   frame_type: FrameTypeName;
   gain: number | null;
   gain_range: ValueRange | null;
@@ -513,6 +517,10 @@ export interface PairedDevice {
  */
 export interface CameraSettingsRequest {
   binning?: number | null;
+  /**
+   * Seconds.
+   */
+  exposure?: number | null;
   frame_type?: FrameTypeName | null;
   gain?: number | null;
   offset?: number | null;

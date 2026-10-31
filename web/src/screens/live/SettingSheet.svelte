@@ -13,7 +13,7 @@
   import Stepper from "../../components/Stepper.svelte";
   import Toggle from "../../components/Toggle.svelte";
   import { setCameraSettings, setCooling } from "../../lib/api";
-  import { capture, MAX_EXPOSURE } from "../../lib/camera.svelte";
+  import { MAX_EXPOSURE } from "../../lib/camera.svelte";
   import { errorText } from "../../lib/errors";
   import { formatDecimal, formatSeconds, formatTemperature } from "../../lib/format";
   import { i18n } from "../../lib/i18n";
@@ -34,7 +34,7 @@
 
   // Drafts, from the values when the sheet opened.
   const initial = untrack(() => camera);
-  let exposure = $state<number | null>(capture.exposure[untrack(() => role)]);
+  let exposure = $state<number | null>(initial.exposure);
   let gain = $state<number | null>(initial.gain);
   let offset = $state<number | null>(initial.offset);
   let coolerOn = $state(initial.cooler ?? initial.target !== null);
@@ -64,8 +64,7 @@
   }
 
   function pickExposure(seconds: number): void {
-    capture.setExposure(role, seconds);
-    onclose();
+    void settings({ exposure: seconds });
   }
 
   const valid = $derived.by(() => {
@@ -106,7 +105,7 @@
         <button
           type="button"
           class="preset"
-          aria-pressed={capture.exposure[role] === seconds}
+          aria-pressed={camera.exposure === seconds}
           onclick={() => pickExposure(seconds)}>
           {formatSeconds(seconds, locale)}
         </button>

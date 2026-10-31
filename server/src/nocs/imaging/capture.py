@@ -3,8 +3,11 @@
 State layout under ``("cameras",)``, one entry per connected camera role::
 
     {device, exposing, remaining, temperature, cooler, cooler_power, target, ramp,
-     gain, gain_range, offset, offset_range, binning, max_binning, region,
+     exposure, gain, gain_range, offset, offset_range, binning, max_binning, region,
      frame_type, sensor, bayer, last_frame, preview}
+
+INDI has no exposure time to keep, only the one of each exposure: NOCS keeps it
+per role (the last one set or used), so every client shows the same.
 
 Frames come either saved by the driver into a directory nocsd can read
 (``UPLOAD_LOCAL``) or as BLOBs (ADR 0012); either way each becomes a file that is
@@ -49,6 +52,8 @@ log = logging.getLogger(__name__)
 ROOT: Path = ("cameras",)
 CAMERA_ROLES = (Role.MAIN_CAMERA, Role.GUIDE_CAMERA)
 SAVING_ROLES = (Role.MAIN_CAMERA,)
+EXPOSURE_DEFAULT = 2.0
+MAX_EXPOSURE = 7200.0
 """Guide camera frames are only previews; PHD2 takes its own (ADR 0013)."""
 
 FRAME_TYPES: dict[str, FrameType] = {
@@ -87,6 +92,7 @@ class CameraNotReadyError(Exception):
 
 @dataclass(frozen=True, slots=True)
 class CameraSettings:
+    exposure: float | None = None
     gain: float | None = None
     offset: float | None = None
     binning: int | None = None
@@ -176,6 +182,11 @@ def camera_summary(camera: Camera) -> dict[str, Json]:
     }
 
 
+def _check_exposure(seconds: float) -> None:
+    if not 0 <= seconds <= MAX_EXPOSURE:
+        raise ValueError(f"exposure must be 0..{MAX_EXPOSURE:g} s")
+
+
 class CaptureService:
     def __init__(
         self,
@@ -203,6 +214,7 @@ class CaptureService:
         """Camera roles that are ready, and their INDI device."""
         self._published: dict[Role, dict[str, Json]] = {}
         self._targets: dict[Role, float | None] = {}
+        self._exposures: dict[Role, float] = {}
         self._last_frames: dict[Role, Json] = {}
         self._previews: dict[Role, Json] = {}
         self._images: dict[Role, IndiClient] = {}
@@ -228,6 +240,9 @@ class CaptureService:
         """Change exposure settings; refused while the camera is busy with a job."""
         self._jobs.check_free([role.value])
         camera = self.camera(role)
+        if settings.exposure is not None:
+            _check_exposure(settings.exposure)
+            self._set_exposure(role, settings.exposure)
         if settings.binning is not None:
             if not 1 <= settings.binning <= camera.max_binning:
                 raise ValueError(f"binning must be 1..{camera.max_binning}")
@@ -280,8 +295,7 @@ class CaptureService:
         Frames of the main camera are saved unless ``save`` is false; those of the
         guide camera never are.
         """
-        if seconds < 0:
-            raise ValueError("exposure must not be negative")
+        _check_exposure(seconds)
         if save is None:
             save = role in SAVING_ROLES
         elif save and role not in SAVING_ROLES:
@@ -291,12 +305,13 @@ class CaptureService:
         async def run(context: JobContext) -> Json:
             return await self._expose(context, role, seconds, frame_type, save)
 
-        return self._jobs.start("expose", [role.value], run)
+        job_id = self._jobs.start("expose", [role.value], run)
+        self._set_exposure(role, seconds)
+        return job_id
 
     def loop(self, role: Role, seconds: float, frame_type: FrameType | None = None) -> str:
         """Expose again and again, keeping only previews, until the job is cancelled."""
-        if seconds < 0:
-            raise ValueError("exposure must not be negative")
+        _check_exposure(seconds)
         self.camera(role)
 
         async def run(context: JobContext) -> Json:
@@ -308,7 +323,9 @@ class CaptureService:
                 # worker when the next one arrives is skipped.
                 self._background(self._preview(role, shot, discard=True))
 
-        return self._jobs.start("loop", [role.value], run)
+        job_id = self._jobs.start("loop", [role.value], run)
+        self._set_exposure(role, seconds)
+        return job_id
 
     async def close(self) -> None:
         self._unwatch_bridge()
@@ -587,6 +604,10 @@ class CaptureService:
             case _:
                 pass
 
+    def _set_exposure(self, role: Role, seconds: float) -> None:
+        self._exposures[role] = seconds
+        self._publish(role)
+
     def _publish(self, role: Role) -> None:
         try:
             summary = camera_summary(self.camera(role))
@@ -594,6 +615,7 @@ class CaptureService:
             log.debug("camera %s not publishable yet: %s", role.value, e)
             return
         summary["target"] = self._targets.get(role)
+        summary["exposure"] = self._exposures.get(role, EXPOSURE_DEFAULT)
         summary["last_frame"] = self._last_frames.get(role)
         summary["preview"] = self._previews.get(role)
         previous = self._published.get(role)

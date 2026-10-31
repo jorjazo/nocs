@@ -171,6 +171,9 @@ class CameraState(StateModel):
     cooler_power: float | None = Field(description="As reported by the driver; units vary.")
     target: float | None = Field(description="Cooling target set through NOCS, °C.")
     ramp: float | None = Field(description="Cooling rate limit, °C/min; 0 = unlimited.")
+    exposure: float = Field(
+        description="Seconds; the last one set or used through NOCS (INDI keeps none)."
+    )
     gain: float | None
     gain_range: ValueRange | None
     offset: float | None
@@ -266,6 +269,7 @@ class CameraSettingsRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    exposure: float | None = Field(default=None, ge=0, le=7200, description="Seconds.")
     gain: float | None = None
     offset: float | None = None
     binning: int | None = Field(default=None, ge=1)

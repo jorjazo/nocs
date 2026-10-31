@@ -1,8 +1,8 @@
 <script lang="ts">
   // Live view: the latest preview of a camera with its metrics and histogram,
   // exposure settings, filter, cooling, and loop / capture with or without
-  // saving (docs/ux.md §2). Settings that live on the server are changed
-  // through it; the exposure time and the save choice belong to this device.
+  // saving (docs/ux.md §2). Settings, the exposure time included, are kept by
+  // the server and shared by every client; the save choice belongs to this device.
   import Banner from "../../components/Banner.svelte";
   import Button from "../../components/Button.svelte";
   import Chip, { type Tone } from "../../components/Chip.svelte";
@@ -54,9 +54,10 @@
   const jobs = $derived(cameraJobs(live.app.jobs, role));
   const running = $derived(jobs.running);
   const looping = $derived(running?.info.kind === "loop");
-  const exposure = $derived(capture.exposure[role]);
+  // The server records the exposure a job uses, and refuses changes while it runs.
+  const exposure = $derived(camera?.exposure ?? null);
   const remaining = $derived(camera?.exposing ? camera.remaining : null);
-  const total = $derived(running ? (capture.started[running.id] ?? null) : null);
+  const total = $derived(running ? exposure : null);
   const progress = $derived.by(() => {
     if (!running || remaining === null) return null;
     if (total) return 1 - remaining / total;
@@ -114,8 +115,8 @@
         await cancelJob(running.id);
         return;
       }
-      const id = await expose(role, exposure, main ? capture.save : undefined);
-      capture.started[id] = exposure;
+      if (exposure === null) return;
+      await expose(role, exposure, main ? capture.save : undefined);
     });
   }
 
@@ -125,11 +126,11 @@
         await cancelJob(running.id);
         return;
       }
+      if (exposure === null) return;
       if (exposure > MAX_LOOP_EXPOSURE) {
         throw new Error(t.live.loopMax(formatSeconds(MAX_LOOP_EXPOSURE, locale)));
       }
-      const id = await loop(role, exposure);
-      capture.started[id] = exposure;
+      await loop(role, exposure);
     });
   }
 
@@ -244,8 +245,8 @@
       <div class="tiles">
         <Tile
           label={t.live.exposure}
-          value={formatSeconds(exposure, locale)}
-          disabled={!owner}
+          value={formatSeconds(camera.exposure, locale)}
+          disabled={!owner || !!running}
           onclick={() => (editing = "exposure")} />
         <Tile
           label={t.live.gain}

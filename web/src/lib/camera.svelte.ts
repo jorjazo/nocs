@@ -67,10 +67,8 @@ export function selectFilter(wheel: FilterWheelState, slot: number): Promise<voi
 }
 
 // -- Capture choices ------------------------------------------------------------
-// Per device, like the theme: the exposure time is not part of the camera's
-// state, and whether to save is a choice made before each frame.
-
-const EXPOSURE_DEFAULT = 2;
+// Per device, like the theme: the camera shown, and whether to save, a choice
+// made before each frame. The exposure time is in the camera's state.
 
 function readNumber(key: string): number | null {
   try {
@@ -91,18 +89,7 @@ function write(key: string, value: string): void {
 
 class CapturePrefs {
   role: CameraRoleName = $state("main_camera");
-  exposure: Record<CameraRoleName, number> = $state({
-    main_camera: readNumber("nocs.exposure.main_camera") ?? EXPOSURE_DEFAULT,
-    guide_camera: readNumber("nocs.exposure.guide_camera") ?? EXPOSURE_DEFAULT,
-  });
   save: boolean = $state(readNumber("nocs.save") !== 0);
-  // Exposure time of the jobs this device started, to show "74 / 120 s".
-  started: Record<string, number> = $state({});
-
-  setExposure(role: CameraRoleName, seconds: number): void {
-    this.exposure[role] = seconds;
-    write(`nocs.exposure.${role}`, String(seconds));
-  }
 
   setSave(save: boolean): void {
     this.save = save;
