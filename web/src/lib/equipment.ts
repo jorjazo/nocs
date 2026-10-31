@@ -10,7 +10,8 @@ export const ROLES: readonly Role[] = [
   "filter_wheel",
   "focuser",
   "guide_camera",
-  "power_box",
+  "power",
+  "weather",
 ];
 
 export const ROLE_ICONS: Record<Role, IconName> = {
@@ -19,7 +20,8 @@ export const ROLE_ICONS: Record<Role, IconName> = {
   mount: "mount",
   focuser: "focus",
   filter_wheel: "filter",
-  power_box: "power",
+  power: "power",
+  weather: "weather",
 };
 
 export function roleTone(status: DeviceStatusName, connection: ConnectionName): Tone {

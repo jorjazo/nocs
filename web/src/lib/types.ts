@@ -33,8 +33,13 @@ export type {
   LoopRequest,
   ObserverRequest,
   Optics,
+  OutputKindName,
+  OutputRequest,
   PairedDevice,
   PairRequest,
+  PowerInputState,
+  PowerOutput,
+  PowerState,
   Preview,
   Profile,
   PropertyStateName as PropertyState,
@@ -45,6 +50,7 @@ export type {
   SetPropertyRequest,
   StorageDestination,
   StorageState,
+  WeatherState,
 } from "./generated/api";
 
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };

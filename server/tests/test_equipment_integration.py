@@ -19,8 +19,8 @@ from nocs.config import Settings
 pytestmark = pytest.mark.indi
 
 # The simulator rig of dev/profiles/. The dev indiserver preloads its drivers except
-# the weather simulator, which stands in for a power box (none is simulated) and is
-# started through the FIFO.
+# the weather simulator, which plays the weather role (no power box is simulated)
+# and is started through the FIFO.
 SIMULATORS = json.loads(
     (Path(__file__).parents[2] / "dev" / "profiles" / "simulators.json").read_text()
 )
@@ -61,6 +61,8 @@ def test_connect_and_disconnect_simulator_profile(api: TestClient) -> None:
     assert devices["main_camera"]["device"] == "CCD Simulator"
     assert devices["guide_camera"]["device"] == "Guide Simulator"
     assert "Weather Simulator" in current["indi"]["devices"]
+    wait(api, lambda s: s["weather"] is not None and s["weather"]["temperature"] is not None)
+    assert state(api)["weather"]["device"] == "Weather Simulator"
 
     assert api.post("/api/equipment/disconnect").status_code == 202
     # Well within DISCONNECT_TIMEOUT: drivers acknowledge (Idle) at once.

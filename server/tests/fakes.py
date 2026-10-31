@@ -1,11 +1,21 @@
 """Test doubles shared by the unit tests."""
 
 from collections.abc import Callable, Mapping
+from pathlib import Path
 
 from nocs.devices import DeviceInterface
 from nocs.indi import IndiClient, Property, PropertyState, PropertyType, PropertyUpdated
 from nocs.indi.properties import BlobElement, NumberElement, SwitchElement, TextElement
-from nocs.indi.protocol import DefineProperty, DeleteProperty, ElementValue, Message, SetProperty
+from nocs.indi.protocol import (
+    DefineProperty,
+    DeleteProperty,
+    ElementValue,
+    Message,
+    SetProperty,
+    StreamParser,
+)
+
+RECORDINGS = Path(__file__).resolve().parents[2] / "dev" / "recordings"
 
 type Responder = Callable[[str, str, Mapping[str, str | float | bool]], object]
 
@@ -21,6 +31,18 @@ class FakeClient(IndiClient):
     async def send(self, device: str, name: str, values: Mapping[str, str | float | bool]) -> None:
         self.sent.append((device, name, dict(values)))
         self.responder(device, name, values)
+
+    def replay(self, recording: str, device: str) -> None:
+        """Feed what a real driver sent (``dev/recordings/``) for one device."""
+        messages = StreamParser().feed((RECORDINGS / recording).read_bytes())
+        for message in messages:
+            match message:
+                case DefineProperty(property=prop) if prop.device == device:
+                    self._handle(message)  # pyright: ignore[reportPrivateUsage]
+                case SetProperty() | DeleteProperty() | Message() if message.device == device:
+                    self._handle(message)  # pyright: ignore[reportPrivateUsage]
+                case _:
+                    pass
 
     def define(self, prop: Property) -> None:
         self._handle(DefineProperty(prop))  # pyright: ignore[reportPrivateUsage]

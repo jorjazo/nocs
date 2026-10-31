@@ -1,6 +1,6 @@
 # Phase 2 plan — Connect & capture
 
-Status: in progress · Last updated: 2026-10-30 · Roadmap: [Phase 2](../roadmap.md#phase-2--connect--capture-manual-imaging)
+Status: in progress · Last updated: 2026-10-31 · Roadmap: [Phase 2](../roadmap.md#phase-2--connect--capture-manual-imaging)
 
 Goal: replace the laptop for manual imaging sessions, controlled only from a phone.
 
@@ -27,7 +27,7 @@ the exit.
 | 2.7 | Live view | Preview with zoom, metrics, histogram, exposure settings, loop / capture / save, cooling; night mode tints previews | ZWO camera from the phone | Done |
 | 2.8 | Focuser, filter wheel, profile editor | EAF (absolute/relative moves, temperature), EFW (filter names from the profile), profile editor (devices, roles, optics, ports) | EFW and EAF | |
 | 2.9 | Mount | Slew pad with a server-side dead man's switch, go to coordinates (J2000 → JNow) and alt/az, tracking, park/unpark, home; time and site from the client to the mount; frame times corrected when the Pi's clock is off ([ADR 0015](../adr/0015-mount-control-and-client-time.md)) | AM5 | Server done and checked on the lab AM7 (same driver); AM5 and UI pending |
-| 2.10 | Power box | PPBA power outputs, adjustable output, dew heaters and auto-dew, environment readings (tested against recorded properties: no simulator exists) | PPBA | |
+| 2.10 | Power box | `power` and `weather` roles by capability; PPBA power outputs, adjustable output, dew heaters and auto-dew, environment readings; profiles say what each output feeds, and cutting one that feeds a busy device is refused (tested against recorded properties and `dev/tools/fake_ppba.py`: no simulator exists) ([ADR 0017](../adr/0017-roles-by-capability-power-and-weather.md)) | PPBA | Done: dew A PWM, auto-dew and the adjustable output on the lab PPBA through the API (voltmeter: 0 V off, 8 V back on); UI checked against the fake box |
 | 2.11 | Guide camera and field test | Guide camera role with previews (guiding is phase 4); FITS header review on real frames; field test ([checklist](field-test.md)) | Exit criterion | Guide camera and header review done and checked on the lab rig; field test pending |
 
 After the exit: AM7 and iOptron GEM45G (profiles and driver quirks).

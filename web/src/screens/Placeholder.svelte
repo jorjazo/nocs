@@ -4,6 +4,7 @@
   import EmptyState from "../components/EmptyState.svelte";
   import RigStatus from "../components/RigStatus.svelte";
   import ScreenHeader from "../components/ScreenHeader.svelte";
+  import WeatherCard from "../components/WeatherCard.svelte";
   import { i18n } from "../lib/i18n";
   import { live } from "../lib/live.svelte";
   import { router } from "../lib/router.svelte";
@@ -12,11 +13,17 @@
 
   const t = $derived(i18n.t);
   const connected = $derived(live.app.equipment?.connection === "connected");
+  // Tonight's conditions arrive before the rest of the screen (phase 3).
+  const weather = $derived(tab === "tonight" ? (live.app.weather ?? null) : null);
 </script>
 
 <ScreenHeader title={t.tabs[tab]}>
   {#snippet trailing()}<RigStatus />{/snippet}
 </ScreenHeader>
+
+{#if weather}
+  <div class="conditions"><WeatherCard {weather} /></div>
+{/if}
 
 {#if tab === "tonight" && !connected}
   <EmptyState icon={tab} title={t.empty.tonight.title} body="{t.empty.tonight.body} {t.empty.tonight.connect}">
@@ -27,3 +34,9 @@
 {:else}
   <EmptyState icon={tab} title={t.empty[tab].title} body={t.empty[tab].body} />
 {/if}
+
+<style>
+  .conditions {
+    margin-bottom: var(--space-6);
+  }
+</style>

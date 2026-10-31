@@ -13,9 +13,16 @@ import re
 import tempfile
 from enum import StrEnum
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Self, cast
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, ValidationError
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    ValidationError,
+    model_validator,
+)
 
 from nocs.indi.drivers import DRIVER_NAME
 
@@ -34,11 +41,31 @@ class Role(StrEnum):
     MOUNT = "mount"
     FOCUSER = "focuser"
     FILTER_WHEEL = "filter_wheel"
-    POWER_BOX = "power_box"
+    POWER = "power"
+    """Power outputs and dew heaters (INDI's power interface)."""
+    WEATHER = "weather"
+    """Environment readings: temperature, humidity, dew point."""
+
+
+LEGACY_POWER_BOX = "power_box"
+"""The role ADR 0011 gave power boxes; it loads as ``power`` plus ``weather`` (ADR 0017)."""
+
+type OutputId = Annotated[str, StringConstraints(pattern=r"^(dc|dew|usb|variable):[1-9][0-9]?$")]
+"""A power output: its kind and 1-based number in the driver's order (ADR 0017)."""
 
 
 class ProfileModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+
+class OutputConfig(ProfileModel):
+    label: str | None = Field(
+        default=None, min_length=1, max_length=40, description="Name shown instead of the driver's."
+    )
+    feeds: list[Role] = Field(
+        default_factory=list[Role],
+        description="Roles this output powers: switching it off is refused while one is busy.",
+    )
 
 
 class DeviceConfig(ProfileModel):
@@ -53,6 +80,11 @@ class DeviceConfig(ProfileModel):
         default=None,
         min_length=1,
         description="Serial port for DEVICE_PORT, preferably a /dev/serial/by-id/ path.",
+    )
+    outputs: dict[OutputId, OutputConfig] | None = Field(
+        default=None,
+        description="Power role only: what each output (dc:1, dew:2, variable:1…) is called "
+        "and feeds.",
     )
 
 
@@ -77,6 +109,31 @@ class Profile(ProfileModel):
         default=None, description="Optics of the guiding train (guide scope or OAG)."
     )
     site: Site | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _split_power_box(cls, data: object) -> object:
+        """A ``power_box`` role becomes ``power`` and ``weather`` on the same device."""
+        if not isinstance(data, dict):
+            return data
+        fields = cast(dict[str, object], data)
+        devices = fields.get("devices")
+        if not isinstance(devices, dict):
+            return fields
+        roles = dict(cast(dict[str, object], devices))
+        if LEGACY_POWER_BOX not in roles:
+            return fields
+        config = roles.pop(LEGACY_POWER_BOX)
+        roles.setdefault(Role.POWER.value, config)
+        roles.setdefault(Role.WEATHER.value, config)
+        return {**fields, "devices": roles}
+
+    @model_validator(mode="after")
+    def _outputs_on_power_only(self) -> Self:
+        for role, config in self.devices.items():
+            if config.outputs is not None and role is not Role.POWER:
+                raise ValueError(f"only the power role has outputs, not {role.value}")
+        return self
 
 
 class ProfileError(Exception):

@@ -27,6 +27,7 @@
   import { live } from "../lib/live.svelte";
   import { LOCALES, prefs, THEMES } from "../lib/prefs.svelte";
   import { href } from "../lib/router.svelte";
+  import PowerSheet from "./devices/PowerSheet.svelte";
   import type { CameraState, Optics, PairedDevice, Profile, Role, RoleState } from "../lib/types";
 
   const t = $derived(i18n.t);
@@ -127,11 +128,29 @@
     train(profile?.guiding, cameras?.guide_camera, [deviceName(devicesByRole.guide_camera)]),
   );
 
+  const power = $derived(live.app.power ?? null);
+  const weather = $derived(live.app.weather ?? null);
+  let sheet = $state<"power" | null>(null);
+
   function subtitle(role: Role): string {
     const parts = [t.roles[role]];
     const camera = role === "main_camera" || role === "guide_camera" ? cameras?.[role] : undefined;
     if (camera?.temperature != null) parts.push(`${formatDecimal(camera.temperature, locale, 1)}\u00a0°C`);
+    if (role === "power" && power?.input) {
+      const { voltage, current } = power.input;
+      if (voltage !== null) parts.push(`${formatDecimal(voltage, locale, 1)}\u00a0V`);
+      if (current !== null) parts.push(`${formatDecimal(current, locale, 2)}\u00a0A`);
+    }
+    if (role === "weather" && weather) {
+      if (weather.temperature !== null) parts.push(`${formatDecimal(weather.temperature, locale, 1)}\u00a0°C`);
+      if (weather.humidity !== null) parts.push(`${formatDecimal(weather.humidity, locale, 0)}\u00a0%`);
+    }
     return parts.join(" · ");
+  }
+
+  function opener(role: Role): (() => void) | undefined {
+    if (role === "power" && power) return () => (sheet = "power");
+    return undefined;
   }
 
   // -- Storage ------------------------------------------------------------------
@@ -270,7 +289,8 @@
               icon={ROLE_ICONS[role]}
               title={device.device ?? t.roles[role]}
               subtitle={device.device ? subtitle(role) : device.driver}
-              error={device.error}>
+              error={device.error}
+              onclick={opener(role)}>
               {#snippet trailing()}
                 <Chip tone={roleTone(device.status, connection)}>{t.deviceStatus[device.status]}</Chip>
               {/snippet}
@@ -414,6 +434,10 @@
   </div>
 {:else}
   <Banner icon="alert" tone="warning">{t.boot.loading}</Banner>
+{/if}
+
+{#if sheet === "power"}
+  <PowerSheet onclose={() => (sheet = null)} />
 {/if}
 
 <style>

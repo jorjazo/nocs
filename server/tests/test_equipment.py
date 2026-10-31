@@ -59,7 +59,7 @@ class Server:
 
     DEVICES: Mapping[str, tuple[str, str, DeviceInterface]] = {
         FOCUSER_DRIVER: ("Focuser", FOCUSER_DRIVER, DeviceInterface.FOCUSER),
-        POWER_DRIVER: ("Power", POWER_DRIVER, DeviceInterface.AUX),
+        POWER_DRIVER: ("Power", POWER_DRIVER, DeviceInterface.POWER | DeviceInterface.WEATHER),
     }
 
     def __init__(self) -> None:
@@ -91,6 +91,9 @@ class Server:
             # Like real drivers, the focuser defines its properties once connected.
             prop = number_property(device, "ABS_FOCUS_POSITION", FOCUS_ABSOLUTE_POSITION=10)
             loop.call_soon(client.define, prop)
+        if on and device.startswith("Power"):
+            loop.call_soon(client.define, number_property(device, "WEATHER_PARAMETERS"))
+            loop.call_soon(client.define, switch_property(device, "POWER_CHANNELS"))
 
 
 def profile(*, power_device: str | None = None) -> Profile:
@@ -98,7 +101,7 @@ def profile(*, power_device: str | None = None) -> Profile:
         name="Test rig",
         devices={
             Role.FOCUSER: DeviceConfig(driver=FOCUSER_DRIVER),
-            Role.POWER_BOX: DeviceConfig(driver=POWER_DRIVER, device=power_device),
+            Role.WEATHER: DeviceConfig(driver=POWER_DRIVER, device=power_device),
         },
     )
 
@@ -206,18 +209,40 @@ async def test_adopts_running_drivers(
     service = make_service(fifo)
     service.connect("rig")
     await connected(store)
-    assert statuses(store) == {"focuser": "ready", "power_box": "ready"}
+    assert statuses(store) == {"focuser": "ready", "weather": "ready"}
     assert equipment(store, "devices", "focuser", "device") == "Focuser"
     assert fifo.commands == []
     assert profiles.active == "rig"
 
     service.disconnect()
     await until(store, lambda: equipment(store, "connection") == "disconnected")
-    assert statuses(store) == {"focuser": "disconnected", "power_box": "disconnected"}
+    assert statuses(store) == {"focuser": "disconnected", "weather": "disconnected"}
     connection = server.client.get_property("Focuser", "CONNECTION")
     assert connection is not None
     assert not connection.switch("CONNECT")
     assert fifo.commands == []  # NOCS did not start them, so it leaves them running
+
+
+async def test_one_device_plays_power_and_weather(
+    make_service: Factory,
+    store: StateStore,
+    profiles: ProfileStore,
+    bridge: FakeBridge,
+    server: Server,
+    fifo: FakeFifo,
+) -> None:
+    profiles.put(
+        "box",
+        Profile.model_validate({"name": "Box", "devices": {"power_box": {"driver": POWER_DRIVER}}}),
+    )
+    server.run(POWER_DRIVER)
+    service = make_service(fifo)
+    service.connect("box")
+    await connected(store)
+    assert statuses(store) == {"power": "ready", "weather": "ready"}
+    assert service.ready_device(Role.POWER) == service.ready_device(Role.WEATHER) == "Power"
+    connects = [s for s in server.client.sent if s[1] == "CONNECTION"]
+    assert connects == [("Power", "CONNECTION", {"CONNECT": True, "DISCONNECT": False})]
 
 
 async def test_starts_missing_drivers_and_stops_them_on_disconnect(
@@ -232,7 +257,7 @@ async def test_starts_missing_drivers_and_stops_them_on_disconnect(
     service = make_service(fifo)
     service.connect("rig")
     await connected(store)
-    assert statuses(store) == {"focuser": "ready", "power_box": "ready"}
+    assert statuses(store) == {"focuser": "ready", "weather": "ready"}
     assert fifo.commands == [("start", POWER_DRIVER)]
 
     service.disconnect()
@@ -251,8 +276,8 @@ async def test_missing_driver_without_fifo_fails_only_its_role(
     service = make_service(None)
     service.connect("rig")
     await connected(store)
-    assert statuses(store) == {"focuser": "ready", "power_box": "error"}
-    error = equipment(store, "devices", "power_box", "error")
+    assert statuses(store) == {"focuser": "ready", "weather": "error"}
+    error = equipment(store, "devices", "weather", "error")
     assert isinstance(error, str)
     assert "no driver FIFO" in error
 
@@ -269,8 +294,8 @@ async def test_driver_that_defines_nothing_is_stopped(
     service = make_service(fifo, driver_timeout=0.1)
     service.connect("rig")
     await connected(store)
-    assert statuses(store)["power_box"] == "error"
-    error = equipment(store, "devices", "power_box", "error")
+    assert statuses(store)["weather"] == "error"
+    error = equipment(store, "devices", "weather", "error")
     assert isinstance(error, str)
     assert "defined no device" in error
     assert fifo.commands == [("start", POWER_DRIVER), ("stop", POWER_DRIVER)]
@@ -290,7 +315,7 @@ async def test_named_device_that_the_driver_does_not_define(
     service = make_service(fifo, driver_timeout=0.1)
     service.connect("rig")
     await connected(store)
-    error = equipment(store, "devices", "power_box", "error")
+    error = equipment(store, "devices", "weather", "error")
     assert error == f"{POWER_DRIVER} does not define Pegasus PPBA; it defines ['Power']"
 
 
@@ -304,11 +329,11 @@ async def test_several_candidates_need_a_device_name(
 ) -> None:
     server.run(FOCUSER_DRIVER)
     server.run(POWER_DRIVER)
-    server.client.define(driver_info("Power 2", DeviceInterface.AUX, POWER_DRIVER))
+    server.client.define(driver_info("Power 2", DeviceInterface.WEATHER, POWER_DRIVER))
     service = make_service(fifo)
     service.connect("rig")
     await connected(store)
-    error = equipment(store, "devices", "power_box", "error")
+    error = equipment(store, "devices", "weather", "error")
     assert isinstance(error, str)
     assert "several devices" in error
     assert "Power 2" in error
@@ -354,7 +379,7 @@ async def test_resumes_after_indiserver_reconnects(
     bridge.attach(None)
     assert equipment(store, "connection") == "connecting"
     assert equipment(store, "error") == "lost connection to indiserver"
-    assert statuses(store) == {"focuser": "waiting", "power_box": "waiting"}
+    assert statuses(store) == {"focuser": "waiting", "weather": "waiting"}
 
     # indiserver restarted: drivers NOCS did not start come back by themselves.
     client = server.new_client()
@@ -362,7 +387,7 @@ async def test_resumes_after_indiserver_reconnects(
     server.run(POWER_DRIVER)
     bridge.attach(client)
     await connected(store)
-    assert statuses(store) == {"focuser": "ready", "power_box": "ready"}
+    assert statuses(store) == {"focuser": "ready", "weather": "ready"}
     assert equipment(store, "error") is None
 
 
@@ -383,7 +408,7 @@ async def test_notices_devices_disconnected_or_gone(
     server.client.update(
         "Power", "CONNECTION", PropertyState.OK, {"CONNECT": "Off", "DISCONNECT": "On"}
     )
-    assert statuses(store)["power_box"] == "disconnected"
+    assert statuses(store)["weather"] == "disconnected"
     server.client.delete("Focuser")
     assert statuses(store)["focuser"] == "error"
     assert equipment(store, "devices", "focuser", "error") == "Focuser disappeared"

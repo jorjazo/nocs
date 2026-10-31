@@ -47,6 +47,9 @@ class DeviceInterface(IntFlag):
     SPECTROGRAPH = 1 << 13
     CORRELATOR = 1 << 14
     AUX = 1 << 15
+    OUTPUT = 1 << 16
+    INPUT = 1 << 17
+    POWER = 1 << 18
 
 
 def device_interfaces(client: IndiClient, device: str) -> DeviceInterface:

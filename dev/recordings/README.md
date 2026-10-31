@@ -4,7 +4,9 @@ Raw INDI protocol XML captured from real devices with
 [`dev/tools/indi_record.py`](../tools/indi_record.py): every property the drivers
 define (twice: once per connection of the recorder) and the updates that followed
 for ~15 s. No BLOBs. Used to write device facades and to feed fake servers in
-tests for hardware that has no INDI simulator.
+tests for hardware that has no INDI simulator (`FakeClient.replay` in the
+server tests; [`dev/tools/fake_ppba.py`](../tools/fake_ppba.py) serves the PPBA
+to a nocsd).
 
 | File | Devices | Notes |
 |---|---|---|

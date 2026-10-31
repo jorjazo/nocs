@@ -304,6 +304,48 @@ class ClockState(StateModel):
     )
 
 
+type OutputKindName = Literal["dc", "dew", "usb", "variable"]
+
+
+class PowerOutput(StateModel):
+    id: str = Field(description="<kind>:<n>, numbered from 1 in the driver's order (ADR 0017).")
+    kind: OutputKindName
+    label: str = Field(description="The profile's label, else the driver's.")
+    on: bool
+    current: float | None = Field(description="Amperes, when the box measures this output.")
+    duty: float | None = Field(
+        description="Dew heaters: power in percent; while off, what it gets when switched on."
+    )
+    voltage: float | None = Field(description="Variable outputs: volts while on.")
+    voltages: list[float] = Field(description="Variable outputs: the voltages it can be set to.")
+    feeds: list[Role] = Field(description="Roles the profile says this output powers.")
+
+
+class PowerInputState(StateModel):
+    voltage: float | None
+    current: float | None = Field(description="Total current drawn, A.")
+    power: float | None = Field(description="W")
+
+
+class PowerState(StateModel):
+    device: str
+    outputs: list[PowerOutput]
+    auto_dew: bool | None = Field(
+        description="The box drives its dew heaters itself; None: it cannot."
+    )
+    auto_dew_aggression: float | None = Field(description="Percent (Pegasus boxes).")
+    input: PowerInputState | None
+
+
+class WeatherState(StateModel):
+    device: str
+    temperature: float | None = Field(description="°C")
+    humidity: float | None = Field(description="Relative humidity, %.")
+    dew_point: float | None = Field(
+        description="°C: the sensor's, or computed from temperature and humidity."
+    )
+
+
 class AppState(StateModel):
     """The whole state tree sent in snapshots and modified by patches."""
 
@@ -317,6 +359,10 @@ class AppState(StateModel):
     )
     storage: StorageState | None = None
     mount: MountState | None = Field(default=None, description="None: no mount is ready.")
+    power: PowerState | None = Field(default=None, description="None: no power box is ready.")
+    weather: WeatherState | None = Field(
+        default=None, description="None: no weather sensor is ready."
+    )
     clock: ClockState | None = None
 
 
@@ -447,6 +493,28 @@ class TrackingRequest(BaseModel):
 
     on: bool | None = None
     mode: str | None = Field(default=None, description="One of the mount's track_modes.")
+
+
+class OutputRequest(BaseModel):
+    """dc and usb outputs take ``on``; dew heaters ``on`` and/or ``duty``; variable
+    outputs a ``voltage`` (switching them on) or ``on: false``.
+
+    Switching an output off, or changing its voltage, is refused (409) while a role
+    it feeds is busy (any job, when the profile does not say), unless ``force``.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    on: bool | None = None
+    duty: float | None = Field(default=None, ge=0, le=100, description="Percent.")
+    voltage: float | None = Field(default=None, gt=0, description="Volts.")
+    force: bool = False
+
+
+class AutoDewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    on: bool
 
 
 class MountSiteRequest(BaseModel):

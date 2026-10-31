@@ -28,6 +28,7 @@ from pydantic import ValidationError
 from nocs import __version__
 from nocs.api.auth import REVOKED, AuthMiddleware, Sockets, auth_router, identity
 from nocs.api.mount import mount_router
+from nocs.api.power import power_router
 from nocs.api.schemas import (
     CameraRoleName,
     CameraSettingsRequest,
@@ -79,6 +80,7 @@ from nocs.imaging.worker import ImageWorker
 from nocs.indi.drivers import DriverFifo, load_catalog
 from nocs.jobs import JobManager, ResourceBusyError
 from nocs.mount.service import MountService
+from nocs.power.service import PowerService, WeatherService
 from nocs.services.indi_bridge import IndiBridge, NotConnectedError
 from nocs.state import Resync, StateStore
 from nocs.storage import (
@@ -129,6 +131,10 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
         assert services.clock is not None
         return services.clock
 
+    def power() -> PowerService:
+        assert services.power is not None
+        return services.power
+
     def site_longitude() -> float | None:
         profile = equipment().active_profile
         return profile.site.longitude if profile is not None and profile.site else None
@@ -166,11 +172,15 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
         services.mount = MountService(
             store, services.jobs, services.equipment, bridge, services.clock
         )
+        services.power = PowerService(store, services.jobs, services.equipment, bridge)
+        services.weather = WeatherService(store, services.equipment, bridge)
         task = asyncio.create_task(bridge.run(), name="indi-bridge")
         try:
             yield
         finally:
             await mount().close()
+            power().close()
+            services.weather.close()
             await jobs().close()
             await capture().close()
             await equipment().close()
@@ -184,6 +194,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
     app.add_middleware(AuthMiddleware, auth=auth, hostnames=settings.hostnames)
     app.include_router(auth_router(auth, sockets))
     app.include_router(mount_router(mount, clock, sockets))
+    app.include_router(power_router(power))
 
     @app.get("/api/health")
     async def health() -> Health:  # pyright: ignore[reportUnusedFunction]
@@ -441,6 +452,8 @@ class _Services:
     capture: CaptureService | None = None
     storage: StorageService | None = None
     mount: MountService | None = None
+    power: PowerService | None = None
+    weather: WeatherService | None = None
     clock: Clock | None = None
 
 

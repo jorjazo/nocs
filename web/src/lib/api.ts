@@ -11,6 +11,7 @@ import type {
   JobStarted,
   LoopRequest,
   ObserverRequest,
+  OutputRequest,
   PairedDevice,
   PairRequest,
   Profile,
@@ -156,4 +157,14 @@ export async function loop(role: CameraRoleName, exposure: number): Promise<stri
 
 export function cancelJob(job: string): Promise<void> {
   return request("POST", `/api/jobs/${job}/cancel`);
+}
+
+// -- Power box (ADR 0017) ------------------------------------------------------
+
+export function setOutput(id: string, change: OutputRequest): Promise<void> {
+  return request("PUT", `/api/power/outputs/${encodeURIComponent(id)}`, change);
+}
+
+export function setAutoDew(on: boolean): Promise<void> {
+  return request("PUT", "/api/power/auto-dew", { on });
 }

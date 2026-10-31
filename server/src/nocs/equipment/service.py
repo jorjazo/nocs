@@ -25,7 +25,17 @@ from typing import Any, Protocol
 
 import anyio
 
-from nocs.devices import Camera, Device, DeviceError, DeviceInterface, FilterWheel, Focuser, Mount
+from nocs.devices import (
+    Camera,
+    Device,
+    DeviceError,
+    DeviceInterface,
+    FilterWheel,
+    Focuser,
+    Mount,
+    PowerBox,
+    WeatherSensor,
+)
 from nocs.devices.base import device_interfaces
 from nocs.equipment.profiles import DeviceConfig, Profile, ProfileStore, Role
 from nocs.indi import IndiClient, IndiEvent, PropertyDeleted, PropertyUpdated, TextElement
@@ -59,15 +69,15 @@ class DeviceStatus(StrEnum):
     DISCONNECTED = "disconnected"
 
 
-ROLE_INTERFACE: dict[Role, DeviceInterface | None] = {
+ROLE_INTERFACE: dict[Role, DeviceInterface] = {
     Role.MAIN_CAMERA: DeviceInterface.CCD,
     Role.GUIDE_CAMERA: DeviceInterface.CCD,
     Role.MOUNT: DeviceInterface.TELESCOPE,
     Role.FOCUSER: DeviceInterface.FOCUSER,
     Role.FILTER_WHEEL: DeviceInterface.FILTER,
-    # Power boxes declare a mix of interfaces (AUX, weather, focuser…): any device
-    # of the driver qualifies.
-    Role.POWER_BOX: None,
+    # One device may play several of these (a power box: power, weather, focuser).
+    Role.POWER: DeviceInterface.POWER,
+    Role.WEATHER: DeviceInterface.WEATHER,
 }
 
 ROLE_FACADE: dict[Role, type[Device]] = {
@@ -76,7 +86,8 @@ ROLE_FACADE: dict[Role, type[Device]] = {
     Role.MOUNT: Mount,
     Role.FOCUSER: Focuser,
     Role.FILTER_WHEEL: FilterWheel,
-    Role.POWER_BOX: Device,
+    Role.POWER: PowerBox,
+    Role.WEATHER: WeatherSensor,
 }
 
 
@@ -112,7 +123,7 @@ def candidates(client: IndiClient, role: Role, config: DeviceConfig) -> list[str
     return [
         name
         for name in driver_devices(client, config.driver)
-        if interface is None or interface in device_interfaces(client, name)
+        if interface in device_interfaces(client, name)
     ]
 
 

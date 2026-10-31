@@ -105,6 +105,18 @@
           "default": null,
           "description": "None: no mount is ready."
         },
+        "power": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PowerState"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "None: no power box is ready."
+        },
         "storage": {
           "anyOf": [
             {
@@ -115,6 +127,18 @@
             }
           ],
           "default": null
+        },
+        "weather": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WeatherState"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "None: no weather sensor is ready."
         }
       },
       "title": "AppState",
@@ -160,6 +184,19 @@
         "observer"
       ],
       "title": "AuthStatus",
+      "type": "object"
+    },
+    "AutoDewRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "on": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "on"
+      ],
+      "title": "AutoDewRequest",
       "type": "object"
     },
     "BlobInfo": {
@@ -660,6 +697,24 @@
         "driver": {
           "$ref": "#/$defs/DriverName",
           "description": "INDI driver executable, e.g. indi_asi_ccd."
+        },
+        "outputs": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/OutputConfig"
+              },
+              "propertyNames": {
+                "$ref": "#/$defs/OutputId"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Power role only: what each output (dc:1, dew:2, variable:1\u2026) is called and feeds."
         },
         "port": {
           "anyOf": [
@@ -2080,6 +2135,97 @@
       "title": "Optics",
       "type": "object"
     },
+    "OutputConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "feeds": {
+          "description": "Roles this output powers: switching it off is refused while one is busy.",
+          "items": {
+            "$ref": "#/$defs/Role"
+          },
+          "type": "array"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "maxLength": 40,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Name shown instead of the driver's."
+        }
+      },
+      "title": "OutputConfig",
+      "type": "object"
+    },
+    "OutputId": {
+      "pattern": "^(dc|dew|usb|variable):[1-9][0-9]?$",
+      "type": "string"
+    },
+    "OutputKindName": {
+      "enum": [
+        "dc",
+        "dew",
+        "usb",
+        "variable"
+      ],
+      "type": "string"
+    },
+    "OutputRequest": {
+      "additionalProperties": false,
+      "description": "dc and usb outputs take ``on``; dew heaters ``on`` and/or ``duty``; variable\noutputs a ``voltage`` (switching them on) or ``on: false``.\n\nSwitching an output off, or changing its voltage, is refused (409) while a role\nit feeds is busy (any job, when the profile does not say), unless ``force``.",
+      "properties": {
+        "duty": {
+          "anyOf": [
+            {
+              "maximum": 100,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Percent."
+        },
+        "force": {
+          "default": false,
+          "type": "boolean"
+        },
+        "on": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "voltage": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Volts."
+        }
+      },
+      "title": "OutputRequest",
+      "type": "object"
+    },
     "PadRequest": {
       "additionalProperties": false,
       "description": "What the client holds, repeated every 0.25 s while held; all null to let go.\n\nThe mount stops after 1 s without a message, when the socket closes, and on\nany error; after such a stop the client must let go before moving again.",
@@ -2290,6 +2436,184 @@
       "title": "PatchOp",
       "type": "object"
     },
+    "PowerInputState": {
+      "additionalProperties": false,
+      "properties": {
+        "current": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Total current drawn, A."
+        },
+        "power": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "W"
+        },
+        "voltage": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "voltage",
+        "current",
+        "power"
+      ],
+      "title": "PowerInputState",
+      "type": "object"
+    },
+    "PowerOutput": {
+      "additionalProperties": false,
+      "properties": {
+        "current": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Amperes, when the box measures this output."
+        },
+        "duty": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Dew heaters: power in percent; while off, what it gets when switched on."
+        },
+        "feeds": {
+          "description": "Roles the profile says this output powers.",
+          "items": {
+            "$ref": "#/$defs/Role"
+          },
+          "type": "array"
+        },
+        "id": {
+          "description": "<kind>:<n>, numbered from 1 in the driver's order (ADR 0017).",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/OutputKindName"
+        },
+        "label": {
+          "description": "The profile's label, else the driver's.",
+          "type": "string"
+        },
+        "on": {
+          "type": "boolean"
+        },
+        "voltage": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Variable outputs: volts while on."
+        },
+        "voltages": {
+          "description": "Variable outputs: the voltages it can be set to.",
+          "items": {
+            "type": "number"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "label",
+        "on",
+        "current",
+        "duty",
+        "voltage",
+        "voltages",
+        "feeds"
+      ],
+      "title": "PowerOutput",
+      "type": "object"
+    },
+    "PowerState": {
+      "additionalProperties": false,
+      "properties": {
+        "auto_dew": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The box drives its dew heaters itself; None: it cannot."
+        },
+        "auto_dew_aggression": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Percent (Pegasus boxes)."
+        },
+        "device": {
+          "type": "string"
+        },
+        "input": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PowerInputState"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "outputs": {
+          "items": {
+            "$ref": "#/$defs/PowerOutput"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "device",
+        "outputs",
+        "auto_dew",
+        "auto_dew_aggression",
+        "input"
+      ],
+      "title": "PowerState",
+      "type": "object"
+    },
     "Preview": {
       "additionalProperties": false,
       "properties": {
@@ -2496,7 +2820,8 @@
         "mount",
         "focuser",
         "filter_wheel",
-        "power_box"
+        "power",
+        "weather"
       ],
       "title": "Role",
       "type": "string"
@@ -2890,6 +3215,55 @@
         "max"
       ],
       "title": "ValueRange",
+      "type": "object"
+    },
+    "WeatherState": {
+      "additionalProperties": false,
+      "properties": {
+        "device": {
+          "type": "string"
+        },
+        "dew_point": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "\u00b0C: the sensor's, or computed from temperature and humidity."
+        },
+        "humidity": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Relative humidity, %."
+        },
+        "temperature": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "\u00b0C"
+        }
+      },
+      "required": [
+        "device",
+        "temperature",
+        "humidity",
+        "dew_point"
+      ],
+      "title": "WeatherState",
       "type": "object"
     },
     "WestEast": {

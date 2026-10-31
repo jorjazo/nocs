@@ -37,6 +37,16 @@ export type NorthSouth = "north" | "south";
 export type WestEast = "west" | "east";
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "Role".
+ */
+export type Role = "main_camera" | "guide_camera" | "mount" | "focuser" | "filter_wheel" | "power" | "weather";
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "OutputKindName".
+ */
+export type OutputKindName = "dc" | "dew" | "usb" | "variable";
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "ClientRole".
  */
 export type ClientRole = "owner" | "observer";
@@ -52,9 +62,9 @@ export type CameraRoleName = "main_camera" | "guide_camera";
 export type DriverName = string;
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
- * via the `definition` "Role".
+ * via the `definition` "OutputId".
  */
-export type Role = "main_camera" | "guide_camera" | "mount" | "focuser" | "filter_wheel" | "power_box";
+export type OutputId = string;
 
 export interface NOCSAPI {
   [k: string]: unknown;
@@ -100,7 +110,15 @@ export interface AppState {
    * None: no mount is ready.
    */
   mount?: MountState | null;
+  /**
+   * None: no power box is ready.
+   */
+  power?: PowerState | null;
   storage?: StorageState | null;
+  /**
+   * None: no weather sensor is ready.
+   */
+  weather?: WeatherState | null;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -587,6 +605,74 @@ export interface MountSite {
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "PowerState".
+ */
+export interface PowerState {
+  /**
+   * The box drives its dew heaters itself; None: it cannot.
+   */
+  auto_dew: boolean | null;
+  /**
+   * Percent (Pegasus boxes).
+   */
+  auto_dew_aggression: number | null;
+  device: string;
+  input: PowerInputState | null;
+  outputs: PowerOutput[];
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "PowerInputState".
+ */
+export interface PowerInputState {
+  /**
+   * Total current drawn, A.
+   */
+  current: number | null;
+  /**
+   * W
+   */
+  power: number | null;
+  voltage: number | null;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "PowerOutput".
+ */
+export interface PowerOutput {
+  /**
+   * Amperes, when the box measures this output.
+   */
+  current: number | null;
+  /**
+   * Dew heaters: power in percent; while off, what it gets when switched on.
+   */
+  duty: number | null;
+  /**
+   * Roles the profile says this output powers.
+   */
+  feeds: Role[];
+  /**
+   * <kind>:<n>, numbered from 1 in the driver's order (ADR 0017).
+   */
+  id: string;
+  kind: OutputKindName;
+  /**
+   * The profile's label, else the driver's.
+   */
+  label: string;
+  on: boolean;
+  /**
+   * Variable outputs: volts while on.
+   */
+  voltage: number | null;
+  /**
+   * Variable outputs: the voltages it can be set to.
+   */
+  voltages: number[];
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "StorageState".
  */
 export interface StorageState {
@@ -654,6 +740,25 @@ export interface StorageDestination {
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "WeatherState".
+ */
+export interface WeatherState {
+  device: string;
+  /**
+   * °C: the sensor's, or computed from temperature and humidity.
+   */
+  dew_point: number | null;
+  /**
+   * Relative humidity, %.
+   */
+  humidity: number | null;
+  /**
+   * °C
+   */
+  temperature: number | null;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "AuthStatus".
  */
 export interface AuthStatus {
@@ -690,6 +795,13 @@ export interface PairedDevice {
    */
   last_used: string;
   name: string;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "AutoDewRequest".
+ */
+export interface AutoDewRequest {
+  on: boolean;
 }
 /**
  * Only the fields present are changed.
@@ -787,9 +899,29 @@ export interface DeviceConfig {
    */
   driver: string;
   /**
+   * Power role only: what each output (dc:1, dew:2, variable:1…) is called and feeds.
+   */
+  outputs?: {
+    [k: string]: OutputConfig;
+  } | null;
+  /**
    * Serial port for DEVICE_PORT, preferably a /dev/serial/by-id/ path.
    */
   port?: string | null;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "OutputConfig".
+ */
+export interface OutputConfig {
+  /**
+   * Roles this output powers: switching it off is refused while one is busy.
+   */
+  feeds?: Role[];
+  /**
+   * Name shown instead of the driver's.
+   */
+  label?: string | null;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -1054,6 +1186,28 @@ export interface Optics {
    * Reducer or barlow factor.
    */
   reducer?: number;
+}
+/**
+ * dc and usb outputs take ``on``; dew heaters ``on`` and/or ``duty``; variable
+ * outputs a ``voltage`` (switching them on) or ``on: false``.
+ *
+ * Switching an output off, or changing its voltage, is refused (409) while a role
+ * it feeds is busy (any job, when the profile does not say), unless ``force``.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "OutputRequest".
+ */
+export interface OutputRequest {
+  /**
+   * Percent.
+   */
+  duty?: number | null;
+  force?: boolean;
+  on?: boolean | null;
+  /**
+   * Volts.
+   */
+  voltage?: number | null;
 }
 /**
  * What the client holds, repeated every 0.25 s while held; all null to let go.

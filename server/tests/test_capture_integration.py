@@ -90,7 +90,7 @@ def api(
         indi_upload_dir_local=transfer,
     )
     profile = {**SIMULATORS, "devices": dict(SIMULATORS["devices"]), "site": SITE}
-    profile["devices"].pop("power_box")  # needs the FIFO; not relevant here
+    profile["devices"].pop("weather")  # needs the FIFO; not relevant here
     with TestClient(create_app(settings)) as client:
         pair_owner(client)
         # Never a drive that happens to be mounted on the test machine.

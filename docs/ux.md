@@ -154,6 +154,20 @@ Live view (stage 2.7):
   darks). A camera that reports its temperature read-only, like the ASI220MM,
   shows "None" on the cooler tile.
 
+Power box (stage 2.10):
+
+- The power box opens as a sheet from its row in Rig: input voltage, current
+  and power, then each output with what the profile says it feeds, then the
+  dew heaters. Switching an output off and changing the adjustable voltage take
+  a second tap; when the server refuses because what the output feeds is busy,
+  its reason shows with a "switch off anyway" choice that takes a second tap too.
+- A new voltage is picked first and applied with its own button, with a reminder
+  to check what is plugged in. Dew heaters are set by hand only with auto-dew
+  off.
+- Tonight shows the conditions from the weather role (temperature, humidity,
+  dew point and the margin to it, in the warning color under 3 °C) above the
+  rest of the screen, which arrives in phase 3.
+
 ## 8. Open UX questions
 
 - Persistent "session running" indicator on non-session screens (banner vs.

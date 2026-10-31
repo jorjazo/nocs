@@ -27,7 +27,7 @@ web/      Svelte 5 + TypeScript PWA: styles/ (tokens), lib/ (api, live state,
           auth, router, i18n/ with en.ts as the source, prefs), components/,
           screens/ (dev/ is the old INDI property browser at #/dev)
 dev/      compose.yaml (INDI simulators + GSC catalog + driver FIFO in dev/.run,
-          headless PHD2), profiles/ (simulator rig), tools/ (indi_record),
+          headless PHD2), profiles/ (simulator rig), tools/ (indi_record, fake_ppba),
           bench/, spikes/, pi/ (lab Pi flashing and setup)
 docs/     design, roadmap, ux, adr/, spikes/
 ```

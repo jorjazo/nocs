@@ -1,4 +1,4 @@
-"""Typed device facades (camera, mount, focuser, filter wheel) over the INDI client."""
+"""Typed device facades (camera, mount, focuser, filter wheel, power box, weather sensor)."""
 
 from nocs.devices.base import Device, DeviceError, DeviceInterface, device_interfaces
 from nocs.devices.camera import Camera, Frame, FrameType, SensorInfo
@@ -16,6 +16,8 @@ from nocs.devices.mount import (
     Mount,
     PierSide,
 )
+from nocs.devices.power_box import Output, OutputKind, PowerBox, PowerInput, parse_output_id
+from nocs.devices.weather import Environment, WeatherSensor, dew_point
 
 __all__ = [
     "STOPPED",
@@ -26,6 +28,7 @@ __all__ = [
     "DeviceError",
     "DeviceInterface",
     "Direction",
+    "Environment",
     "FilterWheel",
     "Focuser",
     "Frame",
@@ -35,7 +38,14 @@ __all__ = [
     "MeridianLimits",
     "Motion",
     "Mount",
+    "Output",
+    "OutputKind",
     "PierSide",
+    "PowerBox",
+    "PowerInput",
     "SensorInfo",
+    "WeatherSensor",
     "device_interfaces",
+    "dew_point",
+    "parse_output_id",
 ]

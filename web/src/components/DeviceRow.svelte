@@ -9,6 +9,7 @@
     subtitle,
     error,
     trailing,
+    onclick,
   }: {
     icon: IconName;
     title: string;
@@ -16,16 +17,26 @@
     // Shown under the row, in words, when something is wrong.
     error?: string | null;
     trailing?: Snippet;
+    // Makes the icon and text a button that opens the device's controls.
+    onclick?: () => void;
   } = $props();
 </script>
 
-<li class="row">
+{#snippet content()}
   <span class="tile"><Icon name={icon} /></span>
   <span class="text">
     <span class="title">{title}</span>
     {#if subtitle}<span class="subtitle">{subtitle}</span>{/if}
     {#if error}<span class="error">{error}</span>{/if}
   </span>
+{/snippet}
+
+<li class="row">
+  {#if onclick}
+    <button type="button" class="open" {onclick}>{@render content()}</button>
+  {:else}
+    {@render content()}
+  {/if}
   {#if trailing}<span class="trailing">{@render trailing()}</span>{/if}
 </li>
 
@@ -37,6 +48,18 @@
     min-height: 64px;
     padding: var(--space-3) 0;
     border-bottom: 1px solid var(--line);
+  }
+  .open {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    padding: 0;
+    border: 0;
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
   }
   .tile {
     flex: none;

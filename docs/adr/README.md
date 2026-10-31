@@ -21,5 +21,6 @@ that supersedes the old one.
 | [0013](0013-storage-and-catalog.md) | Storage destinations, file layout and frame catalog | Accepted |
 | [0014](0014-authentication-and-pairing.md) | Authentication and device pairing | Accepted |
 | [0015](0015-mount-control-and-client-time.md) | Mount control: slew pad dead man's switch and client time | Accepted |
+| [0017](0017-roles-by-capability-power-and-weather.md) | Roles by capability: power and weather, and what each output feeds | Accepted |
 
 Template: Context → Decision → Consequences.
