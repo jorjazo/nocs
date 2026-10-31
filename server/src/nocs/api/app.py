@@ -42,6 +42,7 @@ from nocs.api.schemas import (
     CoolingRequest,
     DestinationRequest,
     Driver,
+    EjectRequest,
     ExposeRequest,
     FrameRecord,
     FrameTypeName,
@@ -97,7 +98,7 @@ from nocs.jobs import JobManager, ResourceBusyError
 from nocs.mount.service import MountService
 from nocs.power.service import PowerService, WeatherService
 from nocs.services.indi_bridge import IndiBridge, NotConnectedError
-from nocs.services.system import SystemService
+from nocs.services.system import OperationUnavailableError, SystemService
 from nocs.solving import Astap, SolverService
 from nocs.state import Resync, StateStore
 from nocs.storage import (
@@ -111,6 +112,9 @@ from nocs.storage import (
 )
 from nocs.storage.environment import EnvironmentLog
 from nocs.storage.layout import clean
+from nocs.storage.service import DriveBusyError, EjectUnavailableError
+from nocs.system.client import HelperUnavailableError
+from nocs.system.protocol import HelperError
 
 log = logging.getLogger(__name__)
 
@@ -191,6 +195,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
     async def lifespan(_: FastAPI) -> AsyncGenerator[None]:
         services.clock = Clock(store)
         services.jobs = JobManager(store)
+        services.system = SystemService(store, services.jobs, settings.system_socket)
         services.equipment = EquipmentService(
             store, ProfileStore(settings.config_dir), bridge, fifo
         )
@@ -203,7 +208,10 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
             settings.storage_dir or settings.data_dir,
             site_longitude,
             now=services.clock.now,
+            helper=services.system,
+            busy=services.jobs.active,
         )
+        await services.system.refresh()  # so that drives plugged in already get mounted
         await services.storage.start()
         services.capture = CaptureService(
             store,
@@ -255,7 +263,6 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
         )
         task = asyncio.create_task(bridge.run(), name="indi-bridge")
         guiding_task = asyncio.create_task(services.guiding.run(), name="phd2")
-        services.system = SystemService(store, services.jobs, settings.system_socket)
         system_task = asyncio.create_task(services.system.run(), name="nocs-system")
         try:
             yield
@@ -454,6 +461,28 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
             await storage().choose(request.destination)
         except StorageError as e:
             raise HTTPException(status.HTTP_409_CONFLICT, str(e)) from e
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    @app.post(
+        "/api/storage/destinations/{destination_id}/eject",
+        status_code=status.HTTP_204_NO_CONTENT,
+    )
+    async def storage_eject(  # pyright: ignore[reportUnusedFunction]
+        destination_id: str, request: EjectRequest | None = None
+    ) -> Response:
+        """Unmount a USB drive and power it off, so it can be unplugged (ADR 0027)."""
+        try:
+            await storage().eject(destination_id, force=request is not None and request.force)
+        except DriveBusyError as e:
+            raise HTTPException(status.HTTP_409_CONFLICT, str(e)) from e
+        except (EjectUnavailableError, HelperUnavailableError, OperationUnavailableError) as e:
+            raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(e)) from e
+        except ValueError as e:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e)) from e
+        except HelperError as e:
+            raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(e)) from e
+        except StorageError as e:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, str(e)) from e
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     @app.put("/api/storage/target", status_code=status.HTTP_204_NO_CONTENT)

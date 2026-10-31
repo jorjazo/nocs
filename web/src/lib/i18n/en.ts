@@ -157,6 +157,15 @@ export const en = {
   prefs: {
     title: "This screen",
   },
+  drives: {
+    title: "USB drives",
+    eject: "Eject",
+    ejectAnyway: "Eject anyway",
+    confirmEject: "Tap again to eject",
+    ejected: (label: string) => `${label} can be unplugged.`,
+    notMounted: "Not mounted",
+    unplug: "Ejected: unplug it, or plug it in again to use it",
+  },
   system: {
     title: "This computer",
     temperature: "CPU",

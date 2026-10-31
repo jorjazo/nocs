@@ -127,6 +127,14 @@ class SystemService:
             )
         self._publish()
 
+    def offers(self, op: str) -> bool:
+        """nocs-system performs ``op`` here, as far as NOCS knows."""
+        return op in self._operations
+
+    async def perform(self, op: str, args: Message) -> Message:
+        """Perform ``op`` for another service (storage); errors as ``_call`` raises them."""
+        return await self._call(op, args)
+
     async def reboot(self, *, force: bool = False) -> None:
         await self._power("power.reboot", force)
 

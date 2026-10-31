@@ -1172,12 +1172,20 @@ export interface StorageState {
    * File name template.
    */
   template: string;
+  /**
+   * USB drives plugged in but not mounted: unplug an ejected one.
+   */
+  unmounted: UnmountedDrive[];
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "StorageDestination".
  */
 export interface StorageDestination {
+  /**
+   * NOCS can eject it here (ADR 0027).
+   */
+  ejectable: boolean;
   /**
    * Bytes available to nocsd.
    */
@@ -1197,6 +1205,10 @@ export interface StorageDestination {
    */
   path: string;
   /**
+   * On a USB drive.
+   */
+  removable: boolean;
+  /**
    * On an SD card (slower, wears out sooner; still supported).
    */
   sd: boolean;
@@ -1209,6 +1221,28 @@ export interface StorageDestination {
    */
   total: number;
   writable: boolean;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "UnmountedDrive".
+ */
+export interface UnmountedDrive {
+  /**
+   * e.g. /dev/sda1.
+   */
+  device: string;
+  /**
+   * Why NOCS could not mount it; None while it does not try (not here, or ejected and still plugged in).
+   */
+  error: string | null;
+  /**
+   * Filesystem type; empty if unknown.
+   */
+  fs: string;
+  /**
+   * Its filesystem label, else its UUID.
+   */
+  label: string;
 }
 /**
  * The box NOCS runs on (ADR 0027).
@@ -1582,6 +1616,16 @@ export interface Driver {
   label: string;
   manufacturer: string;
   name: string;
+}
+/**
+ * Refused (409) while a job runs, unless ``force``; always while a frame is being saved
+ * to the drive.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "EjectRequest".
+ */
+export interface EjectRequest {
+  force?: boolean;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema

@@ -2,8 +2,10 @@
 
 Everything is read from files any user can read: ``/proc/self/mountinfo`` for the
 mounts, ``/dev/disk/by-uuid`` and ``by-label`` for filesystem identities (with
-``/sys/class/block/<name>/dev`` for the device each link names), and
-``/sys/dev/block`` for the disk behind each one. nocsd mounts nothing.
+``/sys/class/block/<name>/dev`` for the device each link names), ``/sys/dev/block``
+for the disk behind each one, and udev's database (``/run/udev/data``) for the
+filesystems on USB drives that are plugged in but not mounted. nocsd mounts nothing
+itself: nocs-system does (ADR 0027).
 
 All functions here block (file system access): call them from a thread.
 """
@@ -61,6 +63,7 @@ class SystemPaths:
     by_label: Path = Path("/dev/disk/by-label")
     sys_block: Path = Path("/sys/dev/block")
     sys_class_block: Path = Path("/sys/class/block")
+    udev_data: Path = Path("/run/udev/data")
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,6 +89,21 @@ class Volume:
     """On the same disk as ``/``."""
     sd: bool
     """That disk is an SD/MMC card."""
+    usb: bool = False
+    """That disk is attached by USB: it can be unplugged."""
+
+
+@dataclass(frozen=True, slots=True)
+class Attached:
+    """A filesystem on a USB drive that is plugged in but not mounted."""
+
+    device: str
+    """``/dev/sda1``."""
+    number: tuple[int, int]
+    """Its major and minor number."""
+    label: str
+    fs: str
+    uuid: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -116,6 +134,7 @@ class Destination:
             "writable": self.writable,
             "system": self.volume.system,
             "sd": self.volume.sd,
+            "removable": self.volume.usb,
             "internal": self.internal,
         }
 
@@ -169,7 +188,8 @@ def _links(directory: Path, sys_class_block: Path) -> dict[tuple[int, int], str]
 
 
 def _disk(device: tuple[int, int], paths: SystemPaths) -> tuple[str, bool] | None:
-    """The disk holding a block device (itself, or the parent of a partition), and if it is SD."""
+    """The disk holding a block device (itself, or the parent of a partition), and if it is
+    SD; the first item is its path in /sys, which runs through ``/usb`` for USB drives."""
     try:
         node = (paths.sys_block / f"{device[0]}:{device[1]}").resolve(strict=True)
     except OSError:
@@ -216,6 +236,7 @@ class Volumes:
             and self._system_disk is not None
             and disk[0] == self._system_disk[0],
             sd=disk is not None and disk[1],
+            usb=disk is not None and "/usb" in disk[0],
         )
 
     def destination(self, directory: Path, *, internal: bool = False) -> Destination | None:
@@ -265,6 +286,57 @@ class Volumes:
             if within == mount.root or within.is_relative_to(mount.root):
                 return mount.mount_point / within.relative_to(mount.root)
         return None
+
+
+def unmounted_usb(paths: SystemPaths, mounts: list[Mount]) -> list[Attached]:
+    """Filesystems on USB drives that no mount uses, as udev identified them."""
+    mounted = {mount.device for mount in mounts}
+    found: list[Attached] = []
+    try:
+        entries = sorted(paths.sys_class_block.iterdir())
+    except OSError:
+        return found
+    for entry in entries:
+        try:
+            node = entry.resolve(strict=True)
+            major, _, minor = (entry / "dev").read_text().strip().partition(":")
+            number = (int(major), int(minor))
+            # A disk with partitions holds no filesystem itself: its partitions do.
+            partitioned = any(
+                (child / "partition").exists() for child in node.glob(f"{entry.name}*")
+            )
+        except (OSError, ValueError):
+            continue
+        if "/usb" not in str(node) or number in mounted or partitioned:
+            continue
+        udev = _udev(paths.udev_data / f"b{number[0]}:{number[1]}")
+        if udev.get("ID_FS_USAGE") != "filesystem":
+            continue
+        uuid = udev.get("ID_FS_UUID") or None
+        found.append(
+            Attached(
+                device=f"/dev/{entry.name}",
+                number=number,
+                label=udev.get("ID_FS_LABEL") or uuid or entry.name,
+                fs=udev.get("ID_FS_TYPE", ""),
+                uuid=uuid,
+            )
+        )
+    return found
+
+
+def _udev(path: Path) -> dict[str, str]:
+    """The properties (``E:KEY=value`` lines) udev recorded for a device."""
+    try:
+        lines = path.read_text(errors="replace").splitlines()
+    except OSError:
+        return {}
+    properties: dict[str, str] = {}
+    for line in lines:
+        if line.startswith("E:"):
+            key, _, value = line[2:].partition("=")
+            properties[key] = value
+    return properties
 
 
 def _space(directory: Path, mount: Mount) -> tuple[int, int, bool]:

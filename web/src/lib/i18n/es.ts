@@ -153,6 +153,15 @@ export const es: Messages = {
   prefs: {
     title: "Esta pantalla",
   },
+  drives: {
+    title: "Discos USB",
+    eject: "Expulsar",
+    ejectAnyway: "Expulsar de todos modos",
+    confirmEject: "Toca de nuevo para expulsar",
+    ejected: (label: string) => `Ya puedes desconectar ${label}.`,
+    notMounted: "Sin montar",
+    unplug: "Expulsado: desconéctalo, o vuelve a conectarlo para usarlo",
+  },
   system: {
     title: "Este equipo",
     temperature: "CPU",

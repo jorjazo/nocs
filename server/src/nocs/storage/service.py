@@ -2,11 +2,15 @@
 
 State layout under ``("storage",)``::
 
-    {destinations, choice, destination, error, target, template, catalog_error}
+    {destinations, unmounted, choice, destination, error, target, template, catalog_error}
 
 The choice (automatic or a destination), the target name and the file name
 template are kept in ``<config dir>/storage.json``. Saving and catalog queries
 block: they run in threads, never on the event loop.
+
+Where nocs-system mounts and ejects drives (ADR 0027), a USB drive is mounted as
+soon as it is plugged in, and ejecting one waits for the frame being saved to it;
+``unmounted`` lists the drives plugged in but not mounted, with the reason.
 """
 
 from __future__ import annotations
@@ -19,11 +23,12 @@ import shutil
 import sqlite3
 import threading
 import uuid
+from collections import Counter
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path, PurePosixPath
-from typing import Any
+from typing import Any, Protocol
 
 import anyio
 import zipstream  # pyright: ignore[reportMissingTypeStubs]
@@ -45,7 +50,15 @@ from nocs.storage.catalog import (
     TemperatureSample,
 )
 from nocs.storage.fits import Card, FitsError, Header, place
-from nocs.storage.volumes import INTERNAL, SEARCH, Destination, SystemPaths, Volumes
+from nocs.storage.volumes import (
+    INTERNAL,
+    SEARCH,
+    Attached,
+    Destination,
+    SystemPaths,
+    Volumes,
+    unmounted_usb,
+)
 
 log = logging.getLogger(__name__)
 
@@ -67,6 +80,22 @@ class StorageError(Exception):
 
 class FrameUnavailableError(Exception):
     """The frame's drive is not mounted."""
+
+
+class DriveBusyError(StorageError):
+    """Ejecting the drive now would lose a frame, or interrupt running work."""
+
+
+class EjectUnavailableError(StorageError):
+    """NOCS cannot eject drives on this computer."""
+
+
+class SystemHelper(Protocol):
+    """What storage needs from nocs-system: ``nocs.services.system.SystemService``."""
+
+    def offers(self, op: str) -> bool: ...
+
+    async def perform(self, op: str, args: dict[str, object]) -> dict[str, object]: ...
 
 
 class AutoLock(BaseModel):
@@ -142,8 +171,24 @@ class StorageService:
         paths: SystemPaths | None = None,
         search: tuple[Path, ...] = SEARCH,
         now: Callable[[], datetime] = lambda: datetime.now(UTC),
+        helper: SystemHelper | None = None,
+        busy: Callable[[], list[str]] = list,
     ) -> None:
         self._store = store
+        self._helper = helper
+        self._busy = busy
+        """Kinds of the running jobs, which ejecting a drive would disturb."""
+        self._writing = Counter[str]()
+        """Volume id → frames being saved to it."""
+        self._ejecting: set[str] = set()
+        self._unmounted: list[Attached] = []
+        self._present: set[tuple[int, int]] = set()
+        """USB filesystems plugged in, mounted or not, by device number."""
+        self._tried: set[tuple[int, int]] = set()
+        """Drives (by device number) NOCS tried to mount since they were plugged in."""
+        self._ejected: set[tuple[int, int]] = set()
+        """Ejected and not unplugged yet: they stay unmounted."""
+        self._mount_errors: dict[tuple[int, int], str] = {}
         self._config_file = config_dir / "storage.json"
         self._unsaved_dir = data_dir / "unsaved"
         self._internal_dir = internal_dir
@@ -186,9 +231,11 @@ class StorageService:
                 log.exception("cannot read the mounted volumes")
 
     async def refresh(self) -> None:
-        """Re-read the mounts and free space, and publish what changed."""
+        """Re-read the mounts and free space, mount new drives, and publish what changed."""
         longitude = self._longitude()
         summary = await anyio.to_thread.run_sync(self._summary, longitude)
+        if await self._automount():
+            summary = await anyio.to_thread.run_sync(self._summary, longitude)
         if summary != self._published:
             self._store.set(ROOT, summary)
             self._published = summary
@@ -207,6 +254,58 @@ class StorageService:
             label = None
         self._update(destination=destination, destination_label=label, auto_lock=None)
         await self.refresh()
+
+    async def eject(self, destination_id: str, *, force: bool = False) -> None:
+        """Unmount a drive and power it off, once no frame is being saved to it.
+
+        Refused while a job runs, unless ``force``: a sequence saving there would fail.
+        """
+        if self._helper is None or not self._helper.offers("storage.eject"):
+            raise EjectUnavailableError("NOCS cannot eject drives on this computer")
+        candidates = await anyio.to_thread.run_sync(self._candidates)
+        found = next((d for d in candidates if d.id == destination_id and not d.internal), None)
+        if found is None:
+            raise StorageError(f"no drive {destination_id!r} is mounted")
+        if not force and (kinds := self._busy()):
+            raise DriveBusyError(f"{', '.join(kinds)} running: stop it first, or force")
+        volume = found.volume
+        with self._lock:
+            if self._writing[volume.id]:
+                raise DriveBusyError(f"a frame is being saved to {found.label}: try again")
+            self._ejecting.add(volume.id)
+        try:
+            log.info("ejecting %s (%s)", found.label, volume.mount.mount_point)
+            await self._helper.perform(
+                "storage.eject", {"mount_point": str(volume.mount.mount_point)}
+            )
+            self._ejected.add(volume.mount.device)
+        finally:
+            with self._lock:
+                self._ejecting.discard(volume.id)
+        await self.refresh()
+
+    async def _automount(self) -> bool:
+        """Mount the USB drives plugged in since the last look; whether it tried any."""
+        unmounted = {drive.number for drive in self._unmounted}
+        self._tried &= unmounted  # unplugged, or mounted: tried again when it comes back
+        self._ejected &= self._present
+        self._mount_errors = {n: e for n, e in self._mount_errors.items() if n in unmounted}
+        if self._helper is None or not self._helper.offers("storage.mount"):
+            return False
+        tried = False
+        for drive in self._unmounted:
+            if drive.number in self._tried or drive.number in self._ejected:
+                continue
+            self._tried.add(drive.number)
+            tried = True
+            try:
+                await self._helper.perform("storage.mount", {"device": drive.device})
+            except Exception as e:  # any refusal or failure is shown on the drive
+                log.info("cannot mount %s (%s): %s", drive.label, drive.device, e)
+                self._mount_errors[drive.number] = str(e)
+            else:
+                log.info("mounted %s (%s)", drive.label, drive.device)
+        return tried
 
     async def set_target(self, target: str | None) -> None:
         target = (target or "").strip() or None
@@ -229,6 +328,14 @@ class StorageService:
 
     def save(self, facts: FrameFacts) -> SavedFrame:
         """Complete the header, move the frame into place and catalog it."""
+        writing: list[str] = []
+        try:
+            return self._save(facts, writing)
+        finally:
+            with self._lock:
+                self._writing.subtract(writing)
+
+    def _save(self, facts: FrameFacts, writing: list[str]) -> SavedFrame:
         if self.catalog is None:
             raise StorageError(f"the frame catalog is unavailable: {self._catalog_error}")
         try:
@@ -244,6 +351,11 @@ class StorageService:
         night = layout.night_of(started, facts.site.longitude if facts.site else None)
         size = facts.source.stat().st_size
         destination = self._checked(self._resolve(Volumes(self._paths), night), size)
+        with self._lock:
+            if destination.volume.id in self._ejecting:
+                raise StorageError(f"{destination.label} is being ejected")
+            self._writing[destination.volume.id] += 1
+            writing.append(destination.volume.id)
 
         config = self._config
         filter = header.text("FILTER") or facts.filter
@@ -488,6 +600,11 @@ class StorageService:
     def _summary(self, longitude: float | None) -> dict[str, Json]:
         volumes = Volumes(self._paths)
         candidates = self._candidates(volumes)
+        self._unmounted = unmounted_usb(self._paths or SystemPaths(), volumes.mounts)
+        self._present = {drive.number for drive in self._unmounted} | {
+            m.device for m in volumes.mounts if volumes.volume(m).usb
+        }
+        ejectable = self._helper is not None and self._helper.offers("storage.eject")
         config = self._config
         current: str | None = None
         error: str | None = None
@@ -499,7 +616,19 @@ class StorageService:
         if self.catalog is None:
             error = f"the frame catalog is unavailable: {self._catalog_error}"
         return {
-            "destinations": [d.info() for d in candidates],
+            "destinations": [
+                d.info() | {"ejectable": ejectable and d.volume.usb and not d.internal}
+                for d in candidates
+            ],
+            "unmounted": [
+                {
+                    "device": drive.device,
+                    "label": drive.label,
+                    "fs": drive.fs,
+                    "error": self._mount_errors.get(drive.number),
+                }
+                for drive in self._unmounted
+            ],
             "choice": config.destination,
             "destination": current,
             "error": error,

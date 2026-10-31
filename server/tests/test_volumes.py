@@ -5,7 +5,7 @@ from pathlib import Path, PurePosixPath
 
 import pytest
 
-from nocs.storage.volumes import INTERNAL, SystemPaths, Volumes
+from nocs.storage.volumes import INTERNAL, Attached, SystemPaths, Volumes, unmounted_usb
 
 
 class FakeSystem:
@@ -19,8 +19,14 @@ class FakeSystem:
             by_label=root / "dev/disk/by-label",
             sys_block=root / "sys/dev/block",
             sys_class_block=root / "sys/class/block",
+            udev_data=root / "run/udev/data",
         )
-        for directory in (self.paths.by_uuid, self.paths.by_label, self.paths.sys_block):
+        for directory in (
+            self.paths.by_uuid,
+            self.paths.by_label,
+            self.paths.sys_block,
+            self.paths.udev_data,
+        ):
             directory.mkdir(parents=True)
         self.paths.mountinfo.parent.mkdir(parents=True)
         self._lines: list[str] = []
@@ -48,6 +54,42 @@ class FakeSystem:
             (self.paths.by_uuid / uuid).symlink_to(f"../../{name}")
         if label is not None:
             (self.paths.by_label / label.replace(" ", "\\x20")).symlink_to(f"../../{name}")
+
+    def plug(
+        self,
+        name: str,
+        device: tuple[int, int],
+        disk: str,
+        *,
+        fs: str = "exfat",
+        uuid: str | None = None,
+        label: str | None = None,
+        usage: str = "filesystem",
+        bus: str = "usb1/1-1/1-1:1.0/host0/target0:0:0/0:0:0:0",
+    ) -> None:
+        """A partition ``name`` of ``disk`` plugged in, as the kernel links it and udev
+        identifies it; the disk carries an old filesystem signature of its own."""
+        disk_node = self.root / "sys/devices/platform" / bus / "block" / disk
+        node = disk_node / name
+        node.mkdir(parents=True)
+        (node / "partition").write_text("1\n")
+        number = f"{device[0]}:{device[1]}"
+        (node / "dev").write_text(number + "\n")
+        (disk_node / "dev").write_text(f"{device[0]}:{device[1] - 1}\n")
+        self.paths.sys_class_block.mkdir(parents=True, exist_ok=True)
+        (self.paths.sys_block / number).symlink_to(node)
+        (self.paths.sys_class_block / name).symlink_to(node)
+        if not (self.paths.sys_class_block / disk).exists():
+            (self.paths.sys_class_block / disk).symlink_to(disk_node)
+        udev = [f"E:ID_FS_USAGE={usage}", f"E:ID_FS_TYPE={fs}"]
+        if uuid is not None:
+            udev.append(f"E:ID_FS_UUID={uuid}")
+            (self.paths.by_uuid / uuid).symlink_to(f"../../{name}")
+        if label is not None:
+            udev.append(f"E:ID_FS_LABEL={label}")
+        (self.paths.udev_data / f"b{number}").write_text("\n".join(udev) + "\n")
+        disk_udev = self.paths.udev_data / f"b{device[0]}:{device[1] - 1}"
+        disk_udev.write_text("E:ID_FS_USAGE=filesystem\nE:ID_FS_TYPE=vfat\n")
 
     def mount(
         self,
@@ -175,3 +217,20 @@ def test_locate_follows_a_volume_to_its_current_mount_point(system: FakeSystem) 
         "/srv/astro/2026-10-30/Light/M31/a.fits"
     )
     assert Volumes(system.paths).locate("1234-ABCD", PurePosixPath("other/x")) is None
+
+
+def test_usb_drives_plugged_in_but_not_mounted(system: FakeSystem) -> None:
+    system.plug("sdb1", (8, 17), "sdb", fs="exfat", uuid="AB12-CD34", label="NIGHTS")
+    system.plug("sdc1", (8, 33), "sdc", fs="swap", usage="other")
+    system.plug("sdd1", (8, 49), "sdd", fs="ext4", uuid="in-use")
+    system.mount((8, 49), "/media/nocs/in-use")
+    system.plug("nvme0n1p1", (259, 1), "nvme0n1", fs="ext4", uuid="inside", bus="pcie0/nvme0")
+    found = unmounted_usb(system.paths, Volumes(system.paths).mounts)
+    assert found == [Attached("/dev/sdb1", (8, 17), "NIGHTS", "exfat", "AB12-CD34")]
+
+
+def test_mounted_usb_drives_are_removable(system: FakeSystem) -> None:
+    system.block("sda1", (8, 1), "sda", uuid="USB")
+    system.mount((8, 1), "/media/nocs/USB")
+    usb = Volumes(system.paths).volume(Volumes(system.paths).mounts[0])
+    assert usb.usb is True

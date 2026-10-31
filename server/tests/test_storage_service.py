@@ -10,7 +10,7 @@ import os
 import shutil
 import uuid
 import zipfile
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -24,7 +24,13 @@ from nocs.equipment import Optics, Site
 from nocs.state import StateStore
 from nocs.storage import FrameFacts, FrameFilter, FrameUnavailableError, StorageError
 from nocs.storage import service as storage_service
-from nocs.storage.service import StorageService
+from nocs.storage.service import (
+    DriveBusyError,
+    EjectUnavailableError,
+    StorageService,
+    SystemHelper,
+)
+from nocs.system.protocol import HelperError
 
 _fits: Any = fits  # untyped library; see nocs.imaging.pipeline
 
@@ -64,7 +70,9 @@ class Rig:
         self.now = datetime(2026, 10, 31, 1, 5, tzinfo=UTC)
         """The service's clock: the night of the frames below, whatever today is."""
 
-    def service(self) -> StorageService:
+    def service(
+        self, helper: SystemHelper | None = None, busy: Callable[[], list[str]] = list
+    ) -> StorageService:
         return StorageService(
             self.store,
             self.config,
@@ -74,6 +82,8 @@ class Rig:
             paths=self.system.paths,
             search=(self.search,),
             now=lambda: self.now,
+            helper=helper,
+            busy=busy,
         )
 
     def frame(self, frame_type: str = "light", start: str = "2026-10-31T01:00:00") -> FrameFacts:
@@ -340,3 +350,101 @@ async def test_trusted_clock_leaves_the_driver_time(rig: Rig, service: StorageSe
     header = _fits.getheader(saved.path)
     assert header["DATE-OBS"] == "2026-10-31T01:00:00"
     assert "CLOCKCOR" not in header
+
+
+# -- mounting and ejecting through nocs-system (ADR 0027) -----------------------
+
+
+class FakeHelper:
+    """nocs-system as storage sees it: what it offers and what it was asked."""
+
+    def __init__(self, *ops: str) -> None:
+        self.ops = set(ops)
+        self.calls: list[tuple[str, dict[str, object]]] = []
+        self.fail: str | None = None
+
+    def offers(self, op: str) -> bool:
+        return op in self.ops
+
+    async def perform(self, op: str, args: dict[str, object]) -> dict[str, object]:
+        self.calls.append((op, args))
+        if self.fail is not None:
+            raise HelperError("failed", self.fail)
+        return {}
+
+
+BOTH = ("storage.mount", "storage.eject")
+
+
+async def test_a_plugged_in_drive_is_mounted_once(rig: Rig) -> None:
+    helper = FakeHelper(*BOTH)
+    service = rig.service(helper)
+    rig.system.plug("sdb1", (8, 17), "sdb", uuid="NEW-1", label="NIGHTS")
+    await service.refresh()
+    await service.refresh()
+    assert helper.calls == [("storage.mount", {"device": "/dev/sdb1"})]
+    assert rig.state["unmounted"] == [
+        {"device": "/dev/sdb1", "label": "NIGHTS", "fs": "exfat", "error": None}
+    ]
+    await service.close()
+
+
+async def test_a_drive_that_cannot_be_mounted_says_why(rig: Rig) -> None:
+    helper = FakeHelper(*BOTH)
+    helper.fail = "systemd-mount: bad superblock"
+    service = rig.service(helper)
+    rig.system.plug("sdb1", (8, 17), "sdb", fs="ntfs", uuid="NEW-1")
+    await service.refresh()
+    assert rig.state["unmounted"][0]["error"] == "systemd-mount: bad superblock"
+    await service.close()
+
+
+async def test_without_the_helper_nothing_is_mounted(rig: Rig) -> None:
+    helper = FakeHelper()
+    service = rig.service(helper)
+    rig.system.plug("sdb1", (8, 17), "sdb", uuid="NEW-1")
+    await service.refresh()
+    assert helper.calls == []
+    assert [d["ejectable"] for d in rig.state["destinations"]] == [False, False]
+    with pytest.raises(EjectUnavailableError):
+        await service.eject("USB-UUID")
+    await service.close()
+
+
+async def test_eject_and_do_not_mount_it_again(rig: Rig, shm: Path) -> None:
+    helper = FakeHelper(*BOTH)
+    service = rig.service(helper)
+    nights = shm / "nights"
+    nights.mkdir()
+    rig.system.plug("sdb1", (8, 17), "sdb", uuid="NIGHTS-1", label="NIGHTS")
+    rig.system.mount((8, 17), nights, "exfat")
+    await service.refresh()
+    assert helper.calls == []
+    usb = next(d for d in rig.state["destinations"] if d["id"] == "NIGHTS-1")
+    assert (usb["removable"], usb["ejectable"]) == (True, True)
+
+    await service.eject("NIGHTS-1")
+    assert helper.calls == [("storage.eject", {"mount_point": str(nights)})]
+    rig.system.unmount(nights)  # as nocs-system did; the drive stays plugged in
+    await service.refresh()
+    await service.refresh()
+    assert helper.calls == [("storage.eject", {"mount_point": str(nights)})]
+    await service.close()
+
+
+async def test_eject_waits_for_frames_and_jobs(rig: Rig) -> None:
+    helper = FakeHelper(*BOTH)
+    jobs = ["expose"]
+    service = rig.service(helper, busy=lambda: jobs)
+    await service.refresh()
+    with pytest.raises(DriveBusyError, match="expose running"):
+        await service.eject("USB-UUID")
+    service._writing["USB-UUID"] += 1  # pyright: ignore[reportPrivateUsage]
+    with pytest.raises(DriveBusyError, match="being saved"):
+        await service.eject("USB-UUID", force=True)
+    service._writing["USB-UUID"] -= 1  # pyright: ignore[reportPrivateUsage]
+    await service.eject("USB-UUID", force=True)
+    assert [op for op, _ in helper.calls] == ["storage.eject"]
+    with pytest.raises(StorageError, match="no drive"):
+        await service.eject("internal", force=True)
+    await service.close()

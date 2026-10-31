@@ -24,6 +24,7 @@ export type {
   CoolingRequest,
   DeviceConfig,
   DeviceStatusName,
+  EjectRequest,
   Driver,
   EquatorialGoto,
   EquipmentState,
@@ -84,6 +85,7 @@ export type {
   SystemHealth,
   SystemState,
   TrackingRequest,
+  UnmountedDrive,
   WeatherState,
 } from "./generated/api";
 

@@ -1400,6 +1400,18 @@
       "pattern": "^[A-Za-z0-9_.+-]{1,128}$",
       "type": "string"
     },
+    "EjectRequest": {
+      "additionalProperties": false,
+      "description": "Refused (409) while a job runs, unless ``force``; always while a frame is being saved\nto the drive.",
+      "properties": {
+        "force": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "title": "EjectRequest",
+      "type": "object"
+    },
     "EquatorialGoto": {
       "additionalProperties": false,
       "properties": {
@@ -4764,6 +4776,10 @@
     "StorageDestination": {
       "additionalProperties": false,
       "properties": {
+        "ejectable": {
+          "description": "NOCS can eject it here (ADR 0027).",
+          "type": "boolean"
+        },
         "free": {
           "description": "Bytes available to nocsd.",
           "type": "integer"
@@ -4785,6 +4801,10 @@
         "path": {
           "description": "Directory frames are saved below, as NOCS/\u2026.",
           "type": "string"
+        },
+        "removable": {
+          "description": "On a USB drive.",
+          "type": "boolean"
         },
         "sd": {
           "description": "On an SD card (slower, wears out sooner; still supported).",
@@ -4812,6 +4832,8 @@
         "writable",
         "system",
         "sd",
+        "removable",
+        "ejectable",
         "internal"
       ],
       "title": "StorageDestination",
@@ -4867,10 +4889,18 @@
         "template": {
           "description": "File name template.",
           "type": "string"
+        },
+        "unmounted": {
+          "description": "USB drives plugged in but not mounted: unplug an ejected one.",
+          "items": {
+            "$ref": "#/$defs/UnmountedDrive"
+          },
+          "type": "array"
         }
       },
       "required": [
         "destinations",
+        "unmounted",
         "choice",
         "destination",
         "error",
@@ -5162,6 +5192,42 @@
         }
       },
       "title": "TrackingRequest",
+      "type": "object"
+    },
+    "UnmountedDrive": {
+      "additionalProperties": false,
+      "properties": {
+        "device": {
+          "description": "e.g. /dev/sda1.",
+          "type": "string"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Why NOCS could not mount it; None while it does not try (not here, or ejected and still plugged in)."
+        },
+        "fs": {
+          "description": "Filesystem type; empty if unknown.",
+          "type": "string"
+        },
+        "label": {
+          "description": "Its filesystem label, else its UUID.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "device",
+        "label",
+        "fs",
+        "error"
+      ],
+      "title": "UnmountedDrive",
       "type": "object"
     },
     "ValueRange": {

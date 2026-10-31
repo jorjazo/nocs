@@ -3,6 +3,7 @@
 # pyright: reportUnknownMemberType=false, reportUnknownVariableType=false, reportUnknownArgumentType=false
 """nocs-system and nocsd's use of it (ADR 0027), with fake tools on the PATH."""
 
+import json
 import os
 import pwd
 import subprocess
@@ -24,7 +25,7 @@ from nocs.jobs import JobManager
 from nocs.services.system import OperationUnavailableError, SystemBusyError, SystemService
 from nocs.state import StateStore
 from nocs.system.client import HelperUnavailableError, call
-from nocs.system.operations import Context, update_hosts
+from nocs.system.operations import Context, eject, mount, update_hosts
 from nocs.system.protocol import HelperError
 from nocs.system.server import Config, Helper, load_config
 
@@ -297,3 +298,143 @@ def test_api_diagnostics(api: TestClient) -> None:
         'attachment; filename="nocs-diagnostics-'
     )
     assert response.content.startswith(b"PK")
+
+
+# -- storage operations ----------------------------------------------------------
+
+
+@pytest.fixture
+def drives(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Fake lsblk, findmnt and the mount tools, reading their answers from files in
+    the returned directory, and a /sys where sda1 is on USB and nvme0n1p1 is not."""
+    answers = tmp_path / "answers"
+    answers.mkdir()
+    bin_dir = tmp_path / "drive-bin"
+    bin_dir.mkdir()
+    log = answers / "calls.log"
+    scripts = {
+        "lsblk": 'for last; do :; done\nname=$(basename "$last")\n'
+        f'case "$*" in *PKNAME*) cat "{answers}/pkname-$name" ;;'
+        f' *) cat "{answers}/lsblk-$name.json" ;; esac',
+        "findmnt": f'cat "{answers}/findmnt"',
+        "systemd-mount": "",
+        "systemd-umount": "",
+        "udisksctl": "",
+    }
+    for tool, body in scripts.items():
+        script = bin_dir / tool
+        script.write_text(f'#!/bin/sh\necho "{tool} $*" >> "{log}"\n{body}\n')
+        script.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
+    devices = tmp_path / "sys/devices"
+    for node in ("platform/usb1/1-1/host0/block/sda/sda1", "platform/pcie0/nvme0/nvme0n1p1"):
+        (devices / node).mkdir(parents=True)
+    block = tmp_path / "sys/class/block"
+    block.mkdir(parents=True)
+    (block / "sda1").symlink_to(devices / "platform/usb1/1-1/host0/block/sda/sda1")
+    (block / "sdb1").symlink_to(devices / "platform/pcie0/nvme0/nvme0n1p1")
+    (tmp_path / "media").mkdir()
+    return answers
+
+
+def lsblk(answers: Path, name: str, **fields: object) -> None:
+    (answers / f"lsblk-{name}.json").write_text(json.dumps({"blockdevices": [fields]}))
+
+
+def drive_context(tmp_path: Path) -> Context:
+    return Context(
+        hosts=tmp_path / "hosts",
+        media=tmp_path / "media",
+        sys_class_block=tmp_path / "sys/class/block",
+        owner=pwd.getpwuid(os.getuid()).pw_name,
+    )
+
+
+def drive_calls(answers: Path) -> list[str]:
+    return [
+        line for line in calls(answers / "calls.log") if not line.startswith(("lsblk", "findmnt"))
+    ]
+
+
+async def test_mount_a_fat_drive_for_the_user(tmp_path: Path, drives: Path) -> None:
+    lsblk(drives, "sda1", path="/dev/sda1", fstype="exfat", uuid="AB12-CD34", mountpoints=[None])
+    result = await mount(drive_context(tmp_path), {"device": "/dev/sda1"})
+    where = tmp_path / "media/AB12-CD34"
+    assert result == {"mount_point": str(where)}
+    owner = pwd.getpwuid(os.getuid()).pw_name
+    assert drive_calls(drives) == [
+        f"systemd-mount --collect --options=noatime --owner={owner} /dev/sda1 {where}"
+    ]
+
+
+async def test_an_ext4_drive_gets_a_folder_for_the_user(tmp_path: Path, drives: Path) -> None:
+    lsblk(drives, "sda1", path="/dev/sda1", fstype="ext4", uuid="0f3c-77", mountpoints=[None])
+    (tmp_path / "media/0f3c-77").mkdir()  # what systemd-mount would have done
+    await mount(drive_context(tmp_path), {"device": "/dev/sda1"})
+    assert "--owner" not in drive_calls(drives)[0]
+    assert (tmp_path / "media/0f3c-77/NOCS").stat().st_uid == os.getuid()
+
+
+@pytest.mark.parametrize(
+    ("args", "fields", "message"),
+    [
+        ({"device": "/dev/mmcblk0p2"}, {}, "the arguments are"),
+        ({"device": "/dev/sda1; reboot"}, {}, "the arguments are"),
+        ({"device": "/dev/sdb1"}, {}, "not a USB drive"),
+        (
+            {"device": "/dev/sda1"},
+            {"fstype": "crypto_LUKS", "uuid": "x"},
+            "cannot use a crypto_LUKS",
+        ),
+        ({"device": "/dev/sda1"}, {"fstype": None, "uuid": None}, "cannot use a blank"),
+        ({"device": "/dev/sda1"}, {"fstype": "vfat", "uuid": "AB/../x"}, "no filesystem UUID"),
+        (
+            {"device": "/dev/sda1"},
+            {"fstype": "vfat", "uuid": "A", "mountpoints": ["/mnt"]},
+            "already",
+        ),
+    ],
+)
+async def test_mount_refuses(
+    tmp_path: Path, drives: Path, args: dict[str, object], fields: dict[str, object], message: str
+) -> None:
+    lsblk(drives, "sda1", **({"mountpoints": [None]} | fields))
+    with pytest.raises(HelperError, match=message) as refused:
+        await mount(drive_context(tmp_path), args)
+    assert refused.value.code == "invalid"
+    assert drive_calls(drives) == []
+
+
+async def test_eject_unmounts_and_powers_off(tmp_path: Path, drives: Path) -> None:
+    where = tmp_path / "media/AB12-CD34"
+    (drives / "findmnt").write_text("/dev/sda1\n")
+    (drives / "pkname-sda1").write_text("sda\n")
+    lsblk(drives, "sda", mountpoints=[None])
+    result = await eject(drive_context(tmp_path), {"mount_point": str(where)})
+    assert result == {"powered_off": True}
+    assert drive_calls(drives) == [
+        f"systemd-umount {where}",
+        "udisksctl power-off --no-user-interaction -b /dev/sda",
+    ]
+
+
+async def test_eject_leaves_a_drive_with_other_partitions_mounted_on(
+    tmp_path: Path, drives: Path
+) -> None:
+    where = tmp_path / "media/AB12-CD34"
+    (drives / "findmnt").write_text("/dev/sda1\n")
+    (drives / "pkname-sda1").write_text("sda\n")
+    lsblk(drives, "sda", mountpoints=[None, "/media/nocs/OTHER"])
+    assert await eject(drive_context(tmp_path), {"mount_point": str(where)}) == {
+        "powered_off": False
+    }
+
+
+@pytest.mark.parametrize(
+    "mount_point", ["/", "/media/user/USB", "MEDIA/../../etc", "/media/nocs/a b"]
+)
+async def test_eject_only_what_nocs_mounted(tmp_path: Path, drives: Path, mount_point: str) -> None:
+    point = mount_point.replace("MEDIA", str(tmp_path / "media"))
+    with pytest.raises(HelperError, match="did not mount"):
+        await eject(drive_context(tmp_path), {"mount_point": point})
+    assert drive_calls(drives) == []

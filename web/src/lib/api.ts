@@ -12,6 +12,7 @@ import type {
   ConnectRequest,
   CoolingRequest,
   Driver,
+  EjectRequest,
   EquatorialGoto,
   ExposeRequest,
   FilterNamesRequest,
@@ -125,6 +126,14 @@ export function setObserver(enabled: boolean): Promise<void> {
 }
 
 // -- This computer, through nocs-system (ADR 0027) -----------------------------
+
+// Unmounts a USB drive and powers it off; refused (409) while a frame is being
+// saved to it, and while a job runs unless forced.
+export function ejectDrive(id: string, force = false): Promise<void> {
+  return request("POST", `/api/storage/destinations/${encodeURIComponent(id)}/eject`, {
+    force,
+  } satisfies EjectRequest);
+}
 
 // Refused (409) while a job runs, unless forced.
 export function reboot(force = false): Promise<void> {

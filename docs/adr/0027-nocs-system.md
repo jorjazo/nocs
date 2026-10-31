@@ -56,7 +56,12 @@ Phase 6 builds it, and has to decide where the line runs. Facts:
   `nocs`. The unit runs as root under systemd's sandboxing options that leave the
   tools working (`NoNewPrivileges`, `PrivateTmp`, `ProtectHome`, restricted
   address families). Those options give it a mount namespace of its own, so
-  drives are mounted by udisksd, never by nocs-system itself.
+  nocs-system never mounts a drive itself: `systemd-mount` asks systemd to, in the
+  system's namespace, after a file system check, at `/media/nocs/<UUID>`, owned by
+  `nocs` on filesystems without owners (FAT, exFAT, NTFS); on the others nocs-system
+  makes a `NOCS` folder for it. `systemd-umount` and `udisksctl power-off` eject
+  it. udisks2, which ADR 0013 expected to mount drives, mounts them for the user
+  who asks, which here would be root.
 - nocsd's client reports an operation that nocs-system does not offer (no socket,
   or the group switched off) as unavailable in the state, and the app hides it.
 - This refines ADR 0010 and replaces the top-level `system/` directory of the

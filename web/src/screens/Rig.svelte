@@ -33,6 +33,7 @@
   import FocuserSheet from "./devices/FocuserSheet.svelte";
   import MountSheet from "./devices/MountSheet.svelte";
   import PowerSheet from "./devices/PowerSheet.svelte";
+  import StorageDrives from "./StorageDrives.svelte";
   import SystemSection from "./SystemSection.svelte";
   import type { CameraState, Optics, PairedDevice, Profile, Role, RoleState } from "../lib/types";
 
@@ -392,6 +393,7 @@
             </span>
           </div>
         {/if}
+        <StorageDrives />
       </section>
     {/if}
 

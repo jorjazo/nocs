@@ -8,7 +8,7 @@ Configuration in ``/etc/nocs/system.conf`` (``NOCS_SYSTEM_CONFIG``)::
     [helper]
     user = nocs                 # the only user served, besides root
     [operations]
-    enabled = power hostname    # groups of operations to perform
+    enabled = power hostname storage    # groups of operations to perform
 
 The socket is ``/run/nocs-system/socket`` (``NOCS_SYSTEM_SOCKET``), mode 0660 with
 the served user's group. A connection from any other user is closed unanswered.
@@ -78,6 +78,7 @@ def load_config(path: Path, socket_path: Path = SOCKET) -> Config:
         gid=user.pw_gid,
         enabled=frozenset(groups) & known,
         socket=socket_path,
+        context=Context(owner=user.pw_name),
     )
 
 

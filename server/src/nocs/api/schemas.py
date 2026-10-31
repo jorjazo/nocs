@@ -226,11 +226,26 @@ class StorageDestination(StateModel):
     writable: bool
     system: bool = Field(description="On the same disk as the operating system.")
     sd: bool = Field(description="On an SD card (slower, wears out sooner; still supported).")
+    removable: bool = Field(description="On a USB drive.")
+    ejectable: bool = Field(description="NOCS can eject it here (ADR 0027).")
     internal: bool
+
+
+class UnmountedDrive(StateModel):
+    device: str = Field(description="e.g. /dev/sda1.")
+    label: str = Field(description="Its filesystem label, else its UUID.")
+    fs: str = Field(description="Filesystem type; empty if unknown.")
+    error: str | None = Field(
+        description="Why NOCS could not mount it; None while it does not try (not here, or"
+        " ejected and still plugged in)."
+    )
 
 
 class StorageState(StateModel):
     destinations: list[StorageDestination] = Field(description="Internal, then mounted drives.")
+    unmounted: list[UnmountedDrive] = Field(
+        description="USB drives plugged in but not mounted: unplug an ejected one."
+    )
     choice: str = Field(description='"auto" (an external drive if any, else internal) or an id.')
     destination: str | None = Field(description="Where the next frame would go; None if nowhere.")
     error: str | None = Field(description="Why frames cannot be saved right now.")
@@ -800,6 +815,15 @@ class TrackingRequest(BaseModel):
 
 class ShutdownRequest(BaseModel):
     """Refused (409) while a job runs, unless ``force``."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    force: bool = False
+
+
+class EjectRequest(BaseModel):
+    """Refused (409) while a job runs, unless ``force``; always while a frame is being saved
+    to the drive."""
 
     model_config = ConfigDict(extra="forbid")
 

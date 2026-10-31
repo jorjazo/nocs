@@ -22,6 +22,8 @@ GROUPS: dict[str, str] = {
     "power.reboot": "power",
     "power.poweroff": "power",
     "hostname.set": "hostname",
+    "storage.mount": "storage",
+    "storage.eject": "storage",
 }
 """Every operation nocs-system knows, with the group that enables it."""
 
