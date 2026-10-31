@@ -123,30 +123,34 @@
         <span class="readout mono">{formatRa(mount.ra_j2000)}</span>
         <span class="readout mono">{formatDec(mount.dec_j2000)}</span>
         <span class="caption muted mono">{t.mount.jnow(formatRa(mount.ra), formatDec(mount.dec))}</span>
-        {#if mount.alt !== null && mount.az !== null}
-          <span class="caption muted mono">{t.mount.altAz(degrees(mount.alt), degrees(mount.az))}</span>
-        {/if}
-        {#if mount.pier_side !== "unknown"}
-          <span class="caption muted">{t.mount.pier(mount.pier_side)}</span>
-        {/if}
+        <!-- Lines that come and go would move the pad under a finger: they stay, blank. -->
+        <span class="caption muted mono">
+          {mount.alt !== null && mount.az !== null ? t.mount.altAz(degrees(mount.alt), degrees(mount.az)) : "\u00a0"}
+        </span>
+        <span class="caption muted">{mount.pier_side !== "unknown" ? t.mount.pier(mount.pier_side) : "\u00a0"}</span>
       </div>
       <Chip tone={activity.moving ? "accent" : mount.tracking ? "ok" : "neutral"}>{activity.text}</Chip>
     </div>
 
-    {#if job || activity.moving}
-      <div class="running">
-        {#if job?.info.message}<p class="caption muted" role="status">{job.info.message}</p>{/if}
-        <Button variant="danger" wide disabled={!owner} busy={busy === "abort"} onclick={() => void run("abort", abortMount)}>
-          {t.mount.stop}
-        </Button>
-      </div>
-    {/if}
-
-    {#if error}<Banner icon="alert" tone="error">{error}</Banner>{/if}
-
     <section aria-label={t.mount.pad}>
       <MountPad {mount} disabled={padReason !== null} reason={padReason} />
     </section>
+
+    <!-- Below the pad and always there: nothing above the arrows may appear or move
+         while they are held. -->
+    <div class="running">
+      <Button
+        variant="danger"
+        wide
+        disabled={!owner || !(job || activity.moving)}
+        busy={busy === "abort"}
+        onclick={() => void run("abort", abortMount)}>
+        {t.mount.stop}
+      </Button>
+      {#if job?.info.message}<p class="caption muted" role="status">{job.info.message}</p>{/if}
+    </div>
+
+    {#if error}<Banner icon="alert" tone="error">{error}</Banner>{/if}
 
     <section class="group" aria-labelledby="goto-title">
       <h3 class="label muted" id="goto-title">{t.mount.goTo}</h3>

@@ -195,8 +195,12 @@ Mount (stage 2.9):
   view: J2000 position, then JNow, alt/az and pier side; the slew pad; go to
   (J2000, typed as `00 42 44` / `+41 16 09` or decimals, or the zenith for a flat
   panel); tracking and its rate; park, unpark and home; the site and time the
-  mount was given; the limits it keeps (read only). A running go to, park or
-  home shows its progress and a Stop that aborts everything.
+  mount was given; the limits it keeps (read only). Stop, which aborts
+  everything, sits under the pad and is always there, disabled while nothing
+  moves; a running go to, park or home shows its progress under it.
+- Nothing above the pad's arrows may appear, disappear or change height while
+  they are held, or the arrow would slide out from under the finger: lines the
+  mount reports only at times (alt/az, pier side) keep their place, blank.
 - The slew pad moves the mount only while an arrow is held, two at once for a
   diagonal, at a speed picked from the driver's rates. The client repeats what
   it holds every 0.25 s and lets go when the finger lifts, the page goes to the
