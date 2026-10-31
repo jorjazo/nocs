@@ -111,7 +111,9 @@ def api(tmp_path_factory: pytest.TempPathFactory) -> Iterator[TestClient]:
         set_property(client, "Telescope Simulator", "ON_COORD_SET", {"TRACK": True})
         ra, dec = ORION
         set_property(client, "Telescope Simulator", "EQUATORIAL_EOD_COORD", {"RA": ra, "DEC": dec})
-        wait(client, lambda s: not s["mount"]["slewing"])
+        # At rest on the field, not on the way there (frames taken during a slew
+        # have no stars to speak of).
+        wait(client, lambda s: not s["mount"]["slewing"] and abs(s["mount"]["dec"] - dec) < 0.5)
         start = state(client)["focuser"]["position"]
         try:
             yield client
