@@ -33,5 +33,6 @@ that supersedes the old one.
 | [0028](0028-networking.md) | Appliance networking: access point, station, fallback, names and firewall | Proposed |
 | [0029](0029-system-time-and-site.md) | System time and site from NTP, a GPS or the client | Proposed |
 | [0030](0030-supervision.md) | Supervision of indiserver, drivers, PHD2 and nocsd | Proposed |
+| [0031](0031-sequences.md) | Sequences: model, persistence and who owns the devices | Proposed |
 
 Template: Context → Decision → Consequences.
