@@ -13,6 +13,7 @@
   import { live } from "./lib/live.svelte";
   import { router } from "./lib/router.svelte";
   import AuthScreen from "./screens/AuthScreen.svelte";
+  import ChartPreview from "./screens/dev/ChartPreview.svelte";
   import Dev from "./screens/dev/Dev.svelte";
   import Focus from "./screens/focus/Focus.svelte";
   import Guiding from "./screens/guiding/Guiding.svelte";
@@ -115,6 +116,8 @@
       <Live />
     {:else if router.route.screen === "dev"}
       <Dev />
+    {:else if router.route.screen === "chart"}
+      <ChartPreview />
     {:else if router.route.screen === "profile"}
       {#key router.route.id}<ProfileEditor id={router.route.id} />{/key}
     {:else}

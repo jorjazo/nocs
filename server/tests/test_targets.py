@@ -344,8 +344,11 @@ def test_api_gets_one_object_by_a_loose_designation(client: TestClient) -> None:
 
 
 def test_api_names_its_sources(client: TestClient) -> None:
-    (source,) = client.get("/api/targets/sources").json()
-    assert (source["name"], source["license"]) == ("OpenNGC", "CC BY-SA 4.0")
+    sources = client.get("/api/targets/sources").json()
+    assert [(s["name"], s["license"]) for s in sources] == [
+        ("OpenNGC", "CC BY-SA 4.0"),
+        ("Tycho-2", "CC BY-NC 3.0 IGO"),
+    ]
 
 
 def test_observers_may_search(client: TestClient) -> None:

@@ -8,6 +8,7 @@ import type {
   AutofocusRun,
   CameraRoleName,
   CameraSettingsRequest,
+  CatalogMatch,
   CenterRequest,
   ClockReport,
   ClockRequest,
@@ -41,6 +42,7 @@ import type {
   SerialPortInfo,
   ShutdownRequest,
   Site,
+  SkyChart,
   SolveRequest,
   TrackingRequest,
 } from "./types";
@@ -419,4 +421,16 @@ export function syncToSolution(): Promise<void> {
 export async function centerOn(body: CenterRequest): Promise<string> {
   const started = await request<JobStarted>("POST", "/api/solver/center", body);
   return started.job;
+}
+
+// -- Targets (ADR 0019, 0020) ---------------------------------------------------------
+
+export function searchTargets(query: string, limit = 20): Promise<CatalogMatch[]> {
+  return request("GET", `/api/targets/search?${new URLSearchParams({ q: query, limit: String(limit) })}`);
+}
+
+// Stars and deep-sky objects within `radius` degrees of a J2000 point.
+export function getSkyChart(ra: number, dec: number, radius: number, magnitude: number, limit: number): Promise<SkyChart> {
+  const params = { ra: String(ra), dec: String(dec), radius: String(radius), magnitude: String(magnitude), limit: String(limit) };
+  return request("GET", `/api/targets/chart?${new URLSearchParams(params)}`);
 }

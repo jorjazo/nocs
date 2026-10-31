@@ -6554,6 +6554,64 @@
       "title": "Site",
       "type": "object"
     },
+    "SkyChart": {
+      "description": "What the framing chart draws around a point (ADR 0020).",
+      "properties": {
+        "dec": {
+          "description": "Centre, J2000, degrees.",
+          "type": "number"
+        },
+        "magnitude": {
+          "description": "Faintest magnitude of the stars here: the one asked for, or the bundled file's own limit if brighter.",
+          "type": "number"
+        },
+        "objects": {
+          "description": "Deep-sky objects whose extent reaches into the circle, the brightest first.",
+          "items": {
+            "$ref": "#/$defs/CatalogObject"
+          },
+          "type": "array"
+        },
+        "ra": {
+          "description": "Centre, J2000, hours.",
+          "type": "number"
+        },
+        "radius": {
+          "description": "Degrees.",
+          "type": "number"
+        },
+        "star_catalog": {
+          "description": "The star file is installed; a commercial distribution may leave it out (its licence is non-commercial, ADR 0020).",
+          "type": "boolean"
+        },
+        "stars": {
+          "description": "[RA J2000 hours, Dec J2000 degrees, V magnitude], brightest first.",
+          "items": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array"
+          },
+          "type": "array"
+        },
+        "truncated": {
+          "description": "More stars matched: only the brightest ones are here.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "ra",
+        "dec",
+        "radius",
+        "magnitude",
+        "stars",
+        "truncated",
+        "star_catalog",
+        "objects"
+      ],
+      "title": "SkyChart",
+      "type": "object"
+    },
     "SkyPosition": {
       "additionalProperties": false,
       "properties": {

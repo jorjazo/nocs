@@ -1,0 +1,17 @@
+Stars for the framing chart: a subset of the Tycho-2 Catalogue
+
+    Høg E., Fabricius C., Makarov V.V., Urban S., Corbin T., Wycoff G., Bastian U.,
+    Schwekendiek P., Wicenec A., "The Tycho-2 Catalogue of the 2.5 Million Brightest
+    Stars", Astron. Astrophys. 355, L27 (2000). CDS catalogue I/259.
+
+Credit: ESA. The Hipparcos and Tycho Catalogues are distributed by ESA under the
+Creative Commons Attribution-NonCommercial 3.0 IGO licence (CC BY-NC 3.0 IGO):
+https://creativecommons.org/licenses/by-nc/3.0/igo/legalcode
+
+Changes made by NOCS: only the stars of the main catalogue and its supplement 1 down
+to Johnson V 10 are kept (V approximated from BT and VT as the catalogue's
+ReadMe gives it), with their J2000 positions rounded to 0.0001 degree and magnitudes
+to 0.05, in a binary format of NOCS's own; supplement 1 positions are moved from
+J1991.25 to J2000 by their proper motions. The subset is distributed under the same
+licence. It may not be used for commercial purposes; NOCS works without this file
+(the chart then shows no stars), so a commercial distribution can leave it out.

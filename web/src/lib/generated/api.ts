@@ -3203,6 +3203,46 @@ export interface ShutdownRequest {
   force?: boolean;
 }
 /**
+ * What the framing chart draws around a point (ADR 0020).
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "SkyChart".
+ */
+export interface SkyChart {
+  /**
+   * Centre, J2000, degrees.
+   */
+  dec: number;
+  /**
+   * Faintest magnitude of the stars here: the one asked for, or the bundled file's own limit if brighter.
+   */
+  magnitude: number;
+  /**
+   * Deep-sky objects whose extent reaches into the circle, the brightest first.
+   */
+  objects: CatalogObject[];
+  /**
+   * Centre, J2000, hours.
+   */
+  ra: number;
+  /**
+   * Degrees.
+   */
+  radius: number;
+  /**
+   * The star file is installed; a commercial distribution may leave it out (its licence is non-commercial, ADR 0020).
+   */
+  star_catalog: boolean;
+  /**
+   * [RA J2000 hours, Dec J2000 degrees, V magnitude], brightest first.
+   */
+  stars: number[][];
+  /**
+   * More stars matched: only the brightest ones are here.
+   */
+  truncated: boolean;
+}
+/**
  * ``GET /api/sky/visibility``: targets during a night at the active profile's site.
  *
  * This interface was referenced by `NOCSAPI`'s JSON-Schema

@@ -1347,6 +1347,29 @@ class CatalogMatch(WireModel):
     matched: str = Field(description="The designation or name the query matched.")
 
 
+class SkyChart(WireModel):
+    """What the framing chart draws around a point (ADR 0020)."""
+
+    ra: float = Field(description="Centre, J2000, hours.")
+    dec: float = Field(description="Centre, J2000, degrees.")
+    radius: float = Field(description="Degrees.")
+    magnitude: float = Field(
+        description="Faintest magnitude of the stars here: the one asked for, or the bundled"
+        " file's own limit if brighter."
+    )
+    stars: list[list[float]] = Field(
+        description="[RA J2000 hours, Dec J2000 degrees, V magnitude], brightest first."
+    )
+    truncated: bool = Field(description="More stars matched: only the brightest ones are here.")
+    star_catalog: bool = Field(
+        description="The star file is installed; a commercial distribution may leave it out"
+        " (its licence is non-commercial, ADR 0020)."
+    )
+    objects: list[CatalogObject] = Field(
+        description="Deep-sky objects whose extent reaches into the circle, the brightest first."
+    )
+
+
 class CatalogSource(WireModel):
     """Where the bundled catalog comes from; its licence asks to show the attribution."""
 

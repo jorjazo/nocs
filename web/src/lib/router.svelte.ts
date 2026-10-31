@@ -10,6 +10,7 @@ export const TABS: readonly Tab[] = ["tonight", "live", "plan", "session", "rig"
 export type Route =
   | { screen: Tab }
   | { screen: "dev" }
+  | { screen: "chart" }
   | { screen: "focus" }
   | { screen: "guiding" }
   | { screen: "profile"; id: string | null };
@@ -18,6 +19,8 @@ const DEFAULT: Route = { screen: "tonight" };
 
 function parse(hash: string): Route {
   const [first, second, third] = hash.replace(/^#\/?/, "").split("/");
+  // The framing chart's preview until the Plan screen hosts it (3.6).
+  if (first === "dev" && second === "chart") return { screen: "chart" };
   if (first === "dev") return { screen: "dev" };
   if (first === "focus") return { screen: "focus" };
   if (first === "guiding") return { screen: "guiding" };
@@ -30,6 +33,7 @@ function parse(hash: string): Route {
 
 export function href(route: Route): string {
   if (route.screen === "profile") return `#/rig/profile/${route.id === null ? "new" : encodeURIComponent(route.id)}`;
+  if (route.screen === "chart") return "#/dev/chart";
   return `#/${route.screen}`;
 }
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import bisect
 import gzip
 import json
+import math
 import threading
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -157,6 +158,9 @@ class TargetCatalog:
                     names.append((folded.removeprefix("the "), index, name))
         self._keys = sorted(self._by_key)
         self._names = names
+        self._by_dec = sorted(range(len(self.targets)), key=lambda i: self.targets[i].dec)
+        self._decs = [self.targets[i].dec for i in self._by_dec]
+        self._reach = max((_half_axis(t) for t in self.targets), default=0.0)
 
     @classmethod
     def load(cls) -> TargetCatalog:
@@ -182,6 +186,19 @@ class TargetCatalog:
             return None
         # A designation that is some object's own id wins over one that is an alias.
         return self.targets[min(entries, key=lambda e: not e[2])[0]]
+
+    def near(self, ra: float, dec: float, radius: float) -> list[Target]:
+        """Objects within `radius` degrees of a J2000 point (RA in hours), counting their
+        extent: a large one whose centre is outside may still cover part of the circle."""
+        band = radius + self._reach
+        low = bisect.bisect_left(self._decs, dec - band)
+        high = bisect.bisect_right(self._decs, dec + band)
+        found: list[Target] = []
+        for index in self._by_dec[low:high]:
+            target = self.targets[index]
+            if separation(ra, dec, target.ra, target.dec) <= radius + _half_axis(target):
+                found.append(target)
+        return found
 
     def search(self, query: str, limit: int = 20) -> list[Match]:
         """Objects whose designation or name matches the query, best first."""
@@ -225,6 +242,20 @@ class TargetCatalog:
 
         ranked = sorted(best.items(), key=order)[:limit]
         return [Match(self.targets[index], matched) for index, (_, _, matched) in ranked]
+
+
+def _half_axis(target: Target) -> float:
+    """Degrees."""
+    return (target.major_axis or 0.0) / 120
+
+
+def separation(ra1: float, dec1: float, ra2: float, dec2: float) -> float:
+    """Degrees between two points, RA in hours."""
+    d1, d2 = math.radians(dec1), math.radians(dec2)
+    dra = math.radians((ra2 - ra1) * 15)
+    # Haversine: exact for small angles, where the cosine formula loses digits.
+    h = math.sin((d2 - d1) / 2) ** 2 + math.cos(d1) * math.cos(d2) * math.sin(dra / 2) ** 2
+    return math.degrees(2 * math.asin(min(1.0, math.sqrt(h))))
 
 
 _lock = threading.Lock()

@@ -30,7 +30,8 @@ server/   Python package `nocs` (nocsd): indi/ (protocol + async client, driver
           guide steps and RMS),
           solving/ (ASTAP, fields of view), pointing/ (solve and sync, centre),
           sky/ (a night's almanac at the site, targets' visibility),
-          targets/ (bundled OpenNGC catalog and its search, ADR 0019),
+          targets/ (bundled OpenNGC catalog and its search, ADR 0019; Tycho-2
+          stars for the framing chart, ADR 0020),
           system/ (nocs-system, the root helper: stdlib + anyio only, ADR 0027),
           state/ (versioned store), services/ (indi_bridge), api/ (FastAPI
           REST + WebSocket, schemas, schema export)
@@ -58,7 +59,7 @@ NOCS_TEST_INDI=localhost:7624 NOCS_TEST_INDI_FIFO=../dev/.run/fifo \
   NOCS_TEST_PHD2=localhost:4400 NOCS_TEST_PHD2_SETTINGS=../dev/.run/phd2.phd uv run pytest
 # real night frames for the solver: NOCS_TEST_FRAMES=<dir of FITS lights>, with D50
 # (NOCS_TEST_ASTAP_DB=<dir>): D05 fails dense Milky Way fields
-cd web && pnpm install && pnpm check && pnpm build
+cd web && pnpm install && pnpm check && pnpm test && pnpm build
 pnpm gen:types        # after changing server/src/nocs/api/schemas.py (CI checks)
 NOCS_WEB_DIR=web/dist NOCS_INDI_FIFO=dev/.run/fifo NOCS_INDI_DRIVERS_DIR=dev/.run/drivers \
   NOCS_INDI_UPLOAD_DIR=/run/indi/uploads NOCS_INDI_UPLOAD_DIR_LOCAL=dev/.run/uploads \

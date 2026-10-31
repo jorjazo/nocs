@@ -26,7 +26,8 @@ shared with polar alignment (phase 4) and re-centring and the meridian flip
 | 3.4 | Target catalog | OpenNGC (CC BY-SA 4.0) bundled by a pinned build script: Messier, NGC/IC, common names in English and Spanish; search API ([ADR 0019](../adr/0019-bundled-catalogs-and-their-licences.md)) | Tests: parsing, loose ids, NGC 292 / SMC, NGC 253 / Sculptor Galaxy, M 42 in Spanish, aliases, API | Implemented: `dev/catalog/build.py` (OpenNGC v20260501 by SHA-256, `names.tsv`), `nocs.targets`, `GET /api/targets/search`, `/objects/{id}`, `/sources` (observers too) |
 | 3.5 | Tonight's sky | Twilights, Moon (altitude, phase), altitude curves, transit, time above a minimum and above a **horizon profile** by azimuth in the site, distance to the Moon | Against an almanac | Implemented: `nocs.sky` (ERFA: `epv00`, `moon98`), `Site.horizon`, `GET /api/sky/tonight`, `/visibility?target=RA,Dec` (observers too; a catalog id once 3.4 lands); within a minute of USNO |
 | 3.6 | Plan and Tonight UI | Search, target detail with altitude chart, Go / Go and centre; Tonight: night window and Moon | Phone | |
-| 3.7 | Framing assistant | Canvas chart: offline stars (Tycho-2 to mag ~10) and DSO outlines, sensor field with rotation; the maintainer's own solved frames of the target as background; optional online survey (CDS hips2fits, fetched by the browser); "turn the camera N°" helper (ADR 0020) | Simulators | |
+| 3.7a | Framing chart (offline) | Tycho-2 subset to V 10 (CC BY-NC 3.0 IGO) by a pinned build script; chart API (stars and objects around a point); canvas chart: gnomonic, north up, stars by magnitude, DSO outlines with position angle, the camera's frame with rotation, crosshair and coordinates, pan / pinch / wheel, Night mode ([ADR 0020](../adr/0020-framing-chart.md)) | Tests: Tycho-2 records, the star file, queries across 0h and the pole, objects reaching into the circle, API; projection (`pnpm test`); NGC 292 and NGC 253 with the simulator camera's field in the browser | Implemented: `dev/catalog/build_stars.py`, `nocs.targets.stars`, `GET /api/targets/chart`, `SkyChart.svelte` at `#/dev/chart` until 3.6 hosts it |
+| 3.7b | Framing chart (online and own frames) | The maintainer's own solved frames of the target as background; optional online survey (CDS hips2fits, fetched by the browser, opt-in); "turn the camera N°" helper from a solve (needs 3.2) | Simulators | |
 | 3.8 | Field test | Shares the night with phase 2's | Exit criterion | |
 
 ## Decisions taken for this phase
@@ -94,3 +95,10 @@ shared with polar alignment (phase 4) and re-centring and the meridian flip
   loading 0.36 s, +22.5 MB RSS; a search ~0.5 ms, 2 ms at worst (a short id
   prefix, "ngc 2"). Laptop: 0.08 s, the same memory, ~0.12 ms per search
   (`dev/catalog/measure.py`).
+- Chart stars (Tycho-2 and supplement 1 to V 10): 357 145 stars, 1.41 MB (xz). A
+  chart request (stars and objects around a point, as JSON; `dev/catalog/measure_chart.py`)
+  on the lab Pi 5: loading 0.155 s cold, +27 MB RSS; 1–6 ms up to 4° of radius, 4–9 ms
+  at 10°, 11–19 ms at 30° (≤ 1500 stars and 300 objects, ≤ 110 kB). Laptop 0.3–4 ms.
+- Chart drawing, phone-sized view (375 × 566 chart at 2× pixels, laptop browser): a
+  drag redraws every frame at 60 FPS; one draw takes 0.1–0.2 ms at 0.9°, 0.6–0.8 ms at
+  9.5°, ~1 ms at 70° (1.5 ms at worst). Not measured on a phone yet.

@@ -65,7 +65,8 @@ CC BY-SA 4.0 and are published in this repository.
 ### Stars for the offline chart (3.7): a Tycho-2 subset
 
 The framing chart needs stars to about magnitude 10 around any target. 3.7 will
-add a Tycho-2 subset (ESA, distributed by CDS; credit asked, no copyleft), built
+add a Tycho-2 subset (ESA, distributed by CDS; credit asked, no copyleft; 3.7 found
+it is CC BY-NC 3.0 IGO instead, see [ADR 0020](0020-framing-chart.md)), built
 the same way: a pinned download checked by SHA-256, a compact committed file, its
 source and credit in the same `sources` list. 3.7 checks the terms of the exact
 files it uses against rule 1 below, and decides the subset's size and format
