@@ -110,6 +110,8 @@ sub-frames with acceptable RMS.
 
 ## Phase 5 — Focus & sequence
 
+Stage plan and status: [v0.1/phase-5.md](v0.1/phase-5.md).
+
 - Autofocus: V-curve sweep, HFR fit, backlash, quality checks; temperature
   logging from EAF and PPBA sensors.
 - Sequencer engine: containers, instructions, conditions, triggers, recovery

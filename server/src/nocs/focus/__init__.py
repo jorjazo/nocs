@@ -1,1 +1,1 @@
-"""The focuser by role: moves as jobs (and, later, autofocus)."""
+"""The focuser by role: moves as jobs, and autofocus (ADR 0021)."""

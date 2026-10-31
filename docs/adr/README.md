@@ -24,5 +24,6 @@ that supersedes the old one.
 | [0016](0016-settings-per-physical-device.md) | Settings per physical device: filter names by serial number | Accepted |
 | [0017](0017-roles-by-capability-power-and-weather.md) | Roles by capability: power and weather, and what each output feeds | Accepted |
 | [0018](0018-plate-solving-with-astap.md) | Plate solving with ASTAP | Proposed |
+| [0021](0021-autofocus.md) | Autofocus: V-curve sweep with a hyperbolic fit | Proposed |
 
 Template: Context → Decision → Consequences.
