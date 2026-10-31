@@ -1,7 +1,15 @@
 // English messages: the source of truth for every other language. Messages
 // with parameters are functions; es.ts must match this shape exactly.
 
-import type { AutofocusState, ConnectionName, DeviceStatusName, FrameTypeName, Role, SolveFailure } from "../types";
+import type {
+  AutofocusState,
+  CenteringState,
+  ConnectionName,
+  DeviceStatusName,
+  FrameTypeName,
+  Role,
+  SolveFailure,
+} from "../types";
 
 type AutofocusPhase = NonNullable<AutofocusState["phase"]>;
 type AutofocusProblem = NonNullable<AutofocusState["problem"]>;
@@ -262,6 +270,7 @@ export const en = {
       looping: "Looping",
       processing: "Processing",
       solving: "Solving",
+      centering: "Centring",
       failed: "Failed",
     },
     histogram: "Histogram of the latest frame",
@@ -428,6 +437,31 @@ export const en = {
       error: "Solving failed.",
     } satisfies Record<SolveFailure["reason"], string>,
     dismiss: "Dismiss",
+  },
+  center: {
+    title: "Centring",
+    goCenter: "Go and centre",
+    hint: "Go and centre takes frames with the main camera's exposure and corrects the mount until the target is in the middle.",
+    noSolver: "Centring needs ASTAP, the plate solver, on the rig.",
+    noCamera: "Centring needs a main camera.",
+    cameraBusy: "The main camera is busy.",
+    phases: { slewing: "Slewing", settling: "Settling", solving: "Solving" } satisfies Record<
+      NonNullable<CenteringState["phase"]>,
+      string
+    >,
+    phase: (phase: string, attempt: number, total: number) => `${phase} · ${attempt} of ${total}`,
+    centred: "Centred",
+    notCentred: "Not centred",
+    cancelled: "Cancelled",
+    within: (tolerance: string) => `within ${tolerance}`,
+    bySync: "syncing the mount",
+    byOffset: "aiming off",
+    frame: (n: number) => `Frame ${n}`,
+    synced: "synced",
+    notSolved: (why: string) => `Not solved: ${why}`,
+    gaveUp: (error: string, frames: number, tolerance: string) =>
+      `Still ${error} from the target after ${frames} frames (tolerance ${tolerance}). Check the mount's balance and settling, or widen the tolerance.`,
+    neverSolved: (frames: number) => `None of ${frames} frames solved.`,
   },
   focuser: {
     title: "Focuser",

@@ -1,4 +1,4 @@
-"""Plate solving commands: solve a frame of the main camera, and sync the mount to it."""
+"""Plate solving commands: solve a frame of the main camera, sync the mount to it, centre."""
 
 from __future__ import annotations
 
@@ -7,16 +7,18 @@ from collections.abc import Callable, Generator
 
 from fastapi import APIRouter, HTTPException, Response, status
 
-from nocs.api.schemas import JobStarted, SolveRequest
+from nocs.api.schemas import CenterRequest, JobStarted, SolveRequest
 from nocs.devices import DeviceError
 from nocs.imaging import CameraNotReadyError
 from nocs.jobs import ResourceBusyError
 from nocs.mount.service import MountNotReadyError, PointingError
-from nocs.pointing import PointingService, SolveOptions
+from nocs.pointing import CenteringService, CenterOptions, PointingService, SolveOptions
 from nocs.solving import Failure, SolveError
 
 
-def solver_router(pointing: Callable[[], PointingService]) -> APIRouter:
+def solver_router(
+    pointing: Callable[[], PointingService], centering: Callable[[], CenteringService]
+) -> APIRouter:
     router = APIRouter(prefix="/api/solver")
 
     @router.post("/solve", status_code=status.HTTP_202_ACCEPTED)
@@ -33,6 +35,21 @@ def solver_router(pointing: Callable[[], PointingService]) -> APIRouter:
         with _errors():
             await pointing().sync()
         return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    @router.post("/center", status_code=status.HTTP_202_ACCEPTED)
+    async def center(request: CenterRequest) -> JobStarted:  # pyright: ignore[reportUnusedFunction]
+        """Go to a J2000 target and centre it in the main camera's frame."""
+        options = CenterOptions(
+            tolerance=request.tolerance,
+            attempts=request.attempts,
+            settle=request.settle,
+            method=request.method,
+            exposure=request.exposure,
+            binning=request.binning,
+            force=request.force,
+        )
+        with _errors():
+            return JobStarted(job=centering().start(request.ra, request.dec, options))
 
     return router
 

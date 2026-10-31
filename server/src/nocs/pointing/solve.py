@@ -163,27 +163,34 @@ class PointingService:
         self._last: FrameSolve | None = None
 
     def start(self, options: SolveOptions, role: Role = Role.MAIN_CAMERA) -> str:
-        """Solve (and sync) in a job of its own; returns the job id.
-
-        It locks what an exposure of the camera locks, and the mount, which must
-        not move during the frame.
-        """
-        options.check()
-        camera = self._capture.camera(role)  # fail now, not in the job
-        if options.binning is not None and options.binning > camera.max_binning:
-            raise ValueError(f"binning must be 1..{camera.max_binning}")
-        self._solver.check(self._fov(role))
-        if options.sync:
-            self._mount.position()  # MountNotReadyError without a mount
-        resources = [role.value, Role.MOUNT.value]
-        if role is Role.MAIN_CAMERA:
-            resources += [Role.FILTER_WHEEL.value, Role.FOCUSER.value]
+        """Solve (and sync) in a job of its own (locking ``resources``); returns the job id."""
+        self.check(options, role)
 
         async def job(context: JobContext) -> Json:
             solved = await self.solve_frame(context, options, role)
             return self._describe(solved)
 
-        return self._jobs.start("solve", resources, job)
+        return self._jobs.start("solve", self.resources(role), job)
+
+    def check(self, options: SolveOptions, role: Role = Role.MAIN_CAMERA) -> None:
+        """Raise now what a solve with ``options`` would fail on in its job: no
+        camera, a binning it lacks, no solver for its field, no mount for a sync."""
+        options.check()
+        camera = self._capture.camera(role)
+        if options.binning is not None and options.binning > camera.max_binning:
+            raise ValueError(f"binning must be 1..{camera.max_binning}")
+        self._solver.check(self._fov(role))
+        if options.sync:
+            self._mount.position()  # MountNotReadyError without a mount
+
+    @staticmethod
+    def resources(role: Role = Role.MAIN_CAMERA) -> list[str]:
+        """What a job that solves frames of ``role`` locks: what an exposure of the
+        camera locks, and the mount, which must not move during the frame."""
+        resources = [role.value, Role.MOUNT.value]
+        if role is Role.MAIN_CAMERA:
+            resources += [Role.FILTER_WHEEL.value, Role.FOCUSER.value]
+        return resources
 
     async def solve_frame(
         self, context: JobContext, options: SolveOptions, role: Role = Role.MAIN_CAMERA

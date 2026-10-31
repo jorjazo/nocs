@@ -237,3 +237,64 @@ def test_solve_measures_the_pointing_error_and_syncs(api: TestClient) -> None:
     job = solve(api, sync=True)
     assert job["result"]["synced"] is True
     print(f"after the sync: offset {job['result']['offset']}")
+
+
+def center(api: TestClient, **body: Any) -> dict[str, Any]:
+    """A centring run. One that failed with frames that did not solve is tried again
+    with the frame turned, and the target a little further north every other time:
+    the run takes a frame that failed again without moving, which seldom helps."""
+    result: dict[str, Any] = {}
+    try:
+        for attempt in range(ATTEMPTS):
+            rotate(api, attempt * TURN % 360)
+            dec = FIELD[1] + (attempt % 2) * NUDGE
+            response = api.post("/api/solver/center", json={"ra": FIELD[0], "dec": dec, **body})
+            assert response.status_code == 202, response.text
+            job_id: str = response.json()["job"]
+
+            def done(s: dict[str, Any], job_id: str = job_id) -> bool:
+                return s["jobs"][job_id]["state"] != "running"
+
+            wait(api, done, timeout=600)
+            result = state(api)["centering"]
+            assert result["job"] == job_id
+            unsolved = any(a["failure"] is not None for a in result["attempts"])
+            if result["state"] == "succeeded" or not unsolved:
+                break
+    finally:
+        rotate(api, 0)
+    if result["state"] != "succeeded" and any(a["failure"] for a in result["attempts"]):
+        pytest.skip(f"frames of the CCD simulator kept failing in {ATTEMPTS} runs: {result}")
+    errors = [round(a["error"]["angle"], 2) if a["error"] else None for a in result["attempts"]]
+    print(f"centred ({body}): {result['state']}, errors {errors}")
+    return result
+
+
+@pytest.mark.indi
+@pytest.mark.parametrize("method", ["sync", "offset"])
+def test_center_corrects_the_pointing_error(api: TestClient, method: str) -> None:
+    api.post(
+        "/api/cameras/main_camera/settings",
+        json={"region": "full", "binning": 1, "frame_type": "light", "exposure": EXPOSURE},
+    )
+    clear_alignment(api)
+    # As 3.2's test does: the error appears when the index errors change once the mount
+    # is on the field (changed just before the run's go to, a frame once landed on it).
+    mount_model(api, 0, 0)
+    goto(api, *FIELD)
+    mount_model(api, INDEX_DEC, INDEX_HA)
+    try:
+        result = center(api, method=method, tolerance=1.0, attempts=5, settle=1.0)
+    finally:
+        clear_alignment(api)
+    assert result["state"] == "succeeded", result
+    solved = [a for a in result["attempts"] if a["error"] is not None]
+    cos_dec = math.cos(math.radians(FIELD[1]))
+    expected = math.hypot(INDEX_DEC, INDEX_HA * cos_dec)
+    assert solved[0]["error"]["angle"] == pytest.approx(expected, abs=1.5)
+    assert solved[-1]["error"]["angle"] <= 1.0
+    assert all(a["synced"] is (method == "sync") for a in solved)
+    # The frame's centre, not just what the mount says, is on the target now.
+    target = result["target"]
+    final = solved[-1]["solution"]
+    assert separation(final["ra"], final["dec"], target["ra"], target["dec"]) * 60 <= 1.0

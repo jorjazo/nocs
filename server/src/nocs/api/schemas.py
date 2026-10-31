@@ -481,6 +481,38 @@ class SolverState(StateModel):
     )
 
 
+class CenteringFailure(StateModel):
+    reason: SolveFailureReason
+    message: str
+
+
+class CenteringAttempt(StateModel):
+    aim: SkyPosition = Field(description="Where the mount was sent.")
+    solution: SkyPosition | None = Field(description="Centre of the frame; None: not solved.")
+    error: PointingOffset | None = Field(description="From the target to the frame's centre.")
+    synced: bool = Field(description="The mount was synced to the solution.")
+    failure: CenteringFailure | None = Field(description="Why the frame was not solved.")
+
+
+class CenteringState(StateModel):
+    """The running centring, or the most recent one."""
+
+    job: str
+    state: Literal["running", "succeeded", "failed", "cancelled"]
+    phase: Literal["slewing", "settling", "solving"] | None = Field(description="While running.")
+    method: Literal["sync", "offset"] = Field(
+        description="sync: the mount is synced to each frame; offset: the next go to aims"
+        " off by what the frame missed."
+    )
+    target: SkyPosition
+    tolerance: float = Field(description="Arcminutes.")
+    max_attempts: int
+    attempts: list[CenteringAttempt]
+    error: str | None = Field(description="Why it failed.")
+    started: str
+    finished: str | None
+
+
 class AutofocusPoint(StateModel):
     position: int
     hfr: float | None = Field(description="Median HFR, unbinned px; None without enough stars.")
@@ -669,6 +701,7 @@ class AppState(StateModel):
     )
     solver: SolverState | None = None
     autofocus: AutofocusState | None = Field(default=None, description="None: never run.")
+    centering: CenteringState | None = Field(default=None, description="None: never run.")
     guiding: GuidingState | None = None
     system: SystemState | None = None
 
@@ -978,6 +1011,22 @@ class SolveRequest(BaseModel):
     )
     binning: int | None = Field(default=None, ge=1, description="For this frame only.")
     sync: bool = Field(default=False, description="Sync the mount to the solution.")
+
+
+class CenterRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ra: float = Field(ge=0, lt=24, description="J2000, hours.")
+    dec: float = Field(ge=-90, le=90, description="J2000, degrees.")
+    tolerance: float = Field(default=1.0, gt=0, le=60, description="Arcminutes.")
+    attempts: int = Field(default=5, ge=1, le=20, description="Frames at most.")
+    settle: float = Field(default=2.0, ge=0, le=60, description="Seconds after each slew.")
+    method: Literal["sync", "offset"] = "sync"
+    exposure: float | None = Field(
+        default=None, gt=0, le=600, description="Seconds; None: the camera's exposure."
+    )
+    binning: int | None = Field(default=None, ge=1, description="For the frames only.")
+    force: bool = Field(default=False, description="Go below the horizon.")
 
 
 class FilterSelectRequest(BaseModel):

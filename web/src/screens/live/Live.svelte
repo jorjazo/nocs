@@ -28,6 +28,7 @@
   import Histogram from "./Histogram.svelte";
   import SettingSheet, { type Setting } from "./SettingSheet.svelte";
   import Shutter from "./Shutter.svelte";
+  import CenteringCard from "./CenteringCard.svelte";
   import SolvePanel from "./SolvePanel.svelte";
   import Viewer from "./Viewer.svelte";
 
@@ -98,6 +99,7 @@
         return { tone: "accent", text: t.live.status.left(left) };
       }
       if (running.info.kind === "solve") return { tone: "accent", text: t.live.status.solving };
+      if (running.info.kind === "center") return { tone: "accent", text: t.live.status.centering };
       return { tone: "accent", text: looping ? t.live.status.looping : t.live.status.processing };
     }
     if (failed) return { tone: "error", text: t.live.status.failed };
@@ -325,6 +327,9 @@
           disabled={!owner || busy || !!running}
           mountBusy={mountJob !== null}
           run={act} />
+      {/if}
+      {#if main && live.app.centering}
+        <CenteringCard centering={live.app.centering} />
       {/if}
 
       <div class="tiles">

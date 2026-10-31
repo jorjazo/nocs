@@ -23,6 +23,8 @@ from collections.abc import Coroutine
 from datetime import datetime
 from typing import Any, Literal
 
+import anyio
+
 from nocs.clock import Clock
 from nocs.devices import Coordinates, DeviceError, Location, Mount
 from nocs.equipment import EquipmentService, Role, Site
@@ -48,6 +50,8 @@ SITE_TOLERANCE = 0.1
 """Degrees the mount's site may differ from the profile's before NOCS says so."""
 PROPERTY_WAIT = 10.0
 """Seconds to wait for a property drivers define just after the mount is ready."""
+SETTLE_TIMEOUT = 300.0
+"""Seconds a slew may still go on after the go to that started it."""
 
 type Frame = Literal["j2000", "jnow"]
 
@@ -106,6 +110,8 @@ class MountService:
         self._time_sent = False
         """The mount got NOCS's time since it last became ready (after the site)."""
         self._tasks: set[asyncio.Task[object]] = set()
+        self._changes: set[anyio.Event] = set()
+        """Set when a property the state shows changes (``settle``)."""
 
         store.set(ROOT, None)
         self._unwatch_bridge = bridge.watch(self._on_client)
@@ -126,22 +132,45 @@ class MountService:
         RA in hours, Dec in degrees. Refused below the horizon when the site and the
         time are known, unless ``force``.
         """
-        if not 0 <= ra < 24 or not -90 <= dec <= 90:
-            raise ValueError(f"coordinates out of range: RA {ra} h, Dec {dec}°")
-        mount = self._ready_to_slew()
-        self._require_site_and_time()
-        jnow = j2000_to_jnow(ra, dec, self._clock.now()) if frame == "j2000" else None
-        self._check_horizon(jnow.ra if jnow else ra, jnow.dec if jnow else dec, force)
+        mount = self._check_goto(ra, dec, frame, force)
+        self._jobs.check_free([RESOURCE])
 
         async def run(context: JobContext) -> Json:
-            # Converted again at the start: the job may start a moment later.
-            target = j2000_to_jnow(ra, dec, self._clock.now()) if frame == "j2000" else None
-            to_ra, to_dec = (target.ra, target.dec) if target else (ra, dec)
-            context.progress(None, f"slewing to RA {_hms(ra)}, Dec {_dms(dec)}")
-            await self._slew(mount, mount.goto(to_ra, to_dec))
-            return {"ra": to_ra, "dec": to_dec}
+            target = await self._goto(context, mount, ra, dec, frame)
+            return {"ra": target.ra, "dec": target.dec}
 
         return self._jobs.start("goto", [RESOURCE], run)
+
+    def check_goto(self, ra: float, dec: float, *, force: bool = False) -> None:
+        """Raise what a go to J2000 ``ra``, ``dec`` would raise now (for jobs that
+        go to later, so they are refused at once)."""
+        self._check_goto(ra, dec, "j2000", force)
+
+    async def slew(
+        self, context: JobContext, ra: float, dec: float, *, force: bool = False
+    ) -> Coordinates:
+        """Go to J2000 ``ra``, ``dec`` inside ``context``'s job, which must hold the
+        mount, and track there; returns the JNow position sent. Refused as ``goto``."""
+        if self._jobs.holder(RESOURCE) != context.id:
+            raise RuntimeError(f"job {context.id} does not hold the mount")
+        mount = self._check_goto(ra, dec, "j2000", force)
+        return await self._goto(context, mount, ra, dec, "j2000")
+
+    async def settle(self, seconds: float, timeout: float = SETTLE_TIMEOUT) -> None:
+        """Wait until the mount has stopped slewing, then ``seconds`` more for it to
+        come to rest."""
+        try:
+            with anyio.fail_after(timeout):
+                while self.mount().slewing:
+                    changed = anyio.Event()
+                    self._changes.add(changed)
+                    try:
+                        await changed.wait()
+                    finally:
+                        self._changes.discard(changed)
+        except TimeoutError:
+            raise PointingError(f"the mount was still slewing after {timeout:g} s") from None
+        await anyio.sleep(seconds)
 
     def goto_horizontal(self, alt: float, az: float) -> str:
         """Point at a place in the local sky (the zenith for flats) and stop tracking there."""
@@ -334,6 +363,27 @@ class MountService:
                 "the mount has not received the time yet: a client must report its clock first"
             )
 
+    def _check_goto(self, ra: float, dec: float, frame: Frame, force: bool) -> Mount:
+        if not 0 <= ra < 24 or not -90 <= dec <= 90:
+            raise ValueError(f"coordinates out of range: RA {ra} h, Dec {dec}°")
+        mount = self.mount()
+        if mount.parked:
+            raise ValueError(f"{mount.name} is parked: unpark it first")
+        self._require_site_and_time()
+        jnow = j2000_to_jnow(ra, dec, self._clock.now()) if frame == "j2000" else None
+        self._check_horizon(jnow.ra if jnow else ra, jnow.dec if jnow else dec, force)
+        return mount
+
+    async def _goto(
+        self, context: JobContext, mount: Mount, ra: float, dec: float, frame: Frame
+    ) -> Coordinates:
+        # Converted when the slew starts: a job may start it a while after the check.
+        target = j2000_to_jnow(ra, dec, self._clock.now()) if frame == "j2000" else None
+        to = target or Coordinates(ra, dec)
+        context.progress(None, f"slewing to RA {_hms(ra)}, Dec {_dms(dec)}")
+        await self._slew(mount, mount.goto(to.ra, to.dec))
+        return to
+
     def _ready_to_slew(self) -> Mount:
         mount = self.mount()
         if mount.parked:
@@ -433,6 +483,8 @@ class MountService:
                 prop.device == self._device and prop.name in _WATCHED
             ):
                 self._publish()
+                for changed in self._changes:
+                    changed.set()
             case _:
                 pass
 

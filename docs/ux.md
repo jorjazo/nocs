@@ -255,6 +255,24 @@ Plate solve (stage 3.2):
 - A failed solve is explained in the panel by its reason (not enough stars, no
   solution, no database…), not in the dock's generic banner.
 
+Centre (stage 3.3):
+
+- The mount's sheet puts "Go and centre" between Go and Zenith, for the same
+  J2000 fields. It goes to the target, then takes frames with the main camera's
+  exposure and corrects the mount until the frame's centre is within 1′ of the
+  target, at most 5 frames: by syncing the mount to each frame, or for later
+  callers (after a meridian flip) by aiming off by what the frame missed. A
+  disabled button comes with its reason (no ASTAP, no main camera, camera busy);
+  a target below the horizon gets the same "Go anyway" as Go.
+- While it runs, the line under Stop says what it does and which frame of how
+  many (Slewing, Settling, Solving · 2 of 5), and Stop cancels it.
+- A centring card, in the sheet and in Live view under Plate solve, shows the
+  target, the tolerance and how it corrects, then every frame: how far it landed
+  from the target (total, east/west and north/south), "synced", or why it did
+  not solve. Its chip says Centred, Not centred or Cancelled; a run that ran out
+  of frames says how far it still was and what to check. The card stays with the
+  latest run until the next one.
+
 ## 8. Open UX questions
 
 - Persistent "session running" indicator on non-session screens (banner vs.

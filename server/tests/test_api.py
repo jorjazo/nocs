@@ -57,6 +57,15 @@ def test_set_property_without_indi_is_503(client: TestClient) -> None:
     assert response.status_code == 503
 
 
+def test_center_needs_a_camera_and_a_target(client: TestClient) -> None:
+    response = client.post("/api/solver/center", json={"ra": 0.5, "dec": -45})
+    assert response.status_code == 503, response.text
+    assert client.post("/api/solver/center", json={"ra": 24, "dec": 0}).status_code == 422
+    assert client.post("/api/solver/center", json={"dec": 0}).status_code == 422
+    bad = {"ra": 1, "dec": 0, "method": "nudge"}
+    assert client.post("/api/solver/center", json=bad).status_code == 422
+
+
 def test_set_property_validates_body(client: TestClient) -> None:
     response = client.post("/api/indi/devices/CCD/properties/CONNECTION", json={"values": {}})
     assert response.status_code == 422

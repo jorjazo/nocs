@@ -1,6 +1,6 @@
 <script lang="ts">
-  // The mount: where it points, the slew pad, go to (J2000 or the zenith),
-  // tracking, park and home, the site and time it was given, and the limits it
+  // The mount: where it points, the slew pad, go to (J2000 or the zenith) and go
+  // and centre, tracking, park and home, the site and time it was given, and the limits it
   // keeps. Opened from Rig and from Live view.
   import Banner from "../../components/Banner.svelte";
   import Button from "../../components/Button.svelte";
@@ -13,6 +13,7 @@
   import {
     abortMount,
     ApiError,
+    centerOn,
     gotoMount,
     homeMount,
     parkMount,
@@ -28,6 +29,7 @@
   import { i18n } from "../../lib/i18n";
   import { live } from "../../lib/live.svelte";
   import { formatDec, formatRa, mountActivity, parseDec, parseRa } from "../../lib/mount.svelte";
+  import CenteringCard from "../live/CenteringCard.svelte";
   import MountPad from "./MountPad.svelte";
 
   let { onclose }: { onclose: () => void } = $props();
@@ -41,8 +43,8 @@
 
   let busy = $state<string | null>(null);
   let error = $state("");
-  // A go to refused below the horizon, ready to be forced.
-  let refused = $state<{ ra: number; dec: number } | null>(null);
+  // A go to (or go and centre) refused below the horizon, ready to be forced.
+  let refused = $state<{ ra: number; dec: number; center: boolean } | null>(null);
 
   async function run(kind: string, action: () => Promise<unknown>): Promise<void> {
     busy = kind;
@@ -69,15 +71,16 @@
   const ra = $derived(parseRa(raText));
   const dec = $derived(parseDec(decText));
 
-  async function goTo(force = false): Promise<void> {
+  async function goTo(force = false, center = false): Promise<void> {
     tried = true;
     if (ra === null || dec === null) return;
-    const target = { ra, dec };
+    const target = { ra, dec, center };
     refused = null;
-    busy = "goto";
+    busy = center ? "center" : "goto";
     error = "";
     try {
-      await gotoMount({ frame: "j2000", ra: target.ra, dec: target.dec, force });
+      if (center) await centerOn({ ra: target.ra, dec: target.dec, force });
+      else await gotoMount({ frame: "j2000", ra: target.ra, dec: target.dec, force });
     } catch (e) {
       if (e instanceof ApiError && e.status === 409 && e.message.includes("below the horizon")) refused = target;
       else error = errorText(e, t);
@@ -85,6 +88,26 @@
       busy = null;
     }
   }
+
+  // -- Go and centre (stage 3.3) ----------------------------------------------------
+
+  const centering = $derived(live.app.centering ?? null);
+  const centerReason = $derived.by((): string | null => {
+    if (!live.app.solver?.available) return t.center.noSolver;
+    if (!live.app.cameras?.main_camera) return t.center.noCamera;
+    if (holder(live.app.jobs, "main_camera")) return t.center.cameraBusy;
+    return null;
+  });
+  // What the centring that holds the mount is doing, in this language.
+  const progress = $derived.by((): string | null => {
+    if (!job) return null;
+    if (centering && centering.job === job.id && centering.state === "running") {
+      const attempt = Math.min(centering.attempts.length + 1, centering.max_attempts);
+      const phase = t.center.phases[centering.phase ?? "slewing"];
+      return `${t.center.title} · ${t.center.phase(phase, attempt, centering.max_attempts)}`;
+    }
+    return job.info.message;
+  });
 
   // -- Readouts -----------------------------------------------------------------------
 
@@ -147,7 +170,7 @@
         onclick={() => void run("abort", abortMount)}>
         {t.mount.stop}
       </Button>
-      {#if job?.info.message}<p class="caption muted" role="status">{job.info.message}</p>{/if}
+      {#if progress}<p class="caption muted" role="status">{progress}</p>{/if}
     </div>
 
     {#if error}<Banner icon="alert" tone="error">{error}</Banner>{/if}
@@ -176,7 +199,10 @@
         <Banner icon="alert" tone="warning">
           {t.mount.belowHorizon}
           {#snippet action()}
-            <ConfirmButton label={t.mount.goAnyway} confirmLabel={t.mount.goAnywayConfirm} onconfirm={() => void goTo(true)} />
+            <ConfirmButton
+              label={t.mount.goAnyway}
+              confirmLabel={t.mount.goAnywayConfirm}
+              onconfirm={() => void goTo(true, refused?.center)} />
           {/snippet}
         </Banner>
       {/if}
@@ -185,13 +211,21 @@
           {t.mount.go}
         </Button>
         <Button
+          disabled={!owner || !!job || mount.parked || centerReason !== null}
+          busy={busy === "center"}
+          onclick={() => void goTo(false, true)}>
+          {t.center.goCenter}
+        </Button>
+        <Button
           disabled={!owner || !!job || mount.parked}
           busy={busy === "zenith"}
           onclick={() => void run("zenith", () => gotoMount({ frame: "altaz", alt: 90, az: 0 }))}>
           {t.mount.zenith}
         </Button>
       </div>
+      <p class="caption muted">{centerReason ?? t.center.hint}</p>
       <p class="caption muted">{t.mount.zenithHint}</p>
+      {#if centering}<CenteringCard {centering} />{/if}
     </section>
 
     <section class="group" aria-label={t.mount.tracking}>

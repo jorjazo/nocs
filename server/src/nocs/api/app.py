@@ -97,7 +97,7 @@ from nocs.imaging.worker import ImageWorker
 from nocs.indi.drivers import DriverFifo, load_catalog
 from nocs.jobs import JobManager, ResourceBusyError
 from nocs.mount.service import MountService
-from nocs.pointing import PointingService
+from nocs.pointing import CenteringService, PointingService
 from nocs.power.service import PowerService, WeatherService
 from nocs.services.indi_bridge import IndiBridge, NotConnectedError
 from nocs.services.system import OperationUnavailableError, SystemService
@@ -183,6 +183,10 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
     def pointing() -> PointingService:
         assert services.pointing is not None
         return services.pointing
+
+    def centering() -> CenteringService:
+        assert services.centering is not None
+        return services.centering
 
     def site_longitude() -> float | None:
         profile = equipment().active_profile
@@ -270,6 +274,9 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
         services.pointing = PointingService(
             store, services.jobs, services.capture, services.solver, services.mount
         )
+        services.centering = CenteringService(
+            store, services.jobs, services.pointing, services.mount
+        )
         task = asyncio.create_task(bridge.run(), name="indi-bridge")
         guiding_task = asyncio.create_task(services.guiding.run(), name="phd2")
         system_task = asyncio.create_task(services.system.run(), name="nocs-system")
@@ -303,7 +310,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
     app.include_router(power_router(power))
     app.include_router(guiding_router(guiding))
     app.include_router(system_router(system))
-    app.include_router(solver_router(pointing))
+    app.include_router(solver_router(pointing, centering))
     app.include_router(accessories_router(focuser, filter_wheel, autofocus))
 
     @app.get("/api/autofocus/runs")
@@ -612,6 +619,7 @@ class _Services:
     filter_wheel: FilterWheelService | None = None
     solver: SolverService | None = None
     pointing: PointingService | None = None
+    centering: CenteringService | None = None
     autofocus: AutofocusService | None = None
     guiding: GuidingService | None = None
     environment: EnvironmentLog | None = None

@@ -22,7 +22,7 @@ shared with polar alignment (phase 4) and re-centring and the meridian flip
 |---|---|---|---|---|
 | 3.1 | ASTAP solver | `nocs.solving`: discovery, star databases and the fields they solve, hints (field from the optical train, position from the mount), downsampling from the measured HFR, a process per solve killed on timeout or cancel, one solve at a time, solutions from ASTAP's WCS (J2000 centre, scale, rotation as shown, mirroring); camera state gains `field`; ASTAP + D05 in dev and CI ([ADR 0018](../adr/0018-plate-solving-with-astap.md)) | Real frames (2600MC, 6200MM, 482MC) and simulator frames solve; rotation matches ASIAIR's | Implemented |
 | 3.2 | Solve and sync | `solve` job (`nocs.pointing`): expose with the main camera, HFR from the worker, hinted then blind, offset from the mount, optional sync at mid-exposure; later sync to the last solution if the mount has not moved; failures with a reason; Live view: Solve, Solve and sync, result card, Sync | Lab: AM5/AM7 accept a sync | Implemented |
-| 3.3 | Centre | `center` job: go to → settle → solve → sync or offset → repeat until within tolerance or N attempts; Mount sheet: Go and centre | Simulators with an injected pointing error | |
+| 3.3 | Centre | `center` job (`nocs.pointing.center`, callable from any job holding the camera and the mount): go to → settle → solve → sync, or aim off by the error → repeat until within tolerance (1′) or N frames (5); a frame that does not solve is taken again without moving; `centering` state with every frame's error; Mount sheet: Go and centre; centring card in the sheet and Live view | Simulators with an injected pointing error; lab: one run on the AM7 | Implemented |
 | 3.4 | Target catalog | OpenNGC (CC BY-SA 4.0) bundled by a pinned build script: Messier, NGC/IC, common names in English and Spanish; search API (ADR 0019) | — | |
 | 3.5 | Tonight's sky | Twilights, Moon (altitude, phase), altitude curves, transit, time above a minimum and above a **horizon profile** by azimuth in the site, distance to the Moon | Against an almanac | |
 | 3.6 | Plan and Tonight UI | Search, target detail with altitude chart, Go / Go and centre; Tonight: night window and Moon | Phone | |
@@ -58,6 +58,15 @@ shared with polar alignment (phase 4) and re-centring and the meridian flip
   simulator's alignment model, which takes effect only once that model has been
   initialised (clear and commit); then the next solve was 0.05–0.2′ from the mount.
   Stale points later moved the sky it renders far from where it says it points.
+- Centring on the simulators (index errors 20′ in Dec, 15′ in HA, at J2000 0h −45°):
+  syncing, 22.7′ then 0.06′ (two frames); aiming off, 22.6′ then 0.06′. A frame that failed
+  to solve kept failing when taken again in place (up to four in a row): the test
+  starts the run again with the frame turned.
+- Lab AM7 (indoors, so no frame solved): a go and centre slewed 10° from home in
+  17 s; the driver reported the slew finished when the position stopped changing
+  (no drift during the 2 s settle), and a 1 s frame plus a failed D50 solve took
+  ~5 s per attempt. ASTAP CLI-2026.09.01 exits 1 with `ERROR=Not enough stars.` for
+  an empty frame, which NOCS reports as `no_solution`, not `no_stars`.
 - With D05, only some of the CCD simulator's 5 s frames of a sparse field solved
   (fewer 10 s frames), and a frame that failed kept failing until the frame changed
   (turned, or moved). On a laptop on 2026-10-31 even 3.1's simulator test failed

@@ -57,6 +57,18 @@
           "default": null,
           "description": "Connected camera roles."
         },
+        "centering": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CenteringState"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "None: never run."
+        },
         "clock": {
           "anyOf": [
             {
@@ -1127,6 +1139,259 @@
         "used_by"
       ],
       "title": "CameraState",
+      "type": "object"
+    },
+    "CenterRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "attempts": {
+          "default": 5,
+          "description": "Frames at most.",
+          "maximum": 20,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "binning": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "For the frames only."
+        },
+        "dec": {
+          "description": "J2000, degrees.",
+          "maximum": 90,
+          "minimum": -90,
+          "type": "number"
+        },
+        "exposure": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "maximum": 600,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Seconds; None: the camera's exposure."
+        },
+        "force": {
+          "default": false,
+          "description": "Go below the horizon.",
+          "type": "boolean"
+        },
+        "method": {
+          "default": "sync",
+          "enum": [
+            "sync",
+            "offset"
+          ],
+          "type": "string"
+        },
+        "ra": {
+          "description": "J2000, hours.",
+          "exclusiveMaximum": 24,
+          "minimum": 0,
+          "type": "number"
+        },
+        "settle": {
+          "default": 2.0,
+          "description": "Seconds after each slew.",
+          "maximum": 60,
+          "minimum": 0,
+          "type": "number"
+        },
+        "tolerance": {
+          "default": 1.0,
+          "description": "Arcminutes.",
+          "exclusiveMinimum": 0,
+          "maximum": 60,
+          "type": "number"
+        }
+      },
+      "required": [
+        "ra",
+        "dec"
+      ],
+      "title": "CenterRequest",
+      "type": "object"
+    },
+    "CenteringAttempt": {
+      "additionalProperties": false,
+      "properties": {
+        "aim": {
+          "$ref": "#/$defs/SkyPosition",
+          "description": "Where the mount was sent."
+        },
+        "error": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PointingOffset"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "From the target to the frame's centre."
+        },
+        "failure": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CenteringFailure"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Why the frame was not solved."
+        },
+        "solution": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SkyPosition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Centre of the frame; None: not solved."
+        },
+        "synced": {
+          "description": "The mount was synced to the solution.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "aim",
+        "solution",
+        "error",
+        "synced",
+        "failure"
+      ],
+      "title": "CenteringAttempt",
+      "type": "object"
+    },
+    "CenteringFailure": {
+      "additionalProperties": false,
+      "properties": {
+        "message": {
+          "type": "string"
+        },
+        "reason": {
+          "$ref": "#/$defs/SolveFailureReason"
+        }
+      },
+      "required": [
+        "reason",
+        "message"
+      ],
+      "title": "CenteringFailure",
+      "type": "object"
+    },
+    "CenteringState": {
+      "additionalProperties": false,
+      "description": "The running centring, or the most recent one.",
+      "properties": {
+        "attempts": {
+          "items": {
+            "$ref": "#/$defs/CenteringAttempt"
+          },
+          "type": "array"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Why it failed."
+        },
+        "finished": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "job": {
+          "type": "string"
+        },
+        "max_attempts": {
+          "type": "integer"
+        },
+        "method": {
+          "description": "sync: the mount is synced to each frame; offset: the next go to aims off by what the frame missed.",
+          "enum": [
+            "sync",
+            "offset"
+          ],
+          "type": "string"
+        },
+        "phase": {
+          "anyOf": [
+            {
+              "enum": [
+                "slewing",
+                "settling",
+                "solving"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "While running."
+        },
+        "started": {
+          "type": "string"
+        },
+        "state": {
+          "enum": [
+            "running",
+            "succeeded",
+            "failed",
+            "cancelled"
+          ],
+          "type": "string"
+        },
+        "target": {
+          "$ref": "#/$defs/SkyPosition"
+        },
+        "tolerance": {
+          "description": "Arcminutes.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "job",
+        "state",
+        "phase",
+        "method",
+        "target",
+        "tolerance",
+        "max_attempts",
+        "attempts",
+        "error",
+        "started",
+        "finished"
+      ],
+      "title": "CenteringState",
       "type": "object"
     },
     "ClientRole": {

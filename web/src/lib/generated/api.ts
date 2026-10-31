@@ -7,6 +7,11 @@
 export type FrameTypeName = "light" | "dark" | "bias" | "flat";
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "SolveFailureReason".
+ */
+export type SolveFailureReason = "unavailable" | "no_database" | "no_stars" | "no_solution" | "unreadable" | "error";
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "ConnectionName".
  */
 export type ConnectionName = "disconnected" | "connecting" | "connected" | "disconnecting";
@@ -75,11 +80,6 @@ export type DriverName = string;
  * via the `definition` "OutputId".
  */
 export type OutputId = string;
-/**
- * This interface was referenced by `NOCSAPI`'s JSON-Schema
- * via the `definition` "SolveFailureReason".
- */
-export type SolveFailureReason = "unavailable" | "no_database" | "no_stars" | "no_solution" | "unreadable" | "error";
 
 export interface NOCSAPI {
   [k: string]: unknown;
@@ -116,6 +116,10 @@ export interface AppState {
   cameras?: {
     [k: string]: CameraState;
   } | null;
+  /**
+   * None: never run.
+   */
+  centering?: CenteringState | null;
   clock?: ClockState | null;
   equipment?: EquipmentState | null;
   /**
@@ -442,6 +446,113 @@ export interface SensorInfo {
    */
   pixel_size: number;
   width: number;
+}
+/**
+ * The running centring, or the most recent one.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "CenteringState".
+ */
+export interface CenteringState {
+  attempts: CenteringAttempt[];
+  /**
+   * Why it failed.
+   */
+  error: string | null;
+  finished: string | null;
+  job: string;
+  max_attempts: number;
+  /**
+   * sync: the mount is synced to each frame; offset: the next go to aims off by what the frame missed.
+   */
+  method: "sync" | "offset";
+  /**
+   * While running.
+   */
+  phase: ("slewing" | "settling" | "solving") | null;
+  started: string;
+  state: "running" | "succeeded" | "failed" | "cancelled";
+  target: SkyPosition1;
+  /**
+   * Arcminutes.
+   */
+  tolerance: number;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "CenteringAttempt".
+ */
+export interface CenteringAttempt {
+  aim: SkyPosition;
+  /**
+   * From the target to the frame's centre.
+   */
+  error: PointingOffset | null;
+  /**
+   * Why the frame was not solved.
+   */
+  failure: CenteringFailure | null;
+  /**
+   * Centre of the frame; None: not solved.
+   */
+  solution: SkyPosition1 | null;
+  /**
+   * The mount was synced to the solution.
+   */
+  synced: boolean;
+}
+/**
+ * Where the mount was sent.
+ */
+export interface SkyPosition {
+  /**
+   * J2000, degrees.
+   */
+  dec: number;
+  /**
+   * J2000, hours.
+   */
+  ra: number;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "PointingOffset".
+ */
+export interface PointingOffset {
+  /**
+   * Arcminutes on the sky.
+   */
+  angle: number;
+  /**
+   * Arcminutes, north +.
+   */
+  dec: number;
+  /**
+   * Arcminutes on the sky along RA (scaled by cos Dec), east +.
+   */
+  ra: number;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "CenteringFailure".
+ */
+export interface CenteringFailure {
+  message: string;
+  reason: SolveFailureReason;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "SkyPosition".
+ */
+export interface SkyPosition1 {
+  /**
+   * J2000, degrees.
+   */
+  dec: number;
+  /**
+   * J2000, hours.
+   */
+  ra: number;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -1149,7 +1260,7 @@ export interface SolutionState {
   /**
    * Where the mount said it pointed as the frame started, J2000.
    */
-  mount: SkyPosition | null;
+  mount: SkyPosition1 | null;
   /**
    * From the mount's position to the solution.
    */
@@ -1182,38 +1293,6 @@ export interface SolutionState {
    * UTC, ISO 8601, when it was solved.
    */
   time: string;
-}
-/**
- * This interface was referenced by `NOCSAPI`'s JSON-Schema
- * via the `definition` "SkyPosition".
- */
-export interface SkyPosition {
-  /**
-   * J2000, degrees.
-   */
-  dec: number;
-  /**
-   * J2000, hours.
-   */
-  ra: number;
-}
-/**
- * This interface was referenced by `NOCSAPI`'s JSON-Schema
- * via the `definition` "PointingOffset".
- */
-export interface PointingOffset {
-  /**
-   * Arcminutes on the sky.
-   */
-  angle: number;
-  /**
-   * Arcminutes, north +.
-   */
-  dec: number;
-  /**
-   * Arcminutes on the sky along RA (scaled by cos Dec), east +.
-   */
-  ra: number;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -1571,6 +1650,45 @@ export interface CameraSettingsRequest {
    * A readout region, or "full" for the whole sensor.
    */
   region?: Region | "full" | null;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "CenterRequest".
+ */
+export interface CenterRequest {
+  /**
+   * Frames at most.
+   */
+  attempts?: number;
+  /**
+   * For the frames only.
+   */
+  binning?: number | null;
+  /**
+   * J2000, degrees.
+   */
+  dec: number;
+  /**
+   * Seconds; None: the camera's exposure.
+   */
+  exposure?: number | null;
+  /**
+   * Go below the horizon.
+   */
+  force?: boolean;
+  method?: "sync" | "offset";
+  /**
+   * J2000, hours.
+   */
+  ra: number;
+  /**
+   * Seconds after each slew.
+   */
+  settle?: number;
+  /**
+   * Arcminutes.
+   */
+  tolerance?: number;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema

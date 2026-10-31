@@ -7,6 +7,7 @@ import type {
   AutofocusRun,
   CameraRoleName,
   CameraSettingsRequest,
+  CenterRequest,
   ClockReport,
   ClockRequest,
   ConnectRequest,
@@ -326,4 +327,10 @@ export async function solve(body: SolveRequest = {}): Promise<string> {
 // Syncs the mount to the last solution, if it has not moved since that frame.
 export function syncToSolution(): Promise<void> {
   return request("POST", "/api/solver/sync");
+}
+
+// Goes to a J2000 target and centres it in the main camera's frame (stage 3.3).
+export async function centerOn(body: CenterRequest): Promise<string> {
+  const started = await request<JobStarted>("POST", "/api/solver/center", body);
+  return started.job;
 }

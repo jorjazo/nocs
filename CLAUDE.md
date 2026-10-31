@@ -28,7 +28,7 @@ server/   Python package `nocs` (nocsd): indi/ (protocol + async client, driver
           mount/, focus/, filters/ (services by role; filter names per wheel),
           guiding/ (PHD2: service, settings it imports, JSON-RPC client,
           guide steps and RMS),
-          solving/ (ASTAP, fields of view), pointing/ (solve and sync),
+          solving/ (ASTAP, fields of view), pointing/ (solve and sync, centre),
           system/ (nocs-system, the root helper: stdlib + anyio only, ADR 0027),
           state/ (versioned store), services/ (indi_bridge), api/ (FastAPI
           REST + WebSocket, schemas, schema export)
@@ -144,6 +144,8 @@ packages workflow builds and installs the .deb on amd64 and arm64.
   (arcminutes); its syncs are alignment points that work only after its alignment
   model is cleared and committed, and stale points later throw its sky far off:
   clear them after a test (`tests/test_pointing_integration.py`).
+- Set those index errors with the mount already on the field: changed just before
+  a go to, the next frame once landed right on the target, with no error to correct.
 - The ZWO AM5/AM7 keeps a sync away from the pole, but at home (Dec −90°) goes
   back to −90° at its next poll.
 
