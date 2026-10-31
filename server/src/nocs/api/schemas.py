@@ -487,6 +487,20 @@ type Phd2AppState = Literal[
 ]
 
 
+class GuidingCalibration(StateModel):
+    ra_angle: float = Field(description="Of the RA axis on the guide camera, degrees.")
+    ra_rate: float = Field(description="Pixels per second of an RA pulse.")
+    dec_angle: float
+    dec_rate: float
+    declination: float | None = Field(description="Where it was calibrated, degrees.")
+
+
+class GuidingAlert(StateModel):
+    message: str
+    kind: str = Field(description="PHD2's type: info, question, warning or error.")
+    time: str = Field(description="UTC, ISO 8601.")
+
+
 class GuidingState(StateModel):
     phd2: Phd2Server
     managed: bool = Field(description="NOCS writes PHD2's settings from the profile (ADR 0022).")
@@ -502,6 +516,9 @@ class GuidingState(StateModel):
         " PHD2's (ADR 0023)."
     )
     exposure: float | None = Field(description="PHD2's exposure, seconds; None while unknown.")
+    calibration: GuidingCalibration | None = Field(description="None: PHD2 is not calibrated.")
+    settling: bool = Field(description="PHD2 waits for the star to settle.")
+    alert: GuidingAlert | None = Field(description="The last thing PHD2 warned about.")
     error: str | None = Field(description="Why PHD2 does not run the profile's settings.")
 
 
@@ -556,6 +573,22 @@ class GuidingLoopRequest(BaseModel):
     exposure: float | None = Field(
         default=None, ge=0.05, le=60, description="Seconds; PHD2's current one when omitted."
     )
+
+
+class SettleRequest(BaseModel):
+    pixels: float = Field(default=1.5, gt=0, le=20, description="Within this distance, px…")
+    time: float = Field(default=10, ge=0, le=300, description="…for this long, seconds…")
+    timeout: float = Field(default=60, gt=0, le=600, description="…or give up after this.")
+
+
+class GuideRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    recalibrate: bool = Field(
+        default=False,
+        description="Calibrate even if PHD2 has a calibration (after rotating the camera).",
+    )
+    settle: SettleRequest = Field(default_factory=SettleRequest)
 
 
 class GuidingExposureRequest(BaseModel):
@@ -647,6 +680,9 @@ class EquatorialGoto(BaseModel):
     ra: float = Field(ge=0, lt=24, description="Hours.")
     dec: float = Field(ge=-90, le=90, description="Degrees.")
     force: bool = Field(default=False, description="Slew even if the target is below the horizon.")
+    stop_guiding: bool = Field(
+        default=False, description="Stop guiding first; refused while guiding otherwise (ADR 0023)."
+    )
 
 
 class HorizontalGoto(BaseModel):
@@ -657,6 +693,19 @@ class HorizontalGoto(BaseModel):
     frame: Literal["altaz"]
     alt: float = Field(ge=0, le=90, description="Degrees.")
     az: float = Field(ge=0, lt=360, description="Degrees from north through east.")
+    stop_guiding: bool = Field(
+        default=False, description="Stop guiding first; refused while guiding otherwise (ADR 0023)."
+    )
+
+
+class MountMoveRequest(BaseModel):
+    """Park or home."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    stop_guiding: bool = Field(
+        default=False, description="Stop guiding first; refused while guiding otherwise (ADR 0023)."
+    )
 
 
 type GotoRequest = Annotated[EquatorialGoto | HorizontalGoto, Field(discriminator="frame")]

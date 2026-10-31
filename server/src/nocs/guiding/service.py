@@ -10,6 +10,9 @@ State layout under ``("guiding",)``::
                LostLock, Paused), or None while unknown
     equipment: PHD2 is connected to the guide camera and the mount
     exposure:  PHD2's exposure, seconds, or None while unknown
+    calibration: {ra_angle, ra_rate, dec_angle, dec_rate, declination}, or None
+    settling:  PHD2 waits for the star to settle (after starting to guide or a dither)
+    alert:     {message, kind, time}: the last thing PHD2 warned about, or None
     error:     why PHD2 does not run the profile's settings, or None
 
 When nocsd manages the settings, it renders them from the active profile once its
@@ -20,7 +23,11 @@ change waits until it stops.
 
 While PHD2's equipment is connected, the guide camera is PHD2's: NOCS holds the
 role with a reservation, refuses its own exposures, and shows PHD2's frames as
-previews (ADR 0023).
+previews (ADR 0023). While PHD2 calibrates or guides, NOCS also holds the mount, so
+that slews, parking and the pad wait until guiding stops.
+
+Starting to guide is a job: loop, select a star, calibrate if needed, guide, and
+wait until PHD2 has settled. Guiding goes on after the job ends, until ``stop``.
 """
 
 from __future__ import annotations
@@ -29,6 +36,8 @@ import asyncio
 import contextlib
 import logging
 from collections.abc import Callable, Coroutine
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path as FsPath
 from typing import Any, Protocol
@@ -39,10 +48,17 @@ from nocs.devices import Camera, DeviceError, Mount
 from nocs.equipment import EquipmentService, Role
 from nocs.equipment.profiles import write_atomic
 from nocs.equipment.service import IndiConnection
-from nocs.guiding.phd2 import Phd2Client, Phd2ConnectionError, Phd2Error, Phd2Event, Phd2Message
+from nocs.guiding.phd2 import (
+    Phd2Client,
+    Phd2Closed,
+    Phd2ConnectionError,
+    Phd2Error,
+    Phd2Event,
+    Phd2Message,
+)
 from nocs.guiding.settings import GuideRig, Phd2Settings, render
 from nocs.indi import IndiClient
-from nocs.jobs import JobManager, ResourceBusyError
+from nocs.jobs import JobContext, JobManager, ResourceBusyError
 from nocs.state import Json, Path, StateStore
 
 log = logging.getLogger(__name__)
@@ -54,29 +70,42 @@ RESTART_BACKOFF = 1.0
 RESTART_ATTEMPTS = 20
 """…and for how many attempts, before the usual backoff."""
 
-IDLE_STATES = frozenset({"Stopped", "Selected"})
-"""PHD2 states in which it does not expose."""
+IDLE_STATES = frozenset({"Stopped"})
+"""PHD2 states in which it does not expose. "Selected" is not one: PHD2 2.6.14 reports it
+while looping with a star selected, although its documentation says otherwise."""
+LOOPING_STATES = frozenset({"Looping", "Selected"})
 CAMERA = Role.GUIDE_CAMERA
 HOLDER = "phd2"
 CONNECT_TIMEOUT = 60.0
 STOP_MARGIN = 15.0
+CAPTURE_ENDING = 10.0
+"""How long PHD2 may refuse to (dis)connect because a capture is still ending."""
 """How long the exposure PHD2 was taking may run over when it stops."""
 EXPOSURE_RANGE = (0.05, 60.0)
+GUIDING_STATES = frozenset({"Calibrating", "Guiding", "LostLock"})
+"""PHD2 states in which it moves the mount: NOCS holds the mount meanwhile."""
+FIND_STAR_ATTEMPTS = 5
+"""Frames to try ``find_star`` on before giving up."""
+FIRST_FRAME_MARGIN = 20.0
+STAR_EDGE = 0.1
+"""Guide stars are picked away from the frame's edges (this fraction, at least 50 px):
+calibration moves the star by 25 px each way, and a star near the edge is lost."""
+LOST_WHILE_CALIBRATING = 30.0
+"""Seconds (or 10 exposures, if longer) without the star before calibration is given up.
+PHD2 counts no step while the star is lost, so it would calibrate forever."""
 
 _STATE_OF_EVENT = {
     "LoopingExposures": "Looping",
     "LoopingExposuresStopped": "Stopped",
     "StartCalibration": "Calibrating",
     "Calibrating": "Calibrating",
+    "StartGuiding": "Guiding",
     "GuideStep": "Guiding",
     "GuidingStopped": "Stopped",
-    "StarLost": "LostLock",
     "Paused": "Paused",
 }
 """Events that tell PHD2's state unambiguously."""
-_QUERY_EVENTS = frozenset(
-    {"StartGuiding", "Resumed", "StarSelected", "CalibrationComplete", "CalibrationFailed"}
-)
+_QUERY_EVENTS = frozenset({"Resumed", "StarSelected", "CalibrationComplete", "CalibrationFailed"})
 """Events after which PHD2's state is asked for."""
 
 
@@ -95,6 +124,22 @@ class SettingsStatus(StrEnum):
 
 class GuidingNotReadyError(Exception):
     """PHD2 cannot do that now: unreachable, other settings, or devices missing."""
+
+
+class GuidingError(Exception):
+    """Guiding did not start: no star, calibration failed, PHD2 stopped, no settle."""
+
+
+@dataclass(frozen=True, slots=True)
+class Settle:
+    """When PHD2 counts as settled: within ``pixels`` for ``time`` s, giving up at ``timeout``."""
+
+    pixels: float = 1.5
+    time: float = 10.0
+    timeout: float = 60.0
+
+    def params(self) -> dict[str, Json]:
+        return {"pixels": self.pixels, "time": self.time, "timeout": self.timeout}
 
 
 class FrameFollower(Protocol):
@@ -129,6 +174,11 @@ class GuidingService:
         self._exposure: float | None = None
         self._idle = asyncio.Event()
         self._commands = asyncio.Lock()
+        self._mount_hold: str | None = None
+        """The reservation of the mount while PHD2 calibrates or guides."""
+        self._starting: str | None = None
+        """The job starting to guide, while it runs."""
+        self._queues: set[asyncio.Queue[Phd2Message]] = set()
         self._tasks: set[asyncio.Task[None]] = set()
         self._host = host
         self._port = port
@@ -154,6 +204,9 @@ class GuidingService:
                 "app_state": None,
                 "equipment": False,
                 "exposure": None,
+                "calibration": None,
+                "settling": False,
+                "alert": None,
                 "error": None,
             },
         )
@@ -179,6 +232,11 @@ class GuidingService:
     def equipment_connected(self) -> bool:
         return self._hold is not None
 
+    @property
+    def guiding(self) -> bool:
+        """PHD2 calibrates or guides (or a start of guiding runs): NOCS holds the mount."""
+        return self._mount_hold is not None
+
     async def connect(self) -> None:
         """Connect PHD2 to the guide camera and the mount; the camera is PHD2's then."""
         async with self._commands:
@@ -198,8 +256,32 @@ class GuidingService:
 
     async def stop(self) -> None:
         """Stop PHD2's looping or guiding, and wait until its exposure ends."""
+        if self._starting is not None:
+            self._jobs.cancel(self._starting)
         async with self._commands:
             await self._stop(self._client())
+
+    def guide(self, *, recalibrate: bool = False, settle: Settle | None = None) -> str:
+        """Start guiding as a job that ends once PHD2 has settled; returns the job id.
+
+        PHD2 calibrates first when it has no calibration, or when ``recalibrate`` asks
+        for it (after rotating a camera that guides through the imaging optics).
+        Guiding goes on after the job, until ``stop``.
+        """
+        self._client()  # fail now, not in the job, when PHD2 is not there
+        settle = settle or Settle()
+        if settle.pixels <= 0 or settle.time < 0 or settle.timeout <= 0:
+            raise ValueError("settling needs a positive distance and timeout")
+
+        async def run(context: JobContext) -> Json:
+            self._starting = context.id
+            try:
+                return await self._start_guiding(context, recalibrate, settle)
+            finally:
+                self._starting = None
+                self._sync_mount_hold()
+
+        return self._jobs.start("guide", [HOLDER], run)
 
     async def disconnect(self) -> None:
         """Stop PHD2, disconnect it from its equipment and give the camera back."""
@@ -208,7 +290,7 @@ class GuidingService:
             try:
                 if client is not None:
                     await self._stop(client)
-                    await client.call("set_connected", [False], timeout=CONNECT_TIMEOUT)
+                    await self._set_connected(client, False)
             finally:
                 self._release()
                 self._changed.set()  # settings that waited may go in now
@@ -236,6 +318,8 @@ class GuidingService:
                 else:
                     closed = True
                     self._changed.set()
+                for queue in list(self._queues):
+                    queue.put_nowait(message)
 
             client.add_listener(on_message)
             try:
@@ -259,11 +343,13 @@ class GuidingService:
                     self._app_state = None
                     self._idle.clear()
                     self._release()  # a PHD2 that went away holds nothing
+                    self._sync_mount_hold()
                     await client.close()
                     self._publish_server(connected=False)
                     with self._store.transaction():
                         self._store.set((*ROOT, "app_state"), None)
                         self._store.set((*ROOT, "profile"), None)
+                        self._store.set((*ROOT, "settling"), False)
                 log.info("lost connection to PHD2")
             restarting = self._status() is SettingsStatus.APPLYING
             if restarting and attempt < RESTART_ATTEMPTS:
@@ -299,12 +385,190 @@ class GuidingService:
             raise GuidingNotReadyError("the mount is not connected")
         self._hold_camera()  # raises ResourceBusyError while NOCS uses the camera
         try:
-            await client.call("set_connected", [True], timeout=CONNECT_TIMEOUT)
+            if await client.call("get_connected") is not True:
+                await self._set_connected(client, True)
             await self._read_exposure(client)
+            await self._read_calibration(client)
         except BaseException:
             self._release()
             raise
         return client
+
+    async def _start_guiding(self, context: JobContext, recalibrate: bool, settle: Settle) -> Json:
+        queue: asyncio.Queue[Phd2Message] = asyncio.Queue()
+        self._queues.add(queue)
+        try:
+            async with self._commands:
+                client = await self._connect()
+            self._hold_mount()  # raises ResourceBusyError while NOCS moves the mount
+            try:
+                return await self._guide_steps(context, client, queue, recalibrate, settle)
+            except asyncio.CancelledError:
+                # Not guiding is what a cancelled start means: stop whatever began.
+                with contextlib.suppress(Phd2Error, Phd2ConnectionError, TimeoutError):
+                    await asyncio.shield(client.call("stop_capture"))
+                raise
+        finally:
+            self._queues.discard(queue)
+
+    async def _guide_steps(
+        self,
+        context: JobContext,
+        client: Phd2Client,
+        queue: asyncio.Queue[Phd2Message],
+        recalibrate: bool,
+        settle: Settle,
+    ) -> Json:
+        calibrated = False
+        if self._app_state not in GUIDING_STATES:
+            if self._app_state not in LOOPING_STATES:
+                context.progress(None, "looping")
+                await client.call("loop")
+            await self._next_frame(queue)
+            context.progress(None, "selecting a star")
+            await self._find_star(client, queue)
+        context.progress(None, "starting to guide")
+        await client.call("guide", {"settle": settle.params(), "recalibrate": recalibrate})
+        lost_since: float | None = None
+        calibrating = False
+        lost_limit = max(LOST_WHILE_CALIBRATING, 10 * (self._exposure or 1.0))
+        while True:
+            message = await queue.get()
+            now = asyncio.get_running_loop().time()
+            if calibrating and lost_since is not None and now - lost_since > lost_limit:
+                with contextlib.suppress(Phd2Error, Phd2ConnectionError):
+                    await client.call("stop_capture")
+                raise GuidingError(
+                    f"lost the guide star for {lost_limit:g} s while calibrating: stopped"
+                )
+            if isinstance(message, Phd2Closed):
+                raise Phd2ConnectionError(f"lost PHD2 while starting to guide: {message.reason}")
+            data = message.data
+            match message.name:
+                case "StartCalibration":
+                    calibrating = True
+                    context.progress(None, "calibrating")
+                case "Calibrating":
+                    calibrating, lost_since = True, None
+                    step = data.get("State") or f"{data.get('dir')} step {data.get('step')}"
+                    context.progress(None, f"calibrating: {step}")
+                case "CalibrationComplete":
+                    calibrated, calibrating = True, False
+                    context.progress(None, "calibrated")
+                case "CalibrationFailed":
+                    raise GuidingError(f"calibration failed: {data.get('Reason', 'no reason')}")
+                case "StartGuiding":
+                    context.progress(None, "guiding, settling")
+                case "Settling":
+                    distance = data.get("Distance")
+                    if isinstance(distance, int | float):
+                        context.progress(None, f"settling: {distance:.1f} px")
+                case "StarLost":
+                    if lost_since is None:
+                        lost_since = asyncio.get_running_loop().time()
+                    context.progress(None, "star lost: waiting for it")
+                case "GuideStep":
+                    lost_since = None
+                case "SettleDone":
+                    status = data.get("Status")
+                    if status != 0:
+                        reason = data.get("Error") or "timed out"
+                        raise GuidingError(f"PHD2 did not settle ({reason}); it goes on guiding")
+                    await self._read_calibration(client)
+                    return {
+                        "calibrated": calibrated,
+                        "frames": data.get("TotalFrames"),
+                        "dropped": data.get("DroppedFrames"),
+                    }
+                case "GuidingStopped" | "LoopingExposuresStopped":
+                    raise GuidingError("PHD2 stopped before it settled")
+                case _:
+                    pass
+
+    async def _next_frame(self, queue: asyncio.Queue[Phd2Message]) -> None:
+        timeout = (self._exposure or EXPOSURE_RANGE[1]) + FIRST_FRAME_MARGIN
+        async with asyncio.timeout(timeout):
+            while True:
+                message = await queue.get()
+                if isinstance(message, Phd2Closed):
+                    raise Phd2ConnectionError(f"lost PHD2: {message.reason}")
+                if message.name == "LoopingExposures":
+                    return
+                if message.name == "LoopingExposuresStopped":
+                    raise GuidingError("PHD2 stopped looping")
+
+    async def _find_star(self, client: Phd2Client, queue: asyncio.Queue[Phd2Message]) -> None:
+        region = self._star_region()
+        params: dict[str, Json] | None = {"roi": region} if region is not None else None
+        for attempt in range(FIND_STAR_ATTEMPTS):
+            try:
+                await client.call("find_star", params)
+                return
+            except Phd2Error as e:
+                if attempt == FIND_STAR_ATTEMPTS - 1:
+                    raise GuidingError(f"no guide star: {e}") from e
+                await self._next_frame(queue)
+
+    def _star_region(self) -> list[Json] | None:
+        """Where to look for a guide star: the frame without its edges, as [x, y, w, h]."""
+        device = self._equipment.ready_device(CAMERA)
+        if device is None or self._indi is None:
+            return None
+        try:
+            sensor = Camera(self._indi, device).sensor
+        except (DeviceError, KeyError, TypeError) as e:
+            log.debug("guide camera size unknown: %s", e)
+            return None
+        margin = max(50, round(STAR_EDGE * min(sensor.width, sensor.height)))
+        width, height = sensor.width - 2 * margin, sensor.height - 2 * margin
+        if width <= 0 or height <= 0:
+            return None
+        return [margin, margin, width, height]
+
+    def _hold_mount(self) -> None:
+        if self._mount_hold is None:
+            self._mount_hold = self._jobs.reserve("guiding", [Role.MOUNT.value])
+
+    def _sync_mount_hold(self) -> None:
+        """Hold the mount exactly while PHD2 moves it (or a start of guiding runs)."""
+        wanted = self._starting is not None or self._app_state in GUIDING_STATES
+        if wanted and self._mount_hold is None and self._phd2 is not None:
+            try:
+                self._hold_mount()
+            except ResourceBusyError as e:  # PHD2 guided on its own while NOCS moved it
+                log.warning("PHD2 guides while NOCS uses the mount: %s", e)
+        elif not wanted and self._mount_hold is not None:
+            self._jobs.release(self._mount_hold)
+            self._mount_hold = None
+
+    async def _read_calibration(self, client: Phd2Client) -> None:
+        try:
+            data = await client.call("get_calibration_data", ["Mount"])
+        except Phd2Error as e:
+            log.debug("no calibration data: %s", e)
+            data = None
+        calibration: Json = None
+        if isinstance(data, dict) and data.get("calibrated") is True:
+            calibration = {
+                "ra_angle": data.get("xAngle"),
+                "ra_rate": data.get("xRate"),
+                "dec_angle": data.get("yAngle"),
+                "dec_rate": data.get("yRate"),
+                "declination": data.get("declination"),
+            }
+        self._store.set((*ROOT, "calibration"), calibration)
+
+    async def _set_connected(self, client: Phd2Client, connected: bool) -> None:
+        """PHD2 refuses while a capture ends, a moment after it says it stopped: retry."""
+        deadline = asyncio.get_running_loop().time() + CAPTURE_ENDING
+        while True:
+            try:
+                await client.call("set_connected", [connected], timeout=CONNECT_TIMEOUT)
+                return
+            except Phd2Error as e:
+                if "capture" not in str(e) or asyncio.get_running_loop().time() > deadline:
+                    raise
+            await asyncio.sleep(0.5)
 
     async def _set_exposure(self, client: Phd2Client, exposure: float) -> None:
         low, high = EXPOSURE_RANGE
@@ -400,6 +664,7 @@ class GuidingService:
                 log.warning("PHD2 connected to the guide camera while NOCS used it: %s", e)
                 return
             await self._read_exposure(client)
+            await self._read_calibration(client)
         elif connected is False and self._hold is not None and not self._commands.locked():
             self._release()
 
@@ -494,12 +759,31 @@ class GuidingService:
                 state = event.data.get("State")
                 if isinstance(state, str):
                     self._set_app_state(state)
-            case name if name in _STATE_OF_EVENT:
-                self._set_app_state(_STATE_OF_EVENT[name])
-            case name if name in _QUERY_EVENTS:
-                self._changed.set()  # _sync asks for the state
+            case "Alert":
+                self._alert(str(event.data.get("Msg", "")), str(event.data.get("Type", "info")))
+            case "SettleBegin" | "Settling":
+                self._store.set((*ROOT, "settling"), True)
+            case "SettleDone":
+                self._store.set((*ROOT, "settling"), False)
+            case "CalibrationFailed":
+                self._alert(f"calibration failed: {event.data.get('Reason', '')}", "error")
+                self._changed.set()
             case _:
                 pass
+        if event.name == "StarLost":
+            self._alert(f"star lost: {event.data.get('Status', '')}", "warning")
+            if self._app_state == "Guiding":  # while calibrating, PHD2 still calibrates
+                self._set_app_state("LostLock")
+        if event.name == "LoopingExposures" and self._app_state == "Selected":
+            pass  # looping with a star selected, as PHD2 says itself
+        elif event.name in _STATE_OF_EVENT:
+            self._set_app_state(_STATE_OF_EVENT[event.name])
+        elif event.name in _QUERY_EVENTS:
+            self._changed.set()  # _sync asks for the state
+
+    def _alert(self, message: str, kind: str) -> None:
+        when = datetime.now(UTC).isoformat(timespec="seconds")
+        self._store.set((*ROOT, "alert"), {"message": message, "kind": kind, "time": when})
 
     def _background(self, coro: Coroutine[Any, Any, None]) -> None:
         task = asyncio.get_running_loop().create_task(coro)
@@ -516,6 +800,9 @@ class GuidingService:
         was_busy = self._app_state not in IDLE_STATES
         self._app_state = state
         self._store.set((*ROOT, "app_state"), state)
+        self._sync_mount_hold()
+        if state in IDLE_STATES or state in LOOPING_STATES:
+            self._store.set((*ROOT, "settling"), False)
         if wake and was_busy and state in IDLE_STATES:
             self._changed.set()  # pending settings may go in now
 

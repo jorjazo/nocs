@@ -13,6 +13,7 @@ import pytest
 from conftest import Phd2Setup
 from fastapi.testclient import TestClient
 from owner import pair_owner
+from simfocus import ORION
 
 from nocs.api import create_app
 from nocs.api.schemas import AppState
@@ -47,6 +48,10 @@ def api(indi_address: tuple[str, int], indi_fifo: Path, phd2: Phd2Setup) -> Iter
         wait(client, lambda s: "Weather Simulator" not in s["indi"]["devices"], timeout=15)
 
 
+def expect(response: Any, status: int) -> None:
+    assert response.status_code == status, response.text
+
+
 def state(api: TestClient) -> dict[str, Any]:
     return api.get("/api/state").json()["state"]
 
@@ -62,8 +67,8 @@ def test_phd2_runs_the_profiles_settings_and_takes_the_guide_camera(
     api: TestClient, phd2: Phd2Setup
 ) -> None:
     wait(api, lambda s: s["guiding"]["phd2"]["connected"])
-    assert api.put("/api/profiles/simulators", json=SIMULATORS).status_code == 204
-    assert api.post("/api/equipment/connect", json={"profile": "simulators"}).status_code == 202
+    expect(api.put("/api/profiles/simulators", json=SIMULATORS), 204)
+    expect(api.post("/api/equipment/connect", json={"profile": "simulators"}), 202)
     wait(api, lambda s: s["guiding"]["settings"] == "applied", timeout=90)
     current = state(api)
     AppState.model_validate(current)
@@ -88,8 +93,9 @@ def test_phd2_runs_the_profiles_settings_and_takes_the_guide_camera(
     asyncio.run(check())
 
     # PHD2 loops on the guide camera, which is PHD2's meanwhile (ADR 0023).
-    assert api.post("/api/guiding/loop", json={"exposure": 1}).status_code == 204
-    wait(api, lambda s: s["guiding"]["equipment"] and s["guiding"]["app_state"] == "Looping")
+    expect(api.post("/api/guiding/loop", json={"exposure": 1}), 204)
+    looping = ("Looping", "Selected")  # "Selected": looping with a star selected
+    wait(api, lambda s: s["guiding"]["equipment"] and s["guiding"]["app_state"] in looping)
     assert state(api)["cameras"]["guide_camera"]["used_by"] == "phd2"
     refused = api.post("/api/cameras/guide_camera/expose", json={"exposure": 1})
     assert refused.status_code == 409, refused.text
@@ -103,9 +109,9 @@ def test_phd2_runs_the_profiles_settings_and_takes_the_guide_camera(
     assert api.get(newer["url"]).status_code == 200
     AppState.model_validate(state(api))
 
-    assert api.post("/api/guiding/stop").status_code == 204
-    assert state(api)["guiding"]["app_state"] in ("Stopped", "Selected")
-    assert api.post("/api/guiding/disconnect").status_code == 204
+    expect(api.post("/api/guiding/stop"), 204)
+    assert state(api)["guiding"]["app_state"] == "Stopped"
+    expect(api.post("/api/guiding/disconnect"), 204)
     current = state(api)
     assert not current["guiding"]["equipment"]
     assert current["cameras"]["guide_camera"]["used_by"] is None
@@ -119,3 +125,74 @@ def _new_preview(current: dict[str, Any], before: dict[str, Any] | None) -> dict
     if preview is None or (before is not None and preview["url"] == before["url"]):
         return None
     return preview
+
+
+def point_at_stars(api: TestClient) -> None:
+    """Unpark the simulated mount and track a field rich in guide stars."""
+    if state(api)["mount"]["parked"]:
+        expect(api.post("/api/mount/unpark"), 204)
+        wait(api, lambda s: not s["mount"]["parked"] and not s["mount"]["parking"])
+    set_property(api, "Telescope Simulator", "ON_COORD_SET", {"TRACK": True})
+    ra, dec = ORION
+
+    def there(current: dict[str, Any]) -> bool:
+        mount = current["mount"]
+        arrived = abs(mount["ra"] - ra) < 0.02 and abs(mount["dec"] - dec) < 0.2
+        return arrived and not mount["slewing"]
+
+    set_property(api, "Telescope Simulator", "EQUATORIAL_EOD_COORD", {"RA": ra, "DEC": dec})
+    wait(api, there, timeout=120)
+
+
+def set_property(api: TestClient, device: str, name: str, values: dict[str, Any]) -> None:
+    response = api.post(f"/api/indi/devices/{device}/properties/{name}", json={"values": values})
+    assert response.status_code == 202, response.text
+
+
+def start_guiding(api: TestClient, **request: Any) -> dict[str, Any]:
+    response = api.post("/api/guiding/guide", json=request)
+    assert response.status_code == 202, response.text
+    job_id = response.json()["job"]
+    wait(api, lambda s: s["jobs"][job_id]["state"] != "running", timeout=300)
+    job = state(api)["jobs"][job_id]
+    assert job["state"] == "succeeded", (job["error"], job["message"])
+    return job["result"]
+
+
+def test_calibrate_guide_and_stop_for_the_mount(api: TestClient) -> None:
+    expect(api.put("/api/profiles/simulators", json=SIMULATORS), 204)
+    expect(api.post("/api/equipment/connect", json={"profile": "simulators"}), 202)
+    wait(api, lambda s: s["guiding"]["settings"] == "applied", timeout=90)
+    wait(api, lambda s: s["mount"] is not None)
+    point_at_stars(api)
+    expect(api.post("/api/guiding/connect"), 204)
+    expect(api.put("/api/guiding/exposure", json={"exposure": 1}), 204)
+
+    settle = {"pixels": 1.5, "time": 5, "timeout": 90}
+    result = start_guiding(api, recalibrate=True, settle=settle)
+    assert result["calibrated"] is True
+    current = state(api)
+    AppState.model_validate(current)
+    guiding = current["guiding"]
+    assert guiding["app_state"] == "Guiding"
+    assert guiding["calibration"] is not None
+    assert guiding["calibration"]["ra_rate"] > 0
+
+    # The mount is PHD2's while it guides (ADR 0023).
+    refused = api.post("/api/mount/park")
+    assert refused.status_code == 409, refused.text
+    assert "guiding" in refused.json()["detail"]
+    response = api.post("/api/mount/park", json={"stop_guiding": True})
+    assert response.status_code == 202, response.text
+    assert state(api)["guiding"]["app_state"] == "Stopped"
+    # Only the guiding mattered: stop the park so that the stars are near.
+    expect(api.post("/api/mount/abort"), 202)
+    park = response.json()["job"]
+    wait(api, lambda s: s["jobs"][park]["state"] != "running", timeout=30)
+
+    # Back on the stars, the calibration is reused.
+    point_at_stars(api)
+    result = start_guiding(api, settle=settle)
+    assert result["calibrated"] is False
+    expect(api.post("/api/guiding/stop"), 204)
+    expect(api.post("/api/guiding/disconnect"), 204)

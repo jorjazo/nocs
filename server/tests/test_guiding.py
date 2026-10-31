@@ -135,7 +135,16 @@ class FakePhd2:
         }
         self.connected = False
         self.exposure_ms = 2000
+        self.calibrated = False
+        self.star = True
+        self.calibration_fails = False
+        self.settles = True
+        self.hold_calibration = False
+        """Calibrate until told to go on (``finish_calibration``), to cancel meanwhile."""
+        self._go_on = asyncio.Event()
         self.calls: list[str] = []
+        self.params: dict[str, Any] = {}
+        """The last parameters of each method."""
         self.restarts = 0
         self.import_on_restart = True
         self.answer: dict[str, Callable[[Any], Any]] = {}
@@ -174,6 +183,7 @@ class FakePhd2:
                 request = json.loads(line)
                 method = request["method"]
                 self.calls.append(method)
+                self.params[method] = request.get("params")
                 response: dict[str, Any] = {"jsonrpc": "2.0", "id": request["id"]}
                 if method in self.answer:
                     response["result"] = self.answer[method](request.get("params"))
@@ -186,7 +196,7 @@ class FakePhd2:
                 elif method == "get_connected":
                     response["result"] = self.connected
                 elif method == "set_connected":
-                    if not request["params"][0] and self.state not in ("Stopped", "Selected"):
+                    if self.state != "Stopped":  # as PHD2, even when "Selected"
                         response["error"] = {
                             "code": 1,
                             "message": "cannot disconnect equipment while capture active",
@@ -208,6 +218,30 @@ class FakePhd2:
                         asyncio.get_running_loop().call_later(
                             0.02, lambda: self.event("LoopingExposures", Frame=1)
                         )
+                elif method == "find_star":
+                    if self.star:
+                        response["result"] = [118.9, 497.6]
+                    else:
+                        response["error"] = {"code": 1, "message": "could not find a star"}
+                elif method == "guide":
+                    response["result"] = 0
+                    recalibrate = request["params"]["recalibrate"]
+                    asyncio.get_running_loop().create_task(self._guide(recalibrate))
+                elif method == "get_calibration_data":
+                    response["result"] = (
+                        {
+                            "calibrated": True,
+                            "xAngle": 0.7,
+                            "xRate": 6.169,
+                            "xParity": "+",
+                            "yAngle": 91.8,
+                            "yRate": 5.939,
+                            "yParity": "+",
+                            "declination": -5.4,
+                        }
+                        if self.calibrated
+                        else {"calibrated": False}
+                    )
                 elif method == "stop_capture":
                     response["result"] = 0
                     # The exposure in progress ends a little later.
@@ -227,6 +261,34 @@ class FakePhd2:
         finally:
             self._writers.discard(writer)
             writer.close()
+
+    async def _guide(self, recalibrate: bool) -> None:
+        await asyncio.sleep(0.01)
+        if recalibrate or not self.calibrated:
+            self.state = "Calibrating"
+            self.event("StartCalibration", Mount=f"INDI Mount [{MOUNT}]")
+            self.event("Calibrating", dir="West", step=1, State="West step 1")
+            if self.hold_calibration:
+                await self._go_on.wait()
+            if self.state != "Calibrating":
+                return  # stopped meanwhile
+            if self.calibration_fails:
+                self.state = "Looping"
+                self.event("CalibrationFailed", Reason="star did not move enough")
+                return
+            self.calibrated = True
+            self.event("CalibrationComplete", Mount=f"INDI Mount [{MOUNT}]")
+        self.state = "Guiding"
+        self.event("StartGuiding")
+        self.event("SettleBegin")
+        self.event("Settling", Distance=2.3, Time=1.0, SettleTime=10.0, StarLocked=True)
+        if self.settles:
+            self.event("SettleDone", Status=0, TotalFrames=9, DroppedFrames=0)
+        else:
+            self.event("SettleDone", Status=1, Error="timed-out waiting for guider to settle")
+
+    def finish_calibration(self) -> None:
+        self._go_on.set()
 
     def _stopped(self) -> None:
         was = self.state
@@ -486,7 +548,7 @@ async def test_app_state_follows_events(phd2: FakePhd2) -> None:
         phd2.event("LoopingExposures", Frame=1)
         await until(lambda: guiding(store, "app_state") == "Looping")
         phd2.state = "Guiding"
-        phd2.event("StartGuiding")  # ambiguous: the service asks
+        phd2.event("Resumed")  # ambiguous: the service asks
         await until(lambda: guiding(store, "app_state") == "Guiding")
         phd2.event("StarLost")
         await until(lambda: guiding(store, "app_state") == "LostLock")
@@ -636,3 +698,147 @@ async def test_losing_the_guide_camera_disconnects_phd2(phd2: FakePhd2, tmp_path
         equipment.lose(Role.GUIDE_CAMERA)
         await until(lambda: not guiding(store, "equipment"))
         assert not phd2.connected
+
+
+# -- calibrate, guide, stop -------------------------------------------------------------
+
+
+def job(store: StateStore, job_id: str) -> Any:
+    return store.get(("jobs", job_id))
+
+
+async def finished(service: GuidingService, jobs: JobManager, job_id: str) -> None:
+    await asyncio.wait_for(jobs.wait(job_id), 5)
+
+
+async def test_guiding_calibrates_settles_and_holds_the_mount(
+    phd2: FakePhd2, tmp_path: Path
+) -> None:
+    async with applied(phd2, tmp_path) as (service, store, jobs, _, _):
+        assert guiding(store, "calibration") is None
+        job_id = service.guide()
+        await finished(service, jobs, job_id)
+        assert job(store, job_id)["state"] == "succeeded", job(store, job_id)
+        assert job(store, job_id)["result"] == {"calibrated": True, "frames": 9, "dropped": 0}
+        assert phd2.calls.index("loop") < phd2.calls.index("find_star") < phd2.calls.index("guide")
+        assert guiding(store, "app_state") == "Guiding"
+        assert guiding(store, "calibration")["ra_rate"] == 6.169
+        assert service.guiding
+        # Slews, parking and the pad wait while PHD2 moves the mount (ADR 0023).
+        with pytest.raises(ResourceBusyError, match="mount is busy"):
+            jobs.check_free([Role.MOUNT.value])
+
+        await service.stop()
+        assert guiding(store, "app_state") == "Stopped"
+        assert not service.guiding
+        jobs.check_free([Role.MOUNT.value])
+        assert guiding(store, "equipment")  # the camera stays PHD2's until disconnecting
+
+
+async def test_calibration_is_reused_unless_asked(phd2: FakePhd2, tmp_path: Path) -> None:
+    phd2.calibrated = True
+    async with applied(phd2, tmp_path) as (service, store, jobs, _, _):
+        job_id = service.guide()
+        await finished(service, jobs, job_id)
+        assert job(store, job_id)["result"]["calibrated"] is False
+        await service.stop()
+        job_id = service.guide(recalibrate=True)
+        await finished(service, jobs, job_id)
+        assert job(store, job_id)["result"]["calibrated"] is True
+
+
+async def test_no_star_fails_and_frees_the_mount(phd2: FakePhd2, tmp_path: Path) -> None:
+    phd2.star = False
+    async with applied(phd2, tmp_path) as (service, store, jobs, _, _):
+        job_id = service.guide()
+        phd2.event("LoopingExposures", Frame=2)  # find_star is tried on every new frame
+        for frame in range(3, 8):
+            await asyncio.sleep(0.05)
+            phd2.event("LoopingExposures", Frame=frame)
+        await finished(service, jobs, job_id)
+        assert job(store, job_id)["state"] == "failed"
+        assert "no guide star" in job(store, job_id)["error"]
+        assert "guide" not in phd2.calls
+        assert not service.guiding
+        jobs.check_free([Role.MOUNT.value])
+
+
+async def test_failed_calibration_fails_the_job(phd2: FakePhd2, tmp_path: Path) -> None:
+    phd2.calibration_fails = True
+    async with applied(phd2, tmp_path) as (service, store, jobs, _, _):
+        job_id = service.guide()
+        await finished(service, jobs, job_id)
+        assert "calibration failed: star did not move enough" in job(store, job_id)["error"]
+        assert guiding(store, "alert")["kind"] == "error"
+        await until(lambda: not service.guiding)
+
+
+async def test_no_settle_fails_the_job_but_guiding_goes_on(phd2: FakePhd2, tmp_path: Path) -> None:
+    phd2.calibrated, phd2.settles = True, False
+    async with applied(phd2, tmp_path) as (service, store, jobs, _, _):
+        job_id = service.guide()
+        await finished(service, jobs, job_id)
+        assert job(store, job_id)["state"] == "failed"
+        assert "did not settle" in job(store, job_id)["error"]
+        assert guiding(store, "app_state") == "Guiding"
+        assert service.guiding  # PHD2 still guides: the mount stays held
+
+
+async def test_stopping_cancels_a_start(phd2: FakePhd2, tmp_path: Path) -> None:
+    phd2.hold_calibration = True
+    async with applied(phd2, tmp_path) as (service, store, jobs, _, _):
+        job_id = service.guide()
+        await until(lambda: guiding(store, "app_state") == "Calibrating")
+        assert "calibrating" in (job(store, job_id)["message"] or "")
+        await service.stop()
+        await finished(service, jobs, job_id)
+        assert job(store, job_id)["state"] == "cancelled"
+        assert "stop_capture" in phd2.calls
+        phd2.finish_calibration()
+        await until(lambda: not service.guiding)
+        jobs.check_free([Role.MOUNT.value])
+
+
+async def test_guiding_waits_for_a_mount_nocs_moves(phd2: FakePhd2, tmp_path: Path) -> None:
+    async with applied(phd2, tmp_path) as (service, store, jobs, _, _):
+        token = jobs.reserve("move", [Role.MOUNT.value])  # the slew pad
+        job_id = service.guide()
+        await finished(service, jobs, job_id)
+        assert "mount is busy" in job(store, job_id)["error"]
+        assert "guide" not in phd2.calls
+        jobs.release(token)
+
+
+async def test_alerts_show_in_the_state(phd2: FakePhd2) -> None:
+    async with running(phd2, Equipment(None), None) as (_, store):
+        await until(lambda: guiding(store, "phd2", "connected"))
+        phd2.event("Alert", Msg="Image scale changed", Type="warning")
+        await until(lambda: guiding(store, "alert") is not None)
+        assert guiding(store, "alert")["message"] == "Image scale changed"
+        assert guiding(store, "alert")["kind"] == "warning"
+
+
+async def test_guide_stars_are_picked_away_from_the_edges(phd2: FakePhd2, tmp_path: Path) -> None:
+    phd2.calibrated = True
+    async with applied(phd2, tmp_path) as (service, _, jobs, _, _):
+        await finished(service, jobs, service.guide())
+        # 1936 x 1096 (the ASI220MM Mini): 10 % of the short side kept clear.
+        assert phd2.params["find_star"] == {"roi": [110, 110, 1716, 876]}
+
+
+async def test_calibration_gives_up_on_a_lost_star(
+    phd2: FakePhd2, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("nocs.guiding.service.LOST_WHILE_CALIBRATING", 0.2)
+    phd2.exposure_ms = 10
+    phd2.hold_calibration = True  # it never completes: clouds came
+    async with applied(phd2, tmp_path) as (service, store, jobs, _, _):
+        job_id = service.guide()
+        await until(lambda: guiding(store, "app_state") == "Calibrating")
+        for _ in range(10):
+            phd2.event("StarLost", Frame=1, Status="Star lost - low HFD")
+            await asyncio.sleep(0.05)
+        await finished(service, jobs, job_id)
+        assert "lost the guide star" in job(store, job_id)["error"]
+        assert "stop_capture" in phd2.calls
+        assert guiding(store, "alert")["message"].startswith("star lost")

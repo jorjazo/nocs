@@ -17,6 +17,7 @@ from nocs.api.schemas import (
     GotoRequest,
     JobStarted,
     MountMotion,
+    MountMoveRequest,
     MountSiteRequest,
     PadRequest,
     PadStatusMessage,
@@ -24,15 +25,27 @@ from nocs.api.schemas import (
 )
 from nocs.clock import Clock
 from nocs.devices import DeviceError, Direction, Motion
+from nocs.guiding import GuidingService, Phd2Error
 from nocs.jobs import ResourceBusyError
 from nocs.mount.pad import PadCommand, PadStatus, drive
 from nocs.mount.service import MountNotReadyError, MountService, PointingError
 
 
 def mount_router(
-    mount: Callable[[], MountService], clock: Callable[[], Clock], sockets: Sockets
+    mount: Callable[[], MountService],
+    clock: Callable[[], Clock],
+    sockets: Sockets,
+    guiding: Callable[[], GuidingService],
 ) -> APIRouter:
     router = APIRouter(prefix="/api")
+
+    async def stop_guiding(requested: bool) -> None:
+        """Stop PHD2 first when asked: the mount is held while it guides (ADR 0023)."""
+        if requested and guiding().guiding:
+            try:
+                await guiding().stop()
+            except (Phd2Error, TimeoutError) as e:
+                raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"PHD2: {e}") from e
 
     @router.post("/clock")
     async def report_clock(request: ClockRequest) -> ClockReport:  # pyright: ignore[reportUnusedFunction]
@@ -44,6 +57,7 @@ def mount_router(
 
     @router.post("/mount/goto", status_code=status.HTTP_202_ACCEPTED)
     async def goto(request: GotoRequest) -> JobStarted:  # pyright: ignore[reportUnusedFunction]
+        await stop_guiding(request.stop_guiding)
         with _mount_errors():
             if isinstance(request, EquatorialGoto):
                 job = mount().goto(request.ra, request.dec, request.frame, force=request.force)
@@ -63,7 +77,8 @@ def mount_router(
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     @router.post("/mount/park", status_code=status.HTTP_202_ACCEPTED)
-    async def park() -> JobStarted:  # pyright: ignore[reportUnusedFunction]
+    async def park(request: MountMoveRequest | None = None) -> JobStarted:  # pyright: ignore[reportUnusedFunction]
+        await stop_guiding(request is not None and request.stop_guiding)
         with _mount_errors():
             return JobStarted(job=mount().park())
 
@@ -74,7 +89,8 @@ def mount_router(
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     @router.post("/mount/home", status_code=status.HTTP_202_ACCEPTED)
-    async def home() -> JobStarted:  # pyright: ignore[reportUnusedFunction]
+    async def home(request: MountMoveRequest | None = None) -> JobStarted:  # pyright: ignore[reportUnusedFunction]
+        await stop_guiding(request is not None and request.stop_guiding)
         with _mount_errors():
             return JobStarted(job=mount().home())
 

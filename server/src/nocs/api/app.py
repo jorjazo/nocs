@@ -274,7 +274,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
     app = FastAPI(title="NOCS", version=__version__, lifespan=lifespan)
     app.add_middleware(AuthMiddleware, auth=auth, hostnames=settings.hostnames)
     app.include_router(auth_router(auth, sockets))
-    app.include_router(mount_router(mount, clock, sockets))
+    app.include_router(mount_router(mount, clock, sockets, guiding))
     app.include_router(power_router(power))
     app.include_router(guiding_router(guiding))
     app.include_router(accessories_router(focuser, filter_wheel, autofocus))

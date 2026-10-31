@@ -7,8 +7,14 @@ from collections.abc import Callable, Generator
 
 from fastapi import APIRouter, HTTPException, Response, status
 
-from nocs.api.schemas import GuidingExposureRequest, GuidingLoopRequest
-from nocs.guiding import GuidingNotReadyError, GuidingService, Phd2ConnectionError, Phd2Error
+from nocs.api.schemas import GuideRequest, GuidingExposureRequest, GuidingLoopRequest, JobStarted
+from nocs.guiding import (
+    GuidingNotReadyError,
+    GuidingService,
+    Phd2ConnectionError,
+    Phd2Error,
+    Settle,
+)
 from nocs.jobs import ResourceBusyError
 
 
@@ -32,6 +38,14 @@ def guiding_router(guiding: Callable[[], GuidingService]) -> APIRouter:
         with _guiding_errors():
             await guiding().loop(request.exposure)
         return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    @router.post("/guide", status_code=status.HTTP_202_ACCEPTED)
+    async def guide(request: GuideRequest) -> JobStarted:  # pyright: ignore[reportUnusedFunction]
+        """Start guiding; the job ends once PHD2 has settled, and guiding goes on."""
+        settle = Settle(request.settle.pixels, request.settle.time, request.settle.timeout)
+        with _guiding_errors():
+            job = guiding().guide(recalibrate=request.recalibrate, settle=settle)
+        return JobStarted(job=job)
 
     @router.post("/stop", status_code=status.HTTP_204_NO_CONTENT)
     async def stop() -> Response:  # pyright: ignore[reportUnusedFunction]

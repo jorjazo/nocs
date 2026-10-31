@@ -132,6 +132,9 @@ Checked against the simulators with PHD2 2.6.14, as input for
 - While PHD2 loops, another INDI client with BLOBs enabled for the guide camera
   receives every frame (2.6 MB per 1280×1024 simulator frame).
 - With 1 s exposures, calibration took ~42 s and the settle after it ~12 s.
+- Stage 4.3: AppState `Selected` comes while PHD2 loops with a star selected,
+  so only `Stopped` means no capture; during calibration a lost star raises
+  `StarLost` every frame and the calibration never fails by itself.
 - The calibration step that PHD2's assistant computes: 25 px in 12 steps at the
   guide rate, `ceil(25 · scale / (15 · rate) / 12 s / 50 ms) · 50 ms`, at most
   the pulse that still gives 6 steps, divided by cos(declination).

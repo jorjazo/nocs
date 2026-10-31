@@ -26,7 +26,7 @@ after rotating it) and sits behind the filters.
 |---|---|---|---|---|
 | 4.1 | PHD2 service and profile | PHD2 as an external service that nocsd configures: settings file rendered from the profile (devices, pixel size, guiding focal length, calibration step) and applied by restarting PHD2; JSON-RPC client; `guiding` state; guiding through the imaging optics; PHD2 in CI ([ADR 0022](../adr/0022-phd2-as-a-managed-service.md)) | PHD2 service on the Pi with the lab rig's settings | Done on the lab Pi: settings applied in 5 s, PHD2 loops on the ASI220MM through the imaging optics |
 | 4.2 | Guide camera handover | PHD2 connects and disconnects its equipment (`/api/guiding/connect`, `disconnect`, `loop`, `stop`, `exposure`); the guide camera is held for PHD2 meanwhile and the camera state says so; Live view shows PHD2's frames; disconnecting the profile releases PHD2 first ([ADR 0023](../adr/0023-guide-camera-and-mount-shared-with-phd2.md)) | PHD2 looping on the ASI220MM | Done on the lab Pi: NOCS's exposures refused while PHD2 loops, a preview of PHD2's frame every ~1.9 s, nocsd answering in 12 ms (p95 27 ms) |
-| 4.3 | Calibrate, guide, stop | State machine from PHD2's events; starting to guide as a job (loop, star, guide, settle); calibration reuse; alerts; the mount refuses to move while guiding unless asked to stop it | Guide pulses reach the AM5/AM7 | |
+| 4.3 | Calibrate, guide, stop | Starting to guide as a job (`/api/guiding/guide`: loop, a star away from the edges, calibrate if needed or asked, guide, settle), cancelled by `stop`; calibration, settling and PHD2's alerts in the state; a calibration that loses its star is given up; the mount is held while PHD2 calibrates or guides, and go to, park and home take `stop_guiding` | Guide pulses reach the AM5/AM7 | Done: PHD2's 500 ms pulses N/S/E/W reached the lab AM7 (`TELESCOPE_TIMED_GUIDE_*` Busy for 0.5 s); calibrating and guiding wait for the sky |
 | 4.4 | Guiding statistics | Guide steps kept by the server, RMS in RA, Dec and total (pixels and arcseconds), history for the graph | — | |
 | 4.5 | Dithering between frames | Dither in main camera pixels, settling; a series of N frames with a dither every K; guiding RMS per saved frame | — | |
 | 4.6 | Guiding UI | Guiding screen (graph, RMS, start/stop, recalibrate, dither settings), Live view chip and frame count, profile editor choice of guiding train; en/es | From the phone | |
@@ -61,3 +61,9 @@ after rotating it) and sits behind the filters.
   NOCS's API. Looping 2.3 s after the request; 17 previews of PHD2's frames in
   30 s (1920×1080, 0.26 s in the worker); `GET /api/state` took 12 ms median,
   27 ms p95 and 58 ms at most while the frames' BLOBs arrived.
+- Stage 4.3 on the simulators (1 s exposures): calibrating ~45 s, settling ~10 s;
+  the integration test (calibrate, guide, refuse a park, stop for it, guide again
+  on the kept calibration) takes ~140 s.
+- PHD2 2.6.14 reports `Selected` while it loops with a star selected, not only
+  when idle: only `Stopped` means no capture. A star lost while calibrating
+  makes PHD2 wait for it forever (lost frames are no calibration steps).

@@ -579,9 +579,17 @@ export interface FocuserBacklash {
  */
 export interface GuidingState {
   /**
+   * The last thing PHD2 warned about.
+   */
+  alert: GuidingAlert | null;
+  /**
    * PHD2's state; None while unknown.
    */
   app_state: Phd2AppState | null;
+  /**
+   * None: PHD2 is not calibrated.
+   */
+  calibration: GuidingCalibration | null;
   /**
    * PHD2 is connected to the guide camera and the mount, which is then PHD2's (ADR 0023).
    */
@@ -607,6 +615,45 @@ export interface GuidingState {
    * none: nothing to apply yet (no profile, or its guide camera or mount not ready); pending: waiting for PHD2 to stop; applying: PHD2 restarting with them; user: PHD2 runs the settings its user chose.
    */
   settings: "none" | "pending" | "applying" | "applied" | "failed" | "user";
+  /**
+   * PHD2 waits for the star to settle.
+   */
+  settling: boolean;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "GuidingAlert".
+ */
+export interface GuidingAlert {
+  /**
+   * PHD2's type: info, question, warning or error.
+   */
+  kind: string;
+  message: string;
+  /**
+   * UTC, ISO 8601.
+   */
+  time: string;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "GuidingCalibration".
+ */
+export interface GuidingCalibration {
+  dec_angle: number;
+  dec_rate: number;
+  /**
+   * Where it was calibrated, degrees.
+   */
+  declination: number | null;
+  /**
+   * Of the RA axis on the guide camera, degrees.
+   */
+  ra_angle: number;
+  /**
+   * Pixels per second of an RA pulse.
+   */
+  ra_rate: number;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -1406,6 +1453,10 @@ export interface EquatorialGoto {
    * Hours.
    */
   ra: number;
+  /**
+   * Stop guiding first; refused while guiding otherwise (ADR 0023).
+   */
+  stop_guiding?: boolean;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -1584,6 +1635,10 @@ export interface HorizontalGoto {
    */
   az: number;
   frame: "altaz";
+  /**
+   * Stop guiding first; refused while guiding otherwise (ADR 0023).
+   */
+  stop_guiding?: boolean;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema

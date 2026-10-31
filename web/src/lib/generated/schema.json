@@ -1415,6 +1415,11 @@
           "exclusiveMaximum": 24,
           "minimum": 0,
           "type": "number"
+        },
+        "stop_guiding": {
+          "default": false,
+          "description": "Stop guiding first; refused while guiding otherwise (ADR 0023).",
+          "type": "boolean"
         }
       },
       "required": [
@@ -2115,9 +2120,82 @@
       ],
       "type": "string"
     },
+    "GuidingAlert": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "description": "PHD2's type: info, question, warning or error.",
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "time": {
+          "description": "UTC, ISO 8601.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "message",
+        "kind",
+        "time"
+      ],
+      "title": "GuidingAlert",
+      "type": "object"
+    },
+    "GuidingCalibration": {
+      "additionalProperties": false,
+      "properties": {
+        "dec_angle": {
+          "type": "number"
+        },
+        "dec_rate": {
+          "type": "number"
+        },
+        "declination": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Where it was calibrated, degrees."
+        },
+        "ra_angle": {
+          "description": "Of the RA axis on the guide camera, degrees.",
+          "type": "number"
+        },
+        "ra_rate": {
+          "description": "Pixels per second of an RA pulse.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "ra_angle",
+        "ra_rate",
+        "dec_angle",
+        "dec_rate",
+        "declination"
+      ],
+      "title": "GuidingCalibration",
+      "type": "object"
+    },
     "GuidingState": {
       "additionalProperties": false,
       "properties": {
+        "alert": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GuidingAlert"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The last thing PHD2 warned about."
+        },
         "app_state": {
           "anyOf": [
             {
@@ -2128,6 +2206,17 @@
             }
           ],
           "description": "PHD2's state; None while unknown."
+        },
+        "calibration": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GuidingCalibration"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "None: PHD2 is not calibrated."
         },
         "equipment": {
           "description": "PHD2 is connected to the guide camera and the mount, which is then PHD2's (ADR 0023).",
@@ -2184,6 +2273,10 @@
             "user"
           ],
           "type": "string"
+        },
+        "settling": {
+          "description": "PHD2 waits for the star to settle.",
+          "type": "boolean"
         }
       },
       "required": [
@@ -2194,6 +2287,9 @@
         "app_state",
         "equipment",
         "exposure",
+        "calibration",
+        "settling",
+        "alert",
         "error"
       ],
       "title": "GuidingState",
@@ -2274,6 +2370,11 @@
         "frame": {
           "const": "altaz",
           "type": "string"
+        },
+        "stop_guiding": {
+          "default": false,
+          "description": "Stop guiding first; refused while guiding otherwise (ADR 0023).",
+          "type": "boolean"
         }
       },
       "required": [

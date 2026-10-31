@@ -43,9 +43,11 @@ Facts from stages 4.1 and 2.11:
   takes arrives on NOCS's image connection and goes through the usual preview
   pipeline (newest frame wins, ADR 0012). The camera's state says it is used by
   PHD2, so the app hides the shutter and settings.
-- **The mount is not held**: PHD2 only pulses it. Go to, park, home and the pad
-  are refused while PHD2 calibrates or guides, unless the request says to stop
-  guiding first (stage 4.3; the app asks for a second tap).
+- **The mount is held while PHD2 calibrates or guides** (and while a start of
+  guiding runs), with a second `guiding` reservation; pulse guiding itself
+  needs no lock. Go to, park, home, the pad, tracking and site changes are
+  refused meanwhile. Go to, park and home take `stop_guiding`, which stops PHD2
+  first (the app asks for a second tap); abort stops the mount regardless.
 
 ## Consequences
 

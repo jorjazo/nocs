@@ -141,6 +141,8 @@ packages workflow builds and installs the .deb on amd64 and arm64.
   settings change, with `AutoLoadCalibration` on (ADR 0022).
 - `stop_capture` answers at once; PHD2 refuses `set_connected false` until
   `LoopingExposuresStopped` (or `GuidingStopped`) arrives.
+- AppState `Selected` means looping with a star selected (capture active), not
+  idle: only `Stopped` is. A star lost while calibrating is waited for forever.
 - Xvfb killed with its lock file left behind refuses to start on that display again,
   and PHD2's own lock (`~/phd2.1`, a PID) can name a live process after a power cut,
   leaving PHD2 (even `phd2 -l`) stuck on an invisible dialog: the entrypoint removes
