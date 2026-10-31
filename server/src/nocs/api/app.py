@@ -44,6 +44,7 @@ from nocs.api.schemas import (
     Driver,
     EjectRequest,
     ExposeRequest,
+    FrameGuiding,
     FrameRecord,
     FrameTypeName,
     Health,
@@ -84,7 +85,7 @@ from nocs.filters.wheels import WheelStore
 from nocs.focus.autofocus import AutofocusService
 from nocs.focus.focusers import FocuserStore
 from nocs.focus.service import FocuserService
-from nocs.guiding import GuidingService
+from nocs.guiding import GuidingService, Settle
 from nocs.imaging import (
     FRAME_TYPES,
     CameraNotReadyError,
@@ -92,7 +93,7 @@ from nocs.imaging import (
     CaptureService,
     image_connector,
 )
-from nocs.imaging.capture import UploadDirs
+from nocs.imaging.capture import DitherPlan, UploadDirs
 from nocs.imaging.worker import ImageWorker
 from nocs.indi.drivers import DriverFifo, load_catalog
 from nocs.jobs import JobManager, ResourceBusyError
@@ -277,6 +278,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
         services.centering = CenteringService(
             store, services.jobs, services.pointing, services.mount
         )
+        services.capture.use_guider(services.guiding)
         task = asyncio.create_task(bridge.run(), name="indi-bridge")
         guiding_task = asyncio.create_task(services.guiding.run(), name="phd2")
         system_task = asyncio.create_task(services.system.run(), name="nocs-system")
@@ -448,8 +450,19 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
         role: CameraRoleName, request: ExposeRequest
     ) -> JobStarted:
         frame_type = FRAME_TYPES[request.frame_type] if request.frame_type else None
+        dither = None
+        if request.dither is not None:
+            settle = request.dither.settle
+            dither = DitherPlan(
+                request.dither.every,
+                request.dither.pixels,
+                Settle(settle.pixels, settle.time, settle.timeout),
+                request.dither.ra_only,
+            )
         with _camera_errors():
-            job_id = capture().expose(Role(role), request.exposure, frame_type, request.save)
+            job_id = capture().expose(
+                Role(role), request.exposure, frame_type, request.save, request.count, dither
+            )
         return JobStarted(job=job_id)
 
     @app.post("/api/cameras/{role}/loop", status_code=status.HTTP_202_ACCEPTED)
@@ -729,6 +742,17 @@ def _frame_record(frame: Located) -> FrameRecord:
         height=row.height,
         stars=row.stars,
         hfr=row.hfr,
+        guiding=(
+            FrameGuiding(
+                rms_ra=row.guide_rms_ra,
+                rms_dec=row.guide_rms_dec,
+                rms_total=row.guide_rms_total,
+                steps=row.guide_steps,
+                lost=row.guide_lost or 0,
+            )
+            if row.guide_steps is not None
+            else None
+        ),
     )
 
 

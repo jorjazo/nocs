@@ -59,7 +59,7 @@ from nocs.guiding.phd2 import (
     Phd2Message,
 )
 from nocs.guiding.settings import GuideRig, Phd2Settings, render
-from nocs.guiding.stats import GuideEntry, GuideHistory
+from nocs.guiding.stats import GuideEntry, GuideHistory, rms
 from nocs.indi import IndiClient
 from nocs.jobs import JobContext, JobManager, ResourceBusyError
 from nocs.state import Json, Path, StateStore
@@ -81,6 +81,10 @@ CAMERA = Role.GUIDE_CAMERA
 HOLDER = "phd2"
 CONNECT_TIMEOUT = 60.0
 STOP_MARGIN = 15.0
+SETTLE_MARGIN = 30.0
+"""Beyond PHD2's own settle timeout, before NOCS stops waiting for its answer."""
+MAX_DITHER = 50.0
+"""Guide pixels."""
 CAPTURE_ENDING = 10.0
 """How long PHD2 may refuse to (dis)connect because a capture is still ending."""
 """How long the exposure PHD2 was taking may run over when it stops."""
@@ -181,6 +185,8 @@ class GuidingService:
         """The reservation of the mount while PHD2 calibrates or guides."""
         self._starting: str | None = None
         """The job starting to guide, while it runs."""
+        self._under: str | None = None
+        """The job guiding goes on under, which holds the mount itself (a sequence)."""
         self._queues: set[asyncio.Queue[Phd2Message]] = set()
         self._history = GuideHistory()
         self._settling = False
@@ -251,8 +257,11 @@ class GuidingService:
 
     @property
     def guiding(self) -> bool:
-        """PHD2 calibrates or guides (or a start of guiding runs): NOCS holds the mount."""
-        return self._mount_hold is not None
+        """PHD2 calibrates or guides, or a start of guiding runs.
+
+        NOCS holds the mount meanwhile, unless a job that started guiding holds it.
+        """
+        return self._starting is not None or self._app_state in GUIDING_STATES
 
     async def connect(self) -> None:
         """Connect PHD2 to the guide camera and the mount; the camera is PHD2's then."""
@@ -286,19 +295,145 @@ class GuidingService:
         Guiding goes on after the job, until ``stop``.
         """
         self._client()  # fail now, not in the job, when PHD2 is not there
-        settle = settle or Settle()
-        if settle.pixels <= 0 or settle.time < 0 or settle.timeout <= 0:
-            raise ValueError("settling needs a positive distance and timeout")
+        settle = _checked(settle)
 
         async def run(context: JobContext) -> Json:
-            self._starting = context.id
-            try:
-                return await self._start_guiding(context, recalibrate, settle)
-            finally:
-                self._starting = None
-                self._sync_mount_hold()
+            return await self.start(context, recalibrate=recalibrate, settle=settle)
 
         return self._jobs.start("guide", [HOLDER], run)
+
+    async def start(
+        self, context: JobContext, *, recalibrate: bool = False, settle: Settle | None = None
+    ) -> Json:
+        """Start guiding inside ``context``'s job (the sequencer's, or ``guide``'s).
+
+        When that job holds the mount itself, NOCS does not reserve it for guiding
+        meanwhile: the job must stop guiding before it moves the mount.
+        """
+        settle = _checked(settle)
+        if self._jobs.holder(Role.MOUNT.value) == context.id:
+            self.guide_under(context.id)
+        self._starting = context.id
+        try:
+            return await self._start_guiding(context, recalibrate, settle)
+        finally:
+            self._starting = None
+            self._sync_mount_hold()
+
+    def guide_under(self, job_id: str | None) -> None:
+        """Guiding goes on under ``job_id``'s job, which holds the mount itself.
+
+        NOCS lets go of its own hold on the mount at once, and takes it again only
+        once that job has finished (or after ``guide_under(None)``). A sequence calls
+        it before resuming (``JobManager.resume``) to get the mount back, and with
+        None after suspending, so that NOCS keeps the mount while it is paused.
+        ``start`` inside a job that holds the mount does it by itself.
+        """
+        self._under = job_id
+        if job_id is not None and self._mount_hold is not None:
+            self._jobs.release(self._mount_hold)
+            self._mount_hold = None
+        self._sync_mount_hold()
+
+    def dither_job(
+        self, pixels: float, *, settle: Settle | None = None, ra_only: bool = False
+    ) -> str:
+        """Dither by up to ``pixels`` of the guide camera as a job of its own; returns its id."""
+        self._client()
+        settle = _checked(settle)
+
+        async def run(context: JobContext) -> Json:
+            return await self.dither(context, pixels, settle=settle, ra_only=ra_only)
+
+        return self._jobs.start("dither", [HOLDER], run)
+
+    async def dither(
+        self,
+        context: JobContext,
+        pixels: float,
+        *,
+        settle: Settle | None = None,
+        ra_only: bool = False,
+    ) -> Json:
+        """Move the lock position by up to ``pixels`` guide pixels and wait until settled.
+
+        Runs inside ``context``'s job (a series of frames, the sequencer). Raises
+        ``GuidingError`` when PHD2 does not settle in time; it goes on guiding.
+        """
+        settle = _checked(settle)
+        if not 0 < pixels <= MAX_DITHER:
+            raise ValueError(f"a dither must be 0..{MAX_DITHER:g} guide pixels")
+        client = self._client()
+        if self._app_state != "Guiding":
+            raise GuidingNotReadyError(f"PHD2 is not guiding ({self._app_state or 'unknown'})")
+        queue: asyncio.Queue[Phd2Message] = asyncio.Queue()
+        self._queues.add(queue)
+        try:
+            context.progress(None, f"dithering {pixels:.1f} px")
+            params: dict[str, Json] = {
+                "amount": pixels,
+                "raOnly": ra_only,
+                "settle": settle.params(),
+            }
+            await client.call("dither", params)
+            async with asyncio.timeout(settle.timeout + SETTLE_MARGIN):
+                while True:
+                    message = await queue.get()
+                    if isinstance(message, Phd2Closed):
+                        raise Phd2ConnectionError(f"lost PHD2 while dithering: {message.reason}")
+                    match message.name:
+                        case "Settling":
+                            distance = message.data.get("Distance")
+                            if isinstance(distance, int | float):
+                                context.progress(
+                                    None, f"settling after the dither: {distance:.1f} px"
+                                )
+                        case "SettleDone":
+                            if message.data.get("Status") != 0:
+                                reason = message.data.get("Error") or "timed out"
+                                raise GuidingError(
+                                    f"PHD2 did not settle after the dither ({reason})"
+                                )
+                            return {"pixels": pixels, "frames": message.data.get("TotalFrames")}
+                        case "GuidingStopped":
+                            raise GuidingError("PHD2 stopped guiding while dithering")
+                        case _:
+                            pass
+        finally:
+            self._queues.discard(queue)
+
+    def guide_pixels(self, main_pixels: float) -> float:
+        """Main camera pixels as guide camera pixels, from both trains' pixel scales."""
+        main = self._store.get(("cameras", Role.MAIN_CAMERA.value, "field", "scale"))
+        if not isinstance(main, int | float) or isinstance(main, bool) or main <= 0:
+            raise GuidingNotReadyError("the main camera's pixel scale is unknown (its optics?)")
+        if self._pixel_scale is None:
+            raise GuidingNotReadyError("PHD2's pixel scale is unknown")
+        return main_pixels * main / self._pixel_scale
+
+    def frame_guiding(self, start: float, end: float) -> dict[str, Json] | None:
+        """How guiding went from ``start`` to ``end`` (system clock, Unix seconds).
+
+        None when PHD2 took no guide step meanwhile. PHD2 stamps its events with the
+        clock of its host, which is nocsd's (or, in development, the same kernel's).
+        """
+        entries = self._history.between(start, end)
+        result = rms(entries)
+        lost = sum(1 for e in entries if e.kind == "lost")
+        if result is None and lost == 0:
+            return None
+        scale = self._pixel_scale
+
+        def arcsec(pixels: float | None) -> Json:
+            return round(pixels * scale, 3) if pixels is not None and scale else None
+
+        return {
+            "rms_ra": arcsec(result.ra if result else None),
+            "rms_dec": arcsec(result.dec if result else None),
+            "rms_total": arcsec(result.total if result else None),
+            "steps": result.count if result else 0,
+            "lost": lost,
+        }
 
     async def disconnect(self) -> None:
         """Stop PHD2, disconnect it from its equipment and give the camera back."""
@@ -545,16 +680,36 @@ class GuidingService:
         return [margin, margin, width, height]
 
     def _hold_mount(self) -> None:
-        if self._mount_hold is None:
+        """Reserve the mount, unless the job guiding runs in holds it itself."""
+        holder = self._jobs.holder(Role.MOUNT.value)
+        if self._mount_hold is None and (holder is None or holder not in self._callers()):
             self._mount_hold = self._jobs.reserve("guiding", [Role.MOUNT.value])
 
+    def _callers(self) -> set[str]:
+        return {job for job in (self._starting, self._under) if job is not None}
+
+    def _under_running(self) -> bool:
+        """The job guiding goes on under has not finished yet."""
+        if self._under is None:
+            return False
+        if self._store.get(("jobs", self._under, "state")) == "running":
+            return True
+        self._under = None
+        return False
+
     def _sync_mount_hold(self) -> None:
-        """Hold the mount exactly while PHD2 moves it (or a start of guiding runs)."""
+        """Hold the mount exactly while PHD2 moves it (or a start of guiding runs).
+
+        A job holding the mount itself (a sequence) keeps it; NOCS takes it once that
+        job lets go and PHD2 still guides.
+        """
         wanted = self._starting is not None or self._app_state in GUIDING_STATES
         if wanted and self._mount_hold is None and self._phd2 is not None:
+            if self._jobs.holder(Role.MOUNT.value) is not None or self._under_running():
+                return  # a job holds it (or is about to): it moves it only after stopping guiding
             try:
                 self._hold_mount()
-            except ResourceBusyError as e:  # PHD2 guided on its own while NOCS moved it
+            except ResourceBusyError as e:
                 log.warning("PHD2 guides while NOCS uses the mount: %s", e)
         elif not wanted and self._mount_hold is not None:
             self._jobs.release(self._mount_hold)
@@ -802,6 +957,8 @@ class GuidingService:
         entry = self._history.add(event.name, event.data, settling=self._settling)
         if entry is not None:
             self._publish_stats(entry)
+            if self._mount_hold is None:
+                self._sync_mount_hold()  # a job that held the mount may have let go
         if event.name == "StarLost":
             self._alert(f"star lost: {event.data.get('Status', '')}", "warning")
             if self._app_state == "Guiding":  # while calibrating, PHD2 still calibrates
@@ -907,3 +1064,10 @@ def _write_settings(path: FsPath, content: str) -> None:
     """Readable by PHD2's service, which may run as another user (a container)."""
     write_atomic(path, content)
     path.chmod(0o644)
+
+
+def _checked(settle: Settle | None) -> Settle:
+    settle = settle or Settle()
+    if settle.pixels <= 0 or settle.time < 0 or settle.timeout <= 0:
+        raise ValueError("settling needs a positive distance and timeout")
+    return settle

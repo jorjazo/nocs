@@ -32,13 +32,14 @@ import logging
 import os
 import shutil
 import tempfile
+import time
 import uuid
 from collections.abc import Awaitable, Callable, Coroutine
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path as FsPath
 from pathlib import PurePosixPath
-from typing import Any
+from typing import Any, Protocol
 
 import anyio
 
@@ -47,6 +48,7 @@ from nocs.devices import Camera, DeviceError, FilterWheel, Frame, FrameType, Mou
 from nocs.devices.camera import Region
 from nocs.equipment import EquipmentService, Role, Site
 from nocs.equipment.service import IndiConnection
+from nocs.guiding import GuidingError, GuidingNotReadyError, Settle
 from nocs.imaging.pipeline import FrameAnalysis, StarMetrics
 from nocs.imaging.worker import ImageWorker
 from nocs.indi import BlobMode, IndiClient, IndiEvent, PropertyDefined, PropertyUpdated
@@ -196,6 +198,35 @@ def camera_summary(camera: Camera) -> dict[str, Json]:
     }
 
 
+MAX_SERIES = 1000
+
+
+class Guider(Protocol):
+    """Dithering and guiding figures for frames (``GuidingService``)."""
+
+    @property
+    def guiding(self) -> bool: ...
+
+    def guide_pixels(self, main_pixels: float) -> float: ...
+
+    async def dither(
+        self, context: JobContext, pixels: float, *, settle: Settle | None, ra_only: bool
+    ) -> Json: ...
+
+    def frame_guiding(self, start: float, end: float) -> dict[str, Json] | None: ...
+
+
+@dataclass(frozen=True, slots=True)
+class DitherPlan:
+    """Dither before every ``every``-th frame of a series, while PHD2 guides (ADR 0024)."""
+
+    every: int
+    pixels: float
+    """Main camera pixels (converted to the guide camera's)."""
+    settle: Settle = field(default_factory=Settle)
+    ra_only: bool = False
+
+
 def _exposure_resources(role: Role) -> list[str]:
     """What an exposure locks: a filter change or a focuser move would spoil a main frame.
 
@@ -245,6 +276,7 @@ class CaptureService:
         self._previews: dict[Role, Json] = {}
         self._images: dict[Role, IndiClient] = {}
         self._tasks: set[asyncio.Task[object]] = set()
+        self._guider: Guider | None = None
         self._used_by: dict[Role, str] = {}
         """Cameras another client drives (PHD2), whose frames NOCS only previews."""
         self._following: dict[Role, asyncio.Task[None]] = {}
@@ -312,27 +344,43 @@ class CaptureService:
             self._targets[role] = None
         self._publish(role)
 
+    def use_guider(self, guider: Guider) -> None:
+        """Where series dither, and where saved frames get their guiding figures."""
+        self._guider = guider
+
     def expose(
         self,
         role: Role,
         seconds: float,
         frame_type: FrameType | None = None,
         save: bool | None = None,
+        count: int = 1,
+        dither: DitherPlan | None = None,
     ) -> str:
-        """Start an exposure job; returns its id.
+        """Start an exposure job, of ``count`` frames; returns its id.
 
         Frames of the main camera are saved unless ``save`` is false; those of the
-        guide camera never are.
+        guide camera never are. A series of the main camera dithers by ``dither``
+        between its frames while PHD2 guides (ADR 0024).
         """
         _check_exposure(seconds)
         if save is None:
             save = role in SAVING_ROLES
         elif save and role not in SAVING_ROLES:
             raise ValueError(f"frames of the {role.value} are not saved, only previewed")
+        if not 1 <= count <= MAX_SERIES:
+            raise ValueError(f"a series is 1..{MAX_SERIES} frames")
+        if dither is not None:
+            if role is not Role.MAIN_CAMERA:
+                raise ValueError("only series of the main camera dither")
+            if dither.every < 1 or dither.pixels <= 0:
+                raise ValueError("dithering needs a positive amount, every 1 frame or more")
         self.camera(role)  # fail now, not inside the job, if it is not connected
 
         async def run(context: JobContext) -> Json:
-            return await self._expose(context, role, seconds, frame_type, save)
+            if count == 1:
+                return await self._expose(context, role, seconds, frame_type, save)
+            return await self._series(context, role, seconds, frame_type, save, count, dither)
 
         job_id = self._jobs.start("expose", _exposure_resources(role), run)
         self._set_exposure(role, seconds)
@@ -417,6 +465,44 @@ class CaptureService:
 
     # -- internals: exposures ---------------------------------------------
 
+    async def _series(
+        self,
+        context: JobContext,
+        role: Role,
+        seconds: float,
+        frame_type: FrameType | None,
+        save: bool,
+        count: int,
+        dither: DitherPlan | None,
+    ) -> Json:
+        frames: list[Json] = []
+        dithers = 0
+        warnings: list[Json] = []
+        for index in range(count):
+            label = f"frame {index + 1}/{count}: "
+            if dither is not None and index > 0 and index % dither.every == 0:
+                problem = await self._dither(context, dither, label)
+                if problem is None:
+                    dithers += 1
+                else:
+                    log.warning("%s%s", label, problem)
+                    warnings.append(f"{label}{problem}")
+            frames.append(await self._expose(context, role, seconds, frame_type, save, label))
+        return {"frames": frames, "dithers": dithers, "warnings": warnings}
+
+    async def _dither(self, context: JobContext, plan: DitherPlan, label: str) -> str | None:
+        """Dither before a frame; what went wrong (the series goes on), or None."""
+        guider = self._guider
+        if guider is None or not guider.guiding:
+            return "not dithering: PHD2 is not guiding"
+        context.progress(None, f"{label}dithering")
+        try:
+            pixels = guider.guide_pixels(plan.pixels)
+            await guider.dither(context, pixels, settle=plan.settle, ra_only=plan.ra_only)
+        except (GuidingError, GuidingNotReadyError, ValueError, ConnectionError, TimeoutError) as e:
+            return f"dither: {e}"
+        return None
+
     async def _expose(
         self,
         context: JobContext,
@@ -424,8 +510,15 @@ class CaptureService:
         seconds: float,
         frame_type: FrameType | None,
         save: bool,
+        label: str = "",
     ) -> Json:
-        shot = await self.take(context, role, seconds, frame_type)
+        # PHD2 stamps guide steps with the system clock, not NOCS's corrected one.
+        started = time.time()
+        shot = await self.take(context, role, seconds, frame_type, label)
+        ended = time.time()
+        guiding = None
+        if role is Role.MAIN_CAMERA and self._guider is not None:
+            guiding = self._guider.frame_guiding(started, ended)
         result: dict[str, Json] = {
             "exposure": seconds,
             "frame_type": FRAME_TYPE_NAMES[shot.frame_type],
@@ -435,10 +528,11 @@ class CaptureService:
             "id": None,
             "path": None,
             "destination": None,
+            "guiding": guiding,
         }
         frame_id: int | None = None
         if save:
-            context.progress(None, "saving")
+            context.progress(None, f"{label}saving")
             facts = self._facts(role, shot)
             try:
                 saved = await anyio.to_thread.run_sync(self._storage.save, facts)
@@ -456,12 +550,14 @@ class CaptureService:
             }
         self._last_frames[role] = result
         self._publish(role)
-        context.progress(None, "making the preview")
+        context.progress(None, f"{label}making the preview")
         analysis = await self._preview(role, shot, discard=not save)
         if frame_id is not None and analysis is not None:
             await anyio.to_thread.run_sync(
                 self._storage.set_metrics, frame_id, analysis.stars, analysis.hfr
             )
+        if frame_id is not None and guiding is not None:
+            await anyio.to_thread.run_sync(self._storage.set_guiding, frame_id, guiding)
         return result
 
     def _facts(self, role: Role, shot: Shot) -> FrameFacts:

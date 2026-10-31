@@ -24,7 +24,7 @@ import sqlite3
 import threading
 import uuid
 from collections import Counter
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path, PurePosixPath
@@ -464,6 +464,10 @@ class StorageService:
     def set_metrics(self, frame_id: int, stars: int | None, hfr: float | None) -> None:
         if self.catalog is not None:
             self.catalog.set_metrics(frame_id, stars, hfr)
+
+    def set_guiding(self, frame_id: int, guiding: Mapping[str, object]) -> None:
+        if self.catalog is not None:
+            self.catalog.set_guiding(frame_id, guiding)
 
     def add_temperature(self, sample: TemperatureSample) -> None:
         if self.catalog is not None:

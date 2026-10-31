@@ -131,6 +131,16 @@ class SensorInfo(StateModel):
     bits: int
 
 
+class FrameGuiding(StateModel):
+    """How guiding went during a frame (ADR 0024)."""
+
+    rms_ra: float | None = Field(description="Arcseconds; None without the pixel scale.")
+    rms_dec: float | None
+    rms_total: float | None
+    steps: int
+    lost: int = Field(description="Guide frames without the star.")
+
+
 class FrameInfo(StateModel):
     exposure: float
     frame_type: FrameTypeName
@@ -140,6 +150,7 @@ class FrameInfo(StateModel):
     id: int | None = Field(description="Catalog id of the saved frame; None if it was not saved.")
     path: str | None = Field(description="Where it was saved, below <destination>/NOCS/.")
     destination: str | None = Field(description="Id of the destination it was saved to.")
+    guiding: FrameGuiding | None = Field(description="None: PHD2 did not guide meanwhile.")
 
 
 class Preview(StateModel):
@@ -788,6 +799,25 @@ class CoolingRequest(BaseModel):
     ramp: float | None = Field(default=None, ge=0, description="°C/min; 0 = unlimited.")
 
 
+class DitherRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    every: int = Field(default=1, ge=1, le=100, description="Dither before every n-th frame.")
+    pixels: float = Field(
+        default=5, gt=0, le=100, description="Up to this far, in main camera pixels."
+    )
+    ra_only: bool = False
+    settle: SettleRequest = Field(default_factory=SettleRequest)
+
+
+class DitherNowRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    pixels: float = Field(gt=0, le=100, description="Up to this far, in main camera pixels.")
+    ra_only: bool = False
+    settle: SettleRequest = Field(default_factory=SettleRequest)
+
+
 class ExposeRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -798,6 +828,10 @@ class ExposeRequest(BaseModel):
     save: bool | None = Field(
         default=None,
         description="Defaults to true for the main camera; the guide camera never saves.",
+    )
+    count: int = Field(default=1, ge=1, le=1000, description="Frames in the series.")
+    dither: DitherRequest | None = Field(
+        default=None, description="Main camera series only: dither between frames (ADR 0024)."
     )
 
 
@@ -1115,6 +1149,7 @@ class FrameRecord(WireModel):
     height: int | None
     stars: int | None
     hfr: float | None
+    guiding: FrameGuiding | None = Field(description="None: not guided, or saved before 4.5.")
 
 
 class JobStarted(WireModel):

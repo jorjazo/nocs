@@ -187,7 +187,9 @@ def test_calibrate_guide_and_stop_for_the_mount(api: TestClient) -> None:
     wait(api, lambda s: steps(s) >= 3, timeout=30)
     stats = state(api)["guiding"]["stats"]
     assert stats["rms_total"] is not None
-    assert stats["rms_total"] == pytest.approx(stats["rms_total_px"] * guiding["pixel_scale"], 0.01)
+    # Both rounded to 3 decimals: an absolute tolerance, the RMS can be tiny.
+    expected = stats["rms_total_px"] * guiding["pixel_scale"]
+    assert stats["rms_total"] == pytest.approx(expected, abs=0.005 * guiding["pixel_scale"])
     graph = api.get("/api/guiding/steps").json()
     assert graph["pixel_scale"] == guiding["pixel_scale"]
     seqs = [entry["seq"] for entry in graph["steps"]]
@@ -196,6 +198,32 @@ def test_calibrate_guide_and_stop_for_the_mount(api: TestClient) -> None:
     assert {entry["kind"] for entry in graph["steps"]} <= {"step", "lost", "dither"}
     newer = api.get("/api/guiding/steps", params={"after": seqs[-1]}).json()["steps"]
     assert all(entry["seq"] > seqs[-1] for entry in newer)
+
+    # A guided series with a dither between frames, each frame with its RMS (ADR 0024).
+    response = api.post(
+        "/api/cameras/main_camera/expose",
+        json={
+            "exposure": 4,
+            "count": 3,
+            "save": True,
+            "dither": {"every": 1, "pixels": 5, "settle": {"pixels": 1.5, "time": 3}},
+        },
+    )
+    expect(response, 202)
+    series = response.json()["job"]
+    wait(api, lambda s: s["jobs"][series]["state"] != "running", timeout=180)
+    job = state(api)["jobs"][series]
+    assert job["state"] == "succeeded", (job["error"], job["message"])
+    assert job["result"]["dithers"] == 2, job["result"]["warnings"]
+    frames = job["result"]["frames"]
+    assert len(frames) == 3
+    assert all(frame["guiding"] is not None and frame["guiding"]["steps"] >= 1 for frame in frames)
+    listed = {f["id"]: f for f in api.get("/api/frames").json()}
+    for frame in frames:
+        assert listed[frame["id"]]["guiding"]["steps"] == frame["guiding"]["steps"]
+        assert listed[frame["id"]]["guiding"]["rms_total"] is not None
+    dithers = [e for e in api.get("/api/guiding/steps").json()["steps"] if e["kind"] == "dither"]
+    assert len(dithers) == 2
 
     # The mount is PHD2's while it guides (ADR 0023).
     refused = api.post("/api/mount/park")

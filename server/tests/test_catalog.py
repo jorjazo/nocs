@@ -221,3 +221,24 @@ def test_version_1_catalogs_gain_the_night_tables(tmp_path: Path) -> None:
     assert db.focus_runs() == []
     assert db.temperatures("2026-01-01") == []
     db.close()
+
+
+def test_frames_keep_how_guiding_went(db: Catalog) -> None:
+    frame_id = db.add_frame(FRAME)
+    row = db.frame(frame_id)
+    assert row is not None
+    assert row.guide_steps is None  # not guided (or saved before phase 4.5)
+    db.set_guiding(
+        frame_id, {"rms_ra": 0.41, "rms_dec": 0.32, "rms_total": 0.52, "steps": 150, "lost": 2}
+    )
+    row = db.frame(frame_id)
+    assert row is not None
+    assert (row.guide_rms_ra, row.guide_rms_dec, row.guide_rms_total) == (0.41, 0.32, 0.52)
+    assert (row.guide_steps, row.guide_lost) == (150, 2)
+    # Without the pixel scale, only the counts.
+    db.set_guiding(
+        frame_id, {"rms_ra": None, "rms_dec": None, "rms_total": None, "steps": 3, "lost": 0}
+    )
+    row = db.frame(frame_id)
+    assert row is not None
+    assert (row.guide_rms_total, row.guide_steps) == (None, 3)

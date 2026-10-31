@@ -9,6 +9,7 @@ from typing import Annotated
 from fastapi import APIRouter, HTTPException, Query, Response, status
 
 from nocs.api.schemas import (
+    DitherNowRequest,
     GuideEntryModel,
     GuideRequest,
     GuideSteps,
@@ -67,6 +68,17 @@ def guiding_router(guiding: Callable[[], GuidingService]) -> APIRouter:
             steps=[GuideEntryModel.model_validate(e.to_json()) for e in entries],
             pixel_scale=service.pixel_scale,
         )
+
+    @router.post("/dither", status_code=status.HTTP_202_ACCEPTED)
+    async def dither(request: DitherNowRequest) -> JobStarted:  # pyright: ignore[reportUnusedFunction]
+        """Dither now, by up to ``pixels`` of the main camera; the job ends once settled."""
+        settle = Settle(request.settle.pixels, request.settle.time, request.settle.timeout)
+        with _guiding_errors():
+            service = guiding()
+            job = service.dither_job(
+                service.guide_pixels(request.pixels), settle=settle, ra_only=request.ra_only
+            )
+        return JobStarted(job=job)
 
     @router.post("/stop", status_code=status.HTTP_204_NO_CONTENT)
     async def stop() -> Response:  # pyright: ignore[reportUnusedFunction]

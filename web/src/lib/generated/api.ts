@@ -358,6 +358,10 @@ export interface FrameInfo {
   format: string;
   frame_type: FrameTypeName;
   /**
+   * None: PHD2 did not guide meanwhile.
+   */
+  guiding: FrameGuiding | null;
+  /**
    * Catalog id of the saved frame; None if it was not saved.
    */
   id: number | null;
@@ -373,6 +377,25 @@ export interface FrameInfo {
    * UTC, ISO 8601, when the image arrived.
    */
   time: string;
+}
+/**
+ * How guiding went during a frame (ADR 0024).
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "FrameGuiding".
+ */
+export interface FrameGuiding {
+  /**
+   * Guide frames without the star.
+   */
+  lost: number;
+  rms_dec: number | null;
+  /**
+   * Arcseconds; None without the pixel scale.
+   */
+  rms_ra: number | null;
+  rms_total: number | null;
+  steps: number;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -1792,6 +1815,52 @@ export interface OutputConfig {
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "DitherNowRequest".
+ */
+export interface DitherNowRequest {
+  /**
+   * Up to this far, in main camera pixels.
+   */
+  pixels: number;
+  ra_only?: boolean;
+  settle?: SettleRequest;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "SettleRequest".
+ */
+export interface SettleRequest {
+  /**
+   * Within this distance, px…
+   */
+  pixels?: number;
+  /**
+   * …for this long, seconds…
+   */
+  time?: number;
+  /**
+   * …or give up after this.
+   */
+  timeout?: number;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "DitherRequest".
+ */
+export interface DitherRequest {
+  /**
+   * Dither before every n-th frame.
+   */
+  every?: number;
+  /**
+   * Up to this far, in main camera pixels.
+   */
+  pixels?: number;
+  ra_only?: boolean;
+  settle?: SettleRequest;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "Driver".
  */
 export interface Driver {
@@ -1845,6 +1914,14 @@ export interface EquatorialGoto {
  * via the `definition` "ExposeRequest".
  */
 export interface ExposeRequest {
+  /**
+   * Frames in the series.
+   */
+  count?: number;
+  /**
+   * Main camera series only: dither between frames (ADR 0024).
+   */
+  dither?: DitherRequest | null;
   /**
    * Seconds.
    */
@@ -1953,6 +2030,10 @@ export interface FrameRecord {
   filter: string | null;
   frame_type: FrameTypeName;
   gain: number | null;
+  /**
+   * None: not guided, or saved before 4.5.
+   */
+  guiding: FrameGuiding | null;
   height: number | null;
   hfr: number | null;
   id: number;
@@ -1991,24 +2072,6 @@ export interface GuideRequest {
    */
   recalibrate?: boolean;
   settle?: SettleRequest;
-}
-/**
- * This interface was referenced by `NOCSAPI`'s JSON-Schema
- * via the `definition` "SettleRequest".
- */
-export interface SettleRequest {
-  /**
-   * Within this distance, px…
-   */
-  pixels?: number;
-  /**
-   * …for this long, seconds…
-   */
-  time?: number;
-  /**
-   * …or give up after this.
-   */
-  timeout?: number;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema

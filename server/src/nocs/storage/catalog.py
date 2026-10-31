@@ -13,6 +13,7 @@ from __future__ import annotations
 import logging
 import sqlite3
 import threading
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path, PurePosixPath
@@ -91,6 +92,14 @@ MIGRATIONS: list[str] = [
     );
     CREATE INDEX focus_runs_by_time ON focus_runs (started);
     """,
+    """
+    -- How guiding went during each frame (phase 4.5, ADR 0024).
+    ALTER TABLE frames ADD COLUMN guide_rms_ra REAL;     -- arcseconds
+    ALTER TABLE frames ADD COLUMN guide_rms_dec REAL;
+    ALTER TABLE frames ADD COLUMN guide_rms_total REAL;
+    ALTER TABLE frames ADD COLUMN guide_steps INTEGER;
+    ALTER TABLE frames ADD COLUMN guide_lost INTEGER;    -- frames without the guide star
+    """,
 ]
 VERSION = len(MIGRATIONS)
 
@@ -148,6 +157,11 @@ class FrameRow:
     height: int | None
     stars: int | None
     hfr: float | None
+    guide_rms_ra: float | None = None
+    guide_rms_dec: float | None = None
+    guide_rms_total: float | None = None
+    guide_steps: int | None = None
+    guide_lost: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -217,7 +231,8 @@ _RUN_COLUMNS = (
 _FRAME_COLUMNS = """
     f.id, n.night, t.name, v.key, v.label, f.directory, f.path, f.size, f.started,
     f.exposure, f.frame_type, f.filter, f.profile, f.camera, f.gain, f."offset", f.binning,
-    f.temperature, f.width, f.height, f.stars, f.hfr
+    f.temperature, f.width, f.height, f.stars, f.hfr,
+    f.guide_rms_ra, f.guide_rms_dec, f.guide_rms_total, f.guide_steps, f.guide_lost
 """
 _FRAME_JOINS = """
     FROM frames f
@@ -375,6 +390,27 @@ class Catalog:
         with self._lock:
             self._db.execute(
                 "UPDATE frames SET stars = ?, hfr = ? WHERE id = ?", (stars, hfr, frame_id)
+            )
+
+    def set_guiding(self, frame_id: int, guiding: Mapping[str, object]) -> None:
+        """How guiding went during the frame: RMS in arcseconds, steps, lost frames."""
+
+        def value(key: str) -> float | int | None:
+            item = guiding.get(key)
+            return item if isinstance(item, int | float) and not isinstance(item, bool) else None
+
+        with self._lock:
+            self._db.execute(
+                "UPDATE frames SET guide_rms_ra = ?, guide_rms_dec = ?, guide_rms_total = ?,"
+                " guide_steps = ?, guide_lost = ? WHERE id = ?",
+                (
+                    value("rms_ra"),
+                    value("rms_dec"),
+                    value("rms_total"),
+                    value("steps"),
+                    value("lost"),
+                    frame_id,
+                ),
             )
 
     def add_temperature(self, sample: TemperatureSample) -> None:

@@ -27,6 +27,7 @@ that supersedes the old one.
 | [0021](0021-autofocus.md) | Autofocus: V-curve sweep with a hyperbolic fit | Proposed |
 | [0022](0022-phd2-as-a-managed-service.md) | PHD2 as a service configured by nocsd | Proposed |
 | [0023](0023-guide-camera-and-mount-shared-with-phd2.md) | Guide camera and mount shared with PHD2 | Proposed |
+| [0024](0024-dithering-between-frames.md) | Dithering and settling between frames | Proposed |
 | [0025](0025-packaging-and-updates.md) | Packaging, apt repository and updates | Proposed |
 | [0026](0026-raspberry-pi-image.md) | Raspberry Pi image | Proposed |
 | [0027](0027-nocs-system.md) | nocs-system: what the privileged helper does, and what nocsd does itself | Proposed |

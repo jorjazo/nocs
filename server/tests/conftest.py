@@ -33,10 +33,15 @@ def test_hostname() -> Iterator[None]:
 
 @pytest.fixture(autouse=True)
 def config_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Keep every Settings() of a test away from the user's real configuration and data."""
+    """Keep every Settings() of a test away from the user's real configuration and data.
+
+    And from a PHD2 on its default port (the dev container's, CI's): its events would
+    patch the state of apps that do not expect them. Tests of guiding pass its port.
+    """
     path = tmp_path / "config"
     monkeypatch.setenv("NOCS_CONFIG_DIR", str(path))
     monkeypatch.setenv("NOCS_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("NOCS_PHD2_PORT", "9")
     return path
 
 

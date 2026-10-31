@@ -1631,6 +1631,57 @@
       ],
       "type": "string"
     },
+    "DitherNowRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "pixels": {
+          "description": "Up to this far, in main camera pixels.",
+          "exclusiveMinimum": 0,
+          "maximum": 100,
+          "type": "number"
+        },
+        "ra_only": {
+          "default": false,
+          "type": "boolean"
+        },
+        "settle": {
+          "$ref": "#/$defs/SettleRequest"
+        }
+      },
+      "required": [
+        "pixels"
+      ],
+      "title": "DitherNowRequest",
+      "type": "object"
+    },
+    "DitherRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "every": {
+          "default": 1,
+          "description": "Dither before every n-th frame.",
+          "maximum": 100,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "pixels": {
+          "default": 5,
+          "description": "Up to this far, in main camera pixels.",
+          "exclusiveMinimum": 0,
+          "maximum": 100,
+          "type": "number"
+        },
+        "ra_only": {
+          "default": false,
+          "type": "boolean"
+        },
+        "settle": {
+          "$ref": "#/$defs/SettleRequest"
+        }
+      },
+      "title": "DitherRequest",
+      "type": "object"
+    },
     "Driver": {
       "properties": {
         "driver": {
@@ -1776,6 +1827,25 @@
     "ExposeRequest": {
       "additionalProperties": false,
       "properties": {
+        "count": {
+          "default": 1,
+          "description": "Frames in the series.",
+          "maximum": 1000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "dither": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DitherRequest"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Main camera series only: dither between frames (ADR 0024)."
+        },
         "exposure": {
           "description": "Seconds.",
           "maximum": 7200,
@@ -2153,6 +2223,59 @@
       "title": "FocuserState",
       "type": "object"
     },
+    "FrameGuiding": {
+      "additionalProperties": false,
+      "description": "How guiding went during a frame (ADR 0024).",
+      "properties": {
+        "lost": {
+          "description": "Guide frames without the star.",
+          "type": "integer"
+        },
+        "rms_dec": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "rms_ra": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Arcseconds; None without the pixel scale."
+        },
+        "rms_total": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "steps": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "rms_ra",
+        "rms_dec",
+        "rms_total",
+        "steps",
+        "lost"
+      ],
+      "title": "FrameGuiding",
+      "type": "object"
+    },
     "FrameInfo": {
       "additionalProperties": false,
       "properties": {
@@ -2176,6 +2299,17 @@
         },
         "frame_type": {
           "$ref": "#/$defs/FrameTypeName"
+        },
+        "guiding": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FrameGuiding"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "None: PHD2 did not guide meanwhile."
         },
         "id": {
           "anyOf": [
@@ -2216,7 +2350,8 @@
         "time",
         "id",
         "path",
-        "destination"
+        "destination",
+        "guiding"
       ],
       "title": "FrameInfo",
       "type": "object"
@@ -2265,6 +2400,17 @@
               "type": "null"
             }
           ]
+        },
+        "guiding": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FrameGuiding"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "None: not guided, or saved before 4.5."
         },
         "height": {
           "anyOf": [
@@ -2394,7 +2540,8 @@
         "width",
         "height",
         "stars",
-        "hfr"
+        "hfr",
+        "guiding"
       ],
       "title": "FrameRecord",
       "type": "object"

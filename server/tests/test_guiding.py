@@ -14,6 +14,7 @@ from nocs.devices import DeviceInterface, Mount
 from nocs.equipment import EquipmentService, Optics, Profile, Role
 from nocs.guiding import (
     GuideRig,
+    GuidingError,
     GuidingNotReadyError,
     GuidingService,
     Phd2Client,
@@ -244,6 +245,12 @@ class FakePhd2:
                         if self.calibrated
                         else {"calibrated": False}
                     )
+                elif method == "dither":
+                    if self.state != "Guiding":
+                        response["error"] = {"code": 1, "message": "cannot dither if not guiding"}
+                    else:
+                        response["result"] = 0
+                        asyncio.get_running_loop().create_task(self._dither(request["params"]))
                 elif method == "stop_capture":
                     response["result"] = 0
                     # The exposure in progress ends a little later.
@@ -295,6 +302,16 @@ class FakePhd2:
             event = json.loads(line)
             if event["Event"] not in ("Version", "AppState"):
                 self.event(event.pop("Event"), **event)
+
+    async def _dither(self, params: dict[str, Any]) -> None:
+        await asyncio.sleep(0.01)
+        self.event("GuidingDithered", dx=params["amount"] * 0.6, dy=params["amount"] * 0.8)
+        self.event("SettleBegin")
+        self.event("Settling", Distance=params["amount"], Time=0.0, SettleTime=5.0)
+        if self.settles:
+            self.event("SettleDone", Status=0, TotalFrames=6, DroppedFrames=0)
+        else:
+            self.event("SettleDone", Status=1, Error="timed-out waiting for guider to settle")
 
     def finish_calibration(self) -> None:
         self._go_on.set()
@@ -873,3 +890,142 @@ async def test_guiding_statistics_from_a_recorded_session(phd2: FakePhd2, tmp_pa
         kinds = [e.kind for e in service.history.after(0)]
         assert (kinds.count("step"), kinds.count("dither")) == (58, 1)
         assert not guiding(store, "settling")
+
+
+# -- dithering (ADR 0024) ------------------------------------------------------------
+
+
+class Context:
+    """A job's context as a caller's job (a series, the sequencer) hands it on."""
+
+    def __init__(self, job_id: str) -> None:
+        self.id = job_id
+        self.messages: list[str] = []
+
+    def progress(self, fraction: float | None, message: str | None = None) -> None:
+        if message:
+            self.messages.append(message)
+
+
+async def guiding_already(service: GuidingService, jobs: JobManager) -> None:
+    await finished(service, jobs, service.guide())
+
+
+async def test_dither_inside_a_callers_job(phd2: FakePhd2, tmp_path: Path) -> None:
+    phd2.calibrated = True
+    async with applied(phd2, tmp_path) as (service, store, jobs, _, _):
+        await guiding_already(service, jobs)
+        context = Context("series")
+        result = await service.dither(cast(Any, context), 4.7)
+        assert result == {"pixels": 4.7, "frames": 6}
+        assert phd2.params["dither"] == {
+            "amount": 4.7,
+            "raOnly": False,
+            "settle": {"pixels": 1.5, "time": 10.0, "timeout": 60.0},
+        }
+        assert any("dithering" in m for m in context.messages)
+        kinds = [e.kind for e in service.history.after(0)]
+        assert "dither" in kinds
+        assert not guiding(store, "settling")
+
+
+async def test_dither_needs_guiding_and_a_settle(phd2: FakePhd2, tmp_path: Path) -> None:
+    phd2.calibrated = True
+    async with applied(phd2, tmp_path) as (service, store, jobs, _, _):
+        with pytest.raises(GuidingNotReadyError, match="not guiding"):
+            await service.dither(cast(Any, Context("series")), 3)
+        await guiding_already(service, jobs)
+        with pytest.raises(ValueError, match="guide pixels"):
+            await service.dither(cast(Any, Context("series")), 0)
+        phd2.settles = False
+        with pytest.raises(GuidingError, match="did not settle after the dither"):
+            await service.dither(cast(Any, Context("series")), 3)
+        assert guiding(store, "app_state") == "Guiding"  # PHD2 goes on guiding
+
+
+async def test_dither_as_a_job_of_its_own(phd2: FakePhd2, tmp_path: Path) -> None:
+    phd2.calibrated = True
+    async with applied(phd2, tmp_path) as (service, store, jobs, _, _):
+        await guiding_already(service, jobs)
+        job_id = service.dither_job(2.0)
+        await finished(service, jobs, job_id)
+        assert job(store, job_id)["state"] == "succeeded"
+        assert job(store, job_id)["kind"] == "dither"
+
+
+async def test_main_camera_pixels_become_guide_pixels(phd2: FakePhd2, tmp_path: Path) -> None:
+    async with applied(phd2, tmp_path) as (service, store, _, _, _):
+        with pytest.raises(GuidingNotReadyError, match="main camera"):
+            service.guide_pixels(5)
+        store.set(("cameras", "main_camera"), {"field": {"scale": 2.04}})
+        with pytest.raises(GuidingNotReadyError, match="PHD2's pixel scale"):
+            service.guide_pixels(5)
+        await service.connect()  # PHD2 says 4.13"/px
+        assert service.guide_pixels(5) == pytest.approx(5 * 2.04 / 4.13)
+
+
+async def test_guiding_figures_for_a_frame(phd2: FakePhd2, tmp_path: Path) -> None:
+    async with applied(phd2, tmp_path) as (service, _, _, _, _):
+        await service.connect()
+        for ra, timestamp in ((0.2, 100.0), (-0.2, 101.0), (0.2, 102.0), (5.0, 200.0)):
+            phd2.event("GuideStep", Timestamp=timestamp, RADistanceRaw=ra, DECDistanceRaw=0.1)
+        phd2.event("StarLost", Timestamp=101.5, SNR=0, StarMass=0)
+        await until(lambda: service.history.last_seq == 5)
+        figures = service.frame_guiding(99.5, 102.5)  # the 5 px step at 200 s is outside
+        assert figures is not None
+        assert (figures["steps"], figures["lost"]) == (3, 1)
+        assert figures["rms_dec"] == 0.0
+        assert figures["rms_ra"] == pytest.approx(0.1886 * 4.13, abs=0.01)
+        assert service.frame_guiding(300, 400) is None
+
+
+def guiding_state(service: GuidingService) -> Any:
+    return service._store.get(("guiding", "app_state"))  # pyright: ignore[reportPrivateUsage]
+
+
+async def test_a_job_that_holds_the_mount_keeps_it(phd2: FakePhd2, tmp_path: Path) -> None:
+    """A sequence holds the mount itself while it guides; NOCS takes it when it lets go."""
+    phd2.calibrated = True
+    async with applied(phd2, tmp_path) as (service, _, jobs, _, _):
+        release = asyncio.Event()
+
+        async def sequence(context: Any) -> Any:
+            result = await service.start(context)
+            await release.wait()
+            return result
+
+        job_id = jobs.start("sequence", [Role.MOUNT.value, Role.MAIN_CAMERA.value], sequence)
+        await until(lambda: service.history.last_seq > 0 or guiding_state(service) == "Guiding")
+        assert jobs.holder(Role.MOUNT.value) == job_id  # not NOCS's guiding reservation
+        release.set()
+        await jobs.wait(job_id)
+        phd2.event("GuideStep", Timestamp=1.0, RADistanceRaw=0.1, DECDistanceRaw=0.1)
+        await until(lambda: jobs.holder(Role.MOUNT.value) not in (None, job_id))
+        with pytest.raises(ResourceBusyError, match="guiding"):
+            jobs.check_free([Role.MOUNT.value])
+
+
+async def test_a_resuming_sequence_gets_the_mount_back(phd2: FakePhd2, tmp_path: Path) -> None:
+    """While a sequence is paused NOCS holds the mount; ``guide_under`` hands it back."""
+    phd2.calibrated = True
+    async with applied(phd2, tmp_path) as (service, _, jobs, _, _):
+        await guiding_already(service, jobs)  # NOCS holds the mount: guiding, no sequence
+        with pytest.raises(ResourceBusyError, match="guiding"):
+            jobs.check_free([Role.MOUNT.value])
+        done = asyncio.Event()
+
+        async def sequence(_: Any) -> Any:
+            await done.wait()
+
+        paused = jobs.start("sequence", [], sequence)  # its locks lent out, as when paused
+        service.guide_under(paused)  # about to resume: it takes the mount back
+        jobs.check_free([Role.MOUNT.value])
+        phd2.event("GuideStep", Timestamp=1.0, RADistanceRaw=0.1, DECDistanceRaw=0.1)
+        await until(lambda: service.history.last_seq >= 1)
+        jobs.check_free([Role.MOUNT.value])  # NOCS does not grab it before the resume
+        done.set()
+        await jobs.wait(paused)
+        phd2.event("GuideStep", Timestamp=2.0, RADistanceRaw=0.1, DECDistanceRaw=0.1)
+        await until(lambda: jobs.holder(Role.MOUNT.value) is not None)
+        with pytest.raises(ResourceBusyError, match="guiding"):
+            jobs.check_free([Role.MOUNT.value])  # the sequence ended, PHD2 still guides

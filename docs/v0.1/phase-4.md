@@ -28,7 +28,7 @@ after rotating it) and sits behind the filters.
 | 4.2 | Guide camera handover | PHD2 connects and disconnects its equipment (`/api/guiding/connect`, `disconnect`, `loop`, `stop`, `exposure`); the guide camera is held for PHD2 meanwhile and the camera state says so; Live view shows PHD2's frames; disconnecting the profile releases PHD2 first ([ADR 0023](../adr/0023-guide-camera-and-mount-shared-with-phd2.md)) | PHD2 looping on the ASI220MM | Done on the lab Pi: NOCS's exposures refused while PHD2 loops, a preview of PHD2's frame every ~1.9 s, nocsd answering in 12 ms (p95 27 ms) |
 | 4.3 | Calibrate, guide, stop | Starting to guide as a job (`/api/guiding/guide`: loop, a star away from the edges, calibrate if needed or asked, guide, settle), cancelled by `stop`; calibration, settling and PHD2's alerts in the state; a calibration that loses its star is given up; the mount is held while PHD2 calibrates or guides, and go to, park and home take `stop_guiding` | Guide pulses reach the AM5/AM7 | Done: PHD2's 500 ms pulses N/S/E/W reached the lab AM7 (`TELESCOPE_TIMED_GUIDE_*` Busy for 0.5 s); calibrating and guiding wait for the sky |
 | 4.4 | Guiding statistics | Guide steps, lost frames and dithers kept by the server per guiding run (`nocs.guiding.stats`); RMS in RA, Dec and total over the last 100 steps not settling, in pixels and arcseconds, with peaks, in `guiding.stats`; `GET /api/guiding/steps?after=` for the graph (observers too); a PHD2 session recorded from the simulators (`dev/tools/phd2_record.py`) | — | Done |
-| 4.5 | Dithering between frames | Dither in main camera pixels, settling; a series of N frames with a dither every K; guiding RMS per saved frame | — | |
+| 4.5 | Dithering between frames | Dither in main camera pixels, converted with both trains' scales, waiting for PHD2 to settle; `dither` and `start` run inside a caller's job (the sequencer's), and `POST /api/guiding/dither` as a job of its own; a series of N frames (`count`) with a dither every K (`dither`); guiding RMS, steps and lost frames per saved frame in the catalog (schema version 3) and the frame list ([ADR 0024](../adr/0024-dithering-between-frames.md)) | — | Done |
 | 4.6 | Guiding UI | Guiding screen (graph, RMS, start/stop, recalibrate, dither settings), Live view chip and frame count, profile editor choice of guiding train; en/es | From the phone | |
 | 4.7 | Lab and field test | Lab: connect, loop, pulses; field-test checklist and the test | Exit criterion | |
 
@@ -67,3 +67,6 @@ after rotating it) and sits behind the filters.
 - PHD2 2.6.14 reports `Selected` while it loops with a star selected, not only
   when idle: only `Stopped` means no capture. A star lost while calibrating
   makes PHD2 wait for it forever (lost frames are no calibration steps).
+- Stage 4.5 on the simulators: a guided series of 3 × 4 s frames with a 5 px
+  dither between them (settling within 1.5 px for 3 s) took ~40 s; every frame
+  got its guiding RMS.
