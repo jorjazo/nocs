@@ -300,6 +300,32 @@ class Camera(Device):
 
         return await self._exposure(seconds, frame, images)
 
+    def watch_frames(
+        self, on_frame: Callable[[Frame], None], exposure: Callable[[], float]
+    ) -> Callable[[], None]:
+        """Call ``on_frame`` with each image the camera sends, whoever asked for it.
+
+        For frames another INDI client (PHD2) takes; it needs the camera's image
+        connection, with BLOBs enabled. ``exposure`` says how long they were. Returns
+        a function that stops watching.
+        """
+        if self.images is None:
+            raise DeviceError(f"{self.name}: watching frames needs its image connection")
+
+        def on_event(event: IndiEvent) -> None:
+            match event:
+                case PropertyUpdated(property=prop) if (
+                    prop.device == self.name and prop.name == "CCD1"
+                ):
+                    blob = prop.elements.get("CCD1")
+                    if isinstance(blob, BlobElement) and blob.data is not None:
+                        data, blob.data = blob.data, None  # not kept in the property mirror
+                        on_frame(Frame(data, blob.format, exposure()))
+                case _:
+                    pass
+
+        return self.images.add_listener(on_event)
+
     async def expose_to_file(
         self,
         seconds: float,

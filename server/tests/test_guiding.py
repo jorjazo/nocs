@@ -14,6 +14,7 @@ from nocs.devices import DeviceInterface, Mount
 from nocs.equipment import EquipmentService, Optics, Profile, Role
 from nocs.guiding import (
     GuideRig,
+    GuidingNotReadyError,
     GuidingService,
     Phd2Client,
     Phd2ConnectionError,
@@ -24,6 +25,7 @@ from nocs.guiding import (
     render,
 )
 from nocs.indi import IndiClient
+from nocs.jobs import JobManager, ResourceBusyError
 from nocs.state import StateStore
 
 CAMERA = "ZWO CCD ASI220MM Mini"
@@ -131,6 +133,8 @@ class FakePhd2:
             "camera": {"name": f"INDI Camera [{CAMERA}]", "connected": False},
             "mount": {"name": f"INDI Mount [{MOUNT}]", "connected": False},
         }
+        self.connected = False
+        self.exposure_ms = 2000
         self.calls: list[str] = []
         self.restarts = 0
         self.import_on_restart = True
@@ -179,6 +183,35 @@ class FakePhd2:
                     response["result"] = {"id": 1, "name": self.profile}
                 elif method == "get_current_equipment":
                     response["result"] = self.equipment
+                elif method == "get_connected":
+                    response["result"] = self.connected
+                elif method == "set_connected":
+                    if not request["params"][0] and self.state not in ("Stopped", "Selected"):
+                        response["error"] = {
+                            "code": 1,
+                            "message": "cannot disconnect equipment while capture active",
+                        }
+                    else:
+                        self.connected = request["params"][0]
+                        response["result"] = 0
+                elif method == "get_exposure":
+                    response["result"] = self.exposure_ms
+                elif method == "set_exposure":
+                    self.exposure_ms = request["params"][0]
+                    response["result"] = 0
+                elif method == "loop":
+                    if not self.connected:
+                        response["error"] = {"code": 1, "message": "camera not connected"}
+                    else:
+                        response["result"] = 0
+                        self.state = "Looping"
+                        asyncio.get_running_loop().call_later(
+                            0.02, lambda: self.event("LoopingExposures", Frame=1)
+                        )
+                elif method == "stop_capture":
+                    response["result"] = 0
+                    # The exposure in progress ends a little later.
+                    asyncio.get_running_loop().call_later(0.1, self._stopped)
                 elif method == "shutdown":
                     response["result"] = 0
                     writer.write(json.dumps(response).encode() + b"\r\n")
@@ -194,6 +227,11 @@ class FakePhd2:
         finally:
             self._writers.discard(writer)
             writer.close()
+
+    def _stopped(self) -> None:
+        was = self.state
+        self.state = "Stopped"
+        self.event("GuidingStopped" if was == "Guiding" else "LoopingExposuresStopped")
 
     def _restart(self) -> None:
         self.restarts += 1
@@ -266,6 +304,13 @@ class Equipment:
 
     def connect(self) -> None:
         self.ready = {Role.GUIDE_CAMERA: CAMERA, Role.MOUNT: MOUNT}
+        self._notify()
+
+    def lose(self, role: Role) -> None:
+        self.ready.pop(role, None)
+        self._notify()
+
+    def _notify(self) -> None:
         for listener in list(self._listeners):
             listener()
 
@@ -305,15 +350,35 @@ DUO = Profile(
 )
 
 
+class Frames:
+    """Records what the service asks the capture service to show."""
+
+    def __init__(self) -> None:
+        self.following: dict[Role, tuple[str, Callable[[], float]]] = {}
+
+    def follow(self, role: Role, by: str, exposure: Callable[[], float]) -> None:
+        self.following[role] = (by, exposure)
+
+    def unfollow(self, role: Role) -> None:
+        self.following.pop(role, None)
+
+
 @contextlib.asynccontextmanager
 async def running(
-    phd2: FakePhd2, equipment: Equipment, settings_file: Path | None
+    phd2: FakePhd2,
+    equipment: Equipment,
+    settings_file: Path | None,
+    store: StateStore | None = None,
+    jobs: JobManager | None = None,
+    frames: Frames | None = None,
 ) -> AsyncGenerator[tuple[GuidingService, StateStore]]:
-    store = StateStore()
+    store = store if store is not None else StateStore()
     service = GuidingService(
         store,
         cast(EquipmentService, equipment),
         Bridge(indi_rig()),
+        jobs if jobs is not None else JobManager(store),
+        frames,
         host="127.0.0.1",
         port=phd2.port,
         settings_file=settings_file,
@@ -434,3 +499,140 @@ async def test_service_reconnects(phd2: FakePhd2) -> None:
         await until(lambda: not guiding(store, "phd2", "connected"))
         assert guiding(store, "app_state") is None
         await until(lambda: guiding(store, "phd2", "connected"), timeout=5)
+
+
+# -- the guide camera, shared with PHD2 (ADR 0023) ------------------------------------
+
+
+@contextlib.asynccontextmanager
+async def applied(
+    phd2: FakePhd2, tmp_path: Path
+) -> AsyncGenerator[tuple[GuidingService, StateStore, JobManager, Frames, Equipment]]:
+    """A service whose PHD2 runs the lab rig's settings."""
+    settings_file = tmp_path / "settings.phd"
+    phd2.settings_file = settings_file
+    store = StateStore()
+    jobs, frames, equipment = JobManager(store), Frames(), Equipment(DUO)
+    async with running(phd2, equipment, settings_file, store, jobs, frames) as (service, _):
+        equipment.connect()
+        await until(lambda: guiding(store, "settings") == "applied")
+        yield service, store, jobs, frames, equipment
+
+
+async def test_phd2_holds_the_guide_camera_while_connected(phd2: FakePhd2, tmp_path: Path) -> None:
+    async with applied(phd2, tmp_path) as (service, store, jobs, frames, _):
+        assert not guiding(store, "equipment")
+        await service.connect()
+        assert phd2.connected
+        assert guiding(store, "equipment")
+        assert guiding(store, "exposure") == 2.0
+        with pytest.raises(ResourceBusyError, match="guiding"):
+            jobs.check_free([Role.GUIDE_CAMERA.value])
+        jobs.check_free([Role.MAIN_CAMERA.value, Role.MOUNT.value])  # only the camera is held
+        by, exposure = frames.following[Role.GUIDE_CAMERA]
+        assert by == "phd2"
+        assert exposure() == 2.0
+
+        await service.disconnect()
+        assert not phd2.connected
+        assert not guiding(store, "equipment")
+        assert Role.GUIDE_CAMERA not in frames.following
+        jobs.check_free([Role.GUIDE_CAMERA.value])
+
+
+async def test_loop_connects_and_stop_waits_for_the_exposure(
+    phd2: FakePhd2, tmp_path: Path
+) -> None:
+    async with applied(phd2, tmp_path) as (service, store, _, frames, _):
+        await service.loop(1.5)
+        assert phd2.connected
+        assert phd2.exposure_ms == 1500
+        assert guiding(store, "exposure") == 1.5
+        assert frames.following[Role.GUIDE_CAMERA][1]() == 1.5
+        await until(lambda: guiding(store, "app_state") == "Looping")
+        await service.stop()  # returns once PHD2 says the loop stopped
+        assert guiding(store, "app_state") == "Stopped"
+        await service.disconnect()  # PHD2 refuses while an exposure runs
+        assert not phd2.connected
+        with pytest.raises(ValueError, match="exposure"):
+            await service.loop(120)
+
+
+async def test_disconnect_stops_a_running_loop_first(phd2: FakePhd2, tmp_path: Path) -> None:
+    async with applied(phd2, tmp_path) as (service, store, _, _, _):
+        await service.loop()
+        await until(lambda: guiding(store, "app_state") == "Looping")
+        await service.disconnect()
+        stopped = phd2.calls.index("stop_capture")
+        assert "set_connected" in phd2.calls[stopped:]
+        assert not phd2.connected
+
+
+async def test_connect_is_refused_while_nocs_uses_the_camera(
+    phd2: FakePhd2, tmp_path: Path
+) -> None:
+    async with applied(phd2, tmp_path) as (service, store, jobs, frames, _):
+        token = jobs.reserve("loop", [Role.GUIDE_CAMERA.value])
+        with pytest.raises(ResourceBusyError):
+            await service.connect()
+        assert not phd2.connected
+        assert not frames.following
+        jobs.release(token)
+        await service.connect()
+        assert guiding(store, "equipment")
+
+
+async def test_connect_needs_the_profiles_settings(phd2: FakePhd2, tmp_path: Path) -> None:
+    async with running(phd2, Equipment(DUO), tmp_path / "settings.phd") as (service, store):
+        await until(lambda: guiding(store, "phd2", "connected"))
+        with pytest.raises(GuidingNotReadyError, match="settings"):
+            await service.connect()
+        assert "set_connected" not in phd2.calls
+
+
+async def test_settings_wait_while_phd2_holds_its_equipment(phd2: FakePhd2, tmp_path: Path) -> None:
+    async with applied(phd2, tmp_path) as (service, store, _, _, equipment):
+        await service.connect()
+        restarts = phd2.restarts
+        equipment.active_profile = DUO.model_copy(update={"imaging": Optics(focal_length=400)})
+        equipment.connect()
+        await until(lambda: guiding(store, "settings") == "pending")
+        assert phd2.restarts == restarts
+        await service.disconnect()
+        await until(lambda: guiding(store, "settings") == "applied")
+        assert phd2.restarts == restarts + 1
+
+
+async def test_phd2_going_away_frees_the_camera(phd2: FakePhd2, tmp_path: Path) -> None:
+    async with applied(phd2, tmp_path) as (service, store, jobs, frames, _):
+        await service.connect()
+        phd2.connected = False  # as a restarted PHD2
+        phd2.drop()
+        await until(lambda: not guiding(store, "equipment"))
+        assert not frames.following
+        jobs.check_free([Role.GUIDE_CAMERA.value])
+        await until(lambda: guiding(store, "phd2", "connected"))
+        assert not service.equipment_connected
+
+
+async def test_phd2_found_connected_holds_the_camera(phd2: FakePhd2, tmp_path: Path) -> None:
+    # Connected, with NOCS's settings, before nocsd started (nocsd restarted while guiding).
+    phd2.connected = True
+    phd2.exposure_ms = 3000
+    phd2.profile = render(
+        GuideRig(CAMERA, MOUNT, 4.0, 250.0, 0.5, "localhost", 7624), "lab-rig"
+    ).profile_name
+    async with applied(phd2, tmp_path) as (_, store, jobs, frames, _):
+        await until(lambda: guiding(store, "equipment"))
+        assert guiding(store, "exposure") == 3.0
+        assert Role.GUIDE_CAMERA in frames.following
+        with pytest.raises(ResourceBusyError):
+            jobs.check_free([Role.GUIDE_CAMERA.value])
+
+
+async def test_losing_the_guide_camera_disconnects_phd2(phd2: FakePhd2, tmp_path: Path) -> None:
+    async with applied(phd2, tmp_path) as (service, store, _, _, equipment):
+        await service.loop()
+        equipment.lose(Role.GUIDE_CAMERA)
+        await until(lambda: not guiding(store, "equipment"))
+        assert not phd2.connected

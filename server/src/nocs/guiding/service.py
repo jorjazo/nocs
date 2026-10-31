@@ -8,12 +8,19 @@ State layout under ``("guiding",)``::
     profile:   the PHD2 profile in use, by name
     app_state: PHD2's own state (Stopped, Selected, Looping, Calibrating, Guiding,
                LostLock, Paused), or None while unknown
+    equipment: PHD2 is connected to the guide camera and the mount
+    exposure:  PHD2's exposure, seconds, or None while unknown
     error:     why PHD2 does not run the profile's settings, or None
 
 When nocsd manages the settings, it renders them from the active profile once its
 guide camera and mount are ready. If PHD2 runs another profile, nocsd writes the
 file and asks PHD2 to shut down; PHD2's service imports the file as it starts
-again. That never happens while PHD2 is busy: the change waits until it stops.
+again. That never happens while PHD2 is busy or connected to its equipment: the
+change waits until it stops.
+
+While PHD2's equipment is connected, the guide camera is PHD2's: NOCS holds the
+role with a reservation, refuses its own exposures, and shows PHD2's frames as
+previews (ADR 0023).
 """
 
 from __future__ import annotations
@@ -21,8 +28,10 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+from collections.abc import Callable, Coroutine
 from enum import StrEnum
 from pathlib import Path as FsPath
+from typing import Any, Protocol
 
 import anyio
 
@@ -33,6 +42,7 @@ from nocs.equipment.service import IndiConnection
 from nocs.guiding.phd2 import Phd2Client, Phd2ConnectionError, Phd2Error, Phd2Event, Phd2Message
 from nocs.guiding.settings import GuideRig, Phd2Settings, render
 from nocs.indi import IndiClient
+from nocs.jobs import JobManager, ResourceBusyError
 from nocs.state import Json, Path, StateStore
 
 log = logging.getLogger(__name__)
@@ -45,7 +55,13 @@ RESTART_ATTEMPTS = 20
 """…and for how many attempts, before the usual backoff."""
 
 IDLE_STATES = frozenset({"Stopped", "Selected"})
-"""PHD2 states in which it may be restarted."""
+"""PHD2 states in which it does not expose."""
+CAMERA = Role.GUIDE_CAMERA
+HOLDER = "phd2"
+CONNECT_TIMEOUT = 60.0
+STOP_MARGIN = 15.0
+"""How long the exposure PHD2 was taking may run over when it stops."""
+EXPOSURE_RANGE = (0.05, 60.0)
 
 _STATE_OF_EVENT = {
     "LoopingExposures": "Looping",
@@ -77,12 +93,26 @@ class SettingsStatus(StrEnum):
     """nocsd does not manage PHD2's settings."""
 
 
+class GuidingNotReadyError(Exception):
+    """PHD2 cannot do that now: unreachable, other settings, or devices missing."""
+
+
+class FrameFollower(Protocol):
+    """Shows the frames PHD2 takes (``CaptureService``)."""
+
+    def follow(self, role: Role, by: str, exposure: Callable[[], float]) -> None: ...
+
+    def unfollow(self, role: Role) -> None: ...
+
+
 class GuidingService:
     def __init__(
         self,
         store: StateStore,
         equipment: EquipmentService,
         bridge: IndiConnection,
+        jobs: JobManager,
+        frames: FrameFollower | None = None,
         *,
         host: str,
         port: int,
@@ -92,6 +122,14 @@ class GuidingService:
     ) -> None:
         self._store = store
         self._equipment = equipment
+        self._jobs = jobs
+        self._frames = frames
+        self._hold: str | None = None
+        """The reservation of the guide camera while PHD2's equipment is connected."""
+        self._exposure: float | None = None
+        self._idle = asyncio.Event()
+        self._commands = asyncio.Lock()
+        self._tasks: set[asyncio.Task[None]] = set()
         self._host = host
         self._port = port
         self._settings_file = settings_file
@@ -114,6 +152,8 @@ class GuidingService:
                 "settings": (SettingsStatus.NONE if settings_file else SettingsStatus.USER).value,
                 "profile": None,
                 "app_state": None,
+                "equipment": False,
+                "exposure": None,
                 "error": None,
             },
         )
@@ -134,6 +174,53 @@ class GuidingService:
     def phd2(self) -> Phd2Client | None:
         """The connected PHD2, if any."""
         return self._phd2 if self._phd2 is not None and self._phd2.connected else None
+
+    @property
+    def equipment_connected(self) -> bool:
+        return self._hold is not None
+
+    async def connect(self) -> None:
+        """Connect PHD2 to the guide camera and the mount; the camera is PHD2's then."""
+        async with self._commands:
+            await self._connect()
+
+    async def loop(self, exposure: float | None = None) -> None:
+        """Expose with PHD2 again and again (connecting it first), without guiding."""
+        async with self._commands:
+            client = await self._connect()
+            if exposure is not None:
+                await self._set_exposure(client, exposure)
+            await client.call("loop")
+
+    async def set_exposure(self, exposure: float) -> None:
+        async with self._commands:
+            await self._set_exposure(self._client(), exposure)
+
+    async def stop(self) -> None:
+        """Stop PHD2's looping or guiding, and wait until its exposure ends."""
+        async with self._commands:
+            await self._stop(self._client())
+
+    async def disconnect(self) -> None:
+        """Stop PHD2, disconnect it from its equipment and give the camera back."""
+        async with self._commands:
+            client = self.phd2
+            try:
+                if client is not None:
+                    await self._stop(client)
+                    await client.call("set_connected", [False], timeout=CONNECT_TIMEOUT)
+            finally:
+                self._release()
+                self._changed.set()  # settings that waited may go in now
+
+    async def release(self) -> None:
+        """Before the equipment disconnects: free PHD2's hold, whatever happens."""
+        if self._hold is None:
+            return
+        try:
+            await self.disconnect()
+        except (Phd2Error, Phd2ConnectionError, TimeoutError) as e:
+            log.warning("PHD2 did not let go of its equipment cleanly: %s", e)
 
     async def run(self) -> None:
         """Stay connected to PHD2 until cancelled, retrying with backoff."""
@@ -170,6 +257,8 @@ class GuidingService:
                 finally:
                     self._phd2 = None
                     self._app_state = None
+                    self._idle.clear()
+                    self._release()  # a PHD2 that went away holds nothing
                     await client.close()
                     self._publish_server(connected=False)
                     with self._store.transaction():
@@ -188,6 +277,83 @@ class GuidingService:
         self._unwatch_bridge()
         self._unwatch_equipment()
 
+    # -- internals: commands ---------------------------------------------------
+
+    def _client(self) -> Phd2Client:
+        client = self.phd2
+        if client is None:
+            raise GuidingNotReadyError("PHD2 is not reachable")
+        return client
+
+    async def _connect(self) -> Phd2Client:
+        client = self._client()
+        if self._hold is not None:
+            return client
+        if self.managed and self._status() is not SettingsStatus.APPLIED:
+            raise GuidingNotReadyError(
+                self._desired_error or "PHD2 does not run the profile's settings yet"
+            )
+        if self._equipment.ready_device(CAMERA) is None:
+            raise GuidingNotReadyError("the guide camera is not connected")
+        if self._equipment.ready_device(Role.MOUNT) is None:
+            raise GuidingNotReadyError("the mount is not connected")
+        self._hold_camera()  # raises ResourceBusyError while NOCS uses the camera
+        try:
+            await client.call("set_connected", [True], timeout=CONNECT_TIMEOUT)
+            await self._read_exposure(client)
+        except BaseException:
+            self._release()
+            raise
+        return client
+
+    async def _set_exposure(self, client: Phd2Client, exposure: float) -> None:
+        low, high = EXPOSURE_RANGE
+        if not low <= exposure <= high:
+            raise ValueError(f"PHD2's exposure must be {low:g}..{high:g} s")
+        await client.call("set_exposure", [round(exposure * 1000)])
+        self._publish_exposure(exposure)
+
+    async def _stop(self, client: Phd2Client) -> None:
+        # Asked rather than taken from the events: the one telling that a loop just
+        # started may not have arrived yet.
+        state = await client.call("get_app_state")
+        if isinstance(state, str):
+            self._set_app_state(state)
+        if self._app_state in IDLE_STATES:
+            return
+        await client.call("stop_capture")
+        timeout = (self._exposure or EXPOSURE_RANGE[1]) + STOP_MARGIN
+        try:
+            await asyncio.wait_for(self._idle.wait(), timeout)
+        except TimeoutError:
+            raise TimeoutError(f"PHD2 did not stop within {timeout:g} s") from None
+
+    async def _read_exposure(self, client: Phd2Client) -> None:
+        milliseconds = await client.call("get_exposure")
+        if isinstance(milliseconds, int | float) and milliseconds > 0:
+            self._publish_exposure(milliseconds / 1000)
+
+    def _hold_camera(self) -> None:
+        if self._hold is not None:
+            return
+        self._hold = self._jobs.reserve("guiding", [CAMERA.value])
+        self._store.set((*ROOT, "equipment"), True)
+        if self._frames is not None:
+            self._frames.follow(CAMERA, HOLDER, lambda: self._exposure or 0.0)
+
+    def _release(self) -> None:
+        if self._hold is None:
+            return
+        self._jobs.release(self._hold)
+        self._hold = None
+        self._store.set((*ROOT, "equipment"), False)
+        if self._frames is not None:
+            self._frames.unfollow(CAMERA)
+
+    def _publish_exposure(self, exposure: float) -> None:
+        self._exposure = exposure
+        self._store.set((*ROOT, "exposure"), exposure)
+
     # -- internals ----------------------------------------------------------
 
     async def _sync(self, client: Phd2Client) -> None:
@@ -196,6 +362,7 @@ class GuidingService:
             state = await client.call("get_app_state")
             if isinstance(state, str):
                 self._set_app_state(state, wake=False)
+            await self._sync_equipment(client)
             if not self.managed:
                 await self._check_equipment(client)
                 return
@@ -212,7 +379,7 @@ class GuidingService:
         elif name == desired.profile_name:
             self._attempted = None
             self._publish_settings(SettingsStatus.APPLIED)
-        elif self._app_state not in IDLE_STATES:
+        elif self._app_state not in IDLE_STATES or self._hold is not None:
             self._publish_settings(SettingsStatus.PENDING)
         elif self._attempted == desired.profile_name:
             self._publish_settings(
@@ -222,6 +389,19 @@ class GuidingService:
             )
         else:
             await self._apply(client, desired)
+
+    async def _sync_equipment(self, client: Phd2Client) -> None:
+        """Hold the camera exactly while PHD2's equipment is connected, whoever connected it."""
+        connected = await client.call("get_connected")
+        if connected is True and self._hold is None and self._equipment.ready_device(CAMERA):
+            try:
+                self._hold_camera()
+            except ResourceBusyError as e:  # NOCS was using it first
+                log.warning("PHD2 connected to the guide camera while NOCS used it: %s", e)
+                return
+            await self._read_exposure(client)
+        elif connected is False and self._hold is not None and not self._commands.locked():
+            self._release()
 
     async def _apply(self, client: Phd2Client, desired: Phd2Settings) -> None:
         assert self._settings_file is not None
@@ -261,6 +441,11 @@ class GuidingService:
 
     def _refresh(self) -> None:
         """Work out the settings for the active profile as its devices come and go."""
+        if self._hold is not None and (
+            self._equipment.ready_device(CAMERA) is None
+            or self._equipment.ready_device(Role.MOUNT) is None
+        ):
+            self._background(self.release())
         desired, error = self._render()
         if not self.managed:
             self._changed.set()  # to check PHD2's equipment against the new devices
@@ -316,7 +501,16 @@ class GuidingService:
             case _:
                 pass
 
+    def _background(self, coro: Coroutine[Any, Any, None]) -> None:
+        task = asyncio.get_running_loop().create_task(coro)
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
+
     def _set_app_state(self, state: str, *, wake: bool = True) -> None:
+        if state in IDLE_STATES:
+            self._idle.set()
+        else:
+            self._idle.clear()
         if state == self._app_state:
             return
         was_busy = self._app_state not in IDLE_STATES

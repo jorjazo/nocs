@@ -25,7 +25,7 @@ after rotating it) and sits behind the filters.
 | # | Stage | Contents | Lab check | Status |
 |---|---|---|---|---|
 | 4.1 | PHD2 service and profile | PHD2 as an external service that nocsd configures: settings file rendered from the profile (devices, pixel size, guiding focal length, calibration step) and applied by restarting PHD2; JSON-RPC client; `guiding` state; guiding through the imaging optics; PHD2 in CI ([ADR 0022](../adr/0022-phd2-as-a-managed-service.md)) | PHD2 service on the Pi with the lab rig's settings | Done on the lab Pi: settings applied in 5 s, PHD2 loops on the ASI220MM through the imaging optics |
-| 4.2 | Guide camera handover | PHD2 connects and disconnects its equipment; the guide camera is held for PHD2 meanwhile; Live view shows PHD2's frames | PHD2 looping on the ASI220MM | |
+| 4.2 | Guide camera handover | PHD2 connects and disconnects its equipment (`/api/guiding/connect`, `disconnect`, `loop`, `stop`, `exposure`); the guide camera is held for PHD2 meanwhile and the camera state says so; Live view shows PHD2's frames; disconnecting the profile releases PHD2 first ([ADR 0023](../adr/0023-guide-camera-and-mount-shared-with-phd2.md)) | PHD2 looping on the ASI220MM | Done on the lab Pi: NOCS's exposures refused while PHD2 loops, a preview of PHD2's frame every ~1.9 s, nocsd answering in 12 ms (p95 27 ms) |
 | 4.3 | Calibrate, guide, stop | State machine from PHD2's events; starting to guide as a job (loop, star, guide, settle); calibration reuse; alerts; the mount refuses to move while guiding unless asked to stop it | Guide pulses reach the AM5/AM7 | |
 | 4.4 | Guiding statistics | Guide steps kept by the server, RMS in RA, Dec and total (pixels and arcseconds), history for the graph | — | |
 | 4.5 | Dithering between frames | Dither in main camera pixels, settling; a series of N frames with a dither every K; guiding RMS per saved frame | — | |
@@ -57,3 +57,7 @@ after rotating it) and sits behind the filters.
   every ~2 s; `set_connected false` left both ZWO devices connected. PHD2 uses
   ~250 MB of memory. Its event server, like indiserver, listens on every
   interface.
+- Stage 4.2 on the lab Pi: PHD2 looping 1 s exposures on the ASI220MM Mini through
+  NOCS's API. Looping 2.3 s after the request; 17 previews of PHD2's frames in
+  30 s (1920×1080, 0.26 s in the worker); `GET /api/state` took 12 ms median,
+  27 ms p95 and 58 ms at most while the frames' BLOBs arrived.

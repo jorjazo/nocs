@@ -292,6 +292,10 @@ export interface CameraState {
    * Sensor temperature, °C; None if unknown.
    */
   temperature: number | null;
+  /**
+   * Another client drives the camera (PHD2, ADR 0023): NOCS shows its frames and takes none of its own.
+   */
+  used_by: "phd2" | null;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -579,9 +583,17 @@ export interface GuidingState {
    */
   app_state: Phd2AppState | null;
   /**
+   * PHD2 is connected to the guide camera and the mount, which is then PHD2's (ADR 0023).
+   */
+  equipment: boolean;
+  /**
    * Why PHD2 does not run the profile's settings.
    */
   error: string | null;
+  /**
+   * PHD2's exposure, seconds; None while unknown.
+   */
+  exposure: number | null;
   /**
    * NOCS writes PHD2's settings from the profile (ADR 0022).
    */

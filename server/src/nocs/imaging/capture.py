@@ -245,6 +245,9 @@ class CaptureService:
         self._previews: dict[Role, Json] = {}
         self._images: dict[Role, IndiClient] = {}
         self._tasks: set[asyncio.Task[object]] = set()
+        self._used_by: dict[Role, str] = {}
+        """Cameras another client drives (PHD2), whose frames NOCS only previews."""
+        self._following: dict[Role, asyncio.Task[None]] = {}
 
         # Frames left by a previous run (stopped mid-exposure) are of no use now.
         for leftover in self._incoming_dir.glob("*"):
@@ -380,7 +383,28 @@ class CaptureService:
             if discard:
                 await anyio.to_thread.run_sync(lambda: shot.path.unlink(missing_ok=True))
 
+    def follow(self, role: Role, by: str, exposure: Callable[[], float]) -> None:
+        """Preview the frames ``by`` (PHD2) takes with this camera (ADR 0023).
+
+        The caller keeps NOCS's own exposures away from the camera meanwhile.
+        ``exposure`` says how long its frames are, in seconds.
+        """
+        self._used_by[role] = by
+        self._publish(role)
+        if role not in self._following:
+            task = asyncio.get_running_loop().create_task(self._follow(role, exposure))
+            self._following[role] = task
+
+    def unfollow(self, role: Role) -> None:
+        """Stop previewing another client's frames; the camera is NOCS's again."""
+        self._used_by.pop(role, None)
+        if (task := self._following.pop(role, None)) is not None:
+            task.cancel()
+        self._publish(role)
+
     async def close(self) -> None:
+        for task in list(self._following.values()):
+            task.cancel()
         self._unwatch_bridge()
         self._unwatch_equipment()
         self._remove_listener()
@@ -565,6 +589,55 @@ class CaptureService:
         taken = self._clock.now() if self._clock is not None else datetime.now(UTC)
         return Shot(path, size, used_type, taken, seconds, camera.bayer_pattern)
 
+    async def _follow(self, role: Role, exposure: Callable[[], float]) -> None:
+        """Turn each frame the camera sends into a preview, skipping to the newest."""
+        latest: Frame | None = None
+        arrived = asyncio.Event()
+
+        def on_frame(frame: Frame) -> None:
+            nonlocal latest
+            latest = frame
+            arrived.set()
+
+        try:
+            camera = await self._image_camera(role)
+            stop = camera.watch_frames(on_frame, exposure)
+        except (CameraNotReadyError, DeviceError, ConnectionError, TimeoutError) as e:
+            log.warning(
+                "cannot preview %s's frames of the %s: %s", self._used_by.get(role), role.value, e
+            )
+            return
+        try:
+            while True:
+                await arrived.wait()
+                arrived.clear()
+                frame, latest = latest, None
+                if frame is None:
+                    continue
+                path = await anyio.to_thread.run_sync(self._write_incoming, frame, role)
+                taken = self._clock.now() if self._clock is not None else datetime.now(UTC)
+                shot = Shot(
+                    path,
+                    len(frame.data),
+                    camera.frame_type,
+                    taken,
+                    frame.exposure,
+                    camera.bayer_pattern,
+                )
+                await self._preview(role, shot, discard=True)
+        finally:
+            stop()
+
+    async def _image_camera(self, role: Role) -> Camera:
+        """The camera with its image connection, opening it if needed."""
+        name = self.camera(role).name
+        images = self._images.get(role)
+        if images is None or not images.connected:
+            images = await self._connect_images(name)
+            self._images[role] = images
+        assert self._client is not None
+        return Camera(self._client, name, images)
+
     async def _preview(self, role: Role, shot: Shot, *, discard: bool) -> FrameAnalysis | None:
         """Analyse a frame in the worker and publish its preview; never raises."""
         try:
@@ -665,6 +738,8 @@ class CaptureService:
             if (images := self._images.pop(role, None)) is not None:
                 # Useless now; closing it is async.
                 self._background(images.close())
+            if (following := self._following.pop(role, None)) is not None:
+                following.cancel()
             self._published.pop(role, None)
             self._targets.pop(role, None)
             self._previews.pop(role, None)
@@ -694,7 +769,7 @@ class CaptureService:
         profile = self._equipment.active_profile
         optics = None
         if profile is not None:
-            optics = profile.imaging if role is Role.MAIN_CAMERA else profile.guiding
+            optics = profile.imaging if role is Role.MAIN_CAMERA else profile.guiding_optics
         if optics is None:
             return None
         camera = self.camera(role)
@@ -723,6 +798,7 @@ class CaptureService:
         summary["exposure"] = self._exposures.get(role, EXPOSURE_DEFAULT)
         summary["last_frame"] = self._last_frames.get(role)
         summary["preview"] = self._previews.get(role)
+        summary["used_by"] = self._used_by.get(role)
         previous = self._published.get(role)
         path = (*ROOT, role.value)
         if previous is None:

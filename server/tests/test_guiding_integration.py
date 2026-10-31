@@ -17,7 +17,7 @@ from owner import pair_owner
 from nocs.api import create_app
 from nocs.api.schemas import AppState
 from nocs.config import Settings
-from nocs.guiding import Phd2Client, Phd2Event, pixel_scale
+from nocs.guiding import Phd2Client, pixel_scale
 
 pytestmark = [pytest.mark.indi, pytest.mark.phd2]
 
@@ -58,7 +58,9 @@ def wait(api: TestClient, condition: Callable[[dict[str, Any]], bool], timeout: 
         time.sleep(0.2)
 
 
-def test_phd2_runs_and_loops_with_the_profiles_settings(api: TestClient, phd2: Phd2Setup) -> None:
+def test_phd2_runs_the_profiles_settings_and_takes_the_guide_camera(
+    api: TestClient, phd2: Phd2Setup
+) -> None:
     wait(api, lambda s: s["guiding"]["phd2"]["connected"])
     assert api.put("/api/profiles/simulators", json=SIMULATORS).status_code == 204
     assert api.post("/api/equipment/connect", json={"profile": "simulators"}).status_code == 202
@@ -75,16 +77,6 @@ def test_phd2_runs_and_loops_with_the_profiles_settings(api: TestClient, phd2: P
 
     async def check() -> None:
         async with Phd2Client(phd2.host, phd2.port) as client:
-            looping, stopped = asyncio.Event(), asyncio.Event()
-
-            def on_message(message: object) -> None:
-                if isinstance(message, Phd2Event):
-                    if message.name == "LoopingExposures":
-                        looping.set()
-                    elif message.name == "LoopingExposuresStopped":
-                        stopped.set()
-
-            client.add_listener(on_message)
             assert await client.call("get_pixel_scale") == pytest.approx(
                 pixel_scale(pixel, focal), abs=0.01
             )
@@ -92,17 +84,38 @@ def test_phd2_runs_and_loops_with_the_profiles_settings(api: TestClient, phd2: P
             assert isinstance(equipment, dict)
             assert "Guide Simulator" in str(equipment["camera"])
             assert "Telescope Simulator" in str(equipment["mount"])
-            await client.call("set_connected", [True], timeout=60)
-            try:
-                await client.call("set_exposure", [1000])
-                await client.call("loop")
-                await asyncio.wait_for(looping.wait(), 30)
-            finally:
-                # stop_capture answers at once; the exposure in progress ends later, and
-                # PHD2 refuses to disconnect until then.
-                await client.call("stop_capture")
-                await asyncio.wait_for(stopped.wait(), 30)
-                await client.call("set_connected", [False], timeout=60)
 
     asyncio.run(check())
-    wait(api, lambda s: s["guiding"]["app_state"] in ("Stopped", "Selected"), timeout=20)
+
+    # PHD2 loops on the guide camera, which is PHD2's meanwhile (ADR 0023).
+    assert api.post("/api/guiding/loop", json={"exposure": 1}).status_code == 204
+    wait(api, lambda s: s["guiding"]["equipment"] and s["guiding"]["app_state"] == "Looping")
+    assert state(api)["cameras"]["guide_camera"]["used_by"] == "phd2"
+    refused = api.post("/api/cameras/guide_camera/expose", json={"exposure": 1})
+    assert refused.status_code == 409, refused.text
+    assert "guiding" in refused.json()["detail"]
+    # Live view shows PHD2's frames.
+    first = state(api)["cameras"]["guide_camera"]["preview"]
+    wait(api, lambda s: _new_preview(s, first) is not None, timeout=30)
+    newer = _new_preview(state(api), first)
+    assert newer is not None
+    assert newer["exposure"] == 1
+    assert api.get(newer["url"]).status_code == 200
+    AppState.model_validate(state(api))
+
+    assert api.post("/api/guiding/stop").status_code == 204
+    assert state(api)["guiding"]["app_state"] in ("Stopped", "Selected")
+    assert api.post("/api/guiding/disconnect").status_code == 204
+    current = state(api)
+    assert not current["guiding"]["equipment"]
+    assert current["cameras"]["guide_camera"]["used_by"] is None
+    # NOCS has the camera back.
+    response = api.post("/api/cameras/guide_camera/expose", json={"exposure": 0.5})
+    assert response.status_code == 202, response.text
+
+
+def _new_preview(current: dict[str, Any], before: dict[str, Any] | None) -> dict[str, Any] | None:
+    preview = current["cameras"]["guide_camera"]["preview"]
+    if preview is None or (before is not None and preview["url"] == before["url"]):
+        return None
+    return preview

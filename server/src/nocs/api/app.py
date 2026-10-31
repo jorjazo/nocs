@@ -31,6 +31,7 @@ from pydantic import ValidationError
 from nocs import __version__
 from nocs.api.accessories import accessories_router
 from nocs.api.auth import REVOKED, AuthMiddleware, Sockets, auth_router, identity
+from nocs.api.guiding import guiding_router
 from nocs.api.mount import mount_router
 from nocs.api.power import power_router
 from nocs.api.schemas import (
@@ -159,6 +160,10 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
         assert services.filter_wheel is not None
         return services.filter_wheel
 
+    def guiding() -> GuidingService:
+        assert services.guiding is not None
+        return services.guiding
+
     def autofocus() -> AutofocusService:
         assert services.autofocus is not None
         return services.autofocus
@@ -234,6 +239,8 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
             store,
             services.equipment,
             bridge,
+            services.jobs,
+            services.capture,
             host=settings.phd2_host,
             port=settings.phd2_port,
             settings_file=settings.phd2_settings,
@@ -269,6 +276,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
     app.include_router(auth_router(auth, sockets))
     app.include_router(mount_router(mount, clock, sockets))
     app.include_router(power_router(power))
+    app.include_router(guiding_router(guiding))
     app.include_router(accessories_router(focuser, filter_wheel, autofocus))
 
     @app.get("/api/autofocus/runs")
@@ -359,6 +367,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
 
     @app.post("/api/equipment/disconnect", status_code=status.HTTP_202_ACCEPTED)
     async def disconnect() -> None:  # pyright: ignore[reportUnusedFunction]
+        await guiding().release()  # PHD2 lets go of the camera and mount first (ADR 0023)
         equipment().disconnect()
 
     @app.post("/api/jobs/{job_id}/cancel", status_code=status.HTTP_202_ACCEPTED)

@@ -26,5 +26,6 @@ that supersedes the old one.
 | [0018](0018-plate-solving-with-astap.md) | Plate solving with ASTAP | Proposed |
 | [0021](0021-autofocus.md) | Autofocus: V-curve sweep with a hyperbolic fit | Proposed |
 | [0022](0022-phd2-as-a-managed-service.md) | PHD2 as a service configured by nocsd | Proposed |
+| [0023](0023-guide-camera-and-mount-shared-with-phd2.md) | Guide camera and mount shared with PHD2 | Proposed |
 
 Template: Context → Decision → Consequences.

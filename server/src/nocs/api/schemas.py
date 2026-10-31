@@ -198,6 +198,10 @@ class CameraState(StateModel):
     )
     last_frame: FrameInfo | None
     preview: Preview | None = Field(description="Latest preview, from any exposure or loop.")
+    used_by: Literal["phd2"] | None = Field(
+        description="Another client drives the camera (PHD2, ADR 0023): NOCS shows its frames"
+        " and takes none of its own."
+    )
 
 
 class JobInfo(StateModel):
@@ -493,6 +497,11 @@ class GuidingState(StateModel):
     )
     profile: str | None = Field(description="The PHD2 profile in use.")
     app_state: Phd2AppState | None = Field(description="PHD2's state; None while unknown.")
+    equipment: bool = Field(
+        description="PHD2 is connected to the guide camera and the mount, which is then"
+        " PHD2's (ADR 0023)."
+    )
+    exposure: float | None = Field(description="PHD2's exposure, seconds; None while unknown.")
     error: str | None = Field(description="Why PHD2 does not run the profile's settings.")
 
 
@@ -541,6 +550,16 @@ class Health(WireModel):
 class StateSnapshot(WireModel):
     version: int
     state: dict[str, Any]
+
+
+class GuidingLoopRequest(BaseModel):
+    exposure: float | None = Field(
+        default=None, ge=0.05, le=60, description="Seconds; PHD2's current one when omitted."
+    )
+
+
+class GuidingExposureRequest(BaseModel):
+    exposure: float = Field(ge=0.05, le=60, description="Seconds.")
 
 
 class SetPropertyRequest(BaseModel):

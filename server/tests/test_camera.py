@@ -244,3 +244,21 @@ async def test_a_path_resent_mid_exposure_is_not_the_new_frame() -> None:
     written = await camera.expose_to_file(1, directory="/run/up", prefix="NOCS_XXX")
     assert written == "/run/up/NOCS_001.fits"
     assert events[-1] == "PropertyUpdated"  # it waited for the update, not the re-send
+
+
+def test_frames_another_client_takes_are_watched() -> None:
+    control, images = camera_client(), camera_client()
+    frames: list[tuple[bytes, float]] = []
+    camera = Camera(control, "Cam", images)
+    stop = camera.watch_frames(lambda f: frames.append((f.data, f.exposure)), lambda: 2.0)
+    images.deliver_blob("Cam", "CCD1", b"first")
+    images.deliver_blob("Cam", "CCD1", b"second")
+    assert frames == [(b"first", 2.0), (b"second", 2.0)]
+    element = images.get_property("Cam", "CCD1").elements["CCD1"]  # pyright: ignore[reportOptionalMemberAccess]
+    assert isinstance(element, BlobElement)
+    assert element.data is None  # not kept in the property mirror
+    stop()
+    images.deliver_blob("Cam", "CCD1", b"third")
+    assert len(frames) == 2
+    with pytest.raises(DeviceError, match="image connection"):
+        Camera(control, "Cam").watch_frames(lambda _: None, lambda: 1.0)

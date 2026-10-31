@@ -1074,6 +1074,18 @@
             }
           ],
           "description": "Sensor temperature, \u00b0C; None if unknown."
+        },
+        "used_by": {
+          "anyOf": [
+            {
+              "const": "phd2",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Another client drives the camera (PHD2, ADR 0023): NOCS shows its frames and takes none of its own."
         }
       },
       "required": [
@@ -1099,7 +1111,8 @@
         "bayer",
         "field",
         "last_frame",
-        "preview"
+        "preview",
+        "used_by"
       ],
       "title": "CameraState",
       "type": "object"
@@ -2115,6 +2128,10 @@
           ],
           "description": "PHD2's state; None while unknown."
         },
+        "equipment": {
+          "description": "PHD2 is connected to the guide camera and the mount, which is then PHD2's (ADR 0023).",
+          "type": "boolean"
+        },
         "error": {
           "anyOf": [
             {
@@ -2125,6 +2142,17 @@
             }
           ],
           "description": "Why PHD2 does not run the profile's settings."
+        },
+        "exposure": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "PHD2's exposure, seconds; None while unknown."
         },
         "managed": {
           "description": "NOCS writes PHD2's settings from the profile (ADR 0022).",
@@ -2163,6 +2191,8 @@
         "settings",
         "profile",
         "app_state",
+        "equipment",
+        "exposure",
         "error"
       ],
       "title": "GuidingState",

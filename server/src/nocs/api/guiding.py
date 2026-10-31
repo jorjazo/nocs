@@ -1,0 +1,63 @@
+"""Guiding with PHD2: connecting its equipment, looping and stopping (ADR 0022, 0023)."""
+
+from __future__ import annotations
+
+import contextlib
+from collections.abc import Callable, Generator
+
+from fastapi import APIRouter, HTTPException, Response, status
+
+from nocs.api.schemas import GuidingExposureRequest, GuidingLoopRequest
+from nocs.guiding import GuidingNotReadyError, GuidingService, Phd2ConnectionError, Phd2Error
+from nocs.jobs import ResourceBusyError
+
+
+def guiding_router(guiding: Callable[[], GuidingService]) -> APIRouter:
+    router = APIRouter(prefix="/api/guiding")
+
+    @router.post("/connect", status_code=status.HTTP_204_NO_CONTENT)
+    async def connect() -> Response:  # pyright: ignore[reportUnusedFunction]
+        with _guiding_errors():
+            await guiding().connect()
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    @router.post("/disconnect", status_code=status.HTTP_204_NO_CONTENT)
+    async def disconnect() -> Response:  # pyright: ignore[reportUnusedFunction]
+        with _guiding_errors():
+            await guiding().disconnect()
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    @router.post("/loop", status_code=status.HTTP_204_NO_CONTENT)
+    async def loop(request: GuidingLoopRequest) -> Response:  # pyright: ignore[reportUnusedFunction]
+        with _guiding_errors():
+            await guiding().loop(request.exposure)
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    @router.post("/stop", status_code=status.HTTP_204_NO_CONTENT)
+    async def stop() -> Response:  # pyright: ignore[reportUnusedFunction]
+        with _guiding_errors():
+            await guiding().stop()
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    @router.put("/exposure", status_code=status.HTTP_204_NO_CONTENT)
+    async def set_exposure(request: GuidingExposureRequest) -> Response:  # pyright: ignore[reportUnusedFunction]
+        with _guiding_errors():
+            await guiding().set_exposure(request.exposure)
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    return router
+
+
+@contextlib.contextmanager
+def _guiding_errors() -> Generator[None]:
+    try:
+        yield
+    except ResourceBusyError as e:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(e)) from e
+    except GuidingNotReadyError as e:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e)) from e
+    except (Phd2Error, Phd2ConnectionError, TimeoutError) as e:
+        # PHD2 failed or refused: an upstream error.
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"PHD2: {e}") from e
