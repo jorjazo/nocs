@@ -23,7 +23,7 @@ the exit.
 | 2.4 | Storage and catalog | Destinations (mounted drives, microSD warning), file layout, NOCS FITS headers, SQLite catalog, frame list and downloads ([ADR 0013](../adr/0013-storage-and-catalog.md)) | Frames on a USB drive | Done |
 | 2.5 | Authentication and pairing | First-run passphrase, device pairing with revocable tokens, read-only observer, Origin checks; plain HTTP limits ([ADR 0014](../adr/0014-authentication-and-pairing.md)) | — | Done |
 | 2.6 | Web app foundation | Design tokens and themes, navigation, router, i18n (en/es), typed API client, first run and pairing screens, Rig status and connect | Pair and connect from a phone | Done |
-| 2.7 | Live view | Preview with zoom, metrics, histogram, exposure settings, loop / capture / save, cooling; night mode tints previews | ZWO camera from the phone | |
+| 2.7 | Live view | Preview with zoom, metrics, histogram, exposure settings, loop / capture / save, cooling; night mode tints previews | ZWO camera from the phone | Done |
 | 2.8 | Focuser, filter wheel, profile editor | EAF (absolute/relative moves, temperature), EFW (filter names from the profile), profile editor (devices, roles, optics, ports) | EFW and EAF | |
 | 2.9 | Mount | Slew pad with a server-side dead man's switch, go to coordinates (J2000 → JNow) and alt/az, tracking, park/unpark, home; time and site from the client to the mount; frame times corrected when the Pi's clock is off ([ADR 0015](../adr/0015-mount-control-and-client-time.md)) | AM5 | Server done and checked on the lab AM7 (same driver); AM5 and UI pending |
 | 2.10 | Power box | PPBA power outputs, adjustable output, dew heaters and auto-dew, environment readings (tested against recorded properties: no simulator exists) | PPBA | |
