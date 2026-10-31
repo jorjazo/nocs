@@ -4,6 +4,7 @@
 
 import io
 import json
+import math
 import os
 import time
 import zipfile
@@ -51,6 +52,13 @@ def job(api: TestClient, job_id: str) -> dict[str, Any]:
 
 def finished(job_id: str) -> Callable[[dict[str, Any]], bool]:
     return lambda s: s["jobs"][job_id]["state"] != "running"
+
+
+def _separation(ra1: float, dec1: float, ra2: float, dec2: float) -> float:
+    """Angle between two positions, all in degrees."""
+    a1, d1, a2, d2 = map(math.radians, (ra1, dec1, ra2, dec2))
+    cosine = math.sin(d1) * math.sin(d2) + math.cos(d1) * math.cos(d2) * math.cos(a1 - a2)
+    return math.degrees(math.acos(min(1.0, max(-1.0, cosine))))
 
 
 # The dev container's frame upload directory, as indiserver sees it.
@@ -202,8 +210,11 @@ def test_expose_and_save(api: TestClient, data_dir: Path) -> None:
         # The driver converts the mount's JNow to J2000, as NOCS does (ADR 0015).
         mount = state(api)["mount"]
         assert header["EQUINOX"] == 2000
-        assert header["RA"] == pytest.approx(mount["ra_j2000"] * 15, abs=0.05)
-        assert header["DEC"] == pytest.approx(mount["dec_j2000"], abs=0.05)
+        # As an angle: near the pole (a freshly parked simulator) RA alone means little.
+        separation = _separation(
+            header["RA"], header["DEC"], mount["ra_j2000"] * 15, mount["dec_j2000"]
+        )
+        assert separation < 0.05
     assert camera(api)["last_frame"] == frame
     current = state(api)
     AppState.model_validate(current)
