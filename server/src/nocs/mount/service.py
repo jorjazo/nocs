@@ -45,6 +45,8 @@ HORIZON = 0.0
 """Lowest altitude a go to may aim at without ``force``, degrees."""
 SITE_TOLERANCE = 0.1
 """Degrees the mount's site may differ from the profile's before NOCS says so."""
+PROPERTY_WAIT = 10.0
+"""Seconds to wait for a property drivers define just after the mount is ready."""
 
 type Frame = Literal["j2000", "jnow"]
 
@@ -216,7 +218,11 @@ class MountService:
         """Set the mount's clock from the time NOCS trusts."""
         if not self._clock.known:
             raise PointingError("the time is unknown until a client reports its clock")
-        await self.mount().set_time(self._clock.now(), self._clock.utc_offset or 0.0)
+        mount = self.mount()
+        if await self._defined(mount, "TIME_UTC"):
+            await mount.set_time(self._clock.now(), self._clock.utc_offset or 0.0)
+        else:
+            log.info("%s has no clock to set", mount.name)
         self._time_sent = True
         self._publish()
 
@@ -266,12 +272,24 @@ class MountService:
 
     async def _send_site(self, location: Location | None = None) -> None:
         """Send ``location``, or the profile's site, or else what the driver has saved."""
-        location = location or self._site()
-        if location is None:
-            raise PointingError("the site is unknown: set it in the profile")
-        await self.mount().set_location(location)
+        mount = self.mount()
+        if await self._defined(mount, "GEOGRAPHIC_COORD"):
+            location = location or self._site()
+            if location is None:
+                raise PointingError("the site is unknown: set it in the profile")
+            await mount.set_location(location)
+        else:
+            log.info("%s has no site to set", mount.name)
         self._site_sent = True
         self._publish()
+
+    async def _defined(self, mount: Mount, name: str) -> bool:
+        """Whether the driver defines ``name``, which it may do just after the mount is ready."""
+        try:
+            await mount.client.wait_for_property(mount.name, name, PROPERTY_WAIT)
+        except TimeoutError:
+            return False
+        return True
 
     def _require_site_and_time(self) -> None:
         if not self._site_sent:
