@@ -14,6 +14,7 @@ import shutil
 import subprocess
 import tempfile
 from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
 
 import anyio
@@ -49,17 +50,36 @@ ROWS_PER_STEP = 1500
 """Rows a frame needs per step of downsampling: a 1080-row frame of a crowded
 globular cluster solved only at full size, a 4176-row one at -z 1 or 2."""
 
+
+class Failure(StrEnum):
+    """Why a frame was not solved, for clients to explain."""
+
+    UNAVAILABLE = "unavailable"
+    """ASTAP is not installed."""
+    NO_DATABASE = "no_database"
+    """No star database is installed for the frame's field."""
+    NO_STARS = "no_stars"
+    NO_SOLUTION = "no_solution"
+    UNREADABLE = "unreadable"
+    """ASTAP could not read the image."""
+    ERROR = "error"
+
+
 EXIT_CODES = {
-    1: "no solution found",
-    2: "not enough stars detected",
-    16: "error reading the image",
-    32: "no star database found",
-    33: "error reading the star database",
+    1: ("no solution found", Failure.NO_SOLUTION),
+    2: ("not enough stars detected", Failure.NO_STARS),
+    16: ("error reading the image", Failure.UNREADABLE),
+    32: ("no star database found", Failure.NO_DATABASE),
+    33: ("error reading the star database", Failure.ERROR),
 }
 
 
 class SolveError(Exception):
-    """ASTAP did not solve the frame; the message says why."""
+    """ASTAP did not solve the frame; the message says why, ``reason`` in a word."""
+
+    def __init__(self, message: str, reason: Failure = Failure.ERROR) -> None:
+        super().__init__(message)
+        self.reason = reason
 
 
 @dataclass(frozen=True, slots=True)
@@ -215,14 +235,19 @@ class Astap:
                         command, check=False, stdin=subprocess.DEVNULL, stderr=subprocess.STDOUT
                     )
             except TimeoutError:
-                raise SolveError(f"no solution within {timeout:g} s") from None
+                raise SolveError(f"no solution within {timeout:g} s", Failure.NO_SOLUTION) from None
             except OSError as error:
                 raise SolveError(f"cannot run ASTAP: {error}") from error
             ini = output.with_suffix(".ini")
             values = read_ini(ini) if ini.is_file() else {}
             if result.returncode != 0 or values.get("PLTSOLVD") != "T":
-                reason = values.get("ERROR") or EXIT_CODES.get(result.returncode)
-                raise SolveError(reason or f"ASTAP exited with {result.returncode}")
+                message, reason = EXIT_CODES.get(
+                    result.returncode,
+                    (f"ASTAP exited with {result.returncode}", Failure.ERROR)
+                    if result.returncode
+                    else ("no solution found", Failure.NO_SOLUTION),
+                )
+                raise SolveError(values.get("ERROR") or message, reason)
             try:
                 return solution_from_ini(values, *size, bottom_up=bottom_up)
             except SolutionError as error:

@@ -239,6 +239,22 @@ Autofocus (stage 5.5):
 - Live view reports only its own exposures and loops as failed; a failed
   autofocus is reported on its own screen.
 
+Plate solve (stage 3.2):
+
+- Live view puts "Plate solve" under the mount (main camera only): Solve, and
+  Solve and sync. Both take a frame with the camera's exposure; while the job
+  runs the shutter shows its progress and stops it, and the status chip says
+  Solving once the frame is in. A disabled button always comes with its reason
+  (ASTAP missing, no star database for the field, no mount, parked, not tracking).
+- The result card shows the centre (J2000), the angle of the top of the frame
+  east of north (a bare angle until the framing assistant says which way to turn
+  the camera, ADR 0018), the scale and field, the offset from where the mount
+  pointed (total, then east/west and north/south), and when the frame was taken.
+  After a plain solve, "Sync the mount" syncs to it; NOCS refuses when the mount
+  has moved since the frame. A synced solution shows a chip instead.
+- A failed solve is explained in the panel by its reason (not enough stars, no
+  solution, no database…), not in the dock's generic banner.
+
 ## 8. Open UX questions
 
 - Persistent "session running" indicator on non-session screens (banner vs.

@@ -28,7 +28,7 @@ server/   Python package `nocs` (nocsd): indi/ (protocol + async client, driver
           mount/, focus/, filters/ (services by role; filter names per wheel),
           guiding/ (PHD2: service, settings it imports, JSON-RPC client,
           guide steps and RMS),
-          solving/ (ASTAP, fields of view),
+          solving/ (ASTAP, fields of view), pointing/ (solve and sync),
           system/ (nocs-system, the root helper: stdlib + anyio only, ADR 0027),
           state/ (versioned store), services/ (indi_bridge), api/ (FastAPI
           REST + WebSocket, schemas, schema export)
@@ -140,6 +140,12 @@ packages workflow builds and installs the .deb on amd64 and arm64.
   the switch as it stands, and syncs the switch with the mount only at its next
   poll: right after an abort it can say on while the mount stopped (coordinates
   Idle). `Mount.set_tracking` switches off first in that case.
+- The telescope simulator gets a pointing error from its `MOUNT_MODEL` index errors
+  (arcminutes); its syncs are alignment points that work only after its alignment
+  model is cleared and committed, and stale points later throw its sky far off:
+  clear them after a test (`tests/test_pointing_integration.py`).
+- The ZWO AM5/AM7 keeps a sync away from the pole, but at home (Dec −90°) goes
+  back to −90° at its next poll.
 
 ## PHD2 gotchas
 

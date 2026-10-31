@@ -28,6 +28,7 @@
   import Histogram from "./Histogram.svelte";
   import SettingSheet, { type Setting } from "./SettingSheet.svelte";
   import Shutter from "./Shutter.svelte";
+  import SolvePanel from "./SolvePanel.svelte";
   import Viewer from "./Viewer.svelte";
 
   const t = $derived(i18n.t);
@@ -68,8 +69,8 @@
   });
 
   let dismissed = $state<string | null>(null);
-  // Only this screen's own jobs: workflows that use the camera (autofocus)
-  // report their failures on their own screens.
+  // Only this screen's own jobs: workflows that use the camera report their
+  // failures where they are shown (autofocus on its screen, solving in its panel).
   const failed = $derived(
     jobs.latest?.info.state === "failed" &&
       (jobs.latest.info.kind === "expose" || jobs.latest.info.kind === "loop") &&
@@ -77,6 +78,7 @@
       ? jobs.latest
       : null,
   );
+  const solveJob = $derived(jobs.latest?.info.kind === "solve" ? jobs.latest : null);
   const savedPath = $derived.by(() => {
     const latest = jobs.latest?.info;
     if (latest?.kind !== "expose" || latest.state !== "succeeded") return null;
@@ -95,6 +97,7 @@
         }
         return { tone: "accent", text: t.live.status.left(left) };
       }
+      if (running.info.kind === "solve") return { tone: "accent", text: t.live.status.solving };
       return { tone: "accent", text: looping ? t.live.status.looping : t.live.status.processing };
     }
     if (failed) return { tone: "error", text: t.live.status.failed };
@@ -311,6 +314,17 @@
         {#if showPad}
           <MountPad {mount} disabled={padReason !== null} reason={padReason} />
         {/if}
+      {/if}
+
+      {#if main && live.app.solver}
+        <SolvePanel
+          solver={live.app.solver}
+          {mount}
+          field={camera.field}
+          job={solveJob}
+          disabled={!owner || busy || !!running}
+          mountBusy={mountJob !== null}
+          run={act} />
       {/if}
 
       <div class="tiles">

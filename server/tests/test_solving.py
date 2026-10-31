@@ -2,8 +2,6 @@
 
 import math
 import os
-import stat
-import sys
 import time
 from pathlib import Path
 from typing import Any, cast
@@ -11,11 +9,14 @@ from typing import Any, cast
 import anyio
 import pytest
 from astropy.io import fits  # pyright: ignore[reportMissingTypeStubs]
+from fakeastap import M8, calls, install_fake_astap, write_frame
 
+from nocs.api.schemas import SolverState
 from nocs.devices import SensorInfo
 from nocs.equipment import Optics
 from nocs.solving import (
     Astap,
+    Failure,
     Hint,
     SolveError,
     SolverService,
@@ -31,82 +32,23 @@ _fits: Any = fits
 # The frame fixture is only a header, which astropy notices.
 pytestmark = pytest.mark.filterwarnings("ignore:File may have been truncated")
 
-# ASTAP's result for one of the maintainer's frames of M 8: ZWO ASI2600MC Duo at 384 mm,
-# 6248 x 4176 px, rows top-down, camera angle 316° according to ASIAIR.
-M8 = {
-    "PLTSOLVD": "T",
-    "CRPIX1": "3.1245000000000000E+003",
-    "CRPIX2": "2.0885000000000000E+003",
-    "CRVAL1": "2.7092749705717387E+002",
-    "CRVAL2": "-2.3762873522508709E+001",
-    "CD1_1": "-4.0649848345283222E-004",
-    "CD1_2": "-3.8515240898436026E-004",
-    "CD2_1": "3.8514657177160457E-004",
-    "CD2_2": "-4.0636391327357750E-004",
-}
 ASI2600 = SensorInfo(
     width=6248, height=4176, pixel_size_x=3.76, pixel_size_y=3.76, bits_per_pixel=16
 )
 
-# A stand-in for astap_cli: writes the .ini that FAKE_ASTAP_INI holds (KEY=value lines)
-# under the -o base name, unless the command has a hint and FAKE_ASTAP_HINT_FAILS is
-# set; records its arguments and pid, and can sleep first.
-FAKE = """\
-import os, sys, time
-args = sys.argv[1:]
-with open(os.environ["FAKE_ASTAP_LOG"], "a") as log:
-    log.write(" ".join(args) + "\\n")
-if "-h" in args:
-    print("ASTAP astrometric solver version CLI-2026.09.01")
-    sys.exit(0)
-with open(os.environ["FAKE_ASTAP_PID"], "w") as f:
-    f.write(str(os.getpid()))
-time.sleep(float(os.environ.get("FAKE_ASTAP_SLEEP", "0")))
-if "-ra" in args and os.environ.get("FAKE_ASTAP_HINT_FAILS"):
-    sys.exit(1)
-output = args[args.index("-o") + 1]
-with open(output + ".ini", "w") as f:
-    f.write(open(os.environ["FAKE_ASTAP_INI"]).read())
-"""
-
 
 @pytest.fixture
 def fake_astap(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Astap:
-    executable = tmp_path / "astap_cli"
-    executable.write_text(f"#!{sys.executable}\n{FAKE}")
-    executable.chmod(executable.stat().st_mode | stat.S_IEXEC)
-    (tmp_path / "d05_0101.1476").touch()
-    ini = tmp_path / "result.ini"
-    ini.write_text("".join(f"{key}={value}\n" for key, value in M8.items()))
-    monkeypatch.setenv("FAKE_ASTAP_INI", str(ini))
-    monkeypatch.setenv("FAKE_ASTAP_LOG", str(tmp_path / "calls.log"))
-    monkeypatch.setenv("FAKE_ASTAP_PID", str(tmp_path / "pid"))
-    astap = Astap.find(executable)
-    assert astap is not None
-    return astap
+    return install_fake_astap(tmp_path, monkeypatch)
 
 
 @pytest.fixture
 def frame(tmp_path: Path) -> Path:
-    """A FITS file of the M 8 frame's size (the fake does not look at pixels)."""
-    path = tmp_path / "frame.fits"
-    header = _fits.Header()
-    for key, value in (("SIMPLE", True), ("BITPIX", 16), ("NAXIS", 2)):
-        header[key] = value
-    header["NAXIS1"] = 6248
-    header["NAXIS2"] = 4176
-    header.tofile(path)  # only the header: the fake solver never reads pixels
-    return path
+    return write_frame(tmp_path / "frame.fits")
 
 
 def solver_state(store: StateStore) -> dict[str, Any]:
     return cast(dict[str, Any], store.snapshot()["solver"])
-
-
-def calls(tmp_path: Path) -> list[list[str]]:
-    log = tmp_path / "calls.log"
-    lines = log.read_text().splitlines() if log.exists() else []
-    return [line.split() for line in lines if "-h" not in line.split()]
 
 
 def test_field_of_view() -> None:
@@ -241,9 +183,14 @@ async def test_blind_after_the_hint_fails(
 
 
 async def test_refuses_fields_no_database_solves(fake_astap: Astap, frame: Path) -> None:
-    service = SolverService(StateStore(), fake_astap)
+    store = StateStore()
+    service = SolverService(store, fake_astap)
+    with pytest.raises(SolveError, match="no star database for a 12° field") as error:
+        service.check(12)
+    assert error.value.reason is Failure.NO_DATABASE
     with pytest.raises(SolveError, match="no star database for a 12° field"):
         await service.solve(frame, fov=12, hint=None)
+    assert solver_state(store)["failure"]["reason"] == "no_database"
 
 
 async def test_without_astap(frame: Path) -> None:
@@ -253,6 +200,54 @@ async def test_without_astap(frame: Path) -> None:
     assert solver_state(store)["available"] is False
     with pytest.raises(SolveError, match="not installed"):
         await service.solve(frame, fov=2.34, hint=None)
+    assert solver_state(store)["failure"]["reason"] == "unavailable"
+
+
+@pytest.mark.parametrize(
+    ("code", "reason"),
+    [
+        (1, Failure.NO_SOLUTION),
+        (2, Failure.NO_STARS),
+        (16, Failure.UNREADABLE),
+        (32, Failure.NO_DATABASE),
+        (33, Failure.ERROR),
+        (7, Failure.ERROR),
+    ],
+)
+async def test_failures_say_why(
+    fake_astap: Astap, frame: Path, monkeypatch: pytest.MonkeyPatch, code: int, reason: Failure
+) -> None:
+    store = StateStore()
+    service = SolverService(store, fake_astap)
+    await service.solve(frame, fov=2.34, hint=None)
+    monkeypatch.setenv("FAKE_ASTAP_EXIT", str(code))
+    with pytest.raises(SolveError) as error:
+        await service.solve(frame, fov=2.34, hint=None)
+    assert error.value.reason is reason
+    state = solver_state(store)
+    SolverState.model_validate(state)
+    assert state["failure"]["reason"] == reason.value
+    assert state["failure"]["message"] == str(error.value)
+    assert state["last"] is not None  # the previous solution stays
+
+    monkeypatch.delenv("FAKE_ASTAP_EXIT")
+    await service.solve(frame, fov=2.34, hint=None)
+    assert solver_state(store)["failure"] is None
+
+
+async def test_annotations_go_to_the_latest_solution(fake_astap: Astap, frame: Path) -> None:
+    store = StateStore()
+    service = SolverService(store, fake_astap)
+    first = await service.solve(frame, fov=2.34, hint=None)
+    described = service.annotate(first, {"synced": True})
+    assert described["synced"] is True
+    assert solver_state(store)["last"]["synced"] is True
+    SolverState.model_validate(solver_state(store))
+
+    await service.solve(frame, fov=2.34, hint=None)
+    # A newer solution replaced it: the state is left alone.
+    assert service.annotate(first, {"synced": True})["synced"] is True
+    assert solver_state(store)["last"]["synced"] is False
 
 
 async def test_cancelling_kills_astap(

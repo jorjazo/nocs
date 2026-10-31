@@ -21,7 +21,7 @@ shared with polar alignment (phase 4) and re-centring and the meridian flip
 | # | Stage | Contents | Check | Status |
 |---|---|---|---|---|
 | 3.1 | ASTAP solver | `nocs.solving`: discovery, star databases and the fields they solve, hints (field from the optical train, position from the mount), downsampling from the measured HFR, a process per solve killed on timeout or cancel, one solve at a time, solutions from ASTAP's WCS (J2000 centre, scale, rotation as shown, mirroring); camera state gains `field`; ASTAP + D05 in dev and CI ([ADR 0018](../adr/0018-plate-solving-with-astap.md)) | Real frames (2600MC, 6200MM, 482MC) and simulator frames solve; rotation matches ASIAIR's | Implemented |
-| 3.2 | Solve and sync | `solve` job: expose with the main camera, HFR from the worker, hinted then blind, optional sync at mid-exposure; Live view: Solve, result card, Sync | Lab: AM5/AM7 accept a sync | |
+| 3.2 | Solve and sync | `solve` job (`nocs.pointing`): expose with the main camera, HFR from the worker, hinted then blind, offset from the mount, optional sync at mid-exposure; later sync to the last solution if the mount has not moved; failures with a reason; Live view: Solve, Solve and sync, result card, Sync | Lab: AM5/AM7 accept a sync | Implemented |
 | 3.3 | Centre | `center` job: go to → settle → solve → sync or offset → repeat until within tolerance or N attempts; Mount sheet: Go and centre | Simulators with an injected pointing error | |
 | 3.4 | Target catalog | OpenNGC (CC BY-SA 4.0) bundled by a pinned build script: Messier, NGC/IC, common names in English and Spanish; search API (ADR 0019) | — | |
 | 3.5 | Tonight's sky | Twilights, Moon (altitude, phase), altitude curves, transit, time above a minimum and above a **horizon profile** by azimuth in the site, distance to the Moon | Against an almanac | |
@@ -47,3 +47,19 @@ shared with polar alignment (phase 4) and re-centring and the meridian flip
   AM7) solve within 2′ of the mount's position and, where ASIAIR recorded one, 1°
   of its camera angle; the simulator in 0.04 s, within 0.06′.
 - D05 does not solve dense Milky Way fields; the appliance needs D50.
+- Lab AM7 (`indi_lx200am5`, INDI 2.2.5): a sync completes in 0.05 s and the mount
+  reports the new position at once; 10° from the pole it kept it (a sync 6′ north,
+  then back). At home (Dec −90°) it reported the synced position and went back to
+  −90° at its next poll. Syncs become points of the mount's multi-star alignment
+  (the driver only offers to clear them).
+- Simulators: the telescope simulator's index errors (`MOUNT_MODEL`, `MM_ID` and
+  `MM_IH` in arcminutes) shift the sky the CCD simulator renders from where the mount
+  says it points; a solve measured them within 0.1′. A sync adds a point to the
+  simulator's alignment model, which takes effect only once that model has been
+  initialised (clear and commit); then the next solve was 0.05–0.2′ from the mount.
+  Stale points later moved the sky it renders far from where it says it points.
+- With D05, only some of the CCD simulator's 5 s frames of a sparse field solved
+  (fewer 10 s frames), and a frame that failed kept failing until the frame changed
+  (turned, or moved). On a laptop on 2026-10-31 even 3.1's simulator test failed
+  its turned frame, while CI passed it; the integration test retries with changed
+  frames and is skipped when none solves.

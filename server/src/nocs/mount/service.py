@@ -1,4 +1,4 @@
-"""Mount control by role: state, go to, tracking, park, home, time and site, slew pads.
+"""Mount control by role: state, go to, sync, tracking, park, home, time and site, slew pads.
 
 State under ``("mount",)`` while the mount role is ready, ``None`` otherwise::
 
@@ -20,10 +20,11 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Coroutine
+from datetime import datetime
 from typing import Any, Literal
 
 from nocs.clock import Clock
-from nocs.devices import DeviceError, Location, Mount
+from nocs.devices import Coordinates, DeviceError, Location, Mount
 from nocs.equipment import EquipmentService, Role, Site
 from nocs.equipment.service import IndiConnection
 from nocs.indi import IndiClient, IndiEvent, PropertyDefined, PropertyUpdated
@@ -165,6 +166,38 @@ class MountService:
             return {"ra": target.ra, "dec": target.dec}
 
         return self._jobs.start("goto", [RESOURCE], run)
+
+    def position(self) -> Coordinates:
+        """Where the mount says it points, J2000 (converted from JNow now)."""
+        position = self.mount().coordinates
+        return jnow_to_j2000(position.ra, position.dec, self._clock.now())
+
+    async def sync(
+        self, ra: float, dec: float, when: datetime | None = None, *, job: str | None = None
+    ) -> Coordinates:
+        """Tell the mount it points at J2000 ``ra``, ``dec``; returns the JNow sent.
+
+        ``when`` is the time the position is for (a solved frame's mid-exposure),
+        else now. Refused while the mount is parked, slewing or not tracking (the
+        sky would have moved since), or locked by a job other than ``job``.
+        """
+        if not 0 <= ra < 24 or not -90 <= dec <= 90:
+            raise ValueError(f"coordinates out of range: RA {ra} h, Dec {dec}°")
+        if job is None:
+            self._jobs.check_free([RESOURCE])
+        elif self._jobs.holder(RESOURCE) != job:
+            raise RuntimeError(f"job {job} does not hold the mount")
+        mount = self.mount()
+        if mount.parked:
+            raise ValueError(f"{mount.name} is parked: unpark it first")
+        if mount.slewing:
+            raise PointingError(f"{mount.name} is slewing")
+        if not mount.tracking:
+            raise PointingError(f"{mount.name} is not tracking: switch tracking on and solve again")
+        jnow = j2000_to_jnow(ra, dec, when or self._clock.now())
+        log.info("syncing %s to RA %s, Dec %s (J2000)", mount.name, _hms(ra), _dms(dec))
+        await mount.sync(jnow.ra, jnow.dec)
+        return jnow
 
     async def set_tracking(self, on: bool | None, mode: str | None = None) -> None:
         self._jobs.check_free([RESOURCE])

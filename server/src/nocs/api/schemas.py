@@ -435,6 +435,39 @@ class SolutionState(StateModel):
     hinted: bool = Field(description="Solved near the hint; false: by searching the whole sky.")
     seconds: float = Field(description="Time ASTAP took.")
     time: str = Field(description="UTC, ISO 8601, when it was solved.")
+    taken: str | None = Field(
+        description="UTC, ISO 8601, mid-exposure of the frame; None when the caller did not say."
+    )
+    mount: SkyPosition | None = Field(
+        description="Where the mount said it pointed as the frame started, J2000."
+    )
+    offset: PointingOffset | None = Field(description="From the mount's position to the solution.")
+    synced: bool = Field(description="The mount was synced to this solution.")
+
+
+class SkyPosition(StateModel):
+    ra: float = Field(description="J2000, hours.")
+    dec: float = Field(description="J2000, degrees.")
+
+
+class PointingOffset(StateModel):
+    angle: float = Field(description="Arcminutes on the sky.")
+    ra: float = Field(description="Arcminutes on the sky along RA (scaled by cos Dec), east +.")
+    dec: float = Field(description="Arcminutes, north +.")
+
+
+type SolveFailureReason = Literal[
+    "unavailable", "no_database", "no_stars", "no_solution", "unreadable", "error"
+]
+
+
+class SolveFailure(StateModel):
+    reason: SolveFailureReason = Field(
+        description="unavailable: ASTAP is not installed; no_database: none for the field;"
+        " unreadable: ASTAP could not read the image."
+    )
+    message: str
+    time: str = Field(description="UTC, ISO 8601.")
 
 
 class SolverState(StateModel):
@@ -443,6 +476,9 @@ class SolverState(StateModel):
     databases: list[StarDatabase]
     solving: bool
     last: SolutionState | None = Field(description="The most recent solution.")
+    failure: SolveFailure | None = Field(
+        description="Why the latest attempt failed; None after a solution."
+    )
 
 
 class AutofocusPoint(StateModel):
@@ -932,6 +968,16 @@ class TemperatureRecord(WireModel):
     ambient: float | None = Field(description="The weather role's, °C.")
     humidity: float | None = Field(description="%.")
     dew_point: float | None = Field(description="°C.")
+
+
+class SolveRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    exposure: float | None = Field(
+        default=None, gt=0, le=600, description="Seconds; None: the camera's exposure."
+    )
+    binning: int | None = Field(default=None, ge=1, description="For this frame only.")
+    sync: bool = Field(default=False, description="Sync the mount to the solution.")
 
 
 class FilterSelectRequest(BaseModel):

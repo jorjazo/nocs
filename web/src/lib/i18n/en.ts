@@ -1,7 +1,7 @@
 // English messages: the source of truth for every other language. Messages
 // with parameters are functions; es.ts must match this shape exactly.
 
-import type { AutofocusState, ConnectionName, DeviceStatusName, FrameTypeName, Role } from "../types";
+import type { AutofocusState, ConnectionName, DeviceStatusName, FrameTypeName, Role, SolveFailure } from "../types";
 
 type AutofocusPhase = NonNullable<AutofocusState["phase"]>;
 type AutofocusProblem = NonNullable<AutofocusState["problem"]>;
@@ -261,6 +261,7 @@ export const en = {
       loopLeft: (seconds: string) => `Looping · ${seconds} s left`,
       looping: "Looping",
       processing: "Processing",
+      solving: "Solving",
       failed: "Failed",
     },
     histogram: "Histogram of the latest frame",
@@ -388,6 +389,45 @@ export const en = {
     meridian: (flip: boolean, limit: string) => `Meridian limit ${limit}${flip ? ", flips by itself" : ""}`,
     noLimits: "The driver shows none.",
     locked: "Only the owner's devices move the mount.",
+  },
+  solve: {
+    title: "Plate solve",
+    solve: "Solve",
+    solveSync: "Solve and sync",
+    sync: "Sync the mount",
+    synced: "Mount synced",
+    hint: "Takes a frame with the camera's exposure, finds where it points, and can tell the mount.",
+    unavailable: "ASTAP, the plate solver, is not installed on the rig.",
+    noDatabase: (field: string) => `No star database installed solves a ${field} field.`,
+    noMount: "Connect a mount to sync it.",
+    notTracking: "Switch tracking on to sync the mount.",
+    parked: "Unpark the mount to sync it.",
+    centre: "Centre (J2000)",
+    angle: "Angle",
+    angleHint: "Top of the frame, east of north",
+    mirrored: "mirrored",
+    scale: "Scale",
+    arcsecPerPixel: (scale: string) => `${scale}″/px`,
+    field: (width: string, height: string) => `${width}° × ${height}°`,
+    offset: "From the mount",
+    noOffset: "Mount not connected",
+    offsetParts: (ra: string, dec: string) => `${ra} · ${dec}`,
+    east: (value: string) => `${value} east`,
+    west: (value: string) => `${value} west`,
+    north: (value: string) => `${value} north`,
+    south: (value: string) => `${value} south`,
+    solvedIn: (seconds: string, time: string) => `Solved in ${seconds} s · frame at ${time}`,
+    wholeSky: "found by searching the whole sky",
+    failures: {
+      unavailable: "ASTAP, the plate solver, is not installed on the rig.",
+      no_database: "No star database installed solves this field of view.",
+      no_stars: "Not enough stars in the frame: check the focus, the exposure and the clouds.",
+      no_solution:
+        "No solution: the stars match neither the sky around the mount nor anywhere else. Check the focal length in the profile, or expose longer.",
+      unreadable: "ASTAP could not read the frame.",
+      error: "Solving failed.",
+    } satisfies Record<SolveFailure["reason"], string>,
+    dismiss: "Dismiss",
   },
   focuser: {
     title: "Focuser",

@@ -31,6 +31,7 @@ import type {
   Profile,
   SerialPortInfo,
   ShutdownRequest,
+  SolveRequest,
   TrackingRequest,
 } from "./types";
 
@@ -312,4 +313,17 @@ export function sendMountTime(): Promise<void> {
 // Without a site, the active profile's.
 export function sendMountSite(body: MountSiteRequest = {}): Promise<void> {
   return request("PUT", "/api/mount/site", body);
+}
+
+// -- Plate solving (ADR 0018) ---------------------------------------------------
+
+// A frame of the main camera, solved; with `sync`, the mount is synced to it.
+export async function solve(body: SolveRequest = {}): Promise<string> {
+  const started = await request<JobStarted>("POST", "/api/solver/solve", body);
+  return started.job;
+}
+
+// Syncs the mount to the last solution, if it has not moved since that frame.
+export function syncToSolution(): Promise<void> {
+  return request("POST", "/api/solver/sync");
 }

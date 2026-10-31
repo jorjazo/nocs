@@ -4022,6 +4022,30 @@
       "title": "Phd2Server",
       "type": "object"
     },
+    "PointingOffset": {
+      "additionalProperties": false,
+      "properties": {
+        "angle": {
+          "description": "Arcminutes on the sky.",
+          "type": "number"
+        },
+        "dec": {
+          "description": "Arcminutes, north +.",
+          "type": "number"
+        },
+        "ra": {
+          "description": "Arcminutes on the sky along RA (scaled by cos Dec), east +.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "angle",
+        "ra",
+        "dec"
+      ],
+      "title": "PointingOffset",
+      "type": "object"
+    },
     "PowerInputState": {
       "additionalProperties": false,
       "properties": {
@@ -4598,6 +4622,25 @@
       "title": "Site",
       "type": "object"
     },
+    "SkyPosition": {
+      "additionalProperties": false,
+      "properties": {
+        "dec": {
+          "description": "J2000, degrees.",
+          "type": "number"
+        },
+        "ra": {
+          "description": "J2000, hours.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "ra",
+        "dec"
+      ],
+      "title": "SkyPosition",
+      "type": "object"
+    },
     "SnapshotMessage": {
       "properties": {
         "epoch": {
@@ -4649,6 +4692,28 @@
           "description": "The image as shown is a mirror view of the sky.",
           "type": "boolean"
         },
+        "mount": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SkyPosition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Where the mount said it pointed as the frame started, J2000."
+        },
+        "offset": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PointingOffset"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "From the mount's position to the solution."
+        },
         "ra": {
           "description": "Centre of the frame, J2000, hours.",
           "type": "number"
@@ -4665,6 +4730,21 @@
           "description": "Time ASTAP took.",
           "type": "number"
         },
+        "synced": {
+          "description": "The mount was synced to this solution.",
+          "type": "boolean"
+        },
+        "taken": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "UTC, ISO 8601, mid-exposure of the frame; None when the caller did not say."
+        },
         "time": {
           "description": "UTC, ISO 8601, when it was solved.",
           "type": "string"
@@ -4679,9 +4759,86 @@
         "fov",
         "hinted",
         "seconds",
-        "time"
+        "time",
+        "taken",
+        "mount",
+        "offset",
+        "synced"
       ],
       "title": "SolutionState",
+      "type": "object"
+    },
+    "SolveFailure": {
+      "additionalProperties": false,
+      "properties": {
+        "message": {
+          "type": "string"
+        },
+        "reason": {
+          "$ref": "#/$defs/SolveFailureReason",
+          "description": "unavailable: ASTAP is not installed; no_database: none for the field; unreadable: ASTAP could not read the image."
+        },
+        "time": {
+          "description": "UTC, ISO 8601.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "reason",
+        "message",
+        "time"
+      ],
+      "title": "SolveFailure",
+      "type": "object"
+    },
+    "SolveFailureReason": {
+      "enum": [
+        "unavailable",
+        "no_database",
+        "no_stars",
+        "no_solution",
+        "unreadable",
+        "error"
+      ],
+      "type": "string"
+    },
+    "SolveRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "binning": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "For this frame only."
+        },
+        "exposure": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "maximum": 600,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Seconds; None: the camera's exposure."
+        },
+        "sync": {
+          "default": false,
+          "description": "Sync the mount to the solution.",
+          "type": "boolean"
+        }
+      },
+      "title": "SolveRequest",
       "type": "object"
     },
     "SolverState": {
@@ -4696,6 +4853,17 @@
             "$ref": "#/$defs/StarDatabase"
           },
           "type": "array"
+        },
+        "failure": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SolveFailure"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Why the latest attempt failed; None after a solution."
         },
         "last": {
           "anyOf": [
@@ -4727,7 +4895,8 @@
         "version",
         "databases",
         "solving",
-        "last"
+        "last",
+        "failure"
       ],
       "title": "SolverState",
       "type": "object"

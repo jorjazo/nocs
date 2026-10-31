@@ -75,6 +75,11 @@ export type DriverName = string;
  * via the `definition` "OutputId".
  */
 export type OutputId = string;
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "SolveFailureReason".
+ */
+export type SolveFailureReason = "unavailable" | "no_database" | "no_stars" | "no_solution" | "unreadable" | "error";
 
 export interface NOCSAPI {
   [k: string]: unknown;
@@ -1074,6 +1079,10 @@ export interface SolverState {
   available: boolean;
   databases: StarDatabase[];
   /**
+   * Why the latest attempt failed; None after a solution.
+   */
+  failure: SolveFailure | null;
+  /**
    * The most recent solution.
    */
   last: SolutionState | null;
@@ -1100,6 +1109,21 @@ export interface StarDatabase {
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "SolveFailure".
+ */
+export interface SolveFailure {
+  message: string;
+  /**
+   * unavailable: ASTAP is not installed; no_database: none for the field; unreadable: ASTAP could not read the image.
+   */
+  reason: "unavailable" | "no_database" | "no_stars" | "no_solution" | "unreadable" | "error";
+  /**
+   * UTC, ISO 8601.
+   */
+  time: string;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "SolutionState".
  */
 export interface SolutionState {
@@ -1123,6 +1147,14 @@ export interface SolutionState {
    */
   mirrored: boolean;
   /**
+   * Where the mount said it pointed as the frame started, J2000.
+   */
+  mount: SkyPosition | null;
+  /**
+   * From the mount's position to the solution.
+   */
+  offset: PointingOffset | null;
+  /**
    * Centre of the frame, J2000, hours.
    */
   ra: number;
@@ -1139,9 +1171,49 @@ export interface SolutionState {
    */
   seconds: number;
   /**
+   * The mount was synced to this solution.
+   */
+  synced: boolean;
+  /**
+   * UTC, ISO 8601, mid-exposure of the frame; None when the caller did not say.
+   */
+  taken: string | null;
+  /**
    * UTC, ISO 8601, when it was solved.
    */
   time: string;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "SkyPosition".
+ */
+export interface SkyPosition {
+  /**
+   * J2000, degrees.
+   */
+  dec: number;
+  /**
+   * J2000, hours.
+   */
+  ra: number;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "PointingOffset".
+ */
+export interface PointingOffset {
+  /**
+   * Arcminutes on the sky.
+   */
+  angle: number;
+  /**
+   * Arcminutes, north +.
+   */
+  dec: number;
+  /**
+   * Arcminutes on the sky along RA (scaled by cos Dec), east +.
+   */
+  ra: number;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -2214,6 +2286,24 @@ export interface SnapshotMessage {
   };
   type: "snapshot";
   version: number;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "SolveRequest".
+ */
+export interface SolveRequest {
+  /**
+   * For this frame only.
+   */
+  binning?: number | null;
+  /**
+   * Seconds; None: the camera's exposure.
+   */
+  exposure?: number | null;
+  /**
+   * Sync the mount to the solution.
+   */
+  sync?: boolean;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
