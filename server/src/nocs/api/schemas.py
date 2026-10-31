@@ -522,6 +522,30 @@ class GuidingState(StateModel):
     error: str | None = Field(description="Why PHD2 does not run the profile's settings.")
 
 
+type HealthWarningName = Literal["under_voltage", "throttled", "hot", "memory", "disk"]
+
+
+class SystemHealth(StateModel):
+    """Read every few seconds; None where the computer does not report it."""
+
+    cpu_temperature: int | None = Field(description="°C.")
+    fan: int | None = Field(description="Revolutions per minute, to the nearest 100.")
+    under_voltage: bool | None = Field(
+        description="The supply is too weak right now (Raspberry Pi only)."
+    )
+    under_voltage_seen: str | None = Field(
+        description="When it was last too weak since nocsd started, UTC."
+    )
+    throttled: bool | None = Field(
+        description="The CPU runs below its top speed: too hot or under-powered."
+    )
+    memory_used: int | None = Field(description="Percent.")
+    disk_free: int | None = Field(description="Bytes free on the system disk, to 100 MB.")
+    warnings: list[HealthWarningName] = Field(
+        description="Most serious first: hot from 80 °C, memory from 90 %, disk under 2 GB."
+    )
+
+
 class SystemState(StateModel):
     """The box NOCS runs on (ADR 0027)."""
 
@@ -532,6 +556,7 @@ class SystemState(StateModel):
         " hostname.set. Empty on a PC unless its owner enables them."
     )
     error: str | None = Field(description="Why nocs-system does not answer.")
+    health: SystemHealth | None = Field(description="None until the first reading.")
 
 
 class AppState(StateModel):

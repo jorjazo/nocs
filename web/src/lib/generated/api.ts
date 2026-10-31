@@ -52,6 +52,11 @@ export type Role = "main_camera" | "guide_camera" | "mount" | "focuser" | "filte
 export type OutputKindName = "dc" | "dew" | "usb" | "variable";
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "HealthWarningName".
+ */
+export type HealthWarningName = "under_voltage" | "throttled" | "hot" | "memory" | "disk";
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "ClientRole".
  */
 export type ClientRole = "owner" | "observer";
@@ -1143,6 +1148,10 @@ export interface SystemState {
    */
   error: string | null;
   /**
+   * None until the first reading.
+   */
+  health: SystemHealth | null;
+  /**
    * nocs-system answers.
    */
   helper: boolean;
@@ -1154,6 +1163,46 @@ export interface SystemState {
    * What nocs-system performs here: power.reboot, power.poweroff, hostname.set. Empty on a PC unless its owner enables them.
    */
   operations: string[];
+}
+/**
+ * Read every few seconds; None where the computer does not report it.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "SystemHealth".
+ */
+export interface SystemHealth {
+  /**
+   * °C.
+   */
+  cpu_temperature: number | null;
+  /**
+   * Bytes free on the system disk, to 100 MB.
+   */
+  disk_free: number | null;
+  /**
+   * Revolutions per minute, to the nearest 100.
+   */
+  fan: number | null;
+  /**
+   * Percent.
+   */
+  memory_used: number | null;
+  /**
+   * The CPU runs below its top speed: too hot or under-powered.
+   */
+  throttled: boolean | null;
+  /**
+   * The supply is too weak right now (Raspberry Pi only).
+   */
+  under_voltage: boolean | null;
+  /**
+   * When it was last too weak since nocsd started, UTC.
+   */
+  under_voltage_seen: string | null;
+  /**
+   * Most serious first: hot from 80 °C, memory from 90 %, disk under 2 GB.
+   */
+  warnings: HealthWarningName[];
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -1667,6 +1716,16 @@ export interface HorizontalGoto {
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "HostnameRequest".
+ */
+export interface HostnameRequest {
+  /**
+   * One DNS label: letters, digits and hyphens, at most 63.
+   */
+  name: string;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "JobStarted".
  */
 export interface JobStarted {
@@ -1947,6 +2006,15 @@ export interface SetPropertyRequest {
   values: {
     [k: string]: string | number | boolean;
   };
+}
+/**
+ * Refused (409) while a job runs, unless ``force``.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "ShutdownRequest".
+ */
+export interface ShutdownRequest {
+  force?: boolean;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema

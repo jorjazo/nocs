@@ -33,6 +33,7 @@
   import FocuserSheet from "./devices/FocuserSheet.svelte";
   import MountSheet from "./devices/MountSheet.svelte";
   import PowerSheet from "./devices/PowerSheet.svelte";
+  import SystemSection from "./SystemSection.svelte";
   import type { CameraState, Optics, PairedDevice, Profile, Role, RoleState } from "../lib/types";
 
   const t = $derived(i18n.t);
@@ -393,6 +394,8 @@
         {/if}
       </section>
     {/if}
+
+    <SystemSection />
 
     <section aria-labelledby="access-title">
       <h2 class="heading section-title" id="access-title">{t.access.title}</h2>

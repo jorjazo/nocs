@@ -19,6 +19,7 @@ import type {
   FocuserBacklashRequest,
   FocuserMoveRequest,
   HorizontalGoto,
+  HostnameRequest,
   JobStarted,
   LoopRequest,
   MountSiteRequest,
@@ -28,6 +29,7 @@ import type {
   PairRequest,
   Profile,
   SerialPortInfo,
+  ShutdownRequest,
   TrackingRequest,
 } from "./types";
 
@@ -121,6 +123,24 @@ export function revokeDevice(id: string): Promise<void> {
 export function setObserver(enabled: boolean): Promise<void> {
   return request("PUT", "/api/auth/observer", { enabled } satisfies ObserverRequest);
 }
+
+// -- This computer, through nocs-system (ADR 0027) -----------------------------
+
+// Refused (409) while a job runs, unless forced.
+export function reboot(force = false): Promise<void> {
+  return request("POST", "/api/system/reboot", { force } satisfies ShutdownRequest);
+}
+
+export function powerOff(force = false): Promise<void> {
+  return request("POST", "/api/system/poweroff", { force } satisfies ShutdownRequest);
+}
+
+export function setHostname(name: string): Promise<void> {
+  return request("PUT", "/api/system/hostname", { name } satisfies HostnameRequest);
+}
+
+// A zip for bug reports: versions, the state and the last day of logs.
+export const DIAGNOSTICS_URL = "/api/system/diagnostics";
 
 // -- Equipment ----------------------------------------------------------------
 

@@ -287,3 +287,13 @@ def test_api_without_helper_is_503(tmp_path: Path) -> None:
         response = client.post("/api/system/reboot")
     assert response.status_code == 503
     assert "not running" in response.json()["detail"]
+
+
+def test_api_diagnostics(api: TestClient) -> None:
+    response = api.get("/api/system/diagnostics")
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/zip"
+    assert response.headers["content-disposition"].startswith(
+        'attachment; filename="nocs-diagnostics-'
+    )
+    assert response.content.startswith(b"PK")

@@ -2328,6 +2328,16 @@
       "title": "Health",
       "type": "object"
     },
+    "HealthWarningName": {
+      "enum": [
+        "under_voltage",
+        "throttled",
+        "hot",
+        "memory",
+        "disk"
+      ],
+      "type": "string"
+    },
     "Hello": {
       "description": "First client message: the state epoch and version the client already holds, if any.",
       "properties": {
@@ -2394,6 +2404,20 @@
         "az"
       ],
       "title": "HorizontalGoto",
+      "type": "object"
+    },
+    "HostnameRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "description": "One DNS label: letters, digits and hyphens, at most 63.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "HostnameRequest",
       "type": "object"
     },
     "IndiDevice": {
@@ -4154,6 +4178,18 @@
       "title": "SetPropertyRequest",
       "type": "object"
     },
+    "ShutdownRequest": {
+      "additionalProperties": false,
+      "description": "Refused (409) while a job runs, unless ``force``.",
+      "properties": {
+        "force": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "title": "ShutdownRequest",
+      "type": "object"
+    },
     "Site": {
       "additionalProperties": false,
       "properties": {
@@ -4480,6 +4516,108 @@
       "title": "StorageState",
       "type": "object"
     },
+    "SystemHealth": {
+      "additionalProperties": false,
+      "description": "Read every few seconds; None where the computer does not report it.",
+      "properties": {
+        "cpu_temperature": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "\u00b0C."
+        },
+        "disk_free": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Bytes free on the system disk, to 100 MB."
+        },
+        "fan": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Revolutions per minute, to the nearest 100."
+        },
+        "memory_used": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Percent."
+        },
+        "throttled": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The CPU runs below its top speed: too hot or under-powered."
+        },
+        "under_voltage": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The supply is too weak right now (Raspberry Pi only)."
+        },
+        "under_voltage_seen": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "When it was last too weak since nocsd started, UTC."
+        },
+        "warnings": {
+          "description": "Most serious first: hot from 80 \u00b0C, memory from 90 %, disk under 2 GB.",
+          "items": {
+            "$ref": "#/$defs/HealthWarningName"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "cpu_temperature",
+        "fan",
+        "under_voltage",
+        "under_voltage_seen",
+        "throttled",
+        "memory_used",
+        "disk_free",
+        "warnings"
+      ],
+      "title": "SystemHealth",
+      "type": "object"
+    },
     "SystemState": {
       "additionalProperties": false,
       "description": "The box NOCS runs on (ADR 0027).",
@@ -4494,6 +4632,17 @@
             }
           ],
           "description": "Why nocs-system does not answer."
+        },
+        "health": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SystemHealth"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "None until the first reading."
         },
         "helper": {
           "description": "nocs-system answers.",
@@ -4515,7 +4664,8 @@
         "hostname",
         "helper",
         "operations",
-        "error"
+        "error",
+        "health"
       ],
       "title": "SystemState",
       "type": "object"

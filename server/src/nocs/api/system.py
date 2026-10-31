@@ -1,4 +1,4 @@
-"""Reboot, power off and rename the box through nocs-system (ADR 0027)."""
+"""Reboot, power off and rename the box through nocs-system (ADR 0027); diagnostics."""
 
 from __future__ import annotations
 
@@ -27,6 +27,13 @@ def system_router(system: Callable[[], SystemService]) -> APIRouter:
         with _system_errors():
             await system().power_off(force=request is not None and request.force)
         return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    @router.get("/diagnostics")
+    async def diagnostics() -> Response:  # pyright: ignore[reportUnusedFunction]
+        """A zip with versions, the state and the last day of the services' logs."""
+        name, data = await system().diagnostics()
+        headers = {"Content-Disposition": f'attachment; filename="{name}"'}
+        return Response(data, media_type="application/zip", headers=headers)
 
     @router.put("/hostname", status_code=status.HTTP_204_NO_CONTENT)
     async def set_hostname(request: HostnameRequest) -> Response:  # pyright: ignore[reportUnusedFunction]
