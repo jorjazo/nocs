@@ -39,7 +39,7 @@ dev/      compose.yaml (INDI simulators + GSC catalog + driver FIFO in dev/.run,
           headless PHD2), astap/ (solver install), profiles/ (simulator rig),
           tools/ (indi_record, phd2_record, fake_ppba),
           bench/, spikes/, pi/ (lab Pi flashing and setup)
-packaging/ deb/ (the nocs .deb: build.sh, test.sh), later the Pi image (ADR 0025, 0026)
+packaging/ deb/ (the nocs .deb: build.sh, test.sh), image/ (the Pi 5 image, arm64 only; ADR 0025, 0026)
 docs/     design, roadmap, ux, adr/, spikes/
 ```
 

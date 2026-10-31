@@ -1,6 +1,6 @@
 # Phase 6 plan — Appliance
 
-Status: in progress (6.1, 6.3–6.5 implemented; ADRs proposed) · Last updated: 2026-10-31 · Roadmap: [Phase 6](../roadmap.md#phase-6--appliance)
+Status: in progress (6.1–6.5 implemented; ADRs proposed) · Last updated: 2026-10-31 · Roadmap: [Phase 6](../roadmap.md#phase-6--appliance)
 
 Goal: anyone flashes an image onto a Raspberry Pi 5 and runs a full night from a
 phone, with no other computer involved. PC users install the same software from
@@ -21,7 +21,7 @@ no other session is using: the lab Pi stays as it is.
 |---|---|---|---|---|---|
 | 6.0 | Decisions | This plan; ADRs 0025–0030 | Review | 4–5 h | Proposed |
 | 6.1 | The `nocs` package | `.deb` with its own Python (uv, python-build-standalone) in `/opt/nocs`, the web app, units for nocsd, indiserver and PHD2 run as the system user `nocs`, `/etc/nocs`, `/var/lib/nocs`; built in CI for amd64 and arm64 ([ADR 0025](../adr/0025-packaging-and-updates.md)) | Installs on a clean Ubuntu 26.04 container; nocsd answers and connects to indiserver | 8–10 h | Implemented: `packaging/deb/`, checked with systemd in a container on amd64 (116 MB package, 478 MB installed); arm64 in CI |
-| 6.2 | Raspberry Pi image | The official Ubuntu image changed in a chroot on an arm64 runner: INDI and PHD2 from their PPAs, `nocs`, ASTAP with D50, NetworkManager; smoke test in `systemd-nspawn` ([ADR 0026](../adr/0026-raspberry-pi-image.md)) | Boots on a Pi 5 from microSD and from a USB SSD; nocsd reachable | 10–14 h | |
+| 6.2 | Raspberry Pi image | The official Ubuntu image changed in a chroot on an arm64 runner: INDI and PHD2 from their PPAs, `nocs`, ASTAP with D50, NetworkManager; smoke test in `systemd-nspawn` ([ADR 0026](../adr/0026-raspberry-pi-image.md)) | Boots on a Pi 5 from microSD and from a USB SSD; nocsd reachable | 10–14 h | Implemented: `packaging/image/` and the Image workflow; the image builds and passes its smoke test in CI. Booting it on a Pi 5 waits for a Pi that no other work needs |
 | 6.3 | nocs-system | The privileged helper: Unix socket, peer credentials, a closed list of operations, nocsd's client; reboot, power off (and the Pi 5's power button), host name ([ADR 0027](../adr/0027-nocs-system.md)) | Unit tests with fake tools; reboot from the app on a test Pi | 5–7 h | Implemented: `nocs.system` (helper, client, `nocs-system call`), `system` state, `POST /api/system/reboot` and `/poweroff` (refused while a job runs unless forced), `PUT /api/system/hostname`; packaged and checked in the container. Buttons come with the System screen (6.4); reboot, power off and the Pi 5's button are still to check on a test Pi |
 | 6.4 | Health and diagnostics | nocsd reads temperatures, under-voltage, throttling, memory and the system disk without privileges; `system` state; "This computer" on the Rig screen; a diagnostics bundle (logs, versions) to download | Simulated `/sys`; the lab Pi read-only | 5–7 h | Implemented: `system.health` every 5 s, rounded (CPU temperature, fan, under-voltage and when it was last seen, throttling from cpufreq, memory, system disk, warnings); `GET /api/system/diagnostics`; "This computer" on Rig with restart, shut down and rename. Checked in a browser against fake tools; on the Pi when the image exists |
 | 6.5 | Storage manager | USB drives mounted when plugged in, ejected from the app after a sync; eject refused while a frame is being written | A USB drive on a test Pi | 5–6 h | Implemented: `storage.mount` / `storage.eject` in nocs-system (`systemd-mount` at `/media/nocs/<UUID>`, owned by `nocs` on FAT/exFAT/NTFS, then `udisksctl power-off`); nocsd mounts drives as they are plugged in, lists the ones it cannot mount with the reason, does not mount an ejected one again while it stays plugged in, and refuses to eject while a frame is being saved to it (and while a job runs, unless forced); USB drives with Eject on Rig. Checked with fake tools and a fake `/sys`; a real drive waits for a test Pi |
@@ -88,4 +88,13 @@ On the lab Pi (Ubuntu 26.04.1, kernel 7.0 raspi), read without changing anything
   updates.
 - Sizes: the official image is 1.53 GB as `.img.xz`; D50 takes 874 MB installed and
   barely compresses; `indi-3rdparty-libs` 208 MB; nocsd's environment 316 MB with
-  its development tools. The appliance image will be about 2.6–2.9 GB compressed.
+  its development tools.
+
+The first image built by CI (`ubuntu-24.04-arm`, 14 minutes in all):
+
+- The root filesystem holds 4.5 GB once INDI, PHD2, NOCS and D50 are in (2.8 GB in
+  Ubuntu's image), so the build grows it by 3 GB; it is 7.1 GB raw before the first
+  boot grows it to the card.
+- Compressed with `xz -6`: **3.3 GB**.
+- ASTAP and D50 downloaded from SourceForge in 23 s with the resume-on-a-new-
+  connection trick, and are cached for later builds.

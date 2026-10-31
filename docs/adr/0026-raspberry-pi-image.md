@@ -19,7 +19,7 @@ Raspberry Pi 5 (design §12). Facts that shape how it is built:
   downloads to tens of kB/s, and a first boot often has no network at all
   ([spike](../spikes/pi5-performance.md)). D50 takes 874 MB and barely compresses
   (ADR 0018). With INDI's third-party drivers (`indi-3rdparty-libs`, 208 MB) and
-  `nocs` (ADR 0025) the image is about 2.6–2.9 GB compressed: **more than the
+  `nocs` (ADR 0025) the image is 3.3 GB compressed (as first built): **more than the
   2 GiB per file that GitHub Releases accepts**.
 - GitHub offers arm64 runners for public repositories: an arm64 image can be
   built natively, without emulating every package's install scripts under QEMU.

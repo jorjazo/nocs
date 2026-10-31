@@ -1,0 +1,62 @@
+name: Image
+
+# Builds the Raspberry Pi 5 image on an arm64 runner and boots it in a container
+# (ADR 0026). Slow (the star database alone is ~900 MB): it runs when the image's
+# own files change, for tags, on demand, and on image-test/* branches.
+on:
+  push:
+    branches: [main, "image-test/**"]
+    paths: [packaging/image/**, .github/workflows/image.yml]
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  pi5:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0  # the version counts commits
+      - name: Make room (the image needs ~15 GB)
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/share/boost "$AGENT_TOOLSDIRECTORY" || true
+          df -h /
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - name: Build the nocs package
+        run: packaging/deb/build.sh
+      - name: Tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends systemd-container xz-utils fdisk e2fsprogs unzip
+      - name: Cache ASTAP and its D50 star database (SourceForge is slow)
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/nocs/astap
+          key: astap-aarch64-d50-v1
+      # As in the packages workflow: the runner's AppArmor lets only its own bwrap make
+      # user namespaces, and PHD2's image loaders (glycin) need one in the container.
+      # A Pi runs them on its own system, whose profiles allow it.
+      - name: Allow user namespaces for the container's bwrap
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - name: Build and boot the image
+        run: sudo --preserve-env=HOME CACHE="$HOME/.cache/nocs" packaging/image/build.sh packaging/out/nocs_*_arm64.deb
+      - name: Let the cache read ASTAP's files
+        if: always()
+        run: sudo chown -R "$(id -u):$(id -g)" ~/.cache/nocs || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nocs-pi5-image
+          path: |
+            packaging/out/*.img.xz
+            packaging/out/*.img.xz.sha256
+            packaging/out/*.manifest.txt
+          compression-level: 0
+          retention-days: 7
