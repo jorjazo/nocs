@@ -1,4 +1,4 @@
-"""Focuser and filter wheel commands."""
+"""Focuser, autofocus and filter wheel commands."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ from collections.abc import Callable, Generator
 from fastapi import APIRouter, HTTPException, Response, status
 
 from nocs.api.schemas import (
+    AutofocusRequest,
     FilterNamesRequest,
     FilterSelectRequest,
     FocuserMoveRequest,
@@ -15,12 +16,17 @@ from nocs.api.schemas import (
 )
 from nocs.devices import DeviceError
 from nocs.filters.service import FilterWheelNotReadyError, FilterWheelService
+from nocs.focus.autofocus import AutofocusOptions, AutofocusService
 from nocs.focus.service import FocuserNotReadyError, FocuserService
+from nocs.focus.sweep import Direction
+from nocs.imaging import CameraNotReadyError
 from nocs.jobs import ResourceBusyError
 
 
 def accessories_router(
-    focuser: Callable[[], FocuserService], filter_wheel: Callable[[], FilterWheelService]
+    focuser: Callable[[], FocuserService],
+    filter_wheel: Callable[[], FilterWheelService],
+    autofocus: Callable[[], AutofocusService],
 ) -> APIRouter:
     router = APIRouter(prefix="/api")
 
@@ -36,6 +42,19 @@ def accessories_router(
     async def abort() -> None:  # pyright: ignore[reportUnusedFunction]
         with _errors():
             await focuser().abort()
+
+    @router.post("/autofocus", status_code=status.HTTP_202_ACCEPTED)
+    async def focus(request: AutofocusRequest) -> JobStarted:  # pyright: ignore[reportUnusedFunction]
+        options = AutofocusOptions(
+            step=request.step,
+            points=request.points,
+            exposure=request.exposure,
+            frames=request.frames,
+            direction=Direction.OUTWARD if request.direction == "outward" else Direction.INWARD,
+            overshoot=request.overshoot,
+        )
+        with _errors():
+            return JobStarted(job=autofocus().start(options))
 
     @router.post("/filter-wheel/select", status_code=status.HTTP_202_ACCEPTED)
     async def select(request: FilterSelectRequest) -> JobStarted:  # pyright: ignore[reportUnusedFunction]
@@ -60,7 +79,7 @@ def _errors() -> Generator[None]:
         yield
     except ResourceBusyError as e:
         raise HTTPException(status.HTTP_409_CONFLICT, str(e)) from e
-    except (FocuserNotReadyError, FilterWheelNotReadyError) as e:
+    except (FocuserNotReadyError, FilterWheelNotReadyError, CameraNotReadyError) as e:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(e)) from e
     except ValueError as e:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e)) from e

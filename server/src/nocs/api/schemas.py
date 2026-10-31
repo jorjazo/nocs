@@ -413,6 +413,48 @@ class SolverState(StateModel):
     last: SolutionState | None = Field(description="The most recent solution.")
 
 
+class AutofocusPoint(StateModel):
+    position: int
+    hfr: float | None = Field(description="Median HFR, unbinned px; None without enough stars.")
+    stars: int
+
+
+class AutofocusFit(StateModel):
+    """The V-curve ``hfr = a·√(1 + ((x - c)/b)²)`` (ADR 0021)."""
+
+    a: float = Field(description="HFR at best focus, px.")
+    b: float = Field(description="Steps from best focus at which the HFR is √2·a.")
+    c: float = Field(description="Best focus position, steps.")
+    r_squared: float
+
+
+class AutofocusState(StateModel):
+    """The running autofocus, or the most recent one."""
+
+    job: str
+    state: Literal["running", "succeeded", "failed", "cancelled"]
+    phase: Literal["starting", "sweeping", "moving", "checking", "restoring"] | None = Field(
+        description="While running."
+    )
+    started: str
+    finished: str | None
+    step: int
+    start_position: int
+    start_hfr: float | None
+    start_stars: int | None
+    temperature: float | None = Field(description="The focuser's probe at the start, °C.")
+    points: list[AutofocusPoint] = Field(description="Measured so far, by position.")
+    fit: AutofocusFit | None
+    position: int | None = Field(description="Best focus, once the run checked it.")
+    hfr: float | None = Field(description="Of the last frame, at ``position``.")
+    stars: int | None
+    problem: Literal["no_stars", "too_few_stars", "not_turning", "bad_fit", "worse"] | None
+    detail: str | None = Field(description="Why it failed.")
+    suggested_step: int | None = Field(
+        description="A step that would put the sweep's ends at 2.5 times the best HFR."
+    )
+
+
 class AppState(StateModel):
     """The whole state tree sent in snapshots and modified by patches."""
 
@@ -436,6 +478,7 @@ class AppState(StateModel):
         default=None, description="None: no filter wheel is ready."
     )
     solver: SolverState | None = None
+    autofocus: AutofocusState | None = Field(default=None, description="None: never run.")
 
 
 # -- HTTP --------------------------------------------------------------------
@@ -610,6 +653,21 @@ class FocuserMoveRequest(BaseModel):
         if (self.position is None) == (self.steps is None):
             raise ValueError("give either position or steps")
         return self
+
+
+class AutofocusRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    step: int = Field(ge=1, description="Focuser steps between points.")
+    points: int = Field(default=9, ge=5, le=25)
+    exposure: float = Field(default=2.0, gt=0, le=600, description="Seconds.")
+    frames: int = Field(default=1, ge=1, le=10, description="Frames per point.")
+    direction: Literal["outward", "inward"] = Field(
+        default="outward", description="Which way every position is reached (backlash)."
+    )
+    overshoot: int | None = Field(
+        default=None, ge=0, description="Steps past a target moving the other way; None: a step."
+    )
 
 
 class FilterSelectRequest(BaseModel):

@@ -27,6 +27,18 @@
       "additionalProperties": false,
       "description": "The whole state tree sent in snapshots and modified by patches.",
       "properties": {
+        "autofocus": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AutofocusState"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "None: never run."
+        },
         "cameras": {
           "anyOf": [
             {
@@ -232,6 +244,260 @@
         "on"
       ],
       "title": "AutoDewRequest",
+      "type": "object"
+    },
+    "AutofocusFit": {
+      "additionalProperties": false,
+      "description": "The V-curve ``hfr = a\u00b7\u221a(1 + ((x - c)/b)\u00b2)`` (ADR 0021).",
+      "properties": {
+        "a": {
+          "description": "HFR at best focus, px.",
+          "type": "number"
+        },
+        "b": {
+          "description": "Steps from best focus at which the HFR is \u221a2\u00b7a.",
+          "type": "number"
+        },
+        "c": {
+          "description": "Best focus position, steps.",
+          "type": "number"
+        },
+        "r_squared": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "a",
+        "b",
+        "c",
+        "r_squared"
+      ],
+      "title": "AutofocusFit",
+      "type": "object"
+    },
+    "AutofocusPoint": {
+      "additionalProperties": false,
+      "properties": {
+        "hfr": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Median HFR, unbinned px; None without enough stars."
+        },
+        "position": {
+          "type": "integer"
+        },
+        "stars": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "position",
+        "hfr",
+        "stars"
+      ],
+      "title": "AutofocusPoint",
+      "type": "object"
+    },
+    "AutofocusState": {
+      "additionalProperties": false,
+      "description": "The running autofocus, or the most recent one.",
+      "properties": {
+        "detail": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Why it failed."
+        },
+        "finished": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fit": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AutofocusFit"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "hfr": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Of the last frame, at ``position``."
+        },
+        "job": {
+          "type": "string"
+        },
+        "phase": {
+          "anyOf": [
+            {
+              "enum": [
+                "starting",
+                "sweeping",
+                "moving",
+                "checking",
+                "restoring"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "While running."
+        },
+        "points": {
+          "description": "Measured so far, by position.",
+          "items": {
+            "$ref": "#/$defs/AutofocusPoint"
+          },
+          "type": "array"
+        },
+        "position": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Best focus, once the run checked it."
+        },
+        "problem": {
+          "anyOf": [
+            {
+              "enum": [
+                "no_stars",
+                "too_few_stars",
+                "not_turning",
+                "bad_fit",
+                "worse"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "stars": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "start_hfr": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "start_position": {
+          "type": "integer"
+        },
+        "start_stars": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "started": {
+          "type": "string"
+        },
+        "state": {
+          "enum": [
+            "running",
+            "succeeded",
+            "failed",
+            "cancelled"
+          ],
+          "type": "string"
+        },
+        "step": {
+          "type": "integer"
+        },
+        "suggested_step": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "A step that would put the sweep's ends at 2.5 times the best HFR."
+        },
+        "temperature": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The focuser's probe at the start, \u00b0C."
+        }
+      },
+      "required": [
+        "job",
+        "state",
+        "phase",
+        "started",
+        "finished",
+        "step",
+        "start_position",
+        "start_hfr",
+        "start_stars",
+        "temperature",
+        "points",
+        "fit",
+        "position",
+        "hfr",
+        "stars",
+        "problem",
+        "detail",
+        "suggested_step"
+      ],
+      "title": "AutofocusState",
       "type": "object"
     },
     "BlobInfo": {

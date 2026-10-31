@@ -30,12 +30,19 @@ async def best_focus(client: IndiClient) -> float:
     focuser = Focuser(client, FOCUSER)
     start = focuser.position
     samples: list[tuple[float, float]] = []
-    for position in (20000, 40000, 60000):
+    for position in SAMPLE_POSITIONS:
         await focuser.move_to(position)
         samples.append((position, fwhm(client)))
     await focuser.move_to(start)
+    return vertex(samples)
+
+
+SAMPLE_POSITIONS = (20000, 40000, 60000)
+
+
+def vertex(samples: list[tuple[float, float]]) -> float:
+    """Where the parabola through three (position, FWHM) points is lowest."""
     (x0, y0), (x1, y1), (x2, y2) = samples
-    # Vertex of the parabola through the three points.
     numerator = (x1 - x0) ** 2 * (y1 - y2) - (x1 - x2) ** 2 * (y1 - y0)
     denominator = (x1 - x0) * (y1 - y2) - (x1 - x2) * (y1 - y0)
     return x1 - numerator / (2 * denominator)

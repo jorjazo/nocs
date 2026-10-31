@@ -92,6 +92,10 @@ export interface AltitudeLimits {
  */
 export interface AppState {
   /**
+   * None: never run.
+   */
+  autofocus?: AutofocusState | null;
+  /**
    * Connected camera roles.
    */
   cameras?: {
@@ -128,6 +132,86 @@ export interface AppState {
    * None: no weather sensor is ready.
    */
   weather?: WeatherState | null;
+}
+/**
+ * The running autofocus, or the most recent one.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "AutofocusState".
+ */
+export interface AutofocusState {
+  /**
+   * Why it failed.
+   */
+  detail: string | null;
+  finished: string | null;
+  fit: AutofocusFit | null;
+  /**
+   * Of the last frame, at ``position``.
+   */
+  hfr: number | null;
+  job: string;
+  /**
+   * While running.
+   */
+  phase: ("starting" | "sweeping" | "moving" | "checking" | "restoring") | null;
+  /**
+   * Measured so far, by position.
+   */
+  points: AutofocusPoint[];
+  /**
+   * Best focus, once the run checked it.
+   */
+  position: number | null;
+  problem: ("no_stars" | "too_few_stars" | "not_turning" | "bad_fit" | "worse") | null;
+  stars: number | null;
+  start_hfr: number | null;
+  start_position: number;
+  start_stars: number | null;
+  started: string;
+  state: "running" | "succeeded" | "failed" | "cancelled";
+  step: number;
+  /**
+   * A step that would put the sweep's ends at 2.5 times the best HFR.
+   */
+  suggested_step: number | null;
+  /**
+   * The focuser's probe at the start, °C.
+   */
+  temperature: number | null;
+}
+/**
+ * The V-curve ``hfr = a·√(1 + ((x - c)/b)²)`` (ADR 0021).
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "AutofocusFit".
+ */
+export interface AutofocusFit {
+  /**
+   * HFR at best focus, px.
+   */
+  a: number;
+  /**
+   * Steps from best focus at which the HFR is √2·a.
+   */
+  b: number;
+  /**
+   * Best focus position, steps.
+   */
+  c: number;
+  r_squared: number;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "AutofocusPoint".
+ */
+export interface AutofocusPoint {
+  /**
+   * Median HFR, unbinned px; None without enough stars.
+   */
+  hfr: number | null;
+  position: number;
+  stars: number;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema

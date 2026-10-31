@@ -71,6 +71,7 @@ from nocs.equipment import (
 )
 from nocs.filters.service import FilterWheelService
 from nocs.filters.wheels import WheelStore
+from nocs.focus.autofocus import AutofocusService
 from nocs.focus.service import FocuserService
 from nocs.imaging import (
     FRAME_TYPES,
@@ -148,6 +149,10 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
         assert services.filter_wheel is not None
         return services.filter_wheel
 
+    def autofocus() -> AutofocusService:
+        assert services.autofocus is not None
+        return services.autofocus
+
     def site_longitude() -> float | None:
         profile = equipment().active_profile
         return profile.site.longitude if profile is not None and profile.site else None
@@ -188,6 +193,9 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
         services.power = PowerService(store, services.jobs, services.equipment, bridge)
         services.weather = WeatherService(store, services.equipment, bridge)
         services.focuser = FocuserService(store, services.jobs, services.equipment, bridge)
+        services.autofocus = AutofocusService(
+            store, services.jobs, services.focuser, services.capture
+        )
         services.filter_wheel = FilterWheelService(
             store, services.jobs, services.equipment, bridge, WheelStore(settings.config_dir)
         )
@@ -216,7 +224,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
     app.include_router(auth_router(auth, sockets))
     app.include_router(mount_router(mount, clock, sockets))
     app.include_router(power_router(power))
-    app.include_router(accessories_router(focuser, filter_wheel))
+    app.include_router(accessories_router(focuser, filter_wheel, autofocus))
 
     @app.get("/api/health")
     async def health() -> Health:  # pyright: ignore[reportUnusedFunction]
@@ -480,6 +488,7 @@ class _Services:
     focuser: FocuserService | None = None
     filter_wheel: FilterWheelService | None = None
     solver: SolverService | None = None
+    autofocus: AutofocusService | None = None
 
 
 def _upload_dirs(settings: Settings) -> UploadDirs | None:
