@@ -130,7 +130,8 @@ completed, parked session — including a meridian flip.
 
 ## Phase 6 — Appliance
 
-Goal: anyone can flash an image and use NOCS.
+Goal: anyone can flash an image and use NOCS. Stage plan and status:
+[v0.1/phase-6.md](v0.1/phase-6.md).
 
 - nocs-system: Wi-Fi access point / station / fallback, USB storage manager,
   health monitoring, reboot/shutdown.

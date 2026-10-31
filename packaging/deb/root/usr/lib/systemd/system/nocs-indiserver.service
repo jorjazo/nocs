@@ -1,0 +1,16 @@
+# indiserver as nocsd expects it: its own service with a driver FIFO that nocsd
+# writes to (ADR 0011). Drivers are started by nocsd when it connects a profile.
+[Unit]
+Description=INDI server for NOCS
+Documentation=https://github.com/jorjazo/nocs
+After=network.target
+
+[Service]
+User=nocs
+Group=nocs
+RuntimeDirectory=indi
+RuntimeDirectoryMode=0750
+ExecStartPre=/usr/bin/mkfifo -m 0660 /run/indi/fifo
+ExecStart=/usr/bin/indiserver -v -p 7624 -f /run/indi/fifo
+Restart=always
+RestartSec=2

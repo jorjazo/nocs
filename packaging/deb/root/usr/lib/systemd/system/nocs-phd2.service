@@ -1,0 +1,17 @@
+# Headless PHD2 that imports the settings nocsd writes, restarted when nocsd asks
+# it to shut down to apply new ones (ADR 0022). Needs the phd2 and xvfb packages.
+[Unit]
+Description=PHD2 guiding for NOCS
+Documentation=https://github.com/jorjazo/nocs
+After=network.target nocs-indiserver.service
+ConditionPathExists=/usr/bin/phd2
+ConditionPathExists=/usr/bin/Xvfb
+
+[Service]
+User=nocs
+Group=nocs
+Environment=PHD2_SETTINGS=/var/lib/nocs/phd2.phd
+PrivateTmp=yes
+ExecStart=/opt/nocs/libexec/nocs-phd2
+Restart=always
+RestartSec=2

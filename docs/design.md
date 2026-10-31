@@ -341,8 +341,7 @@ In rough order of expected value:
 Monorepo:
 
 ```
-server/      Python package `nocs` (nocsd)
-system/      nocs-system helper
+server/      Python package `nocs`: nocsd, and nocs-system in `nocs.system` (ADR 0027)
 web/         Svelte PWA
 packaging/   .deb packaging and Raspberry Pi image build
 dev/         Development containers, simulator setups, scripts

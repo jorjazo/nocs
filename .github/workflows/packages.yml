@@ -1,0 +1,43 @@
+name: Packages
+
+# Builds the nocs .deb natively on each architecture and installs it on a clean
+# Ubuntu 26.04 with systemd running (ADR 0025). Packages are kept as artifacts
+# until the apt repository exists (phase 6.10).
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  deb:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0  # the version counts commits
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - name: Build
+        run: packaging/deb/build.sh
+      - name: Install and start on Ubuntu 26.04
+        run: packaging/deb/test.sh packaging/out/nocs_*_${{ matrix.arch }}.deb
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nocs-${{ matrix.arch }}
+          path: packaging/out/*.deb
+          retention-days: 14

@@ -1,0 +1,29 @@
+#!/bin/sh
+# The systemd handling follows what dh_installsystemd generates. deb-systemd-invoke
+# honours policy-rc.d, so nothing starts inside an image build (ADR 0026).
+set -e
+
+units="nocsd.service"
+
+if [ "$1" = "configure" ]; then
+    systemd-sysusers nocs.conf
+    systemd-tmpfiles --create nocs.conf
+fi
+
+if [ "$1" = "configure" ] || [ "$1" = "abort-upgrade" ] || [ "$1" = "abort-deconfigure" ] || [ "$1" = "abort-remove" ]; then
+    for unit in $units; do
+        deb-systemd-helper unmask "$unit" >/dev/null || true
+        # was-enabled is true for a new installation, which therefore enables it.
+        if deb-systemd-helper --quiet was-enabled "$unit"; then
+            deb-systemd-helper enable "$unit" >/dev/null || true
+        else
+            deb-systemd-helper update-state "$unit" >/dev/null || true
+        fi
+    done
+    if [ -d /run/systemd/system ]; then
+        systemctl --system daemon-reload >/dev/null || true
+        # An upgrade restarts nocsd only: indiserver and PHD2 keep their devices.
+        if [ -n "$2" ]; then action=restart; else action=start; fi
+        deb-systemd-invoke "$action" $units >/dev/null || true
+    fi
+fi

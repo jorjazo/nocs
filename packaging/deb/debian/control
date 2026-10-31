@@ -1,0 +1,17 @@
+Package: nocs
+Version: @VERSION@
+Architecture: @ARCH@
+Maintainer: Jorge Valencia <jorjazo@gmail.com>
+Installed-Size: @SIZE@
+Depends: indi-bin (>= 2.0), systemd, init-system-helpers
+Recommends: indi-3rdparty-drivers, phd2, xvfb
+Section: science
+Priority: optional
+Homepage: https://github.com/jorjazo/nocs
+Description: web-first control of astrophotography rigs over INDI
+ NOCS runs at the telescope and is operated from a phone, tablet or desktop
+ browser: equipment profiles, capture, plate solving, guiding with PHD2,
+ autofocus and sequences, on top of INDI drivers.
+ .
+ This package holds nocsd with its own Python runtime, the web app and the
+ systemd units that run nocsd, indiserver and PHD2 as the user nocs.

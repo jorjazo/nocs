@@ -33,6 +33,7 @@ dev/      compose.yaml (INDI simulators + GSC catalog + driver FIFO in dev/.run,
           headless PHD2), astap/ (solver install), profiles/ (simulator rig),
           tools/ (indi_record, fake_ppba),
           bench/, spikes/, pi/ (lab Pi flashing and setup)
+packaging/ deb/ (the nocs .deb: build.sh, test.sh), later the Pi image (ADR 0025, 0026)
 docs/     design, roadmap, ux, adr/, spikes/
 ```
 
@@ -63,7 +64,12 @@ curl -c jar -H 'Content-Type: application/json' -d '{"passphrase": "…", "name"
 # NOCS_HOSTNAMES=nocs.lan,rig.example lists extra ones; tests add `testserver`
 ```
 
-CI runs all of the above (INDI simulators included) on every push to `main`.
+```sh
+packaging/deb/build.sh && packaging/deb/test.sh packaging/out/nocs_*_amd64.deb  # .deb, installed with systemd
+```
+
+CI runs all of the above (INDI simulators included) on every push to `main`; the
+packages workflow builds and installs the .deb on amd64 and arm64.
 
 ## Conventions and decisions to respect
 

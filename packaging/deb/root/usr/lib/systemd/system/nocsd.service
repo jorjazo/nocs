@@ -1,0 +1,29 @@
+# nocsd, with indiserver and PHD2 as services of their own: restarting nocsd
+# leaves the drivers and guiding running (ADR 0011, ADR 0022, ADR 0025).
+# Settings in /etc/nocs/nocsd.env override the paths below.
+[Unit]
+Description=NOCS server
+Documentation=https://github.com/jorjazo/nocs
+Wants=nocs-indiserver.service nocs-phd2.service
+# Not network-online.target: in the field there may be no network at all.
+After=network.target nocs-indiserver.service nocs-phd2.service
+
+[Service]
+User=nocs
+Group=nocs
+Environment=NOCS_CONFIG_DIR=/var/lib/nocs/config
+Environment=NOCS_DATA_DIR=/var/lib/nocs
+Environment=NOCS_WEB_DIR=/opt/nocs/web
+Environment=NOCS_INDI_FIFO=/run/indi/fifo
+Environment=NOCS_INDI_UPLOAD_DIR=/var/lib/nocs/indi-uploads
+Environment=NOCS_PHD2_SETTINGS=/var/lib/nocs/phd2.phd
+EnvironmentFile=/etc/nocs/nocsd.env
+ExecStart=/opt/nocs/venv/bin/nocsd
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target
