@@ -10,7 +10,11 @@ Read [docs/design.md](docs/design.md), [docs/roadmap.md](docs/roadmap.md) and th
 - Talk in **Spanish**. Code, comments, docs and commit messages in **English**.
 - One maintainer, 5–10 h/week: keep phases small and every step testable.
 - **Commit and push only when asked.** Commits are signed off (`git commit -s`,
-  DCO) and end with the Co-Authored-By line. After a push, check that CI passes.
+  DCO) and end with the Co-Authored-By line. After a push, check that CI passes
+  **without blocking on it**: watch the run in the background
+  (`gh run watch <id> --exit-status` as a background command), keep working on
+  the next step meanwhile, and fix a failure when the notification arrives.
+  The same goes for long local test runs.
 - Propose a plan in stages before large changes; record significant decisions as
   a new ADR rather than editing an accepted one.
 
