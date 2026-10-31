@@ -134,6 +134,7 @@ export interface AppState {
   power?: PowerState | null;
   solver?: SolverState | null;
   storage?: StorageState | null;
+  system?: SystemState | null;
   /**
    * None: no weather sensor is ready.
    */
@@ -1129,6 +1130,30 @@ export interface StorageDestination {
    */
   total: number;
   writable: boolean;
+}
+/**
+ * The box NOCS runs on (ADR 0027).
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "SystemState".
+ */
+export interface SystemState {
+  /**
+   * Why nocs-system does not answer.
+   */
+  error: string | null;
+  /**
+   * nocs-system answers.
+   */
+  helper: boolean;
+  /**
+   * Also its mDNS name, <hostname>.local.
+   */
+  hostname: string;
+  /**
+   * What nocs-system performs here: power.reboot, power.poweroff, hostname.set. Empty on a PC unless its owner enables them.
+   */
+  operations: string[];
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema

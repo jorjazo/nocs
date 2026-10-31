@@ -4,9 +4,9 @@
 [Unit]
 Description=NOCS server
 Documentation=https://github.com/jorjazo/nocs
-Wants=nocs-indiserver.service nocs-phd2.service
+Wants=nocs-indiserver.service nocs-phd2.service nocs-system.service
 # Not network-online.target: in the field there may be no network at all.
-After=network.target nocs-indiserver.service nocs-phd2.service
+After=network.target nocs-indiserver.service nocs-phd2.service nocs-system.service
 
 [Service]
 User=nocs
@@ -17,6 +17,7 @@ Environment=NOCS_WEB_DIR=/opt/nocs/web
 Environment=NOCS_INDI_FIFO=/run/indi/fifo
 Environment=NOCS_INDI_UPLOAD_DIR=/var/lib/nocs/indi-uploads
 Environment=NOCS_PHD2_SETTINGS=/var/lib/nocs/phd2.phd
+Environment=NOCS_SYSTEM_SOCKET=/run/nocs-system/socket
 EnvironmentFile=/etc/nocs/nocsd.env
 ExecStart=/opt/nocs/venv/bin/nocsd
 Restart=on-failure

@@ -61,6 +61,7 @@ from nocs.api.schemas import (
     TemperatureRecord,
     TemplateRequest,
 )
+from nocs.api.system import system_router
 from nocs.auth import AuthStore
 from nocs.clock import Clock
 from nocs.config import Settings
@@ -96,6 +97,7 @@ from nocs.jobs import JobManager, ResourceBusyError
 from nocs.mount.service import MountService
 from nocs.power.service import PowerService, WeatherService
 from nocs.services.indi_bridge import IndiBridge, NotConnectedError
+from nocs.services.system import SystemService
 from nocs.solving import Astap, SolverService
 from nocs.state import Resync, StateStore
 from nocs.storage import (
@@ -167,6 +169,10 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
     def autofocus() -> AutofocusService:
         assert services.autofocus is not None
         return services.autofocus
+
+    def system() -> SystemService:
+        assert services.system is not None
+        return services.system
 
     def site_longitude() -> float | None:
         profile = equipment().active_profile
@@ -249,12 +255,15 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
         )
         task = asyncio.create_task(bridge.run(), name="indi-bridge")
         guiding_task = asyncio.create_task(services.guiding.run(), name="phd2")
+        services.system = SystemService(store, services.jobs, settings.system_socket)
+        system_task = asyncio.create_task(services.system.run(), name="nocs-system")
         try:
             yield
         finally:
-            guiding_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await guiding_task
+            for background in (system_task, guiding_task):
+                background.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await background
             services.guiding.close()
             await mount().close()
             power().close()
@@ -277,6 +286,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
     app.include_router(mount_router(mount, clock, sockets, guiding))
     app.include_router(power_router(power))
     app.include_router(guiding_router(guiding))
+    app.include_router(system_router(system))
     app.include_router(accessories_router(focuser, filter_wheel, autofocus))
 
     @app.get("/api/autofocus/runs")
@@ -565,6 +575,7 @@ class _Services:
     autofocus: AutofocusService | None = None
     guiding: GuidingService | None = None
     environment: EnvironmentLog | None = None
+    system: SystemService | None = None
 
 
 def _iso(time: datetime) -> str:

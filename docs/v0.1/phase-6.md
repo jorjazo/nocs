@@ -1,6 +1,6 @@
 # Phase 6 plan — Appliance
 
-Status: in progress (6.1 packaging implemented; ADRs proposed) · Last updated: 2026-10-31 · Roadmap: [Phase 6](../roadmap.md#phase-6--appliance)
+Status: in progress (6.1 and 6.3 implemented; ADRs proposed) · Last updated: 2026-10-31 · Roadmap: [Phase 6](../roadmap.md#phase-6--appliance)
 
 Goal: anyone flashes an image onto a Raspberry Pi 5 and runs a full night from a
 phone, with no other computer involved. PC users install the same software from
@@ -22,7 +22,7 @@ no other session is using: the lab Pi stays as it is.
 | 6.0 | Decisions | This plan; ADRs 0025–0030 | Review | 4–5 h | Proposed |
 | 6.1 | The `nocs` package | `.deb` with its own Python (uv, python-build-standalone) in `/opt/nocs`, the web app, units for nocsd, indiserver and PHD2 run as the system user `nocs`, `/etc/nocs`, `/var/lib/nocs`; built in CI for amd64 and arm64 ([ADR 0025](../adr/0025-packaging-and-updates.md)) | Installs on a clean Ubuntu 26.04 container; nocsd answers and connects to indiserver | 8–10 h | Implemented: `packaging/deb/`, checked with systemd in a container on amd64 (116 MB package, 478 MB installed); arm64 in CI |
 | 6.2 | Raspberry Pi image | The official Ubuntu image changed in a chroot on an arm64 runner: INDI and PHD2 from their PPAs, `nocs`, ASTAP with D50, NetworkManager; smoke test in `systemd-nspawn` ([ADR 0026](../adr/0026-raspberry-pi-image.md)) | Boots on a Pi 5 from microSD and from a USB SSD; nocsd reachable | 10–14 h | |
-| 6.3 | nocs-system | The privileged helper: Unix socket, peer credentials, a closed list of operations, nocsd's client; reboot, power off (and the Pi 5's power button), host name ([ADR 0027](../adr/0027-nocs-system.md)) | Unit tests with fake tools; reboot from the app on a test Pi | 5–7 h | |
+| 6.3 | nocs-system | The privileged helper: Unix socket, peer credentials, a closed list of operations, nocsd's client; reboot, power off (and the Pi 5's power button), host name ([ADR 0027](../adr/0027-nocs-system.md)) | Unit tests with fake tools; reboot from the app on a test Pi | 5–7 h | Implemented: `nocs.system` (helper, client, `nocs-system call`), `system` state, `POST /api/system/reboot` and `/poweroff` (refused while a job runs unless forced), `PUT /api/system/hostname`; packaged and checked in the container. Buttons come with the System screen (6.4); reboot, power off and the Pi 5's button are still to check on a test Pi |
 | 6.4 | Health and diagnostics | nocsd reads temperatures, under-voltage, throttling, memory, disks and its services without privileges; `system` state; a System screen; a diagnostics bundle (logs, versions) to download | Simulated `/sys`; the lab Pi read-only | 5–7 h | |
 | 6.5 | Storage manager | USB drives mounted when plugged in, ejected from the app after a sync; eject refused while a frame is being written | A USB drive on a test Pi | 5–6 h | |
 | 6.6 | Network | Access point `NOCS-xxxx`, joining a network from the app with a fallback, Ethernet, country, firewall closing indiserver and PHD2 to the network, nocsd on port 80, SSH off by default ([ADR 0028](../adr/0028-networking.md)) | Phones (iOS, Android) on the access point and on home Wi-Fi; the fallback when the network goes | 12–16 h | |

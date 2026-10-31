@@ -522,6 +522,18 @@ class GuidingState(StateModel):
     error: str | None = Field(description="Why PHD2 does not run the profile's settings.")
 
 
+class SystemState(StateModel):
+    """The box NOCS runs on (ADR 0027)."""
+
+    hostname: str = Field(description="Also its mDNS name, <hostname>.local.")
+    helper: bool = Field(description="nocs-system answers.")
+    operations: list[str] = Field(
+        description="What nocs-system performs here: power.reboot, power.poweroff,"
+        " hostname.set. Empty on a PC unless its owner enables them."
+    )
+    error: str | None = Field(description="Why nocs-system does not answer.")
+
+
 class AppState(StateModel):
     """The whole state tree sent in snapshots and modified by patches."""
 
@@ -547,6 +559,7 @@ class AppState(StateModel):
     solver: SolverState | None = None
     autofocus: AutofocusState | None = Field(default=None, description="None: never run.")
     guiding: GuidingState | None = None
+    system: SystemState | None = None
 
 
 # -- HTTP --------------------------------------------------------------------
@@ -718,6 +731,20 @@ class TrackingRequest(BaseModel):
 
     on: bool | None = None
     mode: str | None = Field(default=None, description="One of the mount's track_modes.")
+
+
+class ShutdownRequest(BaseModel):
+    """Refused (409) while a job runs, unless ``force``."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    force: bool = False
+
+
+class HostnameRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(description="One DNS label: letters, digits and hyphens, at most 63.")
 
 
 class OutputRequest(BaseModel):

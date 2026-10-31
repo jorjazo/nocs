@@ -50,6 +50,8 @@ class Settings(BaseSettings):
     phd2_indi_host: str | None = None
     """indiserver as PHD2 reaches it, when that differs from ``indi_host`` (containers)."""
     phd2_indi_port: int | None = None
+    system_socket: Path = Path("/run/nocs-system/socket")
+    """nocs-system's socket (ADR 0027); without it, NOCS cannot reboot the box or rename it."""
     config_dir: Path = Field(default_factory=_default_config_dir)
     data_dir: Path = Field(default_factory=_default_data_dir)
     """The server's own data: frame catalog, previews, frames on their way."""

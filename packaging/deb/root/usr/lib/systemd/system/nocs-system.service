@@ -1,0 +1,20 @@
+# nocs-system, the privileged helper that reboots, powers off or renames the box
+# when nocsd asks (ADR 0027). /etc/nocs/system.conf says which operations it
+# performs; on a PC, none.
+[Unit]
+Description=NOCS privileged helper
+Documentation=https://github.com/jorjazo/nocs
+
+[Service]
+ExecStart=/opt/nocs/venv/bin/nocs-system
+Restart=on-failure
+RestartSec=2
+RuntimeDirectory=nocs-system
+RuntimeDirectoryMode=0755
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+RestrictAddressFamilies=AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

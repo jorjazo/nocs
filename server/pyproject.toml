@@ -20,6 +20,7 @@ dependencies = [
 
 [project.scripts]
 nocsd = "nocs.__main__:main"
+nocs-system = "nocs.system.server:main"
 
 [dependency-groups]
 dev = [

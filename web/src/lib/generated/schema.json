@@ -186,6 +186,17 @@
           ],
           "default": null
         },
+        "system": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SystemState"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "weather": {
           "anyOf": [
             {
@@ -4467,6 +4478,46 @@
         "template"
       ],
       "title": "StorageState",
+      "type": "object"
+    },
+    "SystemState": {
+      "additionalProperties": false,
+      "description": "The box NOCS runs on (ADR 0027).",
+      "properties": {
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Why nocs-system does not answer."
+        },
+        "helper": {
+          "description": "nocs-system answers.",
+          "type": "boolean"
+        },
+        "hostname": {
+          "description": "Also its mDNS name, <hostname>.local.",
+          "type": "string"
+        },
+        "operations": {
+          "description": "What nocs-system performs here: power.reboot, power.poweroff, hostname.set. Empty on a PC unless its owner enables them.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "hostname",
+        "helper",
+        "operations",
+        "error"
+      ],
+      "title": "SystemState",
       "type": "object"
     },
     "TargetRequest": {

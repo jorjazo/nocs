@@ -24,6 +24,7 @@ server/   Python package `nocs` (nocsd): indi/ (protocol + async client, driver
           mount/, focus/, filters/ (services by role; filter names per wheel),
           guiding/ (PHD2: service, settings it imports, JSON-RPC client),
           solving/ (ASTAP, fields of view),
+          system/ (nocs-system, the root helper: stdlib + anyio only, ADR 0027),
           state/ (versioned store), services/ (indi_bridge), api/ (FastAPI
           REST + WebSocket, schemas, schema export)
 web/      Svelte 5 + TypeScript PWA: styles/ (tokens), lib/ (api, live state,

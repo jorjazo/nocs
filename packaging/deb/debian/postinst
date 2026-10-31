@@ -3,7 +3,7 @@
 # honours policy-rc.d, so nothing starts inside an image build (ADR 0026).
 set -e
 
-units="nocsd.service"
+units="nocs-system.service nocsd.service"
 
 if [ "$1" = "configure" ]; then
     systemd-sysusers nocs.conf
@@ -22,7 +22,8 @@ if [ "$1" = "configure" ] || [ "$1" = "abort-upgrade" ] || [ "$1" = "abort-decon
     done
     if [ -d /run/systemd/system ]; then
         systemctl --system daemon-reload >/dev/null || true
-        # An upgrade restarts nocsd only: indiserver and PHD2 keep their devices.
+        # An upgrade restarts nocsd and the helper only: indiserver and PHD2 keep
+        # their devices.
         if [ -n "$2" ]; then action=restart; else action=start; fi
         deb-systemd-invoke "$action" $units >/dev/null || true
     fi

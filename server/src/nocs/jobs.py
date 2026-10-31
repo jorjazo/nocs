@@ -104,6 +104,10 @@ class JobManager:
         for resource in [r for r, holder in self._locks.items() if holder == token]:
             del self._locks[resource]
 
+    def active(self) -> list[str]:
+        """Kinds of the running jobs and reservations: what a reboot would interrupt."""
+        return [self._kinds[token] for token in [*self._tasks, *sorted(self._reservations)]]
+
     def job_holding(self, resource: str) -> str | None:
         """Id of the running job that locks ``resource``; ``None`` for a reservation."""
         holder = self._locks.get(resource)
