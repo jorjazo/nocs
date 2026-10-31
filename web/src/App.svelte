@@ -5,8 +5,10 @@
   import Button from "./components/Button.svelte";
   import EmptyState from "./components/EmptyState.svelte";
   import NavBar from "./components/NavBar.svelte";
+  import { reportClock } from "./lib/api";
   import { auth } from "./lib/auth.svelte";
   import { errorText } from "./lib/errors";
+  import { formatDuration } from "./lib/format";
   import { i18n } from "./lib/i18n";
   import { live } from "./lib/live.svelte";
   import { router } from "./lib/router.svelte";
@@ -43,6 +45,14 @@
     if (live.failures > 0) void auth.refresh();
   });
 
+  // Every time the state channel opens, the owner's device reports its clock:
+  // the server corrects its own timestamps when the Pi's is off, and sets the
+  // mount's (ADR 0015). Observers may not.
+  $effect(() => {
+    if (live.status === "open" && auth.owner) void reportClock().catch(() => {});
+  });
+  const clock = $derived(live.app.clock ?? null);
+
   // Phones suspend pages; reconnect as soon as the page is visible again.
   $effect(() => {
     const wake = () => {
@@ -74,6 +84,13 @@
   <main class="content" class:full>
     {#if offline}
       <div class="banner"><Banner icon="offline" tone="warning">{t.link.offline}</Banner></div>
+    {/if}
+    {#if clock?.corrected && clock.offset !== null}
+      <div class="banner">
+        <Banner icon="alert" tone="warning">
+          {clock.offset > 0 ? t.clock.behind(formatDuration(clock.offset)) : t.clock.ahead(formatDuration(clock.offset))}
+        </Banner>
+      </div>
     {/if}
     {#if role === "observer"}
       <div class="banner">

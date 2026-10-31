@@ -5,21 +5,27 @@ import type {
   AuthStatus,
   CameraRoleName,
   CameraSettingsRequest,
+  ClockReport,
+  ClockRequest,
   ConnectRequest,
   CoolingRequest,
   Driver,
+  EquatorialGoto,
   ExposeRequest,
   FilterNamesRequest,
   FilterSelectRequest,
   FocuserMoveRequest,
+  HorizontalGoto,
   JobStarted,
   LoopRequest,
+  MountSiteRequest,
   ObserverRequest,
   OutputRequest,
   PairedDevice,
   PairRequest,
   Profile,
   SerialPortInfo,
+  TrackingRequest,
 } from "./types";
 
 export class ApiError extends Error {
@@ -208,4 +214,52 @@ export function setOutput(id: string, change: OutputRequest): Promise<void> {
 
 export function setAutoDew(on: boolean): Promise<void> {
   return request("PUT", "/api/power/auto-dew", { on });
+}
+
+// -- Mount and clock (ADR 0015) --------------------------------------------------
+
+// This client's clock and time zone, reported whenever it connects: the server
+// corrects its own timestamps when the system clock is off, and sets the mount's.
+export function reportClock(): Promise<ClockReport> {
+  const body: ClockRequest = {
+    utc: new Date().toISOString(),
+    utc_offset: -new Date().getTimezoneOffset() / 60,
+  };
+  return request("POST", "/api/clock", body);
+}
+
+export async function gotoMount(body: EquatorialGoto | HorizontalGoto): Promise<string> {
+  const started = await request<JobStarted>("POST", "/api/mount/goto", body);
+  return started.job;
+}
+
+export function abortMount(): Promise<void> {
+  return request("POST", "/api/mount/abort");
+}
+
+export function setTracking(body: TrackingRequest): Promise<void> {
+  return request("PUT", "/api/mount/tracking", body);
+}
+
+export async function parkMount(): Promise<string> {
+  const started = await request<JobStarted>("POST", "/api/mount/park");
+  return started.job;
+}
+
+export function unparkMount(): Promise<void> {
+  return request("POST", "/api/mount/unpark");
+}
+
+export async function homeMount(): Promise<string> {
+  const started = await request<JobStarted>("POST", "/api/mount/home");
+  return started.job;
+}
+
+export function sendMountTime(): Promise<void> {
+  return request("POST", "/api/mount/time");
+}
+
+// Without a site, the active profile's.
+export function sendMountSite(body: MountSiteRequest = {}): Promise<void> {
+  return request("PUT", "/api/mount/site", body);
 }

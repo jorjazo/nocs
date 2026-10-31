@@ -13,9 +13,23 @@
     disabled?: boolean;
     onchange: (value: T) => void;
   } = $props();
+
+  let group: HTMLDivElement;
+
+  // When the options scroll sideways, keep the selected one in view (a mount's
+  // ten speeds, a wheel's slots), without scrolling anything else.
+  $effect(() => {
+    void value;
+    const selected = group.querySelector<HTMLElement>('[aria-checked="true"]');
+    if (!selected) return;
+    const left = selected.offsetLeft;
+    const right = left + selected.offsetWidth;
+    if (left < group.scrollLeft) group.scrollLeft = left;
+    else if (right > group.scrollLeft + group.clientWidth) group.scrollLeft = right - group.clientWidth;
+  });
 </script>
 
-<div class="segmented" role="radiogroup" aria-label={label}>
+<div class="segmented" role="radiogroup" aria-label={label} bind:this={group}>
   {#each options as option (option.value)}
     <button
       type="button"
@@ -33,6 +47,7 @@
   /* Many options (a filter wheel's slots) scroll sideways rather than shrink
      below the touch size. */
   .segmented {
+    position: relative;
     display: flex;
     gap: var(--space-1);
     padding: var(--space-1);

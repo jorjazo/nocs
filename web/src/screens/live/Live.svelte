@@ -18,10 +18,13 @@
   import { formatDecimal, formatPlain, formatSeconds, formatTemperature } from "../../lib/format";
   import { i18n } from "../../lib/i18n";
   import { live } from "../../lib/live.svelte";
+  import { formatDec, formatRa, mountActivity } from "../../lib/mount.svelte";
   import { router } from "../../lib/router.svelte";
   import FilterWheelSheet from "../devices/FilterWheelSheet.svelte";
   import FocuserNudge from "../devices/FocuserNudge.svelte";
   import FocuserSheet from "../devices/FocuserSheet.svelte";
+  import MountPad from "../devices/MountPad.svelte";
+  import MountSheet from "../devices/MountSheet.svelte";
   import Histogram from "./Histogram.svelte";
   import SettingSheet, { type Setting } from "./SettingSheet.svelte";
   import Shutter from "./Shutter.svelte";
@@ -141,7 +144,18 @@
   // -- Layout ----------------------------------------------------------------------------
 
   let editing = $state<Setting | null>(null);
-  let device = $state<"focuser" | "filter_wheel" | null>(null);
+  let device = $state<"focuser" | "filter_wheel" | "mount" | null>(null);
+
+  // The mount, to frame by hand while a loop runs: its pad folds away.
+  const mount = $derived(live.app.mount ?? null);
+  const mountJob = $derived(holder(live.app.jobs, "mount"));
+  let showPad = $state(false);
+  const padReason = $derived.by((): string | null => {
+    if (!owner) return t.mount.locked;
+    if (mount?.parked) return t.mount.padParked;
+    if (mountJob) return t.mount.padBusy;
+    return null;
+  });
   let expanded = $state(false);
 
   const region = $derived(camera?.region ?? null);
@@ -274,6 +288,21 @@
         </div>
       {/if}
 
+      {#if mount}
+        <div class="focuser">
+          <button type="button" class="readout-button" onclick={() => (device = "mount")}>
+            <span class="label muted">{t.mount.title}</span>
+            <span class="value mono coordinates"
+              ><span>{formatRa(mount.ra_j2000)}</span> <span>{formatDec(mount.dec_j2000)}</span></span>
+            <span class="caption muted">{mountActivity(mount, t).text}</span>
+          </button>
+          <Button onclick={() => (showPad = !showPad)}>{showPad ? t.mount.hidePad : t.mount.showPad}</Button>
+        </div>
+        {#if showPad}
+          <MountPad {mount} disabled={padReason !== null} reason={padReason} />
+        {/if}
+      {/if}
+
       <div class="tiles">
         <Tile
           label={t.live.exposure}
@@ -397,6 +426,8 @@
     <FocuserSheet onclose={() => (device = null)} />
   {:else if device === "filter_wheel"}
     <FilterWheelSheet onclose={() => (device = null)} />
+  {:else if device === "mount"}
+    <MountSheet onclose={() => (device = null)} />
   {/if}
 {/if}
 
@@ -522,6 +553,13 @@
     font-size: 20px;
     line-height: 26px;
     font-weight: 500;
+  }
+  .readout-button .coordinates {
+    font-size: 17px;
+    line-height: 24px;
+  }
+  .coordinates > span {
+    white-space: nowrap;
   }
   .tiles {
     display: grid;

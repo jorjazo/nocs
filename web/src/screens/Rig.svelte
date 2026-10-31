@@ -26,10 +26,12 @@
   import { formatBytes, formatDateTime, formatDecimal, formatPlain, formatTemperature } from "../lib/format";
   import { i18n, LANGUAGE_NAMES } from "../lib/i18n";
   import { live } from "../lib/live.svelte";
+  import { formatDec, formatRa, mountActivity } from "../lib/mount.svelte";
   import { LOCALES, prefs, THEMES } from "../lib/prefs.svelte";
   import { href, router } from "../lib/router.svelte";
   import FilterWheelSheet from "./devices/FilterWheelSheet.svelte";
   import FocuserSheet from "./devices/FocuserSheet.svelte";
+  import MountSheet from "./devices/MountSheet.svelte";
   import PowerSheet from "./devices/PowerSheet.svelte";
   import type { CameraState, Optics, PairedDevice, Profile, Role, RoleState } from "../lib/types";
 
@@ -135,7 +137,8 @@
   const weather = $derived(live.app.weather ?? null);
   const focuser = $derived(live.app.focuser ?? null);
   const wheel = $derived(live.app.filter_wheel ?? null);
-  let sheet = $state<"power" | "focuser" | "filter_wheel" | null>(null);
+  const mount = $derived(live.app.mount ?? null);
+  let sheet = $state<"power" | "focuser" | "filter_wheel" | "mount" | null>(null);
 
   function subtitle(role: Role): string {
     const parts = [t.roles[role]];
@@ -154,6 +157,9 @@
       parts.push(t.rig.position(formatPlain(focuser.position, locale)));
       if (focuser.temperature !== null) parts.push(formatTemperature(focuser.temperature, locale));
     }
+    if (role === "mount" && mount) {
+      parts.push(`${formatRa(mount.ra_j2000)} ${formatDec(mount.dec_j2000)}`, mountActivity(mount, t).text);
+    }
     if (role === "filter_wheel" && wheel) {
       if (wheel.label) parts.push(wheel.label);
       if (wheel.slot) parts.push(slotLabel(wheel, wheel.slot, t));
@@ -163,13 +169,18 @@
   }
 
   function moving(role: Role): boolean {
-    return (role === "focuser" && !!focuser?.moving) || (role === "filter_wheel" && !!wheel?.moving);
+    return (
+      (role === "focuser" && !!focuser?.moving) ||
+      (role === "filter_wheel" && !!wheel?.moving) ||
+      (role === "mount" && !!mount && mountActivity(mount, t).moving)
+    );
   }
 
   function opener(role: Role): (() => void) | undefined {
     if (role === "focuser" && focuser) return () => (sheet = "focuser");
     if (role === "filter_wheel" && wheel) return () => (sheet = "filter_wheel");
     if (role === "power" && power) return () => (sheet = "power");
+    if (role === "mount" && mount) return () => (sheet = "mount");
     return undefined;
   }
 
@@ -479,6 +490,8 @@
   <PowerSheet onclose={() => (sheet = null)} />
 {:else if sheet === "focuser"}
   <FocuserSheet onclose={() => (sheet = null)} />
+{:else if sheet === "mount"}
+  <MountSheet onclose={() => (sheet = null)} />
 {:else if sheet === "filter_wheel"}
   <FilterWheelSheet onclose={() => (sheet = null)} />
 {/if}

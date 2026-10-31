@@ -88,6 +88,18 @@ export function formatTemperature(celsius: number, locale: string, digits = 1): 
   return `${formatDecimal(celsius, locale, digits)} °C`;
 }
 
+// How far apart two clocks are, roughly: "45 s", "3 min", "2 h 5 min", "3 d 4 h".
+export function formatDuration(seconds: number): string {
+  const s = Math.round(Math.abs(seconds));
+  if (s < 60) return `${s} s`;
+  const minutes = Math.floor(s / 60);
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return minutes % 60 ? `${hours} h ${minutes % 60} min` : `${hours} h`;
+  const days = Math.floor(hours / 24);
+  return hours % 24 ? `${days} d ${hours % 24} h` : `${days} d`;
+}
+
 // Numbers typed by hand, with either decimal separator; null if not a number.
 export function parseNumber(text: string): number | null {
   const cleaned = text.trim().replace(",", ".").replace(MINUS, "-");

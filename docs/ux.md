@@ -189,6 +189,28 @@ Focuser, filter wheel and profile editor (stage 2.8):
   suggestions, serial port from `/dev/serial/by-id/`; then both trains' optics
   and the site. Changes to a connected profile apply when it is next connected.
 
+Mount (stage 2.9):
+
+- The mount opens as a sheet from its row in Rig and from its readout in Live
+  view: J2000 position, then JNow, alt/az and pier side; the slew pad; go to
+  (J2000, typed as `00 42 44` / `+41 16 09` or decimals, or the zenith for a flat
+  panel); tracking and its rate; park, unpark and home; the site and time the
+  mount was given; the limits it keeps (read only). A running go to, park or
+  home shows its progress and a Stop that aborts everything.
+- The slew pad moves the mount only while an arrow is held, two at once for a
+  diagonal, at a speed picked from the driver's rates. The client repeats what
+  it holds every 0.25 s and lets go when the finger lifts, the page goes to the
+  background or the window loses focus; the server stops the mount after 1 s
+  without a message (ADR 0015). After a stop NOCS made, the pad says so and
+  waits for the arrows to be let go. Arrow keys work on a keyboard. East is on
+  the left, as on a sky chart. Live view carries the pad folded under the
+  focuser, for framing while a loop runs.
+- Park and home take a second tap; go to and zenith do not. A go to below the
+  horizon is refused with a "Go anyway" that takes a second tap.
+- Every time the state channel opens, the owner's device reports its clock.
+  When the Pi's is more than 5 s off, a banner on every screen says by how much
+  and that NOCS uses this device's time for frames and the mount.
+
 ## 8. Open UX questions
 
 - Persistent "session running" indicator on non-session screens (banner vs.

@@ -46,6 +46,12 @@ export const ICONS = {
   close: ["M6 6l12 12M18 6L6 18"],
   plus: ["M12 5v14M5 12h14"],
   minus: ["M5 12h14"],
+  up: ["M6 15l6-6 6 6"],
+  down: ["M6 9l6 6 6-6"],
+  left: ["M15 6l-6 6 6 6"],
+  right: ["M9 6l6 6-6 6"],
+  home: ["M4 11l8-6.5 8 6.5", "M6.5 9.5V19.5h11V9.5", "M10 19.5v-5h4v5"],
+  park: [circle(12, 12, 9), "M9.5 16.5v-9h3.5a2.75 2.75 0 0 1 0 5.5H9.5"],
 } satisfies Record<string, string[]>;
 
 export type IconName = keyof typeof ICONS;
