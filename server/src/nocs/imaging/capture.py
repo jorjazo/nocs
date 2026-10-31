@@ -36,6 +36,7 @@ from typing import Any
 
 import anyio
 
+from nocs.clock import Clock
 from nocs.devices import Camera, DeviceError, FilterWheel, Frame, FrameType
 from nocs.devices.camera import Region
 from nocs.equipment import EquipmentService, Role
@@ -199,6 +200,7 @@ class CaptureService:
         storage: StorageService,
         data_dir: FsPath,
         uploads: UploadDirs | None = None,
+        clock: Clock | None = None,
     ) -> None:
         self._store = store
         self._jobs = jobs
@@ -207,6 +209,7 @@ class CaptureService:
         self._worker = worker
         self._storage = storage
         self._uploads = uploads
+        self._clock = clock
         self._incoming_dir = data_dir / "incoming"
         self._client: IndiClient | None = bridge.client
         self._remove_listener = lambda: None
@@ -413,6 +416,7 @@ class CaptureService:
             profile=self._equipment.active,
             site=profile.site if profile is not None else None,
             optics=profile.imaging if profile is not None else None,
+            clock_correction=self._clock.correction if self._clock is not None else 0.0,
         )
 
     async def _take(
@@ -481,7 +485,8 @@ class CaptureService:
         finally:
             remove()
         used_type = frame_type if frame_type is not None else camera.frame_type
-        return Shot(path, size, used_type, datetime.now(UTC), seconds, camera.bayer_pattern)
+        taken = self._clock.now() if self._clock is not None else datetime.now(UTC)
+        return Shot(path, size, used_type, taken, seconds, camera.bayer_pattern)
 
     async def _preview(self, role: Role, shot: Shot, *, discard: bool) -> FrameAnalysis | None:
         """Analyse a frame in the worker and publish its preview; never raises."""

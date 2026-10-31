@@ -103,6 +103,8 @@ class FrameFacts:
     profile: str | None
     site: Site | None
     optics: Optics | None
+    clock_correction: float = 0.0
+    """Seconds to add to the driver's DATE-OBS: the system clock is off (nocs.clock)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -133,12 +135,14 @@ class StorageService:
         longitude: Callable[[], float | None] = lambda: None,
         paths: SystemPaths | None = None,
         search: tuple[Path, ...] = SEARCH,
+        now: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
         self._store = store
         self._config_file = config_dir / "storage.json"
         self._unsaved_dir = data_dir / "unsaved"
         self._internal_dir = internal_dir
         self._longitude = longitude
+        self._now = now
         self._paths = paths
         self._search = search
         self._lock = threading.Lock()
@@ -225,7 +229,12 @@ class StorageService:
             header = Header(facts.source)
         except (FitsError, OSError) as e:
             raise StorageError(f"cannot read the frame: {e}") from e
-        started = header.start() or facts.arrived - timedelta(seconds=facts.exposure)
+        driver_start = header.start()
+        corrected = driver_start is not None and facts.clock_correction != 0
+        if driver_start is not None:
+            started = driver_start + timedelta(seconds=facts.clock_correction)
+        else:
+            started = facts.arrived - timedelta(seconds=facts.exposure)
         night = layout.night_of(started, facts.site.longitude if facts.site else None)
         size = facts.source.stat().st_size
         destination = self._checked(self._resolve(Volumes(self._paths), night), size)
@@ -260,7 +269,17 @@ class StorageService:
             ),
         )
         suffix = facts.source.suffix or ".fits"
-        header.apply(_cards(facts, target), overwrite=OWNED_KEYWORDS)
+        cards = _cards(facts, target)
+        if corrected:
+            # The driver stamped the frame with the system clock, which is off.
+            start = started.astimezone(UTC).replace(tzinfo=None).isoformat(timespec="milliseconds")
+            cards.append(Card("DATE-OBS", start, "UTC start of exposure, corrected by NOCS"))
+            cards.append(
+                Card("CLOCKCOR", round(facts.clock_correction, 3), "s added to the system clock")
+            )
+        header.apply(
+            cards, overwrite=OWNED_KEYWORDS | ({"DATE-OBS"} if corrected else frozenset[str]())
+        )
         for attempt in range(1, 1000):
             name = f"{stem}{f'_{attempt}' if attempt > 1 else ''}{suffix}"
             try:
@@ -454,7 +473,7 @@ class StorageService:
         current: str | None = None
         error: str | None = None
         try:
-            night = layout.night_of(datetime.now(UTC), longitude)
+            night = layout.night_of(self._now(), longitude)
             current = self._checked(self._resolve(volumes, night), 0).id
         except (StorageError, OSError) as e:
             error = str(e)

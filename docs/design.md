@@ -187,6 +187,8 @@ Three channels, each used for what it does best:
      number. On reconnect, the client asks for patches since its last version;
      if they are no longer available, it gets a new snapshot.
    - Events (job progress, log messages, alerts) travel on the same channel.
+   - One exception: the mount's slew pad has a WebSocket of its own, whose
+     messages double as a dead man's switch (ADR 0015).
 3. **Plain HTTP** for binary data: preview images, FITS files, logs, session
    reports. The WebSocket only announces that a new resource is available.
    This keeps binary data cacheable and out of the state channel.

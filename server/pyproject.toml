@@ -12,6 +12,7 @@ dependencies = [
     "opencv-python-headless>=4.10",
     "pydantic>=2.9",
     "pydantic-settings>=2.6",
+    "pyerfa>=2.0",
     "sep>=1.4",
     "uvicorn[standard]>=0.32",
     "zipstream-ng>=1.8",

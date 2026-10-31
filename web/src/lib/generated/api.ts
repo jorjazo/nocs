@@ -27,6 +27,16 @@ export type PropertyStateName = "Idle" | "Ok" | "Busy" | "Alert";
 export type JobStateName = "running" | "succeeded" | "failed" | "cancelled";
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "NorthSouth".
+ */
+export type NorthSouth = "north" | "south";
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "WestEast".
+ */
+export type WestEast = "west" | "east";
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "ClientRole".
  */
 export type ClientRole = "owner" | "observer";
@@ -50,6 +60,21 @@ export interface NOCSAPI {
   [k: string]: unknown;
 }
 /**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "AltitudeLimits".
+ */
+export interface AltitudeLimits {
+  enabled: boolean;
+  /**
+   * Degrees.
+   */
+  lower: number;
+  /**
+   * Degrees.
+   */
+  upper: number;
+}
+/**
  * The whole state tree sent in snapshots and modified by patches.
  *
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -62,6 +87,7 @@ export interface AppState {
   cameras?: {
     [k: string]: CameraState;
   } | null;
+  clock?: ClockState | null;
   equipment?: EquipmentState | null;
   indi?: IndiState | null;
   /**
@@ -70,6 +96,10 @@ export interface AppState {
   jobs?: {
     [k: string]: JobInfo;
   } | null;
+  /**
+   * None: no mount is ready.
+   */
+  mount?: MountState | null;
   storage?: StorageState | null;
 }
 /**
@@ -245,6 +275,24 @@ export interface SensorInfo {
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "ClockState".
+ */
+export interface ClockState {
+  /**
+   * The system clock is more than 5 s off: NOCS uses the clients' time for frame times, nights and the mount.
+   */
+  corrected: boolean;
+  /**
+   * When it was last reported, UTC.
+   */
+  measured: string | null;
+  /**
+   * Seconds the clients' clock is ahead of the system clock; None until a client reports it.
+   */
+  offset: number | null;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "EquipmentState".
  */
 export interface EquipmentState {
@@ -405,6 +453,136 @@ export interface JobInfo {
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "MountState".
+ */
+export interface MountState {
+  /**
+   * Degrees; from the driver, or computed when the site and time are known.
+   */
+  alt: number | null;
+  /**
+   * Degrees from north through east.
+   */
+  az: number | null;
+  can_home: boolean;
+  can_park: boolean;
+  /**
+   * Apparent (JNow) declination, degrees.
+   */
+  dec: number;
+  /**
+   * Degrees.
+   */
+  dec_j2000: number;
+  device: string;
+  homing: boolean;
+  limits: MountLimits;
+  /**
+   * Paired device whose slew pad holds the mount.
+   */
+  moved_by: string | null;
+  moving: MountMotion;
+  parked: boolean;
+  /**
+   * Parking or unparking right now.
+   */
+  parking: boolean;
+  pier_side: "east" | "west" | "unknown";
+  /**
+   * Apparent (JNow) right ascension, hours.
+   */
+  ra: number;
+  /**
+   * Hours.
+   */
+  ra_j2000: number;
+  /**
+   * Where the mount believes it is.
+   */
+  site: MountSite | null;
+  /**
+   * The mount's site against the active profile's.
+   */
+  site_check: "same" | "different" | "unknown" | "no_profile_site";
+  /**
+   * NOCS sent the site since the mount became ready.
+   */
+  site_sent: boolean;
+  /**
+   * Speed of manual motion, a name in slew_rates.
+   */
+  slew_rate: string | null;
+  /**
+   * Slowest first, as the driver names them.
+   */
+  slew_rates: string[];
+  slewing: boolean;
+  /**
+   * The mount's clock as it last reported it, UTC.
+   */
+  time: string | null;
+  /**
+   * NOCS sent the time since the mount became ready; go to waits for both.
+   */
+  time_sent: boolean;
+  /**
+   * e.g. sidereal, lunar, solar, custom.
+   */
+  track_mode: string | null;
+  track_modes: string[];
+  tracking: boolean;
+}
+/**
+ * Limits the mount enforces itself, when its driver exposes them (read only).
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "MountLimits".
+ */
+export interface MountLimits {
+  altitude: AltitudeLimits | null;
+  meridian: MeridianLimits | null;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "MeridianLimits".
+ */
+export interface MeridianLimits {
+  /**
+   * The mount flips by itself at the limit.
+   */
+  flip: boolean;
+  /**
+   * Degrees past the meridian.
+   */
+  limit: number;
+}
+/**
+ * Manual motion (slew pad), axis by axis.
+ */
+export interface MountMotion {
+  ns: NorthSouth | null;
+  we: WestEast | null;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "MountSite".
+ */
+export interface MountSite {
+  /**
+   * Metres.
+   */
+  elevation: number;
+  /**
+   * Degrees, north positive.
+   */
+  latitude: number;
+  /**
+   * Degrees, east positive (-180..180).
+   */
+  longitude: number;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "StorageState".
  */
 export interface StorageState {
@@ -531,6 +709,36 @@ export interface CameraSettingsRequest {
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "ClockReport".
+ */
+export interface ClockReport {
+  /**
+   * NOCS now uses the clients' time (offset over 5 s).
+   */
+  corrected: boolean;
+  /**
+   * Seconds the client is ahead of the system clock.
+   */
+  offset: number;
+}
+/**
+ * The client's clock, sent when it connects.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "ClockRequest".
+ */
+export interface ClockRequest {
+  /**
+   * ISO 8601 with a time zone, e.g. 2026-10-30T23:10:05.120Z.
+   */
+  utc: string;
+  /**
+   * The client's time zone, hours east of UTC.
+   */
+  utc_offset?: number | null;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "ConnectRequest".
  */
 export interface ConnectRequest {
@@ -595,6 +803,25 @@ export interface Driver {
   label: string;
   manufacturer: string;
   name: string;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "EquatorialGoto".
+ */
+export interface EquatorialGoto {
+  /**
+   * Degrees.
+   */
+  dec: number;
+  /**
+   * Slew even if the target is below the horizon.
+   */
+  force?: boolean;
+  frame: "j2000" | "jnow";
+  /**
+   * Hours.
+   */
+  ra: number;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -678,6 +905,23 @@ export interface Hello {
   type?: "hello";
 }
 /**
+ * Point at a place in the local sky (e.g. the zenith for flats); tracking stops.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "HorizontalGoto".
+ */
+export interface HorizontalGoto {
+  /**
+   * Degrees.
+   */
+  alt: number;
+  /**
+   * Degrees from north through east.
+   */
+  az: number;
+  frame: "altaz";
+}
+/**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "JobStarted".
  */
@@ -696,6 +940,43 @@ export interface LoopRequest {
    */
   exposure: number;
   frame_type?: FrameTypeName | null;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "MountMotion".
+ */
+export interface MountMotion1 {
+  ns: NorthSouth | null;
+  we: WestEast | null;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "MountSiteRequest".
+ */
+export interface MountSiteRequest {
+  /**
+   * None: the active profile's site.
+   */
+  site?: Site | null;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "Site".
+ */
+export interface Site {
+  /**
+   * Metres above sea level.
+   */
+  elevation?: number;
+  /**
+   * Degrees, north positive.
+   */
+  latitude: number;
+  /**
+   * Degrees, east positive.
+   */
+  longitude: number;
+  name?: string;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -771,6 +1052,40 @@ export interface Optics {
   reducer?: number;
 }
 /**
+ * What the client holds, repeated every 0.25 s while held; all null to let go.
+ *
+ * The mount stops after 1 s without a message, when the socket closes, and on
+ * any error; after such a stop the client must let go before moving again.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "PadRequest".
+ */
+export interface PadRequest {
+  ns?: NorthSouth | null;
+  /**
+   * One of the mount's slew_rates.
+   */
+  rate?: string | null;
+  we?: WestEast | null;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "PadStatusMessage".
+ */
+export interface PadStatusMessage {
+  /**
+   * Stopped by NOCS: let go before moving again.
+   */
+  latched: boolean;
+  /**
+   * Why it stopped or refused.
+   */
+  message: string | null;
+  moving: MountMotion1;
+  rate: string | null;
+  type: "pad";
+}
+/**
  * Set up the owner passphrase (``/api/auth/setup``) or pair with it (``/api/auth/pair``).
  *
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -838,25 +1153,6 @@ export interface Profile {
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
- * via the `definition` "Site".
- */
-export interface Site {
-  /**
-   * Metres above sea level.
-   */
-  elevation?: number;
-  /**
-   * Degrees, north positive.
-   */
-  latitude: number;
-  /**
-   * Degrees, east positive.
-   */
-  longitude: number;
-  name?: string;
-}
-/**
- * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "SerialPortInfo".
  */
 export interface SerialPortInfo {
@@ -919,4 +1215,17 @@ export interface TemplateRequest {
    * Fields: {target} {night} {type} {filter} {exposure} {gain} {offset} {temperature} {binning} {camera} {datetime} {seq}.
    */
   template: string;
+}
+/**
+ * Only the fields present are changed.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "TrackingRequest".
+ */
+export interface TrackingRequest {
+  /**
+   * One of the mount's track_modes.
+   */
+  mode?: string | null;
+  on?: boolean | null;
 }

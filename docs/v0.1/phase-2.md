@@ -25,7 +25,7 @@ the exit.
 | 2.6 | Web app foundation | Design tokens and themes, navigation, router, i18n (en/es), typed API client, first run and pairing screens, Rig status and connect | Pair and connect from a phone | Done |
 | 2.7 | Live view | Preview with zoom, metrics, histogram, exposure settings, loop / capture / save, cooling; night mode tints previews | ZWO camera from the phone | |
 | 2.8 | Focuser, filter wheel, profile editor | EAF (absolute/relative moves, temperature), EFW (filter names from the profile), profile editor (devices, roles, optics, ports) | EFW and EAF | |
-| 2.9 | Mount | Slew pad with a server-side dead man's switch, go to coordinates (J2000 → JNow), tracking, park/unpark, home; time and site from the client to the mount | AM5 | |
+| 2.9 | Mount | Slew pad with a server-side dead man's switch, go to coordinates (J2000 → JNow) and alt/az, tracking, park/unpark, home; time and site from the client to the mount; frame times corrected when the Pi's clock is off ([ADR 0015](../adr/0015-mount-control-and-client-time.md)) | AM5 | Server done and checked on the lab AM7 (same driver); AM5 and UI pending |
 | 2.10 | Power box | PPBA power outputs, adjustable output, dew heaters and auto-dew, environment readings (tested against recorded properties: no simulator exists) | PPBA | |
 | 2.11 | Guide camera and field test | Guide camera role with previews (guiding is phase 4); FITS header review on real frames; field test | Exit criterion | |
 
@@ -38,12 +38,16 @@ Pending, without a stage yet:
   frames are discarded once analysed. The server should keep the FITS behind the
   latest preview of each camera, with the facts read when it was taken (gain,
   temperature, filter, target), so the phone can save it later.
+- **Saved sites.** A site lives in each profile; a list of saved sites shared by
+  profiles (and offered to the mount) would avoid typing it again per rig.
+  Nothing checks a site against reality before geolocation or GPS (phase 6).
 
 ## Decisions taken for this phase
 
 - No privileged operations yet (they belong to nocs-system, phase 6): USB drives
   are mounted by the OS (fstab on the lab Pi), the system clock is not set;
-  time and site go to the mount from the client.
+  time and site go to the mount from the client, and when the Pi's clock is off
+  NOCS timestamps frames with the client's time instead (ADR 0015).
 - indiserver runs as its own service with a driver FIFO (ADR 0011); on the lab
   Pi, `dev/pi/indiserver@.service`.
 - Mockups live on a private design canvas; [ux.md](../ux.md) is the reference for

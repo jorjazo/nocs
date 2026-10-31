@@ -27,6 +27,7 @@ from pydantic import ValidationError
 
 from nocs import __version__
 from nocs.api.auth import REVOKED, AuthMiddleware, Sockets, auth_router, identity
+from nocs.api.mount import mount_router
 from nocs.api.schemas import (
     CameraRoleName,
     CameraSettingsRequest,
@@ -53,6 +54,7 @@ from nocs.api.schemas import (
     TemplateRequest,
 )
 from nocs.auth import AuthStore
+from nocs.clock import Clock
 from nocs.config import Settings
 from nocs.devices import DeviceError
 from nocs.devices.camera import Region
@@ -76,6 +78,7 @@ from nocs.imaging.capture import UploadDirs
 from nocs.imaging.worker import ImageWorker
 from nocs.indi.drivers import DriverFifo, load_catalog
 from nocs.jobs import JobManager, ResourceBusyError
+from nocs.mount.service import MountService
 from nocs.services.indi_bridge import IndiBridge, NotConnectedError
 from nocs.state import Resync, StateStore
 from nocs.storage import (
@@ -118,12 +121,21 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
         assert services.storage is not None
         return services.storage
 
+    def mount() -> MountService:
+        assert services.mount is not None
+        return services.mount
+
+    def clock() -> Clock:
+        assert services.clock is not None
+        return services.clock
+
     def site_longitude() -> float | None:
         profile = equipment().active_profile
         return profile.site.longitude if profile is not None and profile.site else None
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncGenerator[None]:
+        services.clock = Clock(store)
         services.jobs = JobManager(store)
         services.equipment = EquipmentService(
             store, ProfileStore(settings.config_dir), bridge, fifo
@@ -136,6 +148,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
             settings.data_dir,
             settings.storage_dir or settings.data_dir,
             site_longitude,
+            now=services.clock.now,
         )
         await services.storage.start()
         services.capture = CaptureService(
@@ -148,11 +161,16 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
             services.storage,
             settings.data_dir,
             _upload_dirs(settings),
+            services.clock,
+        )
+        services.mount = MountService(
+            store, services.jobs, services.equipment, bridge, services.clock
         )
         task = asyncio.create_task(bridge.run(), name="indi-bridge")
         try:
             yield
         finally:
+            await mount().close()
             await jobs().close()
             await capture().close()
             await equipment().close()
@@ -165,6 +183,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
     app = FastAPI(title="NOCS", version=__version__, lifespan=lifespan)
     app.add_middleware(AuthMiddleware, auth=auth, hostnames=settings.hostnames)
     app.include_router(auth_router(auth, sockets))
+    app.include_router(mount_router(mount, clock, sockets))
 
     @app.get("/api/health")
     async def health() -> Health:  # pyright: ignore[reportUnusedFunction]
@@ -421,6 +440,8 @@ class _Services:
     equipment: EquipmentService | None = None
     capture: CaptureService | None = None
     storage: StorageService | None = None
+    mount: MountService | None = None
+    clock: Clock | None = None
 
 
 def _upload_dirs(settings: Settings) -> UploadDirs | None:

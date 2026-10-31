@@ -128,6 +128,9 @@ Goal: anyone can flash an image and use NOCS.
 
 - nocs-system: Wi-Fi access point / station / fallback, USB storage manager,
   health monitoring, reboot/shutdown.
+- System clock and site from the client (and geolocation, now over HTTPS) or a
+  USB GPS on connect; until then NOCS only corrects its own timestamps
+  (ADR 0015).
 - indiserver supervision: systemd restarts it when it dies, but nothing yet
   detects an indiserver or driver that hangs without exiting. Design the
   detection and recovery then (see ADR 0011).

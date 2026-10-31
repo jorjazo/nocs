@@ -17,6 +17,7 @@ from nocs.indi import (
     ConnectionLost,
     IndiClient,
     IndiEvent,
+    MessageReceived,
     Property,
     PropertyDeleted,
     PropertyState,
@@ -181,18 +182,24 @@ class Device:
 
         The listener is registered before sending, so an update that arrives
         immediately cannot be missed, and a stale ``Ok`` from before the command
-        is never mistaken for completion.
+        is never mistaken for completion. Drivers often explain a failure in a
+        separate message just before the ``Alert`` (the ZWO mounts' "Slew failed"); it
+        becomes the error's detail when the property carries none.
         """
         loop = asyncio.get_running_loop()
         result: asyncio.Future[Property] = loop.create_future()
+        messages: list[str] = []
 
         def on_event(event: IndiEvent) -> None:
             if result.done():
                 return
             match event:
+                case MessageReceived(device=device, text=text) if device == self.name:
+                    messages.append(text.removeprefix("[ERROR] ").strip())
                 case PropertyUpdated(property=prop) if prop.key == (self.name, name):
                     if prop.state is PropertyState.ALERT:
-                        detail = f": {prop.message}" if prop.message else ""
+                        reason = prop.message or "; ".join(messages[-2:])
+                        detail = f": {reason}" if reason else ""
                         result.set_exception(DeviceError(f"{self.name}.{name} failed{detail}"))
                     elif prop.state in accept and (done is None or done(prop)):
                         result.set_result(prop)

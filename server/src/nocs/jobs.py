@@ -7,6 +7,9 @@ publishes its progress in the state tree under ``("jobs", <id>)``::
 
 Commands that would disturb a running job (changing the gain mid-exposure)
 check the lock first and are refused with ``ResourceBusyError``.
+
+Short interactive operations that are not worth a job entry (moving the mount
+with the slew pad) hold the same locks through ``reserve``.
 """
 
 from __future__ import annotations
@@ -34,10 +37,12 @@ class JobState(StrEnum):
 
 
 class ResourceBusyError(Exception):
-    def __init__(self, resource: str, kind: str, job_id: str) -> None:
-        super().__init__(f"{resource} is busy ({kind} {job_id})")
+    def __init__(self, resource: str, kind: str, job_id: str | None) -> None:
+        holder = f"{kind} {job_id}" if job_id is not None else kind
+        super().__init__(f"{resource} is busy ({holder})")
         self.resource = resource
         self.job_id = job_id
+        """``None`` when a reservation, not a job, holds it."""
 
 
 class JobContext:
@@ -65,6 +70,7 @@ class JobManager:
         self._locks: dict[str, str] = {}
         """Resource → id of the job holding it."""
         self._kinds: dict[str, str] = {}
+        self._reservations: set[str] = set()
         self._finished: list[str] = []
         store.set(ROOT, {})
 
@@ -74,8 +80,34 @@ class JobManager:
 
     def check_free(self, resources: Iterable[str]) -> None:
         for resource in resources:
-            if (job_id := self._locks.get(resource)) is not None:
-                raise ResourceBusyError(resource, self._kinds[job_id], job_id)
+            if (holder := self._locks.get(resource)) is not None:
+                job_id = None if holder in self._reservations else holder
+                raise ResourceBusyError(resource, self._kinds[holder], job_id)
+
+    def reserve(self, kind: str, resources: Iterable[str]) -> str:
+        """Lock ``resources`` without a job; returns the token for ``release``."""
+        resources = sorted(set(resources))
+        self.check_free(resources)
+        token = f"{kind}-{uuid.uuid4().hex[:12]}"
+        for resource in resources:
+            self._locks[resource] = token
+        self._kinds[token] = kind
+        self._reservations.add(token)
+        return token
+
+    def release(self, token: str) -> None:
+        """Free what ``reserve`` locked; releasing twice does nothing."""
+        if token not in self._reservations:
+            return
+        self._reservations.discard(token)
+        del self._kinds[token]
+        for resource in [r for r, holder in self._locks.items() if holder == token]:
+            del self._locks[resource]
+
+    def job_holding(self, resource: str) -> str | None:
+        """Id of the running job that locks ``resource``; ``None`` for a reservation."""
+        holder = self._locks.get(resource)
+        return holder if holder is not None and holder in self._tasks else None
 
     def start(self, kind: str, resources: Iterable[str], run: JobFunction) -> str:
         """Lock ``resources`` and run ``run`` as a job; returns its id at once."""

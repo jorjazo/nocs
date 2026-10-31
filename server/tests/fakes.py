@@ -5,7 +5,7 @@ from collections.abc import Callable, Mapping
 from nocs.devices import DeviceInterface
 from nocs.indi import IndiClient, Property, PropertyState, PropertyType, PropertyUpdated
 from nocs.indi.properties import BlobElement, NumberElement, SwitchElement, TextElement
-from nocs.indi.protocol import DefineProperty, DeleteProperty, ElementValue, SetProperty
+from nocs.indi.protocol import DefineProperty, DeleteProperty, ElementValue, Message, SetProperty
 
 type Responder = Callable[[str, str, Mapping[str, str | float | bool]], object]
 
@@ -56,6 +56,9 @@ class FakeClient(IndiClient):
         element.format, element.size, element.data = fmt, len(data), data
         prop.state = PropertyState.OK
         self._emit(PropertyUpdated(prop, (name,)))  # pyright: ignore[reportPrivateUsage]
+
+    def message(self, device: str, text: str) -> None:
+        self._handle(Message(device, None, text))  # pyright: ignore[reportPrivateUsage]
 
     def delete(self, device: str, name: str | None = None) -> None:
         self._handle(DeleteProperty(device, name, None, None))  # pyright: ignore[reportPrivateUsage]

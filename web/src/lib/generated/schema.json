@@ -1,5 +1,28 @@
 {
   "$defs": {
+    "AltitudeLimits": {
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "lower": {
+          "description": "Degrees.",
+          "type": "number"
+        },
+        "upper": {
+          "description": "Degrees.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "enabled",
+        "lower",
+        "upper"
+      ],
+      "title": "AltitudeLimits",
+      "type": "object"
+    },
     "AppState": {
       "additionalProperties": false,
       "description": "The whole state tree sent in snapshots and modified by patches.",
@@ -21,6 +44,17 @@
           ],
           "default": null,
           "description": "Connected camera roles."
+        },
+        "clock": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ClockState"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "equipment": {
           "anyOf": [
@@ -58,6 +92,18 @@
           ],
           "default": null,
           "description": "Running jobs and the most recent finished ones."
+        },
+        "mount": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MountState"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "None: no mount is ready."
         },
         "storage": {
           "anyOf": [
@@ -428,6 +474,92 @@
       ],
       "type": "string"
     },
+    "ClockReport": {
+      "properties": {
+        "corrected": {
+          "description": "NOCS now uses the clients' time (offset over 5 s).",
+          "type": "boolean"
+        },
+        "offset": {
+          "description": "Seconds the client is ahead of the system clock.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "offset",
+        "corrected"
+      ],
+      "title": "ClockReport",
+      "type": "object"
+    },
+    "ClockRequest": {
+      "additionalProperties": false,
+      "description": "The client's clock, sent when it connects.",
+      "properties": {
+        "utc": {
+          "description": "ISO 8601 with a time zone, e.g. 2026-10-30T23:10:05.120Z.",
+          "format": "date-time",
+          "type": "string"
+        },
+        "utc_offset": {
+          "anyOf": [
+            {
+              "maximum": 14,
+              "minimum": -14,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The client's time zone, hours east of UTC."
+        }
+      },
+      "required": [
+        "utc"
+      ],
+      "title": "ClockRequest",
+      "type": "object"
+    },
+    "ClockState": {
+      "additionalProperties": false,
+      "properties": {
+        "corrected": {
+          "description": "The system clock is more than 5 s off: NOCS uses the clients' time for frame times, nights and the mount.",
+          "type": "boolean"
+        },
+        "measured": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "When it was last reported, UTC."
+        },
+        "offset": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Seconds the clients' clock is ahead of the system clock; None until a client reports it."
+        }
+      },
+      "required": [
+        "offset",
+        "measured",
+        "corrected"
+      ],
+      "title": "ClockState",
+      "type": "object"
+    },
     "ConnectRequest": {
       "properties": {
         "profile": {
@@ -587,6 +719,42 @@
     "DriverName": {
       "pattern": "^[A-Za-z0-9_.+-]{1,128}$",
       "type": "string"
+    },
+    "EquatorialGoto": {
+      "additionalProperties": false,
+      "properties": {
+        "dec": {
+          "description": "Degrees.",
+          "maximum": 90,
+          "minimum": -90,
+          "type": "number"
+        },
+        "force": {
+          "default": false,
+          "description": "Slew even if the target is below the horizon.",
+          "type": "boolean"
+        },
+        "frame": {
+          "enum": [
+            "j2000",
+            "jnow"
+          ],
+          "type": "string"
+        },
+        "ra": {
+          "description": "Hours.",
+          "exclusiveMaximum": 24,
+          "minimum": 0,
+          "type": "number"
+        }
+      },
+      "required": [
+        "frame",
+        "ra",
+        "dec"
+      ],
+      "title": "EquatorialGoto",
+      "type": "object"
     },
     "EquipmentState": {
       "additionalProperties": false,
@@ -994,6 +1162,35 @@
       "title": "Hello",
       "type": "object"
     },
+    "HorizontalGoto": {
+      "additionalProperties": false,
+      "description": "Point at a place in the local sky (e.g. the zenith for flats); tracking stops.",
+      "properties": {
+        "alt": {
+          "description": "Degrees.",
+          "maximum": 90,
+          "minimum": 0,
+          "type": "number"
+        },
+        "az": {
+          "description": "Degrees from north through east.",
+          "exclusiveMaximum": 360,
+          "minimum": 0,
+          "type": "number"
+        },
+        "frame": {
+          "const": "altaz",
+          "type": "string"
+        }
+      },
+      "required": [
+        "frame",
+        "alt",
+        "az"
+      ],
+      "title": "HorizontalGoto",
+      "type": "object"
+    },
     "IndiDevice": {
       "additionalProperties": false,
       "properties": {
@@ -1392,6 +1589,331 @@
       "title": "LoopRequest",
       "type": "object"
     },
+    "MeridianLimits": {
+      "additionalProperties": false,
+      "properties": {
+        "flip": {
+          "description": "The mount flips by itself at the limit.",
+          "type": "boolean"
+        },
+        "limit": {
+          "description": "Degrees past the meridian.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "flip",
+        "limit"
+      ],
+      "title": "MeridianLimits",
+      "type": "object"
+    },
+    "MountLimits": {
+      "additionalProperties": false,
+      "description": "Limits the mount enforces itself, when its driver exposes them (read only).",
+      "properties": {
+        "altitude": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AltitudeLimits"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "meridian": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MeridianLimits"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "altitude",
+        "meridian"
+      ],
+      "title": "MountLimits",
+      "type": "object"
+    },
+    "MountMotion": {
+      "additionalProperties": false,
+      "properties": {
+        "ns": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NorthSouth"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "we": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WestEast"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "ns",
+        "we"
+      ],
+      "title": "MountMotion",
+      "type": "object"
+    },
+    "MountSite": {
+      "additionalProperties": false,
+      "properties": {
+        "elevation": {
+          "description": "Metres.",
+          "type": "number"
+        },
+        "latitude": {
+          "description": "Degrees, north positive.",
+          "type": "number"
+        },
+        "longitude": {
+          "description": "Degrees, east positive (-180..180).",
+          "type": "number"
+        }
+      },
+      "required": [
+        "latitude",
+        "longitude",
+        "elevation"
+      ],
+      "title": "MountSite",
+      "type": "object"
+    },
+    "MountSiteRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "site": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Site"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "None: the active profile's site."
+        }
+      },
+      "title": "MountSiteRequest",
+      "type": "object"
+    },
+    "MountState": {
+      "additionalProperties": false,
+      "properties": {
+        "alt": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Degrees; from the driver, or computed when the site and time are known."
+        },
+        "az": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Degrees from north through east."
+        },
+        "can_home": {
+          "type": "boolean"
+        },
+        "can_park": {
+          "type": "boolean"
+        },
+        "dec": {
+          "description": "Apparent (JNow) declination, degrees.",
+          "type": "number"
+        },
+        "dec_j2000": {
+          "description": "Degrees.",
+          "type": "number"
+        },
+        "device": {
+          "type": "string"
+        },
+        "homing": {
+          "type": "boolean"
+        },
+        "limits": {
+          "$ref": "#/$defs/MountLimits"
+        },
+        "moved_by": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Paired device whose slew pad holds the mount."
+        },
+        "moving": {
+          "$ref": "#/$defs/MountMotion",
+          "description": "Manual motion (slew pad), axis by axis."
+        },
+        "parked": {
+          "type": "boolean"
+        },
+        "parking": {
+          "description": "Parking or unparking right now.",
+          "type": "boolean"
+        },
+        "pier_side": {
+          "enum": [
+            "east",
+            "west",
+            "unknown"
+          ],
+          "type": "string"
+        },
+        "ra": {
+          "description": "Apparent (JNow) right ascension, hours.",
+          "type": "number"
+        },
+        "ra_j2000": {
+          "description": "Hours.",
+          "type": "number"
+        },
+        "site": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MountSite"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Where the mount believes it is."
+        },
+        "site_check": {
+          "description": "The mount's site against the active profile's.",
+          "enum": [
+            "same",
+            "different",
+            "unknown",
+            "no_profile_site"
+          ],
+          "type": "string"
+        },
+        "site_sent": {
+          "description": "NOCS sent the site since the mount became ready.",
+          "type": "boolean"
+        },
+        "slew_rate": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Speed of manual motion, a name in slew_rates."
+        },
+        "slew_rates": {
+          "description": "Slowest first, as the driver names them.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "slewing": {
+          "type": "boolean"
+        },
+        "time": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The mount's clock as it last reported it, UTC."
+        },
+        "time_sent": {
+          "description": "NOCS sent the time since the mount became ready; go to waits for both.",
+          "type": "boolean"
+        },
+        "track_mode": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "e.g. sidereal, lunar, solar, custom."
+        },
+        "track_modes": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "tracking": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "device",
+        "ra",
+        "dec",
+        "ra_j2000",
+        "dec_j2000",
+        "alt",
+        "az",
+        "slewing",
+        "tracking",
+        "track_mode",
+        "track_modes",
+        "parked",
+        "parking",
+        "can_park",
+        "can_home",
+        "homing",
+        "pier_side",
+        "moving",
+        "moved_by",
+        "slew_rate",
+        "slew_rates",
+        "time",
+        "site",
+        "site_check",
+        "site_sent",
+        "time_sent",
+        "limits"
+      ],
+      "title": "MountState",
+      "type": "object"
+    },
     "NightGroup": {
       "properties": {
         "exposure": {
@@ -1499,6 +2021,13 @@
       "title": "NightInfo",
       "type": "object"
     },
+    "NorthSouth": {
+      "enum": [
+        "north",
+        "south"
+      ],
+      "type": "string"
+    },
     "ObserverRequest": {
       "additionalProperties": false,
       "properties": {
@@ -1544,6 +2073,94 @@
         "focal_length"
       ],
       "title": "Optics",
+      "type": "object"
+    },
+    "PadRequest": {
+      "additionalProperties": false,
+      "description": "What the client holds, repeated every 0.25 s while held; all null to let go.\n\nThe mount stops after 1 s without a message, when the socket closes, and on\nany error; after such a stop the client must let go before moving again.",
+      "properties": {
+        "ns": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NorthSouth"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "rate": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "One of the mount's slew_rates."
+        },
+        "we": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WestEast"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "PadRequest",
+      "type": "object"
+    },
+    "PadStatusMessage": {
+      "properties": {
+        "latched": {
+          "description": "Stopped by NOCS: let go before moving again.",
+          "type": "boolean"
+        },
+        "message": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Why it stopped or refused."
+        },
+        "moving": {
+          "$ref": "#/$defs/MountMotion"
+        },
+        "rate": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "type": {
+          "const": "pad",
+          "default": "pad",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "moving",
+        "rate",
+        "latched",
+        "message"
+      ],
+      "title": "PadStatusMessage",
       "type": "object"
     },
     "PairRequest": {
@@ -2222,6 +2839,37 @@
       "title": "TemplateRequest",
       "type": "object"
     },
+    "TrackingRequest": {
+      "additionalProperties": false,
+      "description": "Only the fields present are changed.",
+      "properties": {
+        "mode": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "One of the mount's track_modes."
+        },
+        "on": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "TrackingRequest",
+      "type": "object"
+    },
     "ValueRange": {
       "additionalProperties": false,
       "properties": {
@@ -2238,6 +2886,13 @@
       ],
       "title": "ValueRange",
       "type": "object"
+    },
+    "WestEast": {
+      "enum": [
+        "west",
+        "east"
+      ],
+      "type": "string"
     }
   },
   "title": "NOCS API"

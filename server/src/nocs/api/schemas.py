@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from nocs.equipment import Role
+from nocs.equipment import Role, Site
 from nocs.state import Patch
 
 # -- State -------------------------------------------------------------------
@@ -222,6 +222,87 @@ class StorageState(StateModel):
     template: str = Field(description="File name template.")
 
 
+type NorthSouth = Literal["north", "south"]
+type WestEast = Literal["west", "east"]
+
+
+class MountMotion(StateModel):
+    ns: NorthSouth | None
+    we: WestEast | None
+
+
+class MountSite(StateModel):
+    latitude: float = Field(description="Degrees, north positive.")
+    longitude: float = Field(description="Degrees, east positive (-180..180).")
+    elevation: float = Field(description="Metres.")
+
+
+class AltitudeLimits(StateModel):
+    enabled: bool
+    lower: float = Field(description="Degrees.")
+    upper: float = Field(description="Degrees.")
+
+
+class MeridianLimits(StateModel):
+    flip: bool = Field(description="The mount flips by itself at the limit.")
+    limit: float = Field(description="Degrees past the meridian.")
+
+
+class MountLimits(StateModel):
+    """Limits the mount enforces itself, when its driver exposes them (read only)."""
+
+    altitude: AltitudeLimits | None
+    meridian: MeridianLimits | None
+
+
+class MountState(StateModel):
+    device: str
+    ra: float = Field(description="Apparent (JNow) right ascension, hours.")
+    dec: float = Field(description="Apparent (JNow) declination, degrees.")
+    ra_j2000: float = Field(description="Hours.")
+    dec_j2000: float = Field(description="Degrees.")
+    alt: float | None = Field(
+        description="Degrees; from the driver, or computed when the site and time are known."
+    )
+    az: float | None = Field(description="Degrees from north through east.")
+    slewing: bool
+    tracking: bool
+    track_mode: str | None = Field(description="e.g. sidereal, lunar, solar, custom.")
+    track_modes: list[str]
+    parked: bool
+    parking: bool = Field(description="Parking or unparking right now.")
+    can_park: bool
+    can_home: bool
+    homing: bool
+    pier_side: Literal["east", "west", "unknown"]
+    moving: MountMotion = Field(description="Manual motion (slew pad), axis by axis.")
+    moved_by: str | None = Field(description="Paired device whose slew pad holds the mount.")
+    slew_rate: str | None = Field(description="Speed of manual motion, a name in slew_rates.")
+    slew_rates: list[str] = Field(description="Slowest first, as the driver names them.")
+    time: str | None = Field(description="The mount's clock as it last reported it, UTC.")
+    site: MountSite | None = Field(description="Where the mount believes it is.")
+    site_check: Literal["same", "different", "unknown", "no_profile_site"] = Field(
+        description="The mount's site against the active profile's."
+    )
+    site_sent: bool = Field(description="NOCS sent the site since the mount became ready.")
+    time_sent: bool = Field(
+        description="NOCS sent the time since the mount became ready; go to waits for both."
+    )
+    limits: MountLimits
+
+
+class ClockState(StateModel):
+    offset: float | None = Field(
+        description="Seconds the clients' clock is ahead of the system clock; None until a"
+        " client reports it."
+    )
+    measured: str | None = Field(description="When it was last reported, UTC.")
+    corrected: bool = Field(
+        description="The system clock is more than 5 s off: NOCS uses the clients' time for"
+        " frame times, nights and the mount."
+    )
+
+
 class AppState(StateModel):
     """The whole state tree sent in snapshots and modified by patches."""
 
@@ -234,6 +315,8 @@ class AppState(StateModel):
         default=None, description="Running jobs and the most recent finished ones."
     )
     storage: StorageState | None = None
+    mount: MountState | None = Field(default=None, description="None: no mount is ready.")
+    clock: ClockState | None = None
 
 
 # -- HTTP --------------------------------------------------------------------
@@ -332,6 +415,59 @@ class TemplateRequest(BaseModel):
         description="Fields: {target} {night} {type} {filter} {exposure} {gain} {offset} "
         "{temperature} {binning} {camera} {datetime} {seq}.",
     )
+
+
+class EquatorialGoto(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    frame: Literal["j2000", "jnow"]
+    ra: float = Field(ge=0, lt=24, description="Hours.")
+    dec: float = Field(ge=-90, le=90, description="Degrees.")
+    force: bool = Field(default=False, description="Slew even if the target is below the horizon.")
+
+
+class HorizontalGoto(BaseModel):
+    """Point at a place in the local sky (e.g. the zenith for flats); tracking stops."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    frame: Literal["altaz"]
+    alt: float = Field(ge=0, le=90, description="Degrees.")
+    az: float = Field(ge=0, lt=360, description="Degrees from north through east.")
+
+
+type GotoRequest = Annotated[EquatorialGoto | HorizontalGoto, Field(discriminator="frame")]
+
+
+class TrackingRequest(BaseModel):
+    """Only the fields present are changed."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    on: bool | None = None
+    mode: str | None = Field(default=None, description="One of the mount's track_modes.")
+
+
+class MountSiteRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    site: Site | None = Field(default=None, description="None: the active profile's site.")
+
+
+class ClockRequest(BaseModel):
+    """The client's clock, sent when it connects."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    utc: datetime = Field(description="ISO 8601 with a time zone, e.g. 2026-10-30T23:10:05.120Z.")
+    utc_offset: float | None = Field(
+        default=None, ge=-14, le=14, description="The client's time zone, hours east of UTC."
+    )
+
+
+class ClockReport(WireModel):
+    offset: float = Field(description="Seconds the client is ahead of the system clock.")
+    corrected: bool = Field(description="NOCS now uses the clients' time (offset over 5 s).")
 
 
 class NightGroup(WireModel):
@@ -477,3 +613,28 @@ class PatchMessage(WireModel):
 
 
 type ServerMessage = SnapshotMessage | PatchMessage
+
+
+# -- Slew pad WebSocket (/api/mount/pad, ADR 0015) -------------------------------
+
+
+class PadRequest(BaseModel):
+    """What the client holds, repeated every 0.25 s while held; all null to let go.
+
+    The mount stops after 1 s without a message, when the socket closes, and on
+    any error; after such a stop the client must let go before moving again.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    ns: NorthSouth | None = None
+    we: WestEast | None = None
+    rate: str | None = Field(default=None, description="One of the mount's slew_rates.")
+
+
+class PadStatusMessage(WireModel):
+    type: Literal["pad"] = "pad"
+    moving: MountMotion
+    rate: str | None
+    latched: bool = Field(description="Stopped by NOCS: let go before moving again.")
+    message: str | None = Field(description="Why it stopped or refused.")

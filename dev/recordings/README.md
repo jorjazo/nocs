@@ -8,4 +8,4 @@ tests for hardware that has no INDI simulator.
 
 | File | Devices | Notes |
 |---|---|---|
-| `lab-rig-2026-10-30.xml` | ZWO ASI2600MC Duo (+ its ASI220MM Mini guide sensor), ZWO EAF, ZWO EFW (8 slots), ZWO AM5, Pegasus PPBA Gen2 | INDI 2.2.5 from the PPA on the lab Pi 5, all devices connected through nocsd (cameras already pointed at the rig with `ACTIVE_DEVICES`). The PPBA driver also defines five empty vectors (`device=""`). |
+| `lab-rig-2026-10-30.xml` | ZWO ASI2600MC Duo (+ its ASI220MM Mini guide sensor), ZWO EAF, ZWO EFW (8 slots), ZWO AM7 (its driver, `indi_lx200am5`, names the device "ZWO AM5"), Pegasus PPBA Gen2 | INDI 2.2.5 from the PPA on the lab Pi 5, all devices connected through nocsd (cameras already pointed at the rig with `ACTIVE_DEVICES`). The PPBA driver also defines five empty vectors (`device=""`). |

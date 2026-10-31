@@ -4,6 +4,7 @@ The "external drive" is a directory on /dev/shm, a filesystem of its own, so the
 check that a destination really is on its drive runs against real devices.
 """
 
+import dataclasses
 import io
 import os
 import shutil
@@ -313,3 +314,22 @@ async def test_unusable_catalog_refuses_to_save(rig: Rig) -> None:
     with pytest.raises(StorageError, match="newer"):
         service.save(rig.frame())
     await service.close()
+
+
+async def test_wrong_system_clock_is_corrected(rig: Rig, service: StorageService) -> None:
+    """A Pi that booted two days behind: start, night and header follow the client (ADR 0015)."""
+    facts = rig.frame(start="2026-10-29T01:00:00.250")
+    facts = dataclasses.replace(facts, clock_correction=2 * 86400.0)
+    saved = service.save(facts)
+    assert saved.started == datetime(2026, 10, 31, 1, 0, 0, 250000, tzinfo=UTC)
+    assert str(saved.relative).startswith("2026-10-30/Light/")
+    header = _fits.getheader(saved.path)
+    assert header["DATE-OBS"] == "2026-10-31T01:00:00.250"
+    assert header["CLOCKCOR"] == 172800.0
+
+
+async def test_trusted_clock_leaves_the_driver_time(rig: Rig, service: StorageService) -> None:
+    saved = service.save(rig.frame(start="2026-10-31T01:00:00"))
+    header = _fits.getheader(saved.path)
+    assert header["DATE-OBS"] == "2026-10-31T01:00:00"
+    assert "CLOCKCOR" not in header

@@ -71,6 +71,22 @@ async def test_command_ignores_ok_that_does_not_reach_target(client: FakeClient)
         await focuser.move_to(200, timeout=0.05)
 
 
+async def test_alert_takes_its_reason_from_the_drivers_messages(client: FakeClient) -> None:
+    focuser = Focuser(client, "Focuser")
+
+    def respond(device: str, name: str, values: Mapping[str, str | float | bool]) -> None:
+        # As the ZWO mounts do: the reason comes as messages, then the property turns Alert.
+        loop = asyncio.get_running_loop()
+        loop.call_soon(client.message, "Other", "[ERROR] unrelated")
+        loop.call_soon(client.message, device, "[ERROR] Error moving to 200")
+        loop.call_soon(client.message, device, "[ERROR] Move failed (-1).")
+        loop.call_soon(client.update, device, name, PropertyState.ALERT)
+
+    client.responder = respond
+    with pytest.raises(DeviceError, match=r"failed: Error moving to 200; Move failed \(-1\)\.$"):
+        await focuser.move_to(200, timeout=1)
+
+
 async def test_alert_fails_the_command_with_driver_message(client: FakeClient) -> None:
     focuser = Focuser(client, "Focuser")
     client.responder = lambda device, name, _: asyncio.get_running_loop().call_soon(
