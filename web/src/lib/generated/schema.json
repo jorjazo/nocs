@@ -291,6 +291,10 @@
           "minItems": 2,
           "type": "array"
         },
+        "can_cool": {
+          "description": "The sensor temperature can be set (a cooled camera).",
+          "type": "boolean"
+        },
         "cooler": {
           "anyOf": [
             {
@@ -446,6 +450,7 @@
         "exposing",
         "remaining",
         "temperature",
+        "can_cool",
         "cooler",
         "cooler_power",
         "target",

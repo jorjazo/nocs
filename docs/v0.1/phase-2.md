@@ -5,7 +5,8 @@ Status: in progress · Last updated: 2026-10-30 · Roadmap: [Phase 2](../roadmap
 Goal: replace the laptop for manual imaging sessions, controlled only from a phone.
 
 **Exit (field test):** with AM5 + ZWO camera + EFW + EAF + PPBA on the Pi 5, take
-a set of manual sub-frames controlled only from a phone.
+a set of manual sub-frames controlled only from a phone
+([checklist](field-test.md)).
 
 The phase is split into small stages, each testable against the INDI simulators
 and leaving something usable. Server stages come first; the UI follows the
@@ -27,7 +28,7 @@ the exit.
 | 2.8 | Focuser, filter wheel, profile editor | EAF (absolute/relative moves, temperature), EFW (filter names from the profile), profile editor (devices, roles, optics, ports) | EFW and EAF | |
 | 2.9 | Mount | Slew pad with a server-side dead man's switch, go to coordinates (J2000 → JNow) and alt/az, tracking, park/unpark, home; time and site from the client to the mount; frame times corrected when the Pi's clock is off ([ADR 0015](../adr/0015-mount-control-and-client-time.md)) | AM5 | Server done and checked on the lab AM7 (same driver); AM5 and UI pending |
 | 2.10 | Power box | PPBA power outputs, adjustable output, dew heaters and auto-dew, environment readings (tested against recorded properties: no simulator exists) | PPBA | |
-| 2.11 | Guide camera and field test | Guide camera role with previews (guiding is phase 4); FITS header review on real frames; field test | Exit criterion | |
+| 2.11 | Guide camera and field test | Guide camera role with previews (guiding is phase 4); FITS header review on real frames; field test ([checklist](field-test.md)) | Exit criterion | Guide camera and header review done and checked on the lab rig; field test pending |
 
 After the exit: AM7 and iOptron GEM45G (profiles and driver quirks).
 

@@ -120,6 +120,7 @@ def test_camera_state(api: TestClient) -> None:
     assert main["gain"] is not None
     assert main["gain_range"]["max"] > main["gain_range"]["min"]
     assert main["exposing"] is False
+    assert main["can_cool"] is True
     assert current["cameras"]["guide_camera"]["device"] == "Guide Simulator"
 
     # Connecting pointed the camera at the rig's devices and optics (FITS headers).
@@ -197,6 +198,12 @@ def test_expose_and_save(api: TestClient, data_dir: Path) -> None:
         assert (header["OBJECT"], header["SITENAME"], header["FILTER"]) == ("M 31", "Lab", filter)
         assert header["SWCREATE"].startswith("NOCS ")
         assert header["FOCALLEN"] == 250
+        assert header["SITEELEV"] == SITE["elevation"]
+        # The driver converts the mount's JNow to J2000, as NOCS does (ADR 0015).
+        mount = state(api)["mount"]
+        assert header["EQUINOX"] == 2000
+        assert header["RA"] == pytest.approx(mount["ra_j2000"] * 15, abs=0.05)
+        assert header["DEC"] == pytest.approx(mount["dec_j2000"], abs=0.05)
     assert camera(api)["last_frame"] == frame
     current = state(api)
     AppState.model_validate(current)
@@ -280,6 +287,44 @@ def test_busy_camera_refuses_commands_and_cancel_aborts(api: TestClient) -> None
     wait(api, finished(guide_job))
     assert job(api, guide_job)["state"] == "succeeded"
     assert job(api, guide_job)["result"]["path"] is None
+
+
+def test_guide_camera_frames_are_blobs(api: TestClient, transfer: Path | None) -> None:
+    """PHD2 needs the guide camera's BLOBs: it never saves frames itself (ADR 0012)."""
+
+    def upload_mode(s: dict[str, Any]) -> str:
+        prop = s["indi"]["devices"]["Guide Simulator"]["properties"]["UPLOAD_MODE"]
+        return next(name for name, e in prop["elements"].items() if e["value"])
+
+    # Connecting left it sending BLOBs; set it back to saving files to check exposures too.
+    assert upload_mode(state(api)) == "UPLOAD_CLIENT"
+    response = api.post(
+        "/api/indi/devices/Guide Simulator/properties/UPLOAD_MODE",
+        json={"values": {"UPLOAD_CLIENT": False, "UPLOAD_LOCAL": True, "UPLOAD_BOTH": False}},
+    )
+    assert response.status_code == 202, response.text
+    wait(api, lambda s: upload_mode(s) == "UPLOAD_LOCAL")
+
+    before = camera(api, "guide_camera")["preview"]
+    response = api.post("/api/cameras/guide_camera/loop", json={"exposure": 0.1})
+    assert response.status_code == 202, response.text
+    job_id = response.json()["job"]
+    seen: set[str] = set()
+
+    def new_previews(s: dict[str, Any]) -> bool:
+        preview = s["cameras"]["guide_camera"]["preview"]
+        if preview is not None and preview != before:
+            seen.add(preview["url"])
+        return len(seen) >= 2
+
+    wait(api, new_previews)
+    assert upload_mode(state(api)) == "UPLOAD_CLIENT"
+    assert api.post(f"/api/jobs/{job_id}/cancel").status_code == 202
+    wait(api, finished(job_id))
+    preview = camera(api, "guide_camera")["preview"]
+    assert preview["color"] is False
+    if transfer is not None:
+        assert not list(transfer.glob("guide_camera_*"))
 
 
 def test_cooling(api: TestClient) -> None:

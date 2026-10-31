@@ -8,7 +8,7 @@ from fakes import FakeClient, number_property, switch_property
 
 from nocs.devices import Camera, DeviceError
 from nocs.devices.camera import Region
-from nocs.indi import Property, PropertyState, PropertyType
+from nocs.indi import Permission, Property, PropertyState, PropertyType
 from nocs.indi.properties import BlobElement, NumberElement, TextElement
 
 
@@ -121,6 +121,19 @@ def test_bayer_pattern() -> None:
     cfa.elements["CFA_TYPE"] = TextElement("CFA_TYPE", "Type", "RGGB")
     client.define(cfa)
     assert camera.bayer_pattern == "RGGB"
+
+
+def test_only_a_settable_temperature_means_a_cooler() -> None:
+    client = camera_client()
+    camera = Camera(client, "Cam")
+    assert not camera.can_cool
+    # An uncooled ZWO camera (the ASI220MM guide sensor) reports its temperature read-only.
+    temperature = number_property("Cam", "CCD_TEMPERATURE", CCD_TEMPERATURE_VALUE=24.5)
+    client.define(temperature)
+    assert camera.temperature == 24.5
+    assert not camera.can_cool
+    temperature.perm = Permission.READ_WRITE
+    assert camera.can_cool
 
 
 async def test_images_arrive_on_their_own_connection() -> None:

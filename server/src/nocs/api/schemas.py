@@ -167,6 +167,7 @@ class CameraState(StateModel):
     exposing: bool
     remaining: float | None = Field(description="Seconds left in the current exposure.")
     temperature: float | None = Field(description="Sensor temperature, °C; None if unknown.")
+    can_cool: bool = Field(description="The sensor temperature can be set (a cooled camera).")
     cooler: bool | None = Field(description="Cooler on; None if the camera has none.")
     cooler_power: float | None = Field(description="As reported by the driver; units vary.")
     target: float | None = Field(description="Cooling target set through NOCS, °C.")

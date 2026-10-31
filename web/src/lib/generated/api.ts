@@ -117,6 +117,10 @@ export interface CameraState {
    */
   binning: [number, number];
   /**
+   * The sensor temperature can be set (a cooled camera).
+   */
+  can_cool: boolean;
+  /**
    * Cooler on; None if the camera has none.
    */
   cooler: boolean | null;

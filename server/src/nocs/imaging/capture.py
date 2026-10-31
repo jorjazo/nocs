@@ -2,7 +2,7 @@
 
 State layout under ``("cameras",)``, one entry per connected camera role::
 
-    {device, exposing, remaining, temperature, cooler, cooler_power, target, ramp,
+    {device, exposing, remaining, temperature, can_cool, cooler, cooler_power, target, ramp,
      exposure, gain, gain_range, offset, offset_range, binning, max_binning, region,
      frame_type, sensor, bayer, last_frame, preview}
 
@@ -10,7 +10,7 @@ INDI has no exposure time to keep, only the one of each exposure: NOCS keeps it
 per role (the last one set or used), so every client shows the same.
 
 Frames come either saved by the driver into a directory nocsd can read
-(``UPLOAD_LOCAL``) or as BLOBs (ADR 0012); either way each becomes a file that is
+(``UPLOAD_LOCAL``, main camera only) or as BLOBs (ADR 0012); either way each becomes a file that is
 handed to storage when saved (main camera only, ADR 0013), analysed in the imaging
 worker, and deleted afterwards when it was only for a preview (loop mode).
 
@@ -37,9 +37,9 @@ from typing import Any
 import anyio
 
 from nocs.clock import Clock
-from nocs.devices import Camera, DeviceError, FilterWheel, Frame, FrameType
+from nocs.devices import Camera, DeviceError, FilterWheel, Frame, FrameType, Mount
 from nocs.devices.camera import Region
-from nocs.equipment import EquipmentService, Role
+from nocs.equipment import EquipmentService, Role, Site
 from nocs.equipment.service import IndiConnection
 from nocs.imaging.pipeline import FrameAnalysis
 from nocs.imaging.worker import ImageWorker
@@ -53,9 +53,13 @@ log = logging.getLogger(__name__)
 ROOT: Path = ("cameras",)
 CAMERA_ROLES = (Role.MAIN_CAMERA, Role.GUIDE_CAMERA)
 SAVING_ROLES = (Role.MAIN_CAMERA,)
+"""Guide camera frames are only previews; PHD2 takes its own (ADR 0013)."""
+LOCAL_UPLOAD_ROLES = (Role.MAIN_CAMERA,)
+"""Roles whose driver may save frames itself (``UPLOAD_LOCAL``). The guide camera
+always sends BLOBs: the upload mode is the device's, and PHD2 needs them (ADR 0012).
+Its frames are small."""
 EXPOSURE_DEFAULT = 2.0
 MAX_EXPOSURE = 7200.0
-"""Guide camera frames are only previews; PHD2 takes its own (ADR 0013)."""
 
 FRAME_TYPES: dict[str, FrameType] = {
     "light": FrameType.LIGHT,
@@ -155,6 +159,7 @@ def camera_summary(camera: Camera) -> dict[str, Json]:
         "exposing": camera.exposing,
         "remaining": camera.exposure_remaining,
         "temperature": camera.temperature,
+        "can_cool": camera.can_cool,
         "cooler": camera.cooler_on,
         "cooler_power": camera.cooler_power,
         "ramp": camera.temperature_ramp,
@@ -269,7 +274,7 @@ class CaptureService:
         Reaching the target can take many minutes; the state shows the progress.
         """
         camera = self.camera(role)
-        if camera.temperature is None:
+        if not camera.can_cool:
             raise DeviceError(f"{camera.name} has no cooler")
         if ramp is not None:
             await camera.set_temperature_ramp(ramp)
@@ -401,6 +406,9 @@ class CaptureService:
             except (DeviceError, KeyError) as e:
                 log.debug("no filter name for the frame: %s", e)
         profile = self._equipment.active_profile
+        site = profile.site if profile is not None else None
+        if site is None:
+            site = self._mount_site()
         return FrameFacts(
             source=shot.path,
             frame_type=FRAME_TYPE_NAMES[shot.frame_type],
@@ -414,9 +422,31 @@ class CaptureService:
             cooler_target=self._targets.get(role),
             filter=filter,
             profile=self._equipment.active,
-            site=profile.site if profile is not None else None,
+            site=site,
             optics=profile.imaging if profile is not None else None,
             clock_correction=self._clock.correction if self._clock is not None else 0.0,
+        )
+
+    def _mount_site(self) -> Site | None:
+        """The site the mount has, for a profile without one.
+
+        The driver writes the mount's latitude and longitude in the header itself;
+        this adds its elevation.
+        """
+        mount = self._equipment.ready_device(Role.MOUNT)
+        if mount is None or self._client is None:
+            return None
+        try:
+            location = Mount(self._client, mount).location
+        except (DeviceError, KeyError) as e:
+            log.debug("no site from the mount for the frame: %s", e)
+            return None
+        if location is None:
+            return None
+        return Site(
+            latitude=location.latitude,
+            longitude=location.longitude,
+            elevation=location.elevation,
         )
 
     async def _take(
@@ -431,7 +461,8 @@ class CaptureService:
         name = self.camera(role).name
         client = self._client
         assert client is not None
-        if self._uploads is None:
+        uploads = self._uploads if role in LOCAL_UPLOAD_ROLES else None
+        if uploads is None:
             images = self._images.get(role)
             if images is None or not images.connected:
                 context.progress(None, f"{label}opening the image connection")
@@ -455,23 +486,21 @@ class CaptureService:
                 case _:
                     pass
 
-        if self._uploads is not None:
+        if uploads is not None:
             await anyio.to_thread.run_sync(self._clear_uploads, role)
         context.progress(0.0, f"{label}exposing {seconds:g} s")
         remove = client.add_listener(on_event)
         try:
-            if self._uploads is not None:
+            if uploads is not None:
                 log.debug("%s: exposing %g s", role.value, seconds)
                 written = await camera.expose_to_file(
                     seconds,
                     frame_type,
-                    directory=str(self._uploads.driver),
+                    directory=str(uploads.driver),
                     prefix=f"{role.value}_XXX",
                 )
                 log.debug("%s: driver saved %s", role.value, written)
-                path = await anyio.to_thread.run_sync(
-                    self._claim, self._uploads.to_local(written), role
-                )
+                path = await anyio.to_thread.run_sync(self._claim, uploads.to_local(written), role)
                 log.debug("%s: claimed as %s", role.value, path.name)
                 try:
                     size = (await anyio.to_thread.run_sync(path.stat)).st_size

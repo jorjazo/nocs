@@ -356,7 +356,10 @@ class EquipmentService:
             self._publish_role(role, status=DeviceStatus.READY)
 
     async def _configure_cameras(self, client: IndiClient, profile: Profile) -> None:
-        """Point the cameras at the rig's other devices and optics, for their FITS headers."""
+        """Point the cameras at the rig's other devices and optics, for their FITS headers.
+
+        The guide camera is also left sending BLOBs.
+        """
 
         def name(role: Role) -> str:
             return self.ready_device(role) or ""
@@ -376,6 +379,10 @@ class EquipmentService:
                 )
                 if optics is not None:
                     await camera.set_optics(optics.focal_length * optics.reducer, optics.aperture)
+                if role is Role.GUIDE_CAMERA:
+                    # Its frames go to PHD2 as BLOBs too, which UPLOAD_LOCAL would stop
+                    # (ADR 0012), whoever set it: undo it before anyone guides.
+                    await camera.set_upload_mode("UPLOAD_CLIENT")
             except (DeviceError, ConnectionError, KeyError) as e:
                 log.warning("cannot configure %s (%s): %s", role.value, device, e)
 

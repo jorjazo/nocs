@@ -14,6 +14,7 @@ from nocs.indi import (
     IndiClient,
     IndiEvent,
     NumberElement,
+    Permission,
     Property,
     PropertyDefined,
     PropertyState,
@@ -108,6 +109,14 @@ class Camera(Device):
         if not self.has("CCD_TEMPERATURE"):
             return None
         return self.prop("CCD_TEMPERATURE").number("CCD_TEMPERATURE_VALUE")
+
+    @property
+    def can_cool(self) -> bool:
+        """Whether the sensor temperature can be set: uncooled cameras report it read-only."""
+        return (
+            self.has("CCD_TEMPERATURE")
+            and self.prop("CCD_TEMPERATURE").perm is not Permission.READ_ONLY
+        )
 
     @property
     def cooler_on(self) -> bool | None:
@@ -277,7 +286,7 @@ class Camera(Device):
     async def expose(self, seconds: float, frame_type: FrameType | None = None) -> Frame:
         """Take one exposure and return the image as delivered by the driver (FITS)."""
         await self._prepare(seconds, frame_type)
-        await self._set_upload_mode("UPLOAD_CLIENT")
+        await self.set_upload_mode("UPLOAD_CLIENT")
         images = self.images if self.images is not None else self.client
         if self.images is None:
             await self.client.enable_blob(self.name, BlobMode.ALSO, "CCD1")
@@ -312,7 +321,7 @@ class Camera(Device):
         wanted = {"UPLOAD_DIR": directory, "UPLOAD_PREFIX": prefix}
         if any(settings.text(k) != v for k, v in wanted.items()):
             await self.command("UPLOAD_SETTINGS", wanted)
-        await self._set_upload_mode("UPLOAD_LOCAL")
+        await self.set_upload_mode("UPLOAD_LOCAL")
 
         def saved(prop: Property) -> str | None:
             if prop.name != "CCD_FILE_PATH" or prop.state is not PropertyState.OK:
@@ -330,7 +339,13 @@ class Camera(Device):
         if frame_type is not None and frame_type is not self.frame_type:
             await self.set_frame_type(frame_type)
 
-    async def _set_upload_mode(self, mode: str) -> None:
+    async def set_upload_mode(self, mode: str) -> None:
+        """How the driver hands over frames: ``UPLOAD_CLIENT`` (BLOBs), ``UPLOAD_LOCAL``
+        (saved by the driver) or ``UPLOAD_BOTH``.
+
+        The mode belongs to the device, so it applies to every INDI client: in
+        ``UPLOAD_LOCAL`` nobody gets BLOBs, PHD2 included (ADR 0012).
+        """
         if not self.has("UPLOAD_MODE") or self.prop("UPLOAD_MODE").switch(mode):
             return
         values = {m: m == mode for m in self.prop("UPLOAD_MODE").elements}

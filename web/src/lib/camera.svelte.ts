@@ -87,9 +87,23 @@ function write(key: string, value: string): void {
   }
 }
 
+function readRole(): CameraRoleName {
+  try {
+    const value = localStorage.getItem("nocs.camera");
+    return CAMERA_ROLES.find((role) => role === value) ?? "main_camera";
+  } catch {
+    return "main_camera";
+  }
+}
+
 class CapturePrefs {
-  role: CameraRoleName = $state("main_camera");
+  role: CameraRoleName = $state(readRole());
   save: boolean = $state(readNumber("nocs.save") !== 0);
+
+  setRole(role: CameraRoleName): void {
+    this.role = role;
+    write("nocs.camera", role);
+  }
 
   setSave(save: boolean): void {
     this.save = save;

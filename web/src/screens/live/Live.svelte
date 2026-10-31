@@ -224,7 +224,7 @@
           label={t.live.camera}
           options={available.map((value) => ({ value, label: t.roles[value] }))}
           value={role}
-          onchange={(value) => (capture.role = value)} />
+          onchange={(value) => capture.setRole(value)} />
       {/if}
 
       {#if preview}
@@ -263,24 +263,27 @@
           value="{camera.binning[0]}×{camera.binning[1]}"
           disabled={!owner || !!running || camera.max_binning <= 1}
           onclick={() => (editing = "binning")} />
-        <Tile
-          label={t.live.frame}
-          value={t.live.frameTypes[camera.frame_type]}
-          word
-          disabled={!owner || !!running}
-          onclick={() => (editing = "frame")} />
+        {#if main}
+          <!-- Guide frames are only for looking; PHD2 keeps its own darks. -->
+          <Tile
+            label={t.live.frame}
+            value={t.live.frameTypes[camera.frame_type]}
+            word
+            disabled={!owner || !!running}
+            onclick={() => (editing = "frame")} />
+        {/if}
         <Tile
           label={t.live.cooler}
-          value={camera.temperature === null
+          value={!camera.can_cool
             ? t.live.coolerNone
             : !coolerOn
               ? t.live.coolerOff
               : camera.target !== null
                 ? formatTemperature(camera.target, locale, 0)
                 : t.live.coolerOn}
-          word={!coolerOn || camera.target === null}
+          word={!camera.can_cool || !coolerOn || camera.target === null}
           detail={camera.temperature === null ? undefined : formatTemperature(camera.temperature, locale)}
-          disabled={!owner || camera.temperature === null}
+          disabled={!owner || !camera.can_cool}
           onclick={() => (editing = "cooling")} />
       </div>
 
