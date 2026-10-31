@@ -190,6 +190,7 @@ export const en = {
     } satisfies Record<FrameTypeName, string>,
     cooler: "Cooler",
     coolerOff: "Off",
+    coolerOn: "On",
     coolerNone: "None",
     cooling: {
       title: "Cooling",

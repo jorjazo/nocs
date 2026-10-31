@@ -273,9 +273,11 @@
           label={t.live.cooler}
           value={camera.temperature === null
             ? t.live.coolerNone
-            : coolerOn && camera.target !== null
-              ? formatTemperature(camera.target, locale, 0)
-              : t.live.coolerOff}
+            : !coolerOn
+              ? t.live.coolerOff
+              : camera.target !== null
+                ? formatTemperature(camera.target, locale, 0)
+                : t.live.coolerOn}
           word={!coolerOn || camera.target === null}
           detail={camera.temperature === null ? undefined : formatTemperature(camera.temperature, locale)}
           disabled={!owner || camera.temperature === null}

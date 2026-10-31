@@ -190,6 +190,7 @@ export const es: Messages = {
     },
     cooler: "Enfriado",
     coolerOff: "Apagado",
+    coolerOn: "Encendido",
     coolerNone: "No tiene",
     cooling: {
       title: "Enfriado",
