@@ -179,14 +179,18 @@ async def test_simulator_frames(api: tuple[TestClient, Path], astap: Astap) -> N
         json={"frame": "j2000", "ra": mount["ra_j2000"], "dec": -45.0, "force": True},
     )
     assert response.status_code == 202, response.text
-    wait(client, finished(response.json()["job"]))
-    mount = state(client)["mount"]
+    job_id = response.json()["job"]
+    wait(client, finished(job_id))
+    assert state(client)["jobs"][job_id]["state"] == "succeeded", state(client)["jobs"][job_id]
+    # The simulator stays still afterwards: in CI a frame once landed 30° away.
+    wait(client, lambda s: not s["mount"]["slewing"] and abs(s["mount"]["dec_j2000"] + 45) < 0.5)
 
     service = SolverService(StateStore(), astap)
-    hint = Hint(mount["ra_j2000"], mount["dec_j2000"])
     rotations: list[float] = []
     for degrees in (0, 30):
         _rotate(client, degrees)
+        mount = state(client)["mount"]
+        hint = Hint(mount["ra_j2000"], mount["dec_j2000"])
         path = _expose(client, data_dir)
         info = image_info(path)
         assert (info.width, info.height) == (sensor["width"], sensor["height"])
