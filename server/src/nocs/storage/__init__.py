@@ -1,6 +1,6 @@
 """Storage destinations, file layout, FITS headers and the frame catalog (ADR 0013)."""
 
-from nocs.storage.catalog import FrameFilter, FrameRow, NightRow
+from nocs.storage.catalog import FocusRun, FrameFilter, FrameRow, NightRow, TemperatureSample
 from nocs.storage.service import (
     AUTO,
     FrameFacts,
@@ -13,6 +13,7 @@ from nocs.storage.service import (
 
 __all__ = [
     "AUTO",
+    "FocusRun",
     "FrameFacts",
     "FrameFilter",
     "FrameRow",
@@ -22,4 +23,5 @@ __all__ = [
     "SavedFrame",
     "StorageError",
     "StorageService",
+    "TemperatureSample",
 ]

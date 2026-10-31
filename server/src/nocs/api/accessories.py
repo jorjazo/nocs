@@ -11,12 +11,14 @@ from nocs.api.schemas import (
     AutofocusRequest,
     FilterNamesRequest,
     FilterSelectRequest,
+    FocuserBacklashRequest,
     FocuserMoveRequest,
     JobStarted,
 )
 from nocs.devices import DeviceError
 from nocs.filters.service import FilterWheelNotReadyError, FilterWheelService
-from nocs.focus.autofocus import AutofocusOptions, AutofocusService
+from nocs.focus.autofocus import AutofocusService
+from nocs.focus.focusers import FocuserConfig
 from nocs.focus.service import FocuserNotReadyError, FocuserService
 from nocs.focus.sweep import Direction
 from nocs.imaging import CameraNotReadyError
@@ -45,16 +47,24 @@ def accessories_router(
 
     @router.post("/autofocus", status_code=status.HTTP_202_ACCEPTED)
     async def focus(request: AutofocusRequest) -> JobStarted:  # pyright: ignore[reportUnusedFunction]
-        options = AutofocusOptions(
-            step=request.step,
-            points=request.points,
-            exposure=request.exposure,
-            frames=request.frames,
-            direction=Direction.OUTWARD if request.direction == "outward" else Direction.INWARD,
-            overshoot=request.overshoot,
-        )
         with _errors():
+            options = autofocus().options(
+                step=request.step,
+                points=request.points,
+                exposure=request.exposure,
+                frames=request.frames,
+                direction=_direction(request.direction),
+                overshoot=request.overshoot,
+            )
             return JobStarted(job=autofocus().start(options))
+
+    @router.put("/focuser/backlash", status_code=status.HTTP_204_NO_CONTENT)
+    async def backlash(request: FocuserBacklashRequest) -> Response:  # pyright: ignore[reportUnusedFunction]
+        with _errors():
+            focuser().set_backlash(
+                FocuserConfig(direction=request.direction, overshoot=request.overshoot)
+            )
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     @router.post("/filter-wheel/select", status_code=status.HTTP_202_ACCEPTED)
     async def select(request: FilterSelectRequest) -> JobStarted:  # pyright: ignore[reportUnusedFunction]
@@ -70,6 +80,12 @@ def accessories_router(
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     return router
+
+
+def _direction(name: str | None) -> Direction | None:
+    if name is None:
+        return None
+    return Direction.INWARD if name == "inward" else Direction.OUTWARD
 
 
 @contextlib.contextmanager

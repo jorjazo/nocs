@@ -147,9 +147,17 @@ export interface AppState {
  */
 export interface AutofocusState {
   /**
+   * The weather role's temperature at the start, °C.
+   */
+  ambient: number | null;
+  /**
    * Why it failed.
    */
   detail: string | null;
+  /**
+   * The filter in place.
+   */
+  filter: string | null;
   finished: string | null;
   fit: AutofocusFit | null;
   /**
@@ -520,8 +528,13 @@ export interface FilterWheelState {
  * via the `definition` "FocuserState".
  */
 export interface FocuserState {
+  backlash: FocuserBacklash;
   can_abort: boolean;
   device: string;
+  /**
+   * The physical focuser: serial:<number> or device:<name>.
+   */
+  key: string;
   /**
    * Highest position the driver accepts.
    */
@@ -539,6 +552,22 @@ export interface FocuserState {
    * Its probe, °C; None if it has none.
    */
   temperature: number | null;
+}
+/**
+ * How autofocus takes up this physical focuser's backlash (ADR 0021).
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "FocuserBacklash".
+ */
+export interface FocuserBacklash {
+  /**
+   * Which way every position is reached.
+   */
+  direction: "outward" | "inward";
+  /**
+   * Steps past a target when moving the other way; None: one sweep step.
+   */
+  overshoot: number | null;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -1108,6 +1137,109 @@ export interface AutoDewRequest {
   on: boolean;
 }
 /**
+ * What is left out comes from the imaging train's sweep and the focuser's backlash.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "AutofocusRequest".
+ */
+export interface AutofocusRequest {
+  /**
+   * Which way every position is reached (backlash).
+   */
+  direction?: ("outward" | "inward") | null;
+  /**
+   * Seconds.
+   */
+  exposure?: number | null;
+  /**
+   * Frames per point.
+   */
+  frames?: number | null;
+  /**
+   * Steps past a target moving the other way.
+   */
+  overshoot?: number | null;
+  points?: number | null;
+  /**
+   * Focuser steps between points.
+   */
+  step?: number | null;
+}
+/**
+ * A finished autofocus run, from the catalog.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "AutofocusRun".
+ */
+export interface AutofocusRun {
+  ambient_temperature: number | null;
+  filter: string | null;
+  finished: string;
+  focuser_temperature: number | null;
+  hfr: number | null;
+  id: number;
+  position: number | null;
+  problem: string | null;
+  profile: string | null;
+  run: AutofocusState1;
+  start_hfr: number | null;
+  start_position: number;
+  started: string;
+  state: "succeeded" | "failed" | "cancelled";
+}
+/**
+ * The running autofocus, or the most recent one.
+ */
+export interface AutofocusState1 {
+  /**
+   * The weather role's temperature at the start, °C.
+   */
+  ambient: number | null;
+  /**
+   * Why it failed.
+   */
+  detail: string | null;
+  /**
+   * The filter in place.
+   */
+  filter: string | null;
+  finished: string | null;
+  fit: AutofocusFit | null;
+  /**
+   * Of the last frame, at ``position``.
+   */
+  hfr: number | null;
+  job: string;
+  /**
+   * While running.
+   */
+  phase: ("starting" | "sweeping" | "moving" | "checking" | "restoring") | null;
+  /**
+   * Measured so far, by position.
+   */
+  points: AutofocusPoint[];
+  /**
+   * Best focus, once the run checked it.
+   */
+  position: number | null;
+  problem: ("no_stars" | "too_few_stars" | "not_turning" | "bad_fit" | "worse") | null;
+  stars: number | null;
+  start_hfr: number | null;
+  start_position: number;
+  start_stars: number | null;
+  started: string;
+  state: "running" | "succeeded" | "failed" | "cancelled";
+  step: number;
+  /**
+   * A step that would put the sweep's ends at 2.5 times the best HFR.
+   */
+  suggested_step: number | null;
+  /**
+   * The focuser's probe at the start, °C.
+   */
+  temperature: number | null;
+}
+/**
  * Only the fields present are changed.
  *
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -1312,6 +1444,38 @@ export interface FilterSelectRequest {
    * 1-based.
    */
   slot?: number | null;
+}
+/**
+ * How autofocus sweeps with a train's optics (ADR 0021).
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "FocusSweep".
+ */
+export interface FocusSweep {
+  /**
+   * Seconds.
+   */
+  exposure?: number;
+  /**
+   * Frames per point.
+   */
+  frames?: number;
+  points?: number;
+  /**
+   * Focuser steps between points.
+   */
+  step: number;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "FocuserBacklashRequest".
+ */
+export interface FocuserBacklashRequest {
+  direction?: "outward" | "inward";
+  /**
+   * None: one sweep step.
+   */
+  overshoot?: number | null;
 }
 /**
  * Exactly one of ``position`` and ``steps``.
@@ -1531,6 +1695,10 @@ export interface Optics {
    */
   aperture?: number | null;
   /**
+   * Imaging train: the autofocus sweep for these optics.
+   */
+  autofocus?: FocusSweep | null;
+  /**
    * Native focal length in mm.
    */
   focal_length: number;
@@ -1719,6 +1887,32 @@ export interface TargetRequest {
    * None to clear it.
    */
   target: string | null;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "TemperatureRecord".
+ */
+export interface TemperatureRecord {
+  /**
+   * The weather role's, °C.
+   */
+  ambient: number | null;
+  /**
+   * °C.
+   */
+  dew_point: number | null;
+  /**
+   * The focuser's probe, °C.
+   */
+  focuser: number | null;
+  /**
+   * %.
+   */
+  humidity: number | null;
+  /**
+   * UTC, ISO 8601.
+   */
+  time: string;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema

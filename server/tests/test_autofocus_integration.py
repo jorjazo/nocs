@@ -63,7 +63,8 @@ def fwhm(api: TestClient) -> float:
 
 
 def focus(api: TestClient, **request: Any) -> str:
-    response = api.post("/api/autofocus", json={"step": STEP, "exposure": 1, **request})
+    """Start autofocus; what the request leaves out comes from the profile's sweep."""
+    response = api.post("/api/autofocus", json=request)
     assert response.status_code == 202, response.text
     return response.json()["job"]
 
@@ -86,7 +87,11 @@ def api(tmp_path_factory: pytest.TempPathFactory) -> Iterator[TestClient]:
     profile = {
         **SIMULATORS,
         "devices": devices,
-        "imaging": {"focal_length": FOCAL_LENGTH, "aperture": APERTURE},
+        "imaging": {
+            "focal_length": FOCAL_LENGTH,
+            "aperture": APERTURE,
+            "autofocus": {"step": STEP, "exposure": 1},
+        },
     }
     with TestClient(create_app(settings)) as client:
         pair_owner(client)
@@ -126,7 +131,7 @@ def best(api: TestClient) -> float:
 
 
 def test_autofocus_finds_the_simulators_focus(api: TestClient, best: float) -> None:
-    start = round(best) + 3000
+    start = round(best) + 8000  # clearly out of focus: HFR noise is ~5 %
     move(api, start)
     job_id = focus(api)
     wait(api, finished(job_id), timeout=180)
@@ -166,3 +171,36 @@ def test_autofocus_without_stars_fails_where_it_is(api: TestClient) -> None:
     assert current["jobs"][job_id]["state"] == "failed"
     assert current["autofocus"]["problem"] == "no_stars"
     assert current["focuser"]["position"] == start
+
+
+def test_runs_are_kept_and_backlash_set(api: TestClient) -> None:
+    response = api.get("/api/autofocus/runs", params={"limit": 3})
+    assert response.status_code == 200, response.text
+    runs = response.json()
+    assert [run["state"] for run in runs] == ["failed", "cancelled", "succeeded"]
+    assert runs[0]["run"]["problem"] == "no_stars"
+    assert runs[2]["profile"] == "focus"
+    assert runs[2]["position"] == runs[2]["run"]["position"]
+
+    response = api.put("/api/focuser/backlash", json={"direction": "inward", "overshoot": 500})
+    assert response.status_code == 204, response.text
+    assert state(api)["focuser"]["backlash"] == {"direction": "inward", "overshoot": 500}
+    api.put("/api/focuser/backlash", json={})
+    assert state(api)["focuser"]["backlash"] == {"direction": "outward", "overshoot": None}
+
+    response = api.get("/api/temperatures")
+    assert response.status_code == 200, response.text
+    assert isinstance(response.json(), list)
+
+
+def test_autofocus_without_a_step_is_refused(api: TestClient) -> None:
+    profile = api.get("/api/profiles/focus").json()
+    profile["imaging"]["autofocus"] = None
+    assert api.put("/api/profiles/focus", json=profile).status_code == 204
+    try:
+        response = api.post("/api/autofocus", json={})
+        assert response.status_code == 422
+        assert "needs a step" in response.json()["detail"]
+    finally:
+        profile["imaging"]["autofocus"] = {"step": STEP, "exposure": 1}
+        api.put("/api/profiles/focus", json=profile)

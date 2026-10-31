@@ -37,10 +37,12 @@ from nocs.storage import layout
 from nocs.storage.catalog import (
     Catalog,
     CatalogError,
+    FocusRun,
     FrameFilter,
     FrameRow,
     NewFrame,
     NightRow,
+    TemperatureSample,
 )
 from nocs.storage.fits import Card, FitsError, Header, place
 from nocs.storage.volumes import INTERNAL, SEARCH, Destination, SystemPaths, Volumes
@@ -105,6 +107,10 @@ class FrameFacts:
     optics: Optics | None
     clock_correction: float = 0.0
     """Seconds to add to the driver's DATE-OBS: the system clock is off (nocs.clock)."""
+    ambient: float | None = None
+    """°C, from the weather role (ADR 0017)."""
+    humidity: float | None = None
+    dew_point: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -347,7 +353,20 @@ class StorageService:
         if self.catalog is not None:
             self.catalog.set_metrics(frame_id, stars, hfr)
 
+    def add_temperature(self, sample: TemperatureSample) -> None:
+        if self.catalog is not None:
+            self.catalog.add_temperature(sample)
+
+    def add_focus_run(self, run: FocusRun) -> int | None:
+        return self.catalog.add_focus_run(run) if self.catalog is not None else None
+
     # -- catalog queries (blocking) ---------------------------------------
+
+    def temperatures(self, since: str, until: str | None = None) -> list[TemperatureSample]:
+        return self._require_catalog().temperatures(since, until)
+
+    def focus_runs(self, limit: int = 20, before: int | None = None) -> list[FocusRun]:
+        return self._require_catalog().focus_runs(limit, before)
 
     def nights(self, night_id: int | None = None) -> list[NightRow]:
         return self._require_catalog().nights(night_id)
@@ -537,5 +556,12 @@ def _cards(facts: FrameFacts, target: str | None) -> list[Card]:
             cards.append(Card("FOCRATIO", round(focal_length / optics.aperture, 2), "Focal ratio"))
     if facts.cooler_target is not None:
         cards.append(Card("SET-TEMP", facts.cooler_target, "Cooler set point in degrees C"))
+    for keyword, value, comment in (
+        ("AMBTEMP", facts.ambient, "Ambient temperature in degrees C"),
+        ("HUMIDITY", facts.humidity, "Relative humidity in percent"),
+        ("DEWPOINT", facts.dew_point, "Dew point in degrees C"),
+    ):
+        if value is not None:
+            cards.append(Card(keyword, round(value, 2), comment))
     cards.append(Card("SWCREATE", f"NOCS {__version__}", "Software that wrote the file"))
     return cards

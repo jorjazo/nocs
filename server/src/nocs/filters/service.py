@@ -19,7 +19,7 @@ from collections.abc import Coroutine
 from typing import Any
 
 from nocs.devices import DeviceError, FilterWheel
-from nocs.devices.filter_wheel import SERIAL_PROPERTIES
+from nocs.devices.base import SERIAL_PROPERTIES
 from nocs.equipment import EquipmentService, Role
 from nocs.equipment.service import IndiConnection
 from nocs.filters.wheels import WheelConfig, WheelStore, check_names, wheel_key

@@ -22,9 +22,12 @@ from nocs.indi import (
     PropertyDeleted,
     PropertyState,
     PropertyUpdated,
+    TextElement,
 )
 
 DEFAULT_TIMEOUT = 30.0
+SERIAL_PROPERTIES = ("Serial Number", "SERIAL_NUMBER")
+"""Where drivers publish a device's serial number; INDI has no standard property (ZWO: SN)."""
 
 
 class DeviceInterface(IntFlag):
@@ -135,6 +138,24 @@ class Device:
             # Drivers report a closed connection as Idle, not Ok.
             accept=frozenset({PropertyState.OK, PropertyState.IDLE}),
         )
+
+    @property
+    def serial_number(self) -> str | None:
+        """The device's serial number, when its driver publishes one."""
+        for name in SERIAL_PROPERTIES:
+            if not self.has(name):
+                continue
+            for element in self.prop(name).elements.values():
+                if isinstance(element, TextElement) and element.value.strip():
+                    return element.value.strip()
+        return None
+
+    @property
+    def key(self) -> str:
+        """The physical device, apart from profiles (ADR 0016): ``serial:<number>`` when
+        its driver publishes one, else ``device:<INDI device name>``."""
+        serial = self.serial_number
+        return f"serial:{serial}" if serial else f"device:{self.name}"
 
     # -- helpers for subclasses ------------------------------------------
 

@@ -3,12 +3,9 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from nocs.devices.base import Device, DeviceInterface
-from nocs.indi import NumberElement, PropertyState, TextElement
+from nocs.indi import NumberElement, PropertyState
 
 CHANGE_TIMEOUT = 60.0
-
-SERIAL_PROPERTIES = ("Serial Number", "SERIAL_NUMBER")
-"""Where drivers publish a device's serial number; INDI has no standard property (ZWO: SN)."""
 
 
 class FilterWheel(Device):
@@ -45,16 +42,6 @@ class FilterWheel(Device):
     @property
     def moving(self) -> bool:
         return self.prop("FILTER_SLOT").state is PropertyState.BUSY
-
-    @property
-    def serial_number(self) -> str | None:
-        for name in SERIAL_PROPERTIES:
-            if not self.has(name):
-                continue
-            for element in self.prop(name).elements.values():
-                if isinstance(element, TextElement) and element.value.strip():
-                    return element.value.strip()
-        return None
 
     def slot_of(self, name: str) -> int:
         wanted = name.strip().casefold()

@@ -88,10 +88,22 @@ class DeviceConfig(ProfileModel):
     )
 
 
+class FocusSweep(ProfileModel):
+    """How autofocus sweeps with a train's optics (ADR 0021)."""
+
+    step: int = Field(ge=1, description="Focuser steps between points.")
+    points: int = Field(default=9, ge=5, le=25)
+    exposure: float = Field(default=2.0, gt=0, le=600, description="Seconds.")
+    frames: int = Field(default=1, ge=1, le=10, description="Frames per point.")
+
+
 class Optics(ProfileModel):
     focal_length: float = Field(gt=0, description="Native focal length in mm.")
     aperture: float | None = Field(default=None, gt=0, description="Aperture in mm.")
     reducer: float = Field(default=1.0, gt=0, description="Reducer or barlow factor.")
+    autofocus: FocusSweep | None = Field(
+        default=None, description="Imaging train: the autofocus sweep for these optics."
+    )
 
 
 class Site(ProfileModel):

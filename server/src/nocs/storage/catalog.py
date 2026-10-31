@@ -1,5 +1,8 @@
 """The SQLite catalog of saved frames: volumes, targets, nights and frames (ADR 0013).
 
+It also keeps what the night was like for the frames: temperatures sampled from
+the focuser and the weather sensor, and autofocus runs (ADR 0021).
+
 One connection, used from worker threads one at a time (every method blocks).
 The schema version lives in ``PRAGMA user_version``; ``MIGRATIONS[n]`` takes a
 database from version ``n`` to ``n + 1``.
@@ -61,6 +64,32 @@ MIGRATIONS: list[str] = [
         UNIQUE (volume_id, directory, path)
     );
     CREATE INDEX frames_by_night ON frames (night_id, id);
+    """,
+    """
+    CREATE TABLE temperatures (
+        time TEXT NOT NULL PRIMARY KEY,    -- UTC ISO 8601
+        focuser REAL,                      -- the focuser's probe, °C
+        ambient REAL,                      -- the weather role's, °C
+        humidity REAL,                     -- %
+        dew_point REAL                     -- °C
+    ) WITHOUT ROWID;
+    CREATE TABLE focus_runs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        started TEXT NOT NULL,             -- UTC ISO 8601
+        finished TEXT NOT NULL,
+        profile TEXT,
+        filter TEXT,
+        state TEXT NOT NULL,               -- succeeded, failed, cancelled
+        problem TEXT,
+        start_position INTEGER NOT NULL,
+        position INTEGER,                  -- best focus, when the run found it
+        start_hfr REAL,
+        hfr REAL,
+        focuser_temperature REAL,
+        ambient_temperature REAL,
+        run TEXT NOT NULL                  -- the whole run as the state showed it (JSON)
+    );
+    CREATE INDEX focus_runs_by_time ON focus_runs (started);
     """,
 ]
 VERSION = len(MIGRATIONS)
@@ -142,6 +171,35 @@ class NightRow:
 
 
 @dataclass(frozen=True, slots=True)
+class TemperatureSample:
+    time: str
+    """UTC, ISO 8601."""
+    focuser: float | None
+    ambient: float | None
+    humidity: float | None
+    dew_point: float | None
+
+
+@dataclass(frozen=True, slots=True)
+class FocusRun:
+    started: str
+    finished: str
+    profile: str | None
+    filter: str | None
+    state: str
+    problem: str | None
+    start_position: int
+    position: int | None
+    start_hfr: float | None
+    hfr: float | None
+    focuser_temperature: float | None
+    ambient_temperature: float | None
+    run: str
+    """The run as the state showed it, as JSON."""
+    id: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class FrameFilter:
     night: int | None = None
     target: str | None = None
@@ -150,6 +208,11 @@ class FrameFilter:
     before: int | None = None
     limit: int | None = None
 
+
+_RUN_COLUMNS = (
+    "started, finished, profile, filter, state, problem, start_position, position,"
+    " start_hfr, hfr, focuser_temperature, ambient_temperature, run"
+)
 
 _FRAME_COLUMNS = """
     f.id, n.night, t.name, v.key, v.label, f.directory, f.path, f.size, f.started,
@@ -314,7 +377,58 @@ class Catalog:
                 "UPDATE frames SET stars = ?, hfr = ? WHERE id = ?", (stars, hfr, frame_id)
             )
 
+    def add_temperature(self, sample: TemperatureSample) -> None:
+        with self._lock:
+            self._db.execute(
+                "INSERT OR REPLACE INTO temperatures VALUES (?, ?, ?, ?, ?)",
+                (sample.time, sample.focuser, sample.ambient, sample.humidity, sample.dew_point),
+            )
+
+    def add_focus_run(self, run: FocusRun) -> int:
+        with self._lock:
+            cursor = self._db.execute(
+                f"INSERT INTO focus_runs ({_RUN_COLUMNS}) VALUES ({', '.join('?' * 13)})",
+                (
+                    run.started,
+                    run.finished,
+                    run.profile,
+                    run.filter,
+                    run.state,
+                    run.problem,
+                    run.start_position,
+                    run.position,
+                    run.start_hfr,
+                    run.hfr,
+                    run.focuser_temperature,
+                    run.ambient_temperature,
+                    run.run,
+                ),
+            )
+        run_id = cursor.lastrowid
+        assert run_id is not None
+        return run_id
+
     # -- reading ----------------------------------------------------------
+
+    def temperatures(self, since: str, until: str | None = None) -> list[TemperatureSample]:
+        """Samples from ``since`` (inclusive) to ``until`` (exclusive), oldest first."""
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT time, focuser, ambient, humidity, dew_point FROM temperatures"
+                " WHERE time >= ? AND (? IS NULL OR time < ?) ORDER BY time",
+                (since, until, until),
+            ).fetchall()
+        return [TemperatureSample(*tuple(row)) for row in rows]
+
+    def focus_runs(self, limit: int = 20, before: int | None = None) -> list[FocusRun]:
+        """Newest first."""
+        with self._lock:
+            rows = self._db.execute(
+                f"SELECT {_RUN_COLUMNS}, id FROM focus_runs WHERE (? IS NULL OR id < ?)"
+                " ORDER BY id DESC LIMIT ?",
+                (before, before, limit),
+            ).fetchall()
+        return [FocusRun(*tuple(row)) for row in rows]
 
     def frame(self, frame_id: int) -> FrameRow | None:
         with self._lock:

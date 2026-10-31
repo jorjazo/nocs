@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import dataclasses
+import json
 import logging
 from collections.abc import AsyncGenerator, Generator
 from contextlib import asynccontextmanager
 from dataclasses import asdict, dataclass
+from datetime import UTC, datetime, timedelta
 from pathlib import Path, PurePosixPath
 from typing import Annotated
 
@@ -31,6 +34,7 @@ from nocs.api.auth import REVOKED, AuthMiddleware, Sockets, auth_router, identit
 from nocs.api.mount import mount_router
 from nocs.api.power import power_router
 from nocs.api.schemas import (
+    AutofocusRun,
     CameraRoleName,
     CameraSettingsRequest,
     ConnectRequest,
@@ -53,6 +57,7 @@ from nocs.api.schemas import (
     SnapshotMessage,
     StateSnapshot,
     TargetRequest,
+    TemperatureRecord,
     TemplateRequest,
 )
 from nocs.auth import AuthStore
@@ -69,9 +74,11 @@ from nocs.equipment import (
     Role,
     serial_ports,
 )
+from nocs.equipment.profiles import FocusSweep
 from nocs.filters.service import FilterWheelService
 from nocs.filters.wheels import WheelStore
 from nocs.focus.autofocus import AutofocusService
+from nocs.focus.focusers import FocuserStore
 from nocs.focus.service import FocuserService
 from nocs.guiding import GuidingService
 from nocs.imaging import (
@@ -91,6 +98,7 @@ from nocs.services.indi_bridge import IndiBridge, NotConnectedError
 from nocs.solving import Astap, SolverService
 from nocs.state import Resync, StateStore
 from nocs.storage import (
+    FocusRun,
     FrameFilter,
     FrameUnavailableError,
     Located,
@@ -98,6 +106,7 @@ from nocs.storage import (
     StorageError,
     StorageService,
 )
+from nocs.storage.environment import EnvironmentLog
 from nocs.storage.layout import clean
 
 log = logging.getLogger(__name__)
@@ -158,6 +167,15 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
         profile = equipment().active_profile
         return profile.site.longitude if profile is not None and profile.site else None
 
+    def imaging_sweep() -> FocusSweep | None:
+        """From the profile as saved: a new sweep needs no reconnection."""
+        active = equipment().active
+        profile = ProfileStore(settings.config_dir).get(active) if active else None
+        return profile.imaging.autofocus if profile and profile.imaging else None
+
+    async def record_focus_run(run: FocusRun) -> None:
+        await anyio.to_thread.run_sync(storage().add_focus_run, run)
+
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncGenerator[None]:
         services.clock = Clock(store)
@@ -193,10 +211,20 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
         )
         services.power = PowerService(store, services.jobs, services.equipment, bridge)
         services.weather = WeatherService(store, services.equipment, bridge)
-        services.focuser = FocuserService(store, services.jobs, services.equipment, bridge)
-        services.autofocus = AutofocusService(
-            store, services.jobs, services.focuser, services.capture
+        services.focuser = FocuserService(
+            store, services.jobs, services.equipment, bridge, FocuserStore(settings.config_dir)
         )
+        services.autofocus = AutofocusService(
+            store,
+            services.jobs,
+            services.focuser,
+            services.capture,
+            sweep=imaging_sweep,
+            profile=lambda: equipment().active,
+            record=record_focus_run,
+        )
+        services.environment = EnvironmentLog(store, services.storage, services.clock.now)
+        services.environment.start()
         services.filter_wheel = FilterWheelService(
             store, services.jobs, services.equipment, bridge, WheelStore(settings.config_dir)
         )
@@ -224,6 +252,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
             await mount().close()
             power().close()
             services.weather.close()
+            await services.environment.close()
             await focuser().close()
             await filter_wheel().close()
             await jobs().close()
@@ -241,6 +270,26 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
     app.include_router(mount_router(mount, clock, sockets))
     app.include_router(power_router(power))
     app.include_router(accessories_router(focuser, filter_wheel, autofocus))
+
+    @app.get("/api/autofocus/runs")
+    async def focus_runs(  # pyright: ignore[reportUnusedFunction]
+        before: int | None = None, limit: Annotated[int, Query(ge=1, le=200)] = 20
+    ) -> list[AutofocusRun]:
+        with _catalog_errors():
+            runs = await anyio.to_thread.run_sync(storage().focus_runs, limit, before)
+        return [_focus_run(run) for run in runs]
+
+    @app.get("/api/temperatures")
+    async def temperatures(  # pyright: ignore[reportUnusedFunction]
+        since: datetime | None = None, until: datetime | None = None
+    ) -> list[TemperatureRecord]:
+        """Samples from ``since`` (default: 12 hours ago) to ``until``, oldest first."""
+        start = since or clock().now() - timedelta(hours=12)
+        with _catalog_errors():
+            samples = await anyio.to_thread.run_sync(
+                storage().temperatures, _iso(start), _iso(until) if until else None
+            )
+        return [TemperatureRecord(**dataclasses.asdict(sample)) for sample in samples]
 
     @app.get("/api/health")
     async def health() -> Health:  # pyright: ignore[reportUnusedFunction]
@@ -506,6 +555,21 @@ class _Services:
     solver: SolverService | None = None
     autofocus: AutofocusService | None = None
     guiding: GuidingService | None = None
+    environment: EnvironmentLog | None = None
+
+
+def _iso(time: datetime) -> str:
+    """As the catalog keeps times: UTC, to the second (naive times are taken as UTC)."""
+    if time.tzinfo is None:
+        time = time.replace(tzinfo=UTC)
+    return time.astimezone(UTC).isoformat(timespec="seconds")
+
+
+def _focus_run(run: FocusRun) -> AutofocusRun:
+    assert run.id is not None
+    fields = dataclasses.asdict(run)
+    fields["run"] = json.loads(run.run)
+    return AutofocusRun.model_validate(fields)
 
 
 def _upload_dirs(settings: Settings) -> UploadDirs | None:

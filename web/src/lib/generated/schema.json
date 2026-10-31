@@ -315,10 +315,239 @@
       "title": "AutofocusPoint",
       "type": "object"
     },
+    "AutofocusRequest": {
+      "additionalProperties": false,
+      "description": "What is left out comes from the imaging train's sweep and the focuser's backlash.",
+      "properties": {
+        "direction": {
+          "anyOf": [
+            {
+              "enum": [
+                "outward",
+                "inward"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Which way every position is reached (backlash)."
+        },
+        "exposure": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "maximum": 600,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Seconds."
+        },
+        "frames": {
+          "anyOf": [
+            {
+              "maximum": 10,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Frames per point."
+        },
+        "overshoot": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Steps past a target moving the other way."
+        },
+        "points": {
+          "anyOf": [
+            {
+              "maximum": 25,
+              "minimum": 5,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "step": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Focuser steps between points."
+        }
+      },
+      "title": "AutofocusRequest",
+      "type": "object"
+    },
+    "AutofocusRun": {
+      "description": "A finished autofocus run, from the catalog.",
+      "properties": {
+        "ambient_temperature": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "filter": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "finished": {
+          "type": "string"
+        },
+        "focuser_temperature": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "hfr": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "id": {
+          "type": "integer"
+        },
+        "position": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "problem": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "profile": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "run": {
+          "$ref": "#/$defs/AutofocusState",
+          "description": "The run as the state showed it at its end."
+        },
+        "start_hfr": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "start_position": {
+          "type": "integer"
+        },
+        "started": {
+          "type": "string"
+        },
+        "state": {
+          "enum": [
+            "succeeded",
+            "failed",
+            "cancelled"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "started",
+        "finished",
+        "profile",
+        "filter",
+        "state",
+        "problem",
+        "start_position",
+        "position",
+        "start_hfr",
+        "hfr",
+        "focuser_temperature",
+        "ambient_temperature",
+        "run"
+      ],
+      "title": "AutofocusRun",
+      "type": "object"
+    },
     "AutofocusState": {
       "additionalProperties": false,
       "description": "The running autofocus, or the most recent one.",
       "properties": {
+        "ambient": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The weather role's temperature at the start, \u00b0C."
+        },
         "detail": {
           "anyOf": [
             {
@@ -329,6 +558,17 @@
             }
           ],
           "description": "Why it failed."
+        },
+        "filter": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The filter in place."
         },
         "finished": {
           "anyOf": [
@@ -499,6 +739,8 @@
         "start_hfr",
         "start_stars",
         "temperature",
+        "ambient",
+        "filter",
         "points",
         "fit",
         "position",
@@ -1404,6 +1646,102 @@
       "title": "FilterWheelState",
       "type": "object"
     },
+    "FocusSweep": {
+      "additionalProperties": false,
+      "description": "How autofocus sweeps with a train's optics (ADR 0021).",
+      "properties": {
+        "exposure": {
+          "default": 2.0,
+          "description": "Seconds.",
+          "exclusiveMinimum": 0,
+          "maximum": 600,
+          "type": "number"
+        },
+        "frames": {
+          "default": 1,
+          "description": "Frames per point.",
+          "maximum": 10,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "points": {
+          "default": 9,
+          "maximum": 25,
+          "minimum": 5,
+          "type": "integer"
+        },
+        "step": {
+          "description": "Focuser steps between points.",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "step"
+      ],
+      "title": "FocusSweep",
+      "type": "object"
+    },
+    "FocuserBacklash": {
+      "additionalProperties": false,
+      "description": "How autofocus takes up this physical focuser's backlash (ADR 0021).",
+      "properties": {
+        "direction": {
+          "description": "Which way every position is reached.",
+          "enum": [
+            "outward",
+            "inward"
+          ],
+          "type": "string"
+        },
+        "overshoot": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Steps past a target when moving the other way; None: one sweep step."
+        }
+      },
+      "required": [
+        "direction",
+        "overshoot"
+      ],
+      "title": "FocuserBacklash",
+      "type": "object"
+    },
+    "FocuserBacklashRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "direction": {
+          "default": "outward",
+          "enum": [
+            "outward",
+            "inward"
+          ],
+          "type": "string"
+        },
+        "overshoot": {
+          "anyOf": [
+            {
+              "maximum": 100000,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "None: one sweep step."
+        }
+      },
+      "title": "FocuserBacklashRequest",
+      "type": "object"
+    },
     "FocuserMoveRequest": {
       "additionalProperties": false,
       "description": "Exactly one of ``position`` and ``steps``.",
@@ -1440,10 +1778,17 @@
     "FocuserState": {
       "additionalProperties": false,
       "properties": {
+        "backlash": {
+          "$ref": "#/$defs/FocuserBacklash"
+        },
         "can_abort": {
           "type": "boolean"
         },
         "device": {
+          "type": "string"
+        },
+        "key": {
+          "description": "The physical focuser: serial:<number> or device:<name>.",
           "type": "string"
         },
         "max_position": {
@@ -1489,12 +1834,14 @@
       },
       "required": [
         "device",
+        "key",
         "position",
         "max_position",
         "moving",
         "target",
         "temperature",
-        "can_abort"
+        "can_abort",
+        "backlash"
       ],
       "title": "FocuserState",
       "type": "object"
@@ -2772,6 +3119,18 @@
           "default": null,
           "description": "Aperture in mm."
         },
+        "autofocus": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FocusSweep"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Imaging train: the autofocus sweep for these optics."
+        },
         "focal_length": {
           "description": "Native focal length in mm.",
           "exclusiveMinimum": 0,
@@ -3998,6 +4357,67 @@
         "target"
       ],
       "title": "TargetRequest",
+      "type": "object"
+    },
+    "TemperatureRecord": {
+      "properties": {
+        "ambient": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The weather role's, \u00b0C."
+        },
+        "dew_point": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "\u00b0C."
+        },
+        "focuser": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The focuser's probe, \u00b0C."
+        },
+        "humidity": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "%."
+        },
+        "time": {
+          "description": "UTC, ISO 8601.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "time",
+        "focuser",
+        "ambient",
+        "humidity",
+        "dew_point"
+      ],
+      "title": "TemperatureRecord",
       "type": "object"
     },
     "TemplateRequest": {

@@ -13,6 +13,7 @@ from nocs.devices import DeviceInterface, FilterWheel, Focuser
 from nocs.equipment import EquipmentService, Role
 from nocs.filters.service import FilterWheelService
 from nocs.filters.wheels import WheelConfig, WheelStore, check_names, wheel_key
+from nocs.focus.focusers import FocuserConfig, FocuserStore
 from nocs.focus.service import FocuserService
 from nocs.indi import IndiClient, Property, PropertyState, PropertyType
 from nocs.indi.properties import NumberElement, SwitchElement, TextElement
@@ -20,6 +21,7 @@ from nocs.jobs import JobManager, ResourceBusyError
 from nocs.state import StateStore
 
 FOCUSER = "ZWO EAF"
+KEY = f"device:{FOCUSER}"
 WHEEL = "ZWO EFW"
 DRIVER_NAMES = ["Red", "Green", "Blue", "H_Alpha", "SII"]
 
@@ -216,14 +218,33 @@ def test_wheel_store_round_trip(tmp_path: Path) -> None:
 # -- focuser service --------------------------------------------------------------
 
 
-def focuser_service(client: FakeClient) -> tuple[FocuserService, JobManager, StateStore]:
+def focuser_service(
+    client: FakeClient, settings: FocuserStore | None = None
+) -> tuple[FocuserService, JobManager, StateStore]:
     store = StateStore()
     jobs = JobManager(store)
     equipment = FakeEquipment()
-    service = FocuserService(store, jobs, cast(EquipmentService, equipment), FakeBridge(client))
+    service = FocuserService(
+        store, jobs, cast(EquipmentService, equipment), FakeBridge(client), settings
+    )
     assert store.get(("focuser",)) is None
     equipment.set_ready(Role.FOCUSER, FOCUSER)
     return service, jobs, store
+
+
+async def test_backlash_is_kept_per_physical_focuser(
+    client: FakeClient, driver: Driver, tmp_path: Path
+) -> None:
+    settings = FocuserStore(tmp_path)
+    service, _, store = focuser_service(client, settings)
+    assert service.backlash() == FocuserConfig()
+    service.set_backlash(FocuserConfig(direction="inward", overshoot=250))
+    assert store.get(("focuser", "backlash")) == {"direction": "inward", "overshoot": 250}
+    assert settings.get(KEY) == FocuserConfig(direction="inward", overshoot=250)
+    # A new service (nocsd restarted) reads it back.
+    again, _, store = focuser_service(client, FocuserStore(tmp_path))
+    assert again.backlash().overshoot == 250
+    assert store.get(("focuser", "backlash", "direction")) == "inward"
 
 
 async def test_focuser_state_and_moves(client: FakeClient, driver: Driver) -> None:
@@ -236,6 +257,8 @@ async def test_focuser_state_and_moves(client: FakeClient, driver: Driver) -> No
         "target": None,
         "temperature": pytest.approx(16.4),
         "can_abort": True,
+        "key": KEY,
+        "backlash": {"direction": "outward", "overshoot": None},
     }
     job = service.move_to(7000)
     await jobs.wait(job)

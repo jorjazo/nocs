@@ -18,12 +18,17 @@ State under ``("autofocus",)``: ``None`` until the first run, then that run as
 it goes (the most recent one, finished or not)::
 
     {job, state, phase, started, finished, step, start_position, start_hfr,
-     start_stars, temperature, points, fit, position, hfr, stars, problem,
-     detail, suggested_step}
+     start_stars, temperature, ambient, filter, points, fit, position, hfr,
+     stars, problem, detail, suggested_step}
+
+Options left out come from the imaging train's sweep in the profile and from the
+physical focuser's backlash settings (``options``). Finished runs are recorded
+in the catalog.
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import statistics
 from collections.abc import Awaitable, Callable, Sequence
@@ -36,7 +41,9 @@ import anyio
 
 from nocs.devices import DeviceError, FrameType
 from nocs.equipment import Role
+from nocs.equipment.profiles import FocusSweep
 from nocs.focus.curve import Fit
+from nocs.focus.focusers import FocuserConfig
 from nocs.focus.service import FocuserNotReadyError
 from nocs.focus.sweep import (
     DEFAULT_CRITERIA,
@@ -53,6 +60,8 @@ from nocs.focus.sweep import (
 from nocs.imaging import Shot, StarMetrics
 from nocs.jobs import JobContext, JobManager
 from nocs.state import Json, Path, StateStore
+from nocs.storage import FocusRun
+from nocs.storage.environment import number
 
 log = logging.getLogger(__name__)
 
@@ -82,6 +91,7 @@ class Focusers(Protocol):
     """The focuser role (``FocuserService``)."""
 
     def focuser(self) -> FocuserDevice: ...
+    def backlash(self) -> FocuserConfig: ...
 
 
 class Frames(Protocol):
@@ -97,6 +107,9 @@ class Frames(Protocol):
         label: str = "",
     ) -> Shot: ...
     async def measure(self, shot: Shot, *, discard: bool = True) -> StarMetrics: ...
+
+
+type Recorder = Callable[[FocusRun], Awaitable[None]]
 
 
 type _Move = Callable[[int], Awaitable[None]]
@@ -172,6 +185,8 @@ class _Run:
     options: AutofocusOptions
     start_position: int
     temperature: float | None
+    ambient: float | None = None
+    filter: str | None = None
     started: str = field(default_factory=lambda: _now())
     state: RunState = RunState.RUNNING
     phase: Phase = Phase.STARTING
@@ -196,6 +211,8 @@ class _Run:
             "start_hfr": self.start.hfr if self.start else None,
             "start_stars": self.start.stars if self.start else None,
             "temperature": self.temperature,
+            "ambient": self.ambient,
+            "filter": self.filter,
             "points": [
                 {"position": p.position, "hfr": p.hfr, "stars": p.stars} for p in self.points
             ],
@@ -229,13 +246,51 @@ class AutofocusService:
         jobs: JobManager,
         focuser: Focusers,
         capture: Frames,
+        *,
+        sweep: Callable[[], FocusSweep | None] = lambda: None,
+        profile: Callable[[], str | None] = lambda: None,
+        record: Recorder | None = None,
     ) -> None:
         self._store = store
         self._jobs = jobs
         self._focuser = focuser
         self._capture = capture
+        self._train_sweep = sweep
+        self._profile = profile
+        self._record = record
         self._run: _Run | None = None
         store.set(ROOT, None)
+
+    def options(
+        self,
+        *,
+        step: int | None = None,
+        points: int | None = None,
+        exposure: float | None = None,
+        frames: int | None = None,
+        direction: Direction | None = None,
+        overshoot: int | None = None,
+    ) -> AutofocusOptions:
+        """Options for a run: those given, then the imaging train's sweep and the
+        focuser's backlash, then the defaults."""
+        sweep = self._train_sweep()
+        backlash = self._focuser.backlash()
+        step = step if step is not None else sweep.step if sweep is not None else None
+        if step is None:
+            raise ValueError("autofocus needs a step: give one, or save one in the imaging train")
+        defaults = AutofocusOptions(step=step)
+        if direction is None:
+            direction = Direction.INWARD if backlash.direction == "inward" else Direction.OUTWARD
+        options = AutofocusOptions(
+            step=step,
+            points=_first(points, sweep.points if sweep else None, defaults.points),
+            exposure=_first(exposure, sweep.exposure if sweep else None, defaults.exposure),
+            frames=_first(frames, sweep.frames if sweep else None, defaults.frames),
+            direction=direction,
+            overshoot=overshoot if overshoot is not None else backlash.overshoot,
+        )
+        options.check()
+        return options
 
     def start(self, options: AutofocusOptions) -> str:
         """Run autofocus in a job of its own; returns the job id."""
@@ -259,7 +314,14 @@ class AutofocusService:
         if self._jobs.holder(Role.FOCUSER.value) != context.id:
             raise RuntimeError(f"job {context.id} does not hold the focuser")
         focuser = self._focuser.focuser()
-        run = _Run(context.id, options, focuser.position, focuser.temperature)
+        run = _Run(
+            context.id,
+            options,
+            focuser.position,
+            focuser.temperature,
+            ambient=number(self._store, ("weather", "temperature")),
+            filter=_text(self._store.get(("filter_wheel", "filter"))),
+        )
         self._run = run
         self._publish()
         try:
@@ -277,6 +339,8 @@ class AutofocusService:
         finally:
             run.finished = _now()
             self._publish()
+            with anyio.CancelScope(shield=True):
+                await self._keep(run)
         return run.summary()
 
     # -- internals ----------------------------------------------------------
@@ -431,6 +495,32 @@ class AutofocusService:
             except (DeviceError, ConnectionError, TimeoutError, FocuserNotReadyError) as e:
                 log.error("autofocus: could not move the focuser back: %s", e)
 
+    async def _keep(self, run: _Run) -> None:
+        """Record a finished run in the catalog; never raises."""
+        if self._record is None:
+            return
+        summary = run.summary()
+        try:
+            await self._record(
+                FocusRun(
+                    started=run.started,
+                    finished=run.finished or run.started,
+                    profile=self._profile(),
+                    filter=run.filter,
+                    state=run.state.value,
+                    problem=run.problem.value if run.problem else None,
+                    start_position=run.start_position,
+                    position=run.final.position if run.final else None,
+                    start_hfr=run.start.hfr if run.start else None,
+                    hfr=run.final.hfr if run.final else None,
+                    focuser_temperature=run.temperature,
+                    ambient_temperature=run.ambient,
+                    run=json.dumps(summary),
+                )
+            )
+        except Exception:
+            log.exception("autofocus: cannot record the run")
+
     def _publish(self) -> None:
         if self._run is not None:
             self._store.set(ROOT, self._run.summary())
@@ -444,6 +534,17 @@ def _combine(position: int, measures: Sequence[Measure], criteria: Criteria) -> 
         return Measure(position, None, stars)
     hfrs = [m.hfr for m in good if m.hfr is not None]
     return Measure(position, round(statistics.median(hfrs), 3), stars)
+
+
+def _first[T](*values: T | None) -> T:
+    for value in values:
+        if value is not None:
+            return value
+    raise ValueError("no value")
+
+
+def _text(value: Json) -> str | None:
+    return value if isinstance(value, str) else None
 
 
 def _point(measure: Measure) -> Point:

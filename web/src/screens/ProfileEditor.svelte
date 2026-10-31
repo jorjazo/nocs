@@ -150,9 +150,11 @@
   });
   const valid = $derived(!problem && Object.values(validity).every(Boolean));
 
-  function optics(draft: OpticsDraft): Optics | null {
+  // Keeps what the editor does not show (the autofocus sweep) from the optics it edits.
+  function optics(draft: OpticsDraft, previous: Optics | null | undefined): Optics | null {
     if (draft.focal_length === null) return null;
     return {
+      ...previous,
       focal_length: draft.focal_length,
       aperture: draft.aperture,
       reducer: draft.reducer ?? 1,
@@ -174,8 +176,8 @@
       ...original,
       name: name.trim(),
       devices: configs,
-      imaging: optics(imaging),
-      guiding: optics(guiding),
+      imaging: optics(imaging, original?.imaging),
+      guiding: optics(guiding, original?.guiding),
       site:
         latitude !== null && longitude !== null
           ? { name: siteName.trim(), latitude, longitude, elevation: elevation ?? 0 }

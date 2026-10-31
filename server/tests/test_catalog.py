@@ -8,7 +8,14 @@ from pathlib import Path, PurePosixPath
 import pytest
 
 from nocs.storage import catalog
-from nocs.storage.catalog import Catalog, CatalogError, FrameFilter, NewFrame
+from nocs.storage.catalog import (
+    Catalog,
+    CatalogError,
+    FocusRun,
+    FrameFilter,
+    NewFrame,
+    TemperatureSample,
+)
 
 FRAME = NewFrame(
     night=date(2026, 10, 30),
@@ -162,3 +169,55 @@ def test_failed_migration_keeps_the_previous_version(
         assert raw.execute("PRAGMA user_version").fetchone()[0] == catalog.VERSION - 1
         columns = [row[1] for row in raw.execute("PRAGMA table_info(frames)")]
         assert "fwhm" not in columns
+
+
+def test_temperatures_are_kept_by_time(db: Catalog) -> None:
+    for minute, focuser in ((0, 8.5), (1, 8.4), (2, 8.2)):
+        db.add_temperature(
+            TemperatureSample(f"2026-10-31T02:0{minute}:00+00:00", focuser, 11.0, 70.0, 5.9)
+        )
+    db.add_temperature(TemperatureSample("2026-10-31T02:02:00+00:00", 8.1, None, None, None))
+    samples = db.temperatures("2026-10-31T02:01:00+00:00")
+    assert [(s.time[11:16], s.focuser, s.ambient) for s in samples] == [
+        ("02:01", 8.4, 11.0),
+        ("02:02", 8.1, None),  # the same time again replaces the sample
+    ]
+    assert len(db.temperatures("2026-10-31T00:00:00+00:00", "2026-10-31T02:01:00+00:00")) == 1
+
+
+def test_focus_runs_newest_first(db: Catalog) -> None:
+    run = FocusRun(
+        started="2026-10-31T02:00:00.000+00:00",
+        finished="2026-10-31T02:01:10.000+00:00",
+        profile="lab",
+        filter="L",
+        state="succeeded",
+        problem=None,
+        start_position=31000,
+        position=30875,
+        start_hfr=2.4,
+        hfr=1.9,
+        focuser_temperature=8.4,
+        ambient_temperature=11.0,
+        run='{"points": []}',
+    )
+    first = db.add_focus_run(run)
+    second = db.add_focus_run(replace(run, state="failed", problem="no_stars", position=None))
+    runs = db.focus_runs()
+    assert [(r.id, r.state, r.problem) for r in runs] == [
+        (second, "failed", "no_stars"),
+        (first, "succeeded", None),
+    ]
+    assert runs[1] == replace(run, id=first)
+    assert db.focus_runs(limit=1, before=second) == [replace(run, id=first)]
+
+
+def test_version_1_catalogs_gain_the_night_tables(tmp_path: Path) -> None:
+    path = tmp_path / "catalog.sqlite"
+    with sqlite3.connect(path) as raw:
+        raw.executescript(catalog.MIGRATIONS[0] + "PRAGMA user_version = 1;")
+    db = Catalog(path)
+    assert db.version == catalog.VERSION
+    assert db.focus_runs() == []
+    assert db.temperatures("2026-01-01") == []
+    db.close()

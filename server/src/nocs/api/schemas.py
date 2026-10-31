@@ -357,14 +357,27 @@ class WeatherState(StateModel):
     )
 
 
+class FocuserBacklash(StateModel):
+    """How autofocus takes up this physical focuser's backlash (ADR 0021)."""
+
+    direction: Literal["outward", "inward"] = Field(
+        description="Which way every position is reached."
+    )
+    overshoot: int | None = Field(
+        description="Steps past a target when moving the other way; None: one sweep step."
+    )
+
+
 class FocuserState(StateModel):
     device: str
+    key: str = Field(description="The physical focuser: serial:<number> or device:<name>.")
     position: int = Field(description="Steps.")
     max_position: int | None = Field(description="Highest position the driver accepts.")
     moving: bool
     target: int | None = Field(description="Where the move NOCS is running goes.")
     temperature: float | None = Field(description="Its probe, °C; None if it has none.")
     can_abort: bool
+    backlash: FocuserBacklash
 
 
 class FilterWheelState(StateModel):
@@ -443,6 +456,8 @@ class AutofocusState(StateModel):
     start_hfr: float | None
     start_stars: int | None
     temperature: float | None = Field(description="The focuser's probe at the start, °C.")
+    ambient: float | None = Field(description="The weather role's temperature at the start, °C.")
+    filter: str | None = Field(description="The filter in place.")
     points: list[AutofocusPoint] = Field(description="Measured so far, by position.")
     fit: AutofocusFit | None
     position: int | None = Field(description="Best focus, once the run checked it.")
@@ -683,18 +698,56 @@ class FocuserMoveRequest(BaseModel):
 
 
 class AutofocusRequest(BaseModel):
+    """What is left out comes from the imaging train's sweep and the focuser's backlash."""
+
     model_config = ConfigDict(extra="forbid")
 
-    step: int = Field(ge=1, description="Focuser steps between points.")
-    points: int = Field(default=9, ge=5, le=25)
-    exposure: float = Field(default=2.0, gt=0, le=600, description="Seconds.")
-    frames: int = Field(default=1, ge=1, le=10, description="Frames per point.")
-    direction: Literal["outward", "inward"] = Field(
-        default="outward", description="Which way every position is reached (backlash)."
+    step: int | None = Field(default=None, ge=1, description="Focuser steps between points.")
+    points: int | None = Field(default=None, ge=5, le=25)
+    exposure: float | None = Field(default=None, gt=0, le=600, description="Seconds.")
+    frames: int | None = Field(default=None, ge=1, le=10, description="Frames per point.")
+    direction: Literal["outward", "inward"] | None = Field(
+        default=None, description="Which way every position is reached (backlash)."
     )
     overshoot: int | None = Field(
-        default=None, ge=0, description="Steps past a target moving the other way; None: a step."
+        default=None, ge=0, description="Steps past a target moving the other way."
     )
+
+
+class FocuserBacklashRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    direction: Literal["outward", "inward"] = "outward"
+    overshoot: int | None = Field(
+        default=None, ge=0, le=100000, description="None: one sweep step."
+    )
+
+
+class AutofocusRun(WireModel):
+    """A finished autofocus run, from the catalog."""
+
+    id: int
+    started: str
+    finished: str
+    profile: str | None
+    filter: str | None
+    state: Literal["succeeded", "failed", "cancelled"]
+    problem: str | None
+    start_position: int
+    position: int | None
+    start_hfr: float | None
+    hfr: float | None
+    focuser_temperature: float | None
+    ambient_temperature: float | None
+    run: AutofocusState = Field(description="The run as the state showed it at its end.")
+
+
+class TemperatureRecord(WireModel):
+    time: str = Field(description="UTC, ISO 8601.")
+    focuser: float | None = Field(description="The focuser's probe, °C.")
+    ambient: float | None = Field(description="The weather role's, °C.")
+    humidity: float | None = Field(description="%.")
+    dew_point: float | None = Field(description="°C.")
 
 
 class FilterSelectRequest(BaseModel):

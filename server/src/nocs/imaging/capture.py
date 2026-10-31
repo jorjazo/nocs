@@ -54,6 +54,7 @@ from nocs.jobs import JobContext, JobManager
 from nocs.solving import field_of_view
 from nocs.state import Json, Path, StateStore
 from nocs.storage import FrameFacts, StorageError, StorageService
+from nocs.storage.environment import number
 
 log = logging.getLogger(__name__)
 
@@ -469,6 +470,9 @@ class CaptureService:
             site=site,
             optics=profile.imaging if profile is not None else None,
             clock_correction=self._clock.correction if self._clock is not None else 0.0,
+            ambient=number(self._store, ("weather", "temperature")),
+            humidity=number(self._store, ("weather", "humidity")),
+            dew_point=number(self._store, ("weather", "dew_point")),
         )
 
     def _mount_site(self) -> Site | None:

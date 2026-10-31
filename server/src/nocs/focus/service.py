@@ -2,10 +2,11 @@
 
 State under ``("focuser",)`` while the role is ready, ``None`` otherwise::
 
-    {device, position, max_position, moving, target, temperature, can_abort}
+    {device, key, position, max_position, moving, target, temperature, can_abort, backlash}
 
 A move (to a position, or by a number of steps) runs as a job that locks the
-focuser; cancelling it, or ``abort``, stops the motor where it is.
+focuser; cancelling it, or ``abort``, stops the motor where it is. ``backlash``
+is how autofocus takes up this physical focuser's backlash (``nocs.focus.focusers``).
 """
 
 from __future__ import annotations
@@ -14,8 +15,10 @@ import asyncio
 import logging
 
 from nocs.devices import DeviceError, Focuser
+from nocs.devices.base import SERIAL_PROPERTIES
 from nocs.equipment import EquipmentService, Role
 from nocs.equipment.service import IndiConnection
+from nocs.focus.focusers import FocuserConfig, FocuserStore
 from nocs.indi import IndiClient, IndiEvent, PropertyDefined, PropertyUpdated
 from nocs.jobs import JobContext, JobManager
 from nocs.state import Json, Path, StateStore
@@ -25,7 +28,15 @@ log = logging.getLogger(__name__)
 ROOT: Path = ("focuser",)
 RESOURCE = Role.FOCUSER.value
 
-_WATCHED = frozenset({"ABS_FOCUS_POSITION", "REL_FOCUS_POSITION", "FOCUS_MAX", "FOCUS_TEMPERATURE"})
+_WATCHED = frozenset(
+    {
+        "ABS_FOCUS_POSITION",
+        "REL_FOCUS_POSITION",
+        "FOCUS_MAX",
+        "FOCUS_TEMPERATURE",
+        *SERIAL_PROPERTIES,
+    }
+)
 
 
 class FocuserNotReadyError(Exception):
@@ -39,8 +50,12 @@ class FocuserService:
         jobs: JobManager,
         equipment: EquipmentService,
         bridge: IndiConnection,
+        settings: FocuserStore | None = None,
     ) -> None:
         self._store = store
+        self._settings = settings
+        self._configs: dict[str, FocuserConfig] = {}
+        """Settings read so far, by focuser key."""
         self._jobs = jobs
         self._equipment = equipment
         self._client: IndiClient | None = bridge.client
@@ -77,6 +92,18 @@ class FocuserService:
         focuser.check_position(target)
         self._jobs.check_free([RESOURCE])
         return self._start(focuser, target)
+
+    def backlash(self) -> FocuserConfig:
+        """How autofocus takes up this focuser's backlash."""
+        return self._config(self.focuser().key)
+
+    def set_backlash(self, config: FocuserConfig) -> None:
+        if self._settings is None:
+            raise RuntimeError("focuser settings are not kept")
+        key = self.focuser().key
+        self._settings.put(key, config)
+        self._configs[key] = config
+        self._publish()
 
     async def abort(self) -> None:
         """Stop the focuser, whoever moved it."""
@@ -167,15 +194,26 @@ class FocuserService:
                     self._store.set((*ROOT, key), value)
         self._published = summary
 
+    def _config(self, key: str) -> FocuserConfig:
+        if key not in self._configs:
+            self._configs[key] = (
+                self._settings.get(key) if self._settings is not None else FocuserConfig()
+            )
+        return self._configs[key]
+
     def _summary(self, focuser: Focuser) -> dict[str, Json]:
+        key = focuser.key
+        config = self._config(key)
         return {
             "device": focuser.name,
+            "key": key,
             "position": focuser.position,
             "max_position": focuser.max_position,
             "moving": focuser.moving or self._move is not None,
             "target": self._move.target if self._move is not None else None,
             "temperature": focuser.temperature,
             "can_abort": focuser.can_abort,
+            "backlash": {"direction": config.direction, "overshoot": config.overshoot},
         }
 
 

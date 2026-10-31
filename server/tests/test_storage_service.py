@@ -98,6 +98,8 @@ class Rig:
             profile="sim",
             site=SITE,
             optics=OPTICS,
+            ambient=11.234,
+            humidity=63.0,
         )
 
     @property
@@ -150,6 +152,8 @@ async def test_automatic_saves_to_the_external_drive(rig: Rig, service: StorageS
         assert (header["SITENAME"], header["SITEELEV"]) == ("Lab", 2400)
         assert header["FOCALLEN"] == 320.0  # the driver's value stays
         assert (header["APTDIA"], header["FOCRATIO"], header["SET-TEMP"]) == (80, 4.0, -10)
+        assert (header["AMBTEMP"], header["HUMIDITY"]) == (11.23, 63.0)
+        assert "DEWPOINT" not in header  # not known: left out
         assert header["FILTER"] == "Ha"
 
     [located] = service.frames(FrameFilter())

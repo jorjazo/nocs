@@ -2,6 +2,7 @@
 follow a known V-curve."""
 
 import asyncio
+import json
 from collections.abc import Callable
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -13,11 +14,15 @@ import pytest
 from nocs.api.schemas import AutofocusState
 from nocs.devices import FrameType
 from nocs.equipment import Role
+from nocs.equipment.profiles import FocusSweep
 from nocs.focus.autofocus import AutofocusOptions, AutofocusService
 from nocs.focus.curve import Hyperbola
+from nocs.focus.focusers import FocuserConfig
+from nocs.focus.sweep import Direction
 from nocs.imaging import Shot, StarMetrics
 from nocs.jobs import JobContext, JobManager
 from nocs.state import Json, StateStore
+from nocs.storage import FocusRun
 
 CURVE = Hyperbola(a=2.0, b=300, c=10000)
 
@@ -70,9 +75,13 @@ class FakeFocuser:
 class FakeFocusers:
     def __init__(self, focuser: FakeFocuser) -> None:
         self.device = focuser
+        self.config = FocuserConfig()
 
     def focuser(self) -> FakeFocuser:
         return self.device
+
+    def backlash(self) -> FocuserConfig:
+        return self.config
 
 
 class FakeCamera:
@@ -119,8 +128,21 @@ class Rig:
         self.jobs = JobManager(self.store)
         self.focuser = FakeFocuser(start, backlash)
         self.camera = FakeCamera(self.focuser, self.jobs)
+        self.focusers = FakeFocusers(self.focuser)
+        self.sweep: FocusSweep | None = None
+        self.runs: list[FocusRun] = []
+
+        async def record(run: FocusRun) -> None:
+            self.runs.append(run)
+
         self.service = AutofocusService(
-            self.store, self.jobs, FakeFocusers(self.focuser), self.camera
+            self.store,
+            self.jobs,
+            self.focusers,
+            self.camera,
+            sweep=lambda: self.sweep,
+            profile=lambda: "lab",
+            record=record,
         )
 
     async def focus(self, **options: Any) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -270,3 +292,42 @@ async def test_options_are_checked_before_the_job() -> None:
         rig.service.start(AutofocusOptions(step=0))
     assert rig.store.get(("autofocus",)) is None
     assert rig.store.get(("jobs",)) == {}
+
+
+def test_options_come_from_the_train_and_the_focuser() -> None:
+    rig = Rig(start=10150)
+    with pytest.raises(ValueError, match="needs a step"):
+        rig.service.options()
+    rig.sweep = FocusSweep(step=300, points=7, exposure=3.5)
+    rig.focusers.config = FocuserConfig(direction="inward", overshoot=50)
+    assert rig.service.options() == AutofocusOptions(
+        step=300, points=7, exposure=3.5, frames=1, direction=Direction.INWARD, overshoot=50
+    )
+    given = rig.service.options(step=120, frames=2, direction=Direction.OUTWARD, overshoot=0)
+    assert (given.step, given.points, given.frames, given.direction, given.overshoot) == (
+        120,
+        7,
+        2,
+        Direction.OUTWARD,
+        0,
+    )
+    rig.sweep = None
+    rig.focusers.config = FocuserConfig()
+    assert rig.service.options(step=100) == AutofocusOptions(step=100)
+
+
+async def test_finished_runs_are_recorded_with_the_conditions() -> None:
+    rig = Rig(start=10150)
+    rig.store.set(("weather",), {"temperature": 11.5})
+    rig.store.set(("filter_wheel",), {"filter": "L"})
+    _, state = await rig.focus()
+    rig.camera.stars = lambda _: 0
+    await rig.focus()
+    assert state["ambient"] == 11.5
+    assert state["filter"] == "L"
+    good, bad = rig.runs
+    assert (good.state, good.profile, good.filter) == ("succeeded", "lab", "L")
+    assert good.position == 10000
+    assert (good.focuser_temperature, good.ambient_temperature) == (4.5, 11.5)
+    assert json.loads(good.run) == state
+    assert (bad.state, bad.problem, bad.position) == ("failed", "no_stars", None)
