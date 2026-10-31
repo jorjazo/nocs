@@ -20,13 +20,16 @@
     setObserver,
   } from "../lib/api";
   import { auth } from "../lib/auth.svelte";
+  import { slotLabel } from "../lib/camera.svelte";
   import { connectionTone, ROLE_ICONS, ROLES, roles, roleTone } from "../lib/equipment";
   import { errorText } from "../lib/errors";
-  import { formatBytes, formatDateTime, formatDecimal } from "../lib/format";
+  import { formatBytes, formatDateTime, formatDecimal, formatPlain, formatTemperature } from "../lib/format";
   import { i18n, LANGUAGE_NAMES } from "../lib/i18n";
   import { live } from "../lib/live.svelte";
   import { LOCALES, prefs, THEMES } from "../lib/prefs.svelte";
-  import { href } from "../lib/router.svelte";
+  import { href, router } from "../lib/router.svelte";
+  import FilterWheelSheet from "./devices/FilterWheelSheet.svelte";
+  import FocuserSheet from "./devices/FocuserSheet.svelte";
   import PowerSheet from "./devices/PowerSheet.svelte";
   import type { CameraState, Optics, PairedDevice, Profile, Role, RoleState } from "../lib/types";
 
@@ -130,7 +133,9 @@
 
   const power = $derived(live.app.power ?? null);
   const weather = $derived(live.app.weather ?? null);
-  let sheet = $state<"power" | null>(null);
+  const focuser = $derived(live.app.focuser ?? null);
+  const wheel = $derived(live.app.filter_wheel ?? null);
+  let sheet = $state<"power" | "focuser" | "filter_wheel" | null>(null);
 
   function subtitle(role: Role): string {
     const parts = [t.roles[role]];
@@ -145,10 +150,25 @@
       if (weather.temperature !== null) parts.push(`${formatDecimal(weather.temperature, locale, 1)}\u00a0°C`);
       if (weather.humidity !== null) parts.push(`${formatDecimal(weather.humidity, locale, 0)}\u00a0%`);
     }
+    if (role === "focuser" && focuser) {
+      parts.push(t.rig.position(formatPlain(focuser.position, locale)));
+      if (focuser.temperature !== null) parts.push(formatTemperature(focuser.temperature, locale));
+    }
+    if (role === "filter_wheel" && wheel) {
+      if (wheel.label) parts.push(wheel.label);
+      if (wheel.slot) parts.push(slotLabel(wheel, wheel.slot, t));
+      if (!wheel.confirmed && wheel.key) parts.push(t.rig.wheelNew);
+    }
     return parts.join(" · ");
   }
 
+  function moving(role: Role): boolean {
+    return (role === "focuser" && !!focuser?.moving) || (role === "filter_wheel" && !!wheel?.moving);
+  }
+
   function opener(role: Role): (() => void) | undefined {
+    if (role === "focuser" && focuser) return () => (sheet = "focuser");
+    if (role === "filter_wheel" && wheel) return () => (sheet = "filter_wheel");
     if (role === "power" && power) return () => (sheet = "power");
     return undefined;
   }
@@ -222,7 +242,13 @@
 {#if !live.synced}
   <p class="loading muted" role="status">{t.boot.loading}</p>
 {:else if equipment && profiles.length === 0}
-  <EmptyState icon="rig" title={t.rig.noProfiles} body={t.rig.noProfilesBody} />
+  <EmptyState icon="rig" title={t.rig.noProfiles} body={t.rig.noProfilesBody}>
+    {#snippet action()}
+      {#if auth.owner}
+        <Button variant="primary" onclick={() => router.go({ screen: "profile", id: null })}>{t.rig.newProfile}</Button>
+      {/if}
+    {/snippet}
+  </EmptyState>
 {:else if equipment}
   <div class="sections">
     <section class="card equipment" aria-labelledby="equipment-title">
@@ -254,6 +280,10 @@
             </Button>
           {/if}
         </div>
+        <div class="links">
+          <a href={href({ screen: "profile", id })}>{t.rig.editProfile}</a>
+          <a href={href({ screen: "profile", id: null })}>{t.rig.newProfile}</a>
+        </div>
       {/if}
     </section>
 
@@ -279,7 +309,12 @@
     {/if}
 
     <section aria-labelledby="devices-title">
-      <h2 class="heading section-title" id="devices-title">{t.rig.devices}</h2>
+      <div class="line section-title">
+        <h2 class="heading" id="devices-title">{t.rig.devices}</h2>
+        {#if auth.owner && profileId !== null}
+          <a href={href({ screen: "profile", id: profileId })}>{t.rig.addDevice}</a>
+        {/if}
+      </div>
       {#if roleList.length === 0}
         <p class="muted">{t.rig.noDevices}</p>
       {:else}
@@ -292,7 +327,11 @@
               error={device.error}
               onclick={opener(role)}>
               {#snippet trailing()}
-                <Chip tone={roleTone(device.status, connection)}>{t.deviceStatus[device.status]}</Chip>
+                {#if moving(role)}
+                  <Chip tone="accent">{t.rig.moving}</Chip>
+                {:else}
+                  <Chip tone={roleTone(device.status, connection)}>{t.deviceStatus[device.status]}</Chip>
+                {/if}
               {/snippet}
             </DeviceRow>
           {/each}
@@ -438,6 +477,10 @@
 
 {#if sheet === "power"}
   <PowerSheet onclose={() => (sheet = null)} />
+{:else if sheet === "focuser"}
+  <FocuserSheet onclose={() => (sheet = null)} />
+{:else if sheet === "filter_wheel"}
+  <FilterWheelSheet onclose={() => (sheet = null)} />
 {/if}
 
 <style>
@@ -471,6 +514,20 @@
   .error {
     color: var(--error);
     overflow-wrap: anywhere;
+  }
+  .links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2) var(--space-6);
+  }
+  .links a,
+  .line a {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--touch);
+    color: var(--accent);
+    font-weight: 600;
+    text-decoration: none;
   }
   .trains {
     gap: 0;

@@ -13,6 +13,8 @@
     required = false,
     minlength,
     maxlength,
+    placeholder,
+    list,
   }: {
     label: string;
     hint?: string;
@@ -24,6 +26,9 @@
     required?: boolean;
     minlength?: number;
     maxlength?: number;
+    placeholder?: string;
+    // Id of a <datalist> with suggestions.
+    list?: string;
   } = $props();
 
   const id = $props.id();
@@ -43,6 +48,8 @@
       {required}
       {minlength}
       {maxlength}
+      {placeholder}
+      {list}
       autocapitalize={type === "password" ? "off" : undefined}
       spellcheck={type === "password" ? false : undefined}
       aria-invalid={error ? true : undefined}

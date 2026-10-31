@@ -7,7 +7,11 @@ import type {
   CameraSettingsRequest,
   ConnectRequest,
   CoolingRequest,
+  Driver,
   ExposeRequest,
+  FilterNamesRequest,
+  FilterSelectRequest,
+  FocuserMoveRequest,
   JobStarted,
   LoopRequest,
   ObserverRequest,
@@ -15,6 +19,7 @@ import type {
   PairedDevice,
   PairRequest,
   Profile,
+  SerialPortInfo,
 } from "./types";
 
 export class ApiError extends Error {
@@ -114,6 +119,22 @@ export function getProfile(id: string): Promise<Profile> {
   return request("GET", `/api/profiles/${encodeURIComponent(id)}`);
 }
 
+export function putProfile(id: string, profile: Profile): Promise<void> {
+  return request("PUT", `/api/profiles/${encodeURIComponent(id)}`, profile);
+}
+
+export function deleteProfile(id: string): Promise<void> {
+  return request("DELETE", `/api/profiles/${encodeURIComponent(id)}`);
+}
+
+export function listDrivers(): Promise<Driver[]> {
+  return request("GET", "/api/indi/drivers");
+}
+
+export function listSerialPorts(): Promise<SerialPortInfo[]> {
+  return request("GET", "/api/system/serial-ports");
+}
+
 export function connectProfile(profile: string): Promise<void> {
   return request("POST", "/api/equipment/connect", { profile } satisfies ConnectRequest);
 }
@@ -129,6 +150,26 @@ export function setIndiProperty(
 ): Promise<void> {
   const url = `/api/indi/devices/${encodeURIComponent(device)}/properties/${encodeURIComponent(name)}`;
   return request("POST", url, { values });
+}
+
+// -- Focuser and filter wheel --------------------------------------------------
+
+export async function moveFocuser(body: FocuserMoveRequest): Promise<string> {
+  const started = await request<JobStarted>("POST", "/api/focuser/move", body);
+  return started.job;
+}
+
+export function abortFocuser(): Promise<void> {
+  return request("POST", "/api/focuser/abort");
+}
+
+export async function selectFilter(body: FilterSelectRequest): Promise<string> {
+  const started = await request<JobStarted>("POST", "/api/filter-wheel/select", body);
+  return started.job;
+}
+
+export function setFilterNames(body: FilterNamesRequest): Promise<void> {
+  return request("PUT", "/api/filter-wheel/names", body);
 }
 
 // -- Cameras and jobs -----------------------------------------------------------

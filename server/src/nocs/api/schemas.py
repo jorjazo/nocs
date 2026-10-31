@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from nocs.equipment import Role, Site
 from nocs.state import Patch
@@ -346,6 +346,34 @@ class WeatherState(StateModel):
     )
 
 
+class FocuserState(StateModel):
+    device: str
+    position: int = Field(description="Steps.")
+    max_position: int | None = Field(description="Highest position the driver accepts.")
+    moving: bool
+    target: int | None = Field(description="Where the move NOCS is running goes.")
+    temperature: float | None = Field(description="Its probe, °C; None if it has none.")
+    can_abort: bool
+
+
+class FilterWheelState(StateModel):
+    device: str
+    key: str | None = Field(
+        description="The physical wheel: serial:<number> or device:<name>; None while"
+        " it is being identified (ADR 0016)."
+    )
+    label: str = Field(description="The user's name for this wheel; may be empty.")
+    slot: int | None = Field(description="1-based; None while unknown.")
+    filter: str | None = Field(description="Name of the current slot; None if it has none.")
+    names: list[str] = Field(description="One per slot, as the driver has them; empty = none.")
+    slots: int
+    moving: bool
+    confirmed: bool = Field(
+        description="The user said what sits in each slot; false for a wheel NOCS has not"
+        " seen before, which keeps its driver's names."
+    )
+
+
 class AppState(StateModel):
     """The whole state tree sent in snapshots and modified by patches."""
 
@@ -364,6 +392,10 @@ class AppState(StateModel):
         default=None, description="None: no weather sensor is ready."
     )
     clock: ClockState | None = None
+    focuser: FocuserState | None = Field(default=None, description="None: no focuser is ready.")
+    filter_wheel: FilterWheelState | None = Field(
+        default=None, description="None: no filter wheel is ready."
+    )
 
 
 # -- HTTP --------------------------------------------------------------------
@@ -521,6 +553,49 @@ class MountSiteRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     site: Site | None = Field(default=None, description="None: the active profile's site.")
+
+
+class FocuserMoveRequest(BaseModel):
+    """Exactly one of ``position`` and ``steps``."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    position: int | None = Field(default=None, ge=0, description="Absolute position, steps.")
+    steps: int | None = Field(
+        default=None, description="Relative move: positive outward, negative inward."
+    )
+
+    @model_validator(mode="after")
+    def _one_of(self) -> FocuserMoveRequest:
+        if (self.position is None) == (self.steps is None):
+            raise ValueError("give either position or steps")
+        return self
+
+
+class FilterSelectRequest(BaseModel):
+    """Exactly one of ``slot`` and ``filter``."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    slot: int | None = Field(default=None, ge=1, description="1-based.")
+    filter: str | None = Field(default=None, min_length=1, description="A name in names.")
+
+    @model_validator(mode="after")
+    def _one_of(self) -> FilterSelectRequest:
+        if (self.slot is None) == (self.filter is None):
+            raise ValueError("give either slot or filter")
+        return self
+
+
+class FilterNamesRequest(BaseModel):
+    """What sits in each slot of the wheel connected now (ADR 0016)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    filters: list[str] = Field(description="One name per slot, in order; empty = no filter.")
+    label: str | None = Field(
+        default=None, max_length=80, description="Name for this wheel; None keeps it."
+    )
 
 
 class ClockRequest(BaseModel):

@@ -168,6 +168,27 @@ Power box (stage 2.10):
   dew point and the margin to it, in the warning color under 3 °C) above the
   rest of the screen, which arrives in phase 3.
 
+Focuser, filter wheel and profile editor (stage 2.8):
+
+- Live view puts the focuser under the filters: its position and temperature,
+  and in / out buttons by the chosen step, so focusing by hand happens next to
+  the preview while a loop runs. Tapping the position opens the focuser's sheet
+  (step, go to a position, stop), which Rig opens too from the focuser's row.
+- A main camera exposure locks the filter wheel and the focuser (a change would
+  spoil the frame); a loop locks only the camera.
+- Filter names belong to each physical wheel, not to a profile (ADR 0016). The
+  wheel's sheet (Rig → the wheel, or the banner Live view shows for a wheel NOCS
+  has not seen) lists one row per slot: tap a slot, then a common name (L, R,
+  G, B, Ha, OIII, SII, Empty), which fills it and moves to the next slot; any
+  name can be typed. "Move here" brings a slot into place to check by eye
+  which filter it holds. The common names come first so that every wheel names
+  a filter the same way.
+- The profile editor (Rig → Edit profile / New profile, `#/rig/profile/<id>`)
+  edits one role per row: driver from the rig's INDI catalog (the role's own
+  catalog groups first), device name with the devices that driver runs now as
+  suggestions, serial port from `/dev/serial/by-id/`; then both trains' optics
+  and the site. Changes to a connected profile apply when it is next connected.
+
 ## 8. Open UX questions
 
 - Persistent "session running" indicator on non-session screens (banner vs.

@@ -5,8 +5,10 @@
   import Icon from "./Icon.svelte";
   import ThemeButton from "./ThemeButton.svelte";
 
-  // The INDI property screen hangs off Rig.
-  const current = $derived<Tab>(router.route.screen === "dev" ? "rig" : router.route.screen);
+  // The INDI property screen and the profile editor hang off Rig.
+  const current = $derived<Tab>(
+    router.route.screen === "dev" || router.route.screen === "profile" ? "rig" : router.route.screen,
+  );
 </script>
 
 <nav class="nav" aria-label={i18n.t.tabs.label}>

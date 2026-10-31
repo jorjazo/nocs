@@ -26,6 +26,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 
 from nocs import __version__
+from nocs.api.accessories import accessories_router
 from nocs.api.auth import REVOKED, AuthMiddleware, Sockets, auth_router, identity
 from nocs.api.mount import mount_router
 from nocs.api.power import power_router
@@ -68,6 +69,9 @@ from nocs.equipment import (
     Role,
     serial_ports,
 )
+from nocs.filters.service import FilterWheelService
+from nocs.filters.wheels import WheelStore
+from nocs.focus.service import FocuserService
 from nocs.imaging import (
     FRAME_TYPES,
     CameraNotReadyError,
@@ -135,6 +139,14 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
         assert services.power is not None
         return services.power
 
+    def focuser() -> FocuserService:
+        assert services.focuser is not None
+        return services.focuser
+
+    def filter_wheel() -> FilterWheelService:
+        assert services.filter_wheel is not None
+        return services.filter_wheel
+
     def site_longitude() -> float | None:
         profile = equipment().active_profile
         return profile.site.longitude if profile is not None and profile.site else None
@@ -174,6 +186,10 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
         )
         services.power = PowerService(store, services.jobs, services.equipment, bridge)
         services.weather = WeatherService(store, services.equipment, bridge)
+        services.focuser = FocuserService(store, services.jobs, services.equipment, bridge)
+        services.filter_wheel = FilterWheelService(
+            store, services.jobs, services.equipment, bridge, WheelStore(settings.config_dir)
+        )
         task = asyncio.create_task(bridge.run(), name="indi-bridge")
         try:
             yield
@@ -181,6 +197,8 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
             await mount().close()
             power().close()
             services.weather.close()
+            await focuser().close()
+            await filter_wheel().close()
             await jobs().close()
             await capture().close()
             await equipment().close()
@@ -195,6 +213,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
     app.include_router(auth_router(auth, sockets))
     app.include_router(mount_router(mount, clock, sockets))
     app.include_router(power_router(power))
+    app.include_router(accessories_router(focuser, filter_wheel))
 
     @app.get("/api/health")
     async def health() -> Health:  # pyright: ignore[reportUnusedFunction]
@@ -455,6 +474,8 @@ class _Services:
     power: PowerService | None = None
     weather: WeatherService | None = None
     clock: Clock | None = None
+    focuser: FocuserService | None = None
+    filter_wheel: FilterWheelService | None = None
 
 
 def _upload_dirs(settings: Settings) -> UploadDirs | None:

@@ -4,18 +4,23 @@
 export type Tab = "tonight" | "live" | "plan" | "session" | "rig";
 export const TABS: readonly Tab[] = ["tonight", "live", "plan", "session", "rig"];
 
-export type Route = { screen: Tab } | { screen: "dev" };
+// The profile editor hangs off Rig: #/rig/profile/<id>, or #/rig/profile/new.
+export type Route = { screen: Tab } | { screen: "dev" } | { screen: "profile"; id: string | null };
 
 const DEFAULT: Route = { screen: "tonight" };
 
 function parse(hash: string): Route {
-  const [first] = hash.replace(/^#\/?/, "").split("/");
+  const [first, second, third] = hash.replace(/^#\/?/, "").split("/");
   if (first === "dev") return { screen: "dev" };
+  if (first === "rig" && second === "profile" && third) {
+    return { screen: "profile", id: third === "new" ? null : decodeURIComponent(third) };
+  }
   const tab = TABS.find((name) => name === first);
   return tab ? { screen: tab } : DEFAULT;
 }
 
 export function href(route: Route): string {
+  if (route.screen === "profile") return `#/rig/profile/${route.id === null ? "new" : encodeURIComponent(route.id)}`;
   return `#/${route.screen}`;
 }
 

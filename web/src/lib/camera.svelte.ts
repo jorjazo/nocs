@@ -1,8 +1,8 @@
 // What the Live view reads from the state besides the camera itself: the job a
-// camera is busy with, the filter wheel, and this device's capture choices.
+// camera is busy with, the focuser and filter wheel, and this device's choices.
 
-import { setIndiProperty } from "./api";
-import type { AppState, CameraRoleName, JobInfo } from "./types";
+import type { Messages } from "./i18n";
+import type { CameraRoleName, FilterWheelState, JobInfo, Role } from "./types";
 
 export const CAMERA_ROLES: readonly CameraRoleName[] = ["main_camera", "guide_camera"];
 
@@ -30,45 +30,33 @@ export function cameraJobs(
   return { running, latest };
 }
 
-// -- Filter wheel ---------------------------------------------------------------
-// Read from the raw INDI properties until stage 2.8 gives the wheel a typed
-// state and endpoint; selectFilter() is the only place that writes to it.
+// -- Focuser and filter wheel ---------------------------------------------------
 
-export interface FilterWheelState {
-  device: string;
-  // 1-based, as INDI counts slots; null while unknown.
-  slot: number | null;
-  // One name per slot; empty when the driver has no names for a slot.
-  names: string[];
-  moving: boolean;
+// The running job that locks a device: its own move, or a main camera exposure
+// (which locks both, so a frame is never spoiled; loops lock only the camera).
+export function holder(jobs: Record<string, JobInfo> | null | undefined, resource: Role): CameraJob | null {
+  for (const [id, info] of Object.entries(jobs ?? {})) {
+    if (info.state === "running" && info.resources.includes(resource)) return { id, info };
+  }
+  return null;
 }
 
-export function filterWheel(app: AppState): FilterWheelState | null {
-  const role = app.equipment?.devices.filter_wheel;
-  if (!role?.device || role.status !== "ready") return null;
-  const properties = app.indi?.devices?.[role.device]?.properties;
-  const slotProperty = properties?.FILTER_SLOT;
-  const element = slotProperty?.elements.FILTER_SLOT_VALUE;
-  if (!slotProperty || !element || !("max" in element)) return null;
-  const names = Object.values(properties.FILTER_NAME?.elements ?? {}).map((name) =>
-    typeof name.value === "string" ? name.value.trim() : "",
-  );
-  const count = names.length || Math.max(0, Math.round(element.max));
-  return {
-    device: role.device,
-    slot: Math.round(element.value) || null,
-    names: names.length ? names : Array.from({ length: count }, () => ""),
-    moving: slotProperty.state === "Busy",
-  };
-}
+// Steps the focuser moves per tap; the choice is kept per device.
+export const FOCUS_STEPS: readonly number[] = [10, 50, 100, 500, 1000];
 
-export function selectFilter(wheel: FilterWheelState, slot: number): Promise<void> {
-  return setIndiProperty(wheel.device, "FILTER_SLOT", { FILTER_SLOT_VALUE: slot });
+// Offered first when naming filters, so every wheel names a filter the same way
+// (frames are grouped by these names, ADR 0016).
+export const COMMON_FILTERS: readonly string[] = ["L", "R", "G", "B", "Ha", "OIII", "SII"];
+
+// The name of a slot to show: its filter, or "Slot 3" when it has none.
+export function slotLabel(wheel: FilterWheelState, slot: number, t: Messages): string {
+  return wheel.names[slot - 1] || t.live.slot(slot);
 }
 
 // -- Capture choices ------------------------------------------------------------
-// Per device, like the theme: the camera shown, and whether to save, a choice
-// made before each frame. The exposure time is in the camera's state.
+// Per device, like the theme: the camera shown, whether to save (a choice made
+// before each frame) and the focuser's step. The exposure time is in the
+// camera's state.
 
 function readNumber(key: string): number | null {
   try {
@@ -99,6 +87,7 @@ function readRole(): CameraRoleName {
 class CapturePrefs {
   role: CameraRoleName = $state(readRole());
   save: boolean = $state(readNumber("nocs.save") !== 0);
+  focusStep: number = $state(FOCUS_STEPS.find((step) => step === readNumber("nocs.focusStep")) ?? 100);
 
   setRole(role: CameraRoleName): void {
     this.role = role;
@@ -108,6 +97,11 @@ class CapturePrefs {
   setSave(save: boolean): void {
     this.save = save;
     write("nocs.save", save ? "1" : "0");
+  }
+
+  setFocusStep(step: number): void {
+    this.focusStep = step;
+    write("nocs.focusStep", String(step));
   }
 }
 

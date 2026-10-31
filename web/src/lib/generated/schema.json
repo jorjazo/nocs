@@ -67,6 +67,30 @@
           ],
           "default": null
         },
+        "filter_wheel": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FilterWheelState"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "None: no filter wheel is ready."
+        },
+        "focuser": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FocuserState"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "None: no focuser is ready."
+        },
         "indi": {
           "anyOf": [
             {
@@ -909,6 +933,241 @@
         "exposure"
       ],
       "title": "ExposeRequest",
+      "type": "object"
+    },
+    "FilterNamesRequest": {
+      "additionalProperties": false,
+      "description": "What sits in each slot of the wheel connected now (ADR 0016).",
+      "properties": {
+        "filters": {
+          "description": "One name per slot, in order; empty = no filter.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "maxLength": 80,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Name for this wheel; None keeps it."
+        }
+      },
+      "required": [
+        "filters"
+      ],
+      "title": "FilterNamesRequest",
+      "type": "object"
+    },
+    "FilterSelectRequest": {
+      "additionalProperties": false,
+      "description": "Exactly one of ``slot`` and ``filter``.",
+      "properties": {
+        "filter": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A name in names."
+        },
+        "slot": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "1-based."
+        }
+      },
+      "title": "FilterSelectRequest",
+      "type": "object"
+    },
+    "FilterWheelState": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmed": {
+          "description": "The user said what sits in each slot; false for a wheel NOCS has not seen before, which keeps its driver's names.",
+          "type": "boolean"
+        },
+        "device": {
+          "type": "string"
+        },
+        "filter": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Name of the current slot; None if it has none."
+        },
+        "key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The physical wheel: serial:<number> or device:<name>; None while it is being identified (ADR 0016)."
+        },
+        "label": {
+          "description": "The user's name for this wheel; may be empty.",
+          "type": "string"
+        },
+        "moving": {
+          "type": "boolean"
+        },
+        "names": {
+          "description": "One per slot, as the driver has them; empty = none.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "slot": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "1-based; None while unknown."
+        },
+        "slots": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "device",
+        "key",
+        "label",
+        "slot",
+        "filter",
+        "names",
+        "slots",
+        "moving",
+        "confirmed"
+      ],
+      "title": "FilterWheelState",
+      "type": "object"
+    },
+    "FocuserMoveRequest": {
+      "additionalProperties": false,
+      "description": "Exactly one of ``position`` and ``steps``.",
+      "properties": {
+        "position": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Absolute position, steps."
+        },
+        "steps": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Relative move: positive outward, negative inward."
+        }
+      },
+      "title": "FocuserMoveRequest",
+      "type": "object"
+    },
+    "FocuserState": {
+      "additionalProperties": false,
+      "properties": {
+        "can_abort": {
+          "type": "boolean"
+        },
+        "device": {
+          "type": "string"
+        },
+        "max_position": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Highest position the driver accepts."
+        },
+        "moving": {
+          "type": "boolean"
+        },
+        "position": {
+          "description": "Steps.",
+          "type": "integer"
+        },
+        "target": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Where the move NOCS is running goes."
+        },
+        "temperature": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Its probe, \u00b0C; None if it has none."
+        }
+      },
+      "required": [
+        "device",
+        "position",
+        "max_position",
+        "moving",
+        "target",
+        "temperature",
+        "can_abort"
+      ],
+      "title": "FocuserState",
       "type": "object"
     },
     "FrameInfo": {

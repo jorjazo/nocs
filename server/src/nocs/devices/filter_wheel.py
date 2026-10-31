@@ -1,8 +1,14 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from nocs.devices.base import Device, DeviceInterface
+from nocs.indi import NumberElement, PropertyState, TextElement
 
 CHANGE_TIMEOUT = 60.0
+
+SERIAL_PROPERTIES = ("Serial Number", "SERIAL_NUMBER")
+"""Where drivers publish a device's serial number; INDI has no standard property (ZWO: SN)."""
 
 
 class FilterWheel(Device):
@@ -16,6 +22,14 @@ class FilterWheel(Device):
         return round(self.prop("FILTER_SLOT").number("FILTER_SLOT_VALUE"))
 
     @property
+    def slots(self) -> int:
+        """How many slots the wheel has."""
+        if names := self.names:
+            return len(names)
+        element = self.prop("FILTER_SLOT").elements.get("FILTER_SLOT_VALUE")
+        return round(element.max) if isinstance(element, NumberElement) else 0
+
+    @property
     def names(self) -> list[str]:
         if not self.has("FILTER_NAME"):
             return []
@@ -25,7 +39,22 @@ class FilterWheel(Device):
     @property
     def filter(self) -> str | None:
         names = self.names
-        return names[self.slot - 1] if 0 < self.slot <= len(names) else None
+        name = names[self.slot - 1].strip() if 0 < self.slot <= len(names) else ""
+        return name or None
+
+    @property
+    def moving(self) -> bool:
+        return self.prop("FILTER_SLOT").state is PropertyState.BUSY
+
+    @property
+    def serial_number(self) -> str | None:
+        for name in SERIAL_PROPERTIES:
+            if not self.has(name):
+                continue
+            for element in self.prop(name).elements.values():
+                if isinstance(element, TextElement) and element.value.strip():
+                    return element.value.strip()
+        return None
 
     def slot_of(self, name: str) -> int:
         wanted = name.strip().casefold()
@@ -37,7 +66,7 @@ class FilterWheel(Device):
     async def select(self, filter: int | str, timeout: float = CHANGE_TIMEOUT) -> None:
         """Move to a slot number or to the slot holding the named filter."""
         slot = self.slot_of(filter) if isinstance(filter, str) else filter
-        count = len(self.names)
+        count = self.slots
         if slot < 1 or (count and slot > count):
             raise ValueError(f"slot {slot} outside 1..{count}")
         await self.command(
@@ -45,4 +74,19 @@ class FilterWheel(Device):
             {"FILTER_SLOT_VALUE": slot},
             timeout=timeout,
             done=lambda p: round(p.number("FILTER_SLOT_VALUE")) == slot,
+        )
+
+    async def set_names(self, names: Sequence[str]) -> None:
+        """Name every slot, in order (the driver keeps them in its configuration)."""
+        prop = self.prop("FILTER_NAME")
+        elements = list(prop.elements)
+        if len(names) != len(elements):
+            raise ValueError(f"{self.name} has {len(elements)} slots, got {len(names)} names")
+        values = dict(zip(elements, (name.strip() for name in names), strict=True))
+        await self.command(
+            "FILTER_NAME",
+            values,
+            done=lambda p: all(p.text(k) == v for k, v in values.items()),
+            # Drivers leave the names Idle or set them Ok.
+            accept=frozenset({PropertyState.OK, PropertyState.IDLE}),
         )

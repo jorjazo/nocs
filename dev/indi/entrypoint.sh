@@ -16,4 +16,6 @@ cp /usr/share/indi/*.xml "$run/drivers/"
 chmod 0777 "$run" "$run/drivers" "$run/uploads"
 chmod 0666 "$run/fifo" "$run"/drivers/*.xml
 
+# Drivers save their configuration in $HOME/.indi (filter names fail without it).
+export HOME=/home/ubuntu
 exec setpriv --reuid=ubuntu --regid=ubuntu --init-groups indiserver -v -f "$run/fifo" "$@"

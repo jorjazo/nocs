@@ -283,6 +283,10 @@ def test_busy_camera_refuses_commands_and_cancel_aborts(api: TestClient) -> None
     assert busy.status_code == 409
     assert job_id in busy.json()["detail"]
     assert api.post("/api/cameras/main_camera/expose", json={"exposure": 1}).status_code == 409
+    # A filter change or a focuser move would spoil the frame.
+    assert job(api, job_id)["resources"] == ["filter_wheel", "focuser", "main_camera"]
+    assert api.post("/api/filter-wheel/select", json={"slot": 2}).status_code == 409
+    assert api.post("/api/focuser/move", json={"steps": 10}).status_code == 409
     # The guide camera is a different resource.
     guide = api.post("/api/cameras/guide_camera/expose", json={"exposure": 0.1, "save": False})
     assert guide.status_code == 202
@@ -369,6 +373,8 @@ def test_loop_makes_previews_and_keeps_nothing(
 
     wait(api, new_previews)
     assert job(api, job_id)["message"].startswith("frame ")
+    # Focusing while looping: only the camera is locked.
+    assert job(api, job_id)["resources"] == ["main_camera"]
     assert api.post("/api/cameras/main_camera/expose", json={"exposure": 1}).status_code == 409
     assert api.post(f"/api/jobs/{job_id}/cancel").status_code == 202
     wait(api, finished(job_id))

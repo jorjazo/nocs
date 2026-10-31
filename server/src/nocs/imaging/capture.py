@@ -188,6 +188,16 @@ def camera_summary(camera: Camera) -> dict[str, Json]:
     }
 
 
+def _exposure_resources(role: Role) -> list[str]:
+    """What an exposure locks: a filter change or a focuser move would spoil a main frame.
+
+    Loops lock only the camera, so focusing and changing filters while looping work.
+    """
+    if role is Role.MAIN_CAMERA:
+        return [role.value, Role.FILTER_WHEEL.value, Role.FOCUSER.value]
+    return [role.value]
+
+
 def _check_exposure(seconds: float) -> None:
     if not 0 <= seconds <= MAX_EXPOSURE:
         raise ValueError(f"exposure must be 0..{MAX_EXPOSURE:g} s")
@@ -313,7 +323,7 @@ class CaptureService:
         async def run(context: JobContext) -> Json:
             return await self._expose(context, role, seconds, frame_type, save)
 
-        job_id = self._jobs.start("expose", [role.value], run)
+        job_id = self._jobs.start("expose", _exposure_resources(role), run)
         self._set_exposure(role, seconds)
         return job_id
 

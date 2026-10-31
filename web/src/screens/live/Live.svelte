@@ -11,21 +11,17 @@
   import SegmentedControl from "../../components/SegmentedControl.svelte";
   import ThemeButton from "../../components/ThemeButton.svelte";
   import Tile from "../../components/Tile.svelte";
-  import { cancelJob, expose, loop, setCameraSettings } from "../../lib/api";
+  import { cancelJob, expose, loop, selectFilter, setCameraSettings } from "../../lib/api";
   import { auth } from "../../lib/auth.svelte";
-  import {
-    CAMERA_ROLES,
-    cameraJobs,
-    capture,
-    filterWheel,
-    MAX_LOOP_EXPOSURE,
-    selectFilter,
-  } from "../../lib/camera.svelte";
+  import { CAMERA_ROLES, cameraJobs, capture, holder, MAX_LOOP_EXPOSURE, slotLabel } from "../../lib/camera.svelte";
   import { errorText } from "../../lib/errors";
   import { formatDecimal, formatPlain, formatSeconds, formatTemperature } from "../../lib/format";
   import { i18n } from "../../lib/i18n";
   import { live } from "../../lib/live.svelte";
   import { router } from "../../lib/router.svelte";
+  import FilterWheelSheet from "../devices/FilterWheelSheet.svelte";
+  import FocuserNudge from "../devices/FocuserNudge.svelte";
+  import FocuserSheet from "../devices/FocuserSheet.svelte";
   import Histogram from "./Histogram.svelte";
   import SettingSheet, { type Setting } from "./SettingSheet.svelte";
   import Shutter from "./Shutter.svelte";
@@ -41,13 +37,17 @@
   const preview = $derived(camera?.preview ?? null);
   const owner = $derived(auth.owner);
 
-  // Only the main camera saves frames, and only it gets the filter (ADR 0013).
+  // Only the main camera saves frames, and only it gets the filter and the
+  // focuser (ADR 0013). A main camera exposure locks both; a loop does not, so
+  // focusing and trying filters work while looping.
   const main = $derived(role === "main_camera");
-  const wheel = $derived(main ? filterWheel(live.app) : null);
-  const filterName = $derived.by(() => {
-    if (!wheel?.slot) return null;
-    return wheel.names[wheel.slot - 1] || t.live.slot(wheel.slot);
-  });
+  const wheel = $derived(main ? (live.app.filter_wheel ?? null) : null);
+  const focuser = $derived(main ? (live.app.focuser ?? null) : null);
+  const filterName = $derived(wheel?.slot ? slotLabel(wheel, wheel.slot, t) : null);
+  const wheelJob = $derived(holder(live.app.jobs, "filter_wheel"));
+  const focuserJob = $derived(holder(live.app.jobs, "focuser"));
+  const wheelLocked = $derived(wheelJob !== null && wheelJob.info.kind !== "filter");
+  const focuserLocked = $derived(focuserJob !== null && focuserJob.info.kind !== "focus");
 
   // -- Jobs -------------------------------------------------------------------------
 
@@ -97,7 +97,7 @@
   let busy = $state(false);
   let actionError = $state("");
 
-  async function act(action: () => Promise<void>): Promise<void> {
+  async function act(action: () => Promise<unknown>): Promise<void> {
     busy = true;
     actionError = "";
     try {
@@ -135,12 +135,13 @@
   }
 
   function pickFilter(value: string): void {
-    if (wheel) void act(() => selectFilter(wheel, Number(value)));
+    void act(() => selectFilter({ slot: Number(value) }));
   }
 
   // -- Layout ----------------------------------------------------------------------------
 
   let editing = $state<Setting | null>(null);
+  let device = $state<"focuser" | "filter_wheel" | null>(null);
   let expanded = $state(false);
 
   const region = $derived(camera?.region ?? null);
@@ -233,12 +234,43 @@
 
       {#if wheel}
         <div class="filters">
+          {#if !wheel.confirmed && wheel.key && owner}
+            <Banner icon="filter" tone="warning">
+              {t.rig.wheelNew}
+              {#snippet action()}
+                <Button variant="text" onclick={() => (device = "filter_wheel")}>{t.live.setFilters}</Button>
+              {/snippet}
+            </Banner>
+          {/if}
           <SegmentedControl
             label={t.live.filter}
-            options={wheel.names.map((name, i) => ({ value: String(i + 1), label: name || t.live.slot(i + 1) }))}
+            options={Array.from({ length: wheel.slots }, (_, i) => ({
+              value: String(i + 1),
+              label: slotLabel(wheel, i + 1, t),
+            }))}
             value={String(wheel.slot ?? "")}
+            disabled={!owner || wheelLocked || wheel.moving}
             onchange={pickFilter} />
-          {#if wheel.moving}<p class="caption muted" role="status">{t.live.filterMoving}</p>{/if}
+          {#if wheel.moving || wheelJob?.info.kind === "filter"}
+            <p class="caption muted" role="status">{t.live.filterMoving}</p>
+          {/if}
+        </div>
+      {/if}
+
+      {#if focuser}
+        <div class="focuser">
+          <button type="button" class="readout-button" onclick={() => (device = "focuser")}>
+            <span class="label muted">{t.focuser.title}</span>
+            <span class="value mono">{formatPlain(focuser.position, locale)}</span>
+            <span class="caption muted mono">
+              {focuser.target !== null
+                ? t.focuser.moving(formatPlain(focuser.target, locale))
+                : focuser.temperature !== null
+                  ? formatTemperature(focuser.temperature, locale)
+                  : ""}
+            </span>
+          </button>
+          <FocuserNudge {focuser} disabled={!owner || focuserLocked} run={act} />
         </div>
       {/if}
 
@@ -361,6 +393,11 @@
   {#if editing}
     <SettingSheet setting={editing} {role} {camera} onclose={() => (editing = null)} />
   {/if}
+  {#if device === "focuser"}
+    <FocuserSheet onclose={() => (device = null)} />
+  {:else if device === "filter_wheel"}
+    <FilterWheelSheet onclose={() => (device = null)} />
+  {/if}
 {/if}
 
 <style>
@@ -461,6 +498,30 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-1);
+  }
+  .focuser {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-2) var(--space-2) 0;
+  }
+  .readout-button {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    min-width: 0;
+    min-height: var(--touch);
+    padding: 0;
+    border: 0;
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+  }
+  .readout-button .value {
+    font-size: 20px;
+    line-height: 26px;
+    font-weight: 500;
   }
   .tiles {
     display: grid;

@@ -3,12 +3,14 @@
     label,
     options,
     value,
+    disabled = false,
     onchange,
   }: {
     // Accessible name of the group.
     label: string;
     options: readonly { value: T; label: string }[];
     value: T;
+    disabled?: boolean;
     onchange: (value: T) => void;
   } = $props();
 </script>
@@ -20,6 +22,7 @@
       role="radio"
       aria-checked={option.value === value}
       class:selected={option.value === value}
+      {disabled}
       onclick={() => onchange(option.value)}>
       {option.label}
     </button>
@@ -50,6 +53,10 @@
     font-size: 15px;
     font-weight: 500;
     cursor: pointer;
+  }
+  button:disabled {
+    cursor: default;
+    opacity: 0.55;
   }
   .selected {
     background: var(--accent);

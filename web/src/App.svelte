@@ -14,6 +14,7 @@
   import Dev from "./screens/dev/Dev.svelte";
   import Live from "./screens/live/Live.svelte";
   import Placeholder from "./screens/Placeholder.svelte";
+  import ProfileEditor from "./screens/ProfileEditor.svelte";
   import Rig from "./screens/Rig.svelte";
 
   const t = $derived(i18n.t);
@@ -90,6 +91,8 @@
       <Live />
     {:else if router.route.screen === "dev"}
       <Dev />
+    {:else if router.route.screen === "profile"}
+      {#key router.route.id}<ProfileEditor id={router.route.id} />{/key}
     {:else}
       <Placeholder tab={router.route.screen} />
     {/if}

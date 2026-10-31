@@ -21,6 +21,7 @@ server/   Python package `nocs` (nocsd): indi/ (protocol + async client, driver
           FIFO + catalog), devices/ (typed facades), equipment/ (profiles,
           roles, connect service), imaging/ (capture, preview worker),
           storage/ (destinations, layout, FITS headers, SQLite catalog),
+          mount/, focus/, filters/ (services by role; filter names per wheel),
           state/ (versioned store), services/ (indi_bridge), api/ (FastAPI
           REST + WebSocket, schemas, schema export)
 web/      Svelte 5 + TypeScript PWA: styles/ (tokens), lib/ (api, live state,
@@ -104,6 +105,12 @@ CI runs all of the above (INDI simulators included) on every push to `main`.
   (~2 s for a 26 MP frame on the Pi's microSD): move frames to new names only.
 - The simulators render real stars only with the GSC catalog (in the dev image);
   their stars are very sharp (HFR < 1 px).
+- The ZWO EAF reports `FOCUS_MAX` = 100000, above that property's own maximum
+  and the 47814 steps `ABS_FOCUS_POSITION` accepts: limits come from the latter.
+- Drivers save filter names in `$HOME/.indi` and turn `FILTER_NAME` to Alert when
+  they cannot write it (the dev image sets `HOME` for the unprivileged user).
+- The ZWO EFW never reports `FILTER_SLOT` Busy while it turns (2–3 s per change):
+  a filter change shows only as its job.
 
 ## Lab hardware
 

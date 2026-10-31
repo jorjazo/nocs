@@ -150,6 +150,8 @@ full night from a phone with no other computer involved.
 - Remote access outside the LAN.
 - Canon DSLR (gphoto) polish.
 - Flats wizard and calibration frame library (darks, bias, flats).
+- Filter wheels: find out which filter sits in each slot (e.g. from the
+  brightness of a flat per slot) instead of asking the user (ADR 0016).
 - Mosaic planning.
 - EAA / live stacking.
 - Observatory: roll-off roof, dome, safety monitor, weather automation.

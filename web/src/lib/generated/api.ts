@@ -99,6 +99,14 @@ export interface AppState {
   } | null;
   clock?: ClockState | null;
   equipment?: EquipmentState | null;
+  /**
+   * None: no filter wheel is ready.
+   */
+  filter_wheel?: FilterWheelState | null;
+  /**
+   * None: no focuser is ready.
+   */
+  focuser?: FocuserState | null;
   indi?: IndiState | null;
   /**
    * Running jobs and the most recent finished ones.
@@ -356,6 +364,64 @@ export interface RoleState {
  */
 export interface ProfileSummary {
   name: string;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "FilterWheelState".
+ */
+export interface FilterWheelState {
+  /**
+   * The user said what sits in each slot; false for a wheel NOCS has not seen before, which keeps its driver's names.
+   */
+  confirmed: boolean;
+  device: string;
+  /**
+   * Name of the current slot; None if it has none.
+   */
+  filter: string | null;
+  /**
+   * The physical wheel: serial:<number> or device:<name>; None while it is being identified (ADR 0016).
+   */
+  key: string | null;
+  /**
+   * The user's name for this wheel; may be empty.
+   */
+  label: string;
+  moving: boolean;
+  /**
+   * One per slot, as the driver has them; empty = none.
+   */
+  names: string[];
+  /**
+   * 1-based; None while unknown.
+   */
+  slot: number | null;
+  slots: number;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "FocuserState".
+ */
+export interface FocuserState {
+  can_abort: boolean;
+  device: string;
+  /**
+   * Highest position the driver accepts.
+   */
+  max_position: number | null;
+  moving: boolean;
+  /**
+   * Steps.
+   */
+  position: number;
+  /**
+   * Where the move NOCS is running goes.
+   */
+  target: number | null;
+  /**
+   * Its probe, °C; None if it has none.
+   */
+  temperature: number | null;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -976,6 +1042,54 @@ export interface ExposeRequest {
    * Defaults to true for the main camera; the guide camera never saves.
    */
   save?: boolean | null;
+}
+/**
+ * What sits in each slot of the wheel connected now (ADR 0016).
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "FilterNamesRequest".
+ */
+export interface FilterNamesRequest {
+  /**
+   * One name per slot, in order; empty = no filter.
+   */
+  filters: string[];
+  /**
+   * Name for this wheel; None keeps it.
+   */
+  label?: string | null;
+}
+/**
+ * Exactly one of ``slot`` and ``filter``.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "FilterSelectRequest".
+ */
+export interface FilterSelectRequest {
+  /**
+   * A name in names.
+   */
+  filter?: string | null;
+  /**
+   * 1-based.
+   */
+  slot?: number | null;
+}
+/**
+ * Exactly one of ``position`` and ``steps``.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "FocuserMoveRequest".
+ */
+export interface FocuserMoveRequest {
+  /**
+   * Absolute position, steps.
+   */
+  position?: number | null;
+  /**
+   * Relative move: positive outward, negative inward.
+   */
+  steps?: number | null;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
