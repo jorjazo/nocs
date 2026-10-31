@@ -66,7 +66,8 @@ shared with polar alignment (phase 4) and re-centring and the meridian flip
   17 s; the driver reported the slew finished when the position stopped changing
   (no drift during the 2 s settle), and a 1 s frame plus a failed D50 solve took
   ~5 s per attempt. ASTAP CLI-2026.09.01 exits 1 with `ERROR=Not enough stars.` for
-  an empty frame, which NOCS reports as `no_solution`, not `no_stars`.
+  an empty frame (2026.10.30 too), like a failed search: NOCS reads that message
+  as `no_stars`.
 - With D05, only some of the CCD simulator's 5 s frames of a sparse field solved
   (fewer 10 s frames), and a frame that failed kept failing until the frame changed
   (turned, or moved). On a laptop on 2026-10-31 even 3.1's simulator test failed

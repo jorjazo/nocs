@@ -27,7 +27,7 @@ M8 = {
 }
 # A stand-in for astap_cli: writes the .ini that FAKE_ASTAP_INI holds (KEY=value lines)
 # under the -o base name, unless the command has a hint and FAKE_ASTAP_HINT_FAILS is
-# set, or FAKE_ASTAP_EXIT gives an exit code; records its arguments and pid, and can
+# set, then exits with FAKE_ASTAP_EXIT if set; records its arguments and pid, and can
 # sleep first.
 FAKE = """\
 import os, sys, time
@@ -40,13 +40,13 @@ if "-h" in args:
 with open(os.environ["FAKE_ASTAP_PID"], "w") as f:
     f.write(str(os.getpid()))
 time.sleep(float(os.environ.get("FAKE_ASTAP_SLEEP", "0")))
-if os.environ.get("FAKE_ASTAP_EXIT"):
-    sys.exit(int(os.environ["FAKE_ASTAP_EXIT"]))
 if "-ra" in args and os.environ.get("FAKE_ASTAP_HINT_FAILS"):
     sys.exit(1)
 output = args[args.index("-o") + 1]
 with open(output + ".ini", "w") as f:
     f.write(open(os.environ["FAKE_ASTAP_INI"]).read())
+if os.environ.get("FAKE_ASTAP_EXIT"):
+    sys.exit(int(os.environ["FAKE_ASTAP_EXIT"]))
 """
 
 

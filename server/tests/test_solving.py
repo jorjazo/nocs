@@ -235,6 +235,18 @@ async def test_failures_say_why(
     assert solver_state(store)["failure"] is None
 
 
+async def test_too_few_stars(
+    fake_astap: Astap, frame: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # What ASTAP 2026.10.30 wrote for a frame of noise: the exit code of a failed search.
+    (tmp_path / "result.ini").write_text("PLTSOLVD=F\nERROR=Not enough stars.\n")
+    monkeypatch.setenv("FAKE_ASTAP_EXIT", "1")
+    with pytest.raises(SolveError) as error:
+        await SolverService(StateStore(), fake_astap).solve(frame, fov=2.34, hint=None)
+    assert error.value.reason is Failure.NO_STARS
+    assert str(error.value) == "Not enough stars."
+
+
 async def test_annotations_go_to_the_latest_solution(fake_astap: Astap, frame: Path) -> None:
     store = StateStore()
     service = SolverService(store, fake_astap)

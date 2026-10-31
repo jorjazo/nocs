@@ -247,7 +247,11 @@ class Astap:
                     if result.returncode
                     else ("no solution found", Failure.NO_SOLUTION),
                 )
-                raise SolveError(values.get("ERROR") or message, reason)
+                error = values.get("ERROR")
+                # Too few stars exits with 1 like a failed search: only the .ini tells.
+                if error and error.lower().startswith("not enough stars"):
+                    reason = Failure.NO_STARS
+                raise SolveError(error or message, reason)
             try:
                 return solution_from_ini(values, *size, bottom_up=bottom_up)
             except SolutionError as error:
