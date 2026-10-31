@@ -139,6 +139,14 @@ class Shot:
     bayer: str | None
 
 
+@dataclass(frozen=True, slots=True)
+class Captured:
+    result: dict[str, Json]
+    """What the expose job returns: the frame's file, id and destination when saved."""
+    stars: int | None
+    hfr: float | None
+
+
 def image_connector(host: str, port: int) -> ImageConnector:
     """Opens the connection that receives one camera's images and nothing else."""
 
@@ -297,9 +305,14 @@ class CaptureService:
             raise CameraNotReadyError(f"{role.value} is not connected")
         return Camera(self._client, name, self._images.get(role))
 
-    async def configure(self, role: Role, settings: CameraSettings) -> None:
-        """Change exposure settings; refused while the camera is busy with a job."""
-        self._jobs.check_free([role.value])
+    async def configure(
+        self, role: Role, settings: CameraSettings, *, job: str | None = None
+    ) -> None:
+        """Change exposure settings; refused while a job (other than ``job``) uses the camera."""
+        if job is None:
+            self._jobs.check_free([role.value])
+        elif self._jobs.holder(role.value) != job:
+            raise RuntimeError(f"job {job} does not hold the {role.value}")
         camera = self.camera(role)
         if settings.exposure is not None:
             _check_exposure(settings.exposure)
@@ -379,7 +392,7 @@ class CaptureService:
 
         async def run(context: JobContext) -> Json:
             if count == 1:
-                return await self._expose(context, role, seconds, frame_type, save)
+                return (await self.capture(context, role, seconds, frame_type, save=save)).result
             return await self._series(context, role, seconds, frame_type, save, count, dither)
 
         job_id = self._jobs.start("expose", _exposure_resources(role), run)
@@ -487,7 +500,8 @@ class CaptureService:
                 else:
                     log.warning("%s%s", label, problem)
                     warnings.append(f"{label}{problem}")
-            frames.append(await self._expose(context, role, seconds, frame_type, save, label))
+            frame = await self.capture(context, role, seconds, frame_type, save=save, label=label)
+            frames.append(frame.result)
         return {"frames": frames, "dithers": dithers, "warnings": warnings}
 
     async def _dither(self, context: JobContext, plan: DitherPlan, label: str) -> str | None:
@@ -503,15 +517,22 @@ class CaptureService:
             return f"dither: {e}"
         return None
 
-    async def _expose(
+    async def capture(
         self,
         context: JobContext,
         role: Role,
         seconds: float,
-        frame_type: FrameType | None,
+        frame_type: FrameType | None = None,
+        *,
         save: bool,
+        target: str | None = None,
         label: str = "",
-    ) -> Json:
+    ) -> Captured:
+        """One exposure inside ``context``'s job, saved if asked and previewed, as ``expose``.
+
+        ``target`` names a light frame's object instead of the storage's target (a
+        sequence's frames). The star metrics are those of the preview, when it was made.
+        """
         # PHD2 stamps guide steps with the system clock, not NOCS's corrected one.
         started = time.time()
         shot = await self.take(context, role, seconds, frame_type, label)
@@ -533,7 +554,7 @@ class CaptureService:
         frame_id: int | None = None
         if save:
             context.progress(None, f"{label}saving")
-            facts = self._facts(role, shot)
+            facts = self._facts(role, shot, target)
             try:
                 saved = await anyio.to_thread.run_sync(self._storage.save, facts)
             except Exception as e:
@@ -558,9 +579,11 @@ class CaptureService:
             )
         if frame_id is not None and guiding is not None:
             await anyio.to_thread.run_sync(self._storage.set_guiding, frame_id, guiding)
-        return result
+        if analysis is None:
+            return Captured(result, None, None)
+        return Captured(result, analysis.stars, analysis.hfr)
 
-    def _facts(self, role: Role, shot: Shot) -> FrameFacts:
+    def _facts(self, role: Role, shot: Shot, target: str | None = None) -> FrameFacts:
         """What storage needs to know about a frame, read now from the devices and profile."""
         camera = self.camera(role)
         filter: str | None = None
@@ -593,6 +616,7 @@ class CaptureService:
             ambient=number(self._store, ("weather", "temperature")),
             humidity=number(self._store, ("weather", "humidity")),
             dew_point=number(self._store, ("weather", "dew_point")),
+            target=target,
         )
 
     def _mount_site(self) -> Site | None:

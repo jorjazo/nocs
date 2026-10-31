@@ -94,6 +94,9 @@ class Rig:
         self.pauses += 1
         self.calls.append("paused")
 
+    async def resumed(self) -> None:
+        self.calls.append("resumed")
+
     def focuser_temperature(self) -> float | None:
         return self.temperature
 
@@ -371,7 +374,7 @@ async def test_a_pause_waits_for_the_frame_lends_the_rig_and_selects_the_filter_
         assert rig.pauses == 1
         runner.resume()
     assert runner.state is RunState.FINISHED
-    assert rig.calls[3:10] == ["filter L", "L 60", "L 60", "paused", "filter L", "L 60", "L 60"]
+    assert rig.calls[3:10] == ["filter L", "L 60", "L 60", "paused", "resumed", "filter L", "L 60"]
     assert len(frames(rig)) == 4
 
 
@@ -435,7 +438,7 @@ async def test_a_paused_run_can_be_stopped() -> None:
         while runner.state is not RunState.PAUSED:
             await anyio.lowlevel.checkpoint()
         runner.stop()
-    assert rig.calls[-3:] == ["paused", "park", "warm"]
+    assert rig.calls[-4:] == ["paused", "resumed", "park", "warm"]
 
 
 async def test_a_failure_runs_the_end_and_every_end_step_is_tried() -> None:

@@ -123,3 +123,33 @@ async def test_close_cancels_running_jobs(store: StateStore) -> None:
     job_id = manager.start("demo", ["x"], run)
     await manager.close()
     assert job(store, job_id)["state"] == "cancelled"
+
+
+async def test_a_suspended_job_lends_its_locks_until_it_resumes(store: StateStore) -> None:
+    manager = JobManager(store)
+    go_on = asyncio.Event()
+
+    async def run(context: JobContext) -> Json:
+        await go_on.wait()
+        return None
+
+    job_id = manager.start("sequence", ["camera", "mount"], run)
+    with pytest.raises(KeyError):
+        manager.suspend("nonsense")
+    manager.suspend(job_id)
+    manager.suspend(job_id)
+    assert manager.holder("camera") is None
+    token = manager.reserve("move", ["mount"])
+    with pytest.raises(ResourceBusyError, match="mount is busy"):
+        manager.resume(job_id)
+    assert manager.holder("camera") is None
+    manager.release(token)
+    manager.resume(job_id)
+    manager.resume(job_id)
+    assert manager.holder("camera") == manager.holder("mount") == job_id
+
+    manager.suspend(job_id)
+    go_on.set()
+    await manager.wait(job_id)
+    manager.resume(job_id)  # finished: nothing to take back
+    assert manager.holder("camera") is None

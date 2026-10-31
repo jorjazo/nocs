@@ -176,6 +176,17 @@
           "default": null,
           "description": "None: no power box is ready."
         },
+        "sequence": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SequenceState"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "solver": {
           "anyOf": [
             {
@@ -278,6 +289,19 @@
         "on"
       ],
       "title": "AutoDewRequest",
+      "type": "object"
+    },
+    "Autofocus": {
+      "additionalProperties": false,
+      "description": "Focus with the settings of the profile's imaging train (ADR 0021).",
+      "properties": {
+        "kind": {
+          "const": "autofocus",
+          "default": "autofocus",
+          "type": "string"
+        }
+      },
+      "title": "Autofocus",
       "type": "object"
     },
     "AutofocusFit": {
@@ -775,6 +799,82 @@
         "suggested_step"
       ],
       "title": "AutofocusState",
+      "type": "object"
+    },
+    "AutofocusTrigger": {
+      "additionalProperties": false,
+      "description": "Focus before a frame when one of the set reasons applies.",
+      "properties": {
+        "filter_change": {
+          "default": false,
+          "description": "The filter is not the last run's.",
+          "type": "boolean"
+        },
+        "frames": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Frames since the last run."
+        },
+        "hfr_frames": {
+          "default": 3,
+          "maximum": 10,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "hfr_increase": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Fraction the median HFR of a filter's last frames grew over its first frames after the last run."
+        },
+        "kind": {
+          "const": "autofocus",
+          "default": "autofocus",
+          "type": "string"
+        },
+        "minutes": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Time since the last run."
+        },
+        "temperature_change": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "\u00b0C the focuser's temperature moved since the last run."
+        }
+      },
+      "title": "AutofocusTrigger",
       "type": "object"
     },
     "BlobInfo": {
@@ -1487,6 +1587,19 @@
       "title": "ClockState",
       "type": "object"
     },
+    "Condition": {
+      "discriminator": {
+        "mapping": {
+          "until_time": "#/$defs/UntilTime"
+        },
+        "propertyName": "kind"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/UntilTime"
+        }
+      ]
+    },
     "ConnectRequest": {
       "properties": {
         "profile": {
@@ -1507,6 +1620,105 @@
         "disconnecting"
       ],
       "type": "string"
+    },
+    "Container": {
+      "additionalProperties": false,
+      "properties": {
+        "children": {
+          "items": {
+            "$ref": "#/$defs/Node"
+          },
+          "type": "array"
+        },
+        "conditions": {
+          "items": {
+            "$ref": "#/$defs/Condition"
+          },
+          "type": "array"
+        },
+        "kind": {
+          "const": "container",
+          "default": "container",
+          "type": "string"
+        },
+        "name": {
+          "default": "",
+          "maxLength": 80,
+          "type": "string"
+        },
+        "repeat": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": 1,
+          "description": "Times to run the children; None: until a condition ends it."
+        },
+        "target": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Target"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "What instructions inside aim at, unless a nested one names another."
+        },
+        "triggers": {
+          "items": {
+            "$ref": "#/$defs/Trigger"
+          },
+          "type": "array"
+        }
+      },
+      "title": "Container",
+      "type": "object"
+    },
+    "Cool": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "cool",
+          "default": "cool",
+          "type": "string"
+        },
+        "ramp": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "At most this many \u00b0C per minute; 0: as fast as it can."
+        },
+        "temperature": {
+          "description": "Target sensor temperature, \u00b0C.",
+          "maximum": 40,
+          "minimum": -60,
+          "type": "number"
+        },
+        "wait": {
+          "default": true,
+          "description": "Wait until the sensor gets there.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "temperature"
+      ],
+      "title": "Cool",
+      "type": "object"
     },
     "CoolingRequest": {
       "additionalProperties": false,
@@ -1881,6 +2093,47 @@
         "exposure"
       ],
       "title": "ExposeRequest",
+      "type": "object"
+    },
+    "ExposurePlan": {
+      "additionalProperties": false,
+      "properties": {
+        "batch": {
+          "default": 5,
+          "maximum": 1000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "frame_type": {
+          "$ref": "#/$defs/FrameKind",
+          "default": "light"
+        },
+        "kind": {
+          "const": "expose",
+          "default": "expose",
+          "type": "string"
+        },
+        "order": {
+          "default": "batches",
+          "description": "batches: up to `batch` frames of a row, then the next row with frames left; in_turn: each row to its end.",
+          "enum": [
+            "batches",
+            "in_turn"
+          ],
+          "type": "string"
+        },
+        "rows": {
+          "items": {
+            "$ref": "#/$defs/PlanRow"
+          },
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "required": [
+        "rows"
+      ],
+      "title": "ExposurePlan",
       "type": "object"
     },
     "FilterNamesRequest": {
@@ -2356,6 +2609,15 @@
       "title": "FrameInfo",
       "type": "object"
     },
+    "FrameKind": {
+      "enum": [
+        "light",
+        "dark",
+        "flat",
+        "bias"
+      ],
+      "type": "string"
+    },
     "FrameRecord": {
       "properties": {
         "available": {
@@ -2554,6 +2816,24 @@
         "flat"
       ],
       "type": "string"
+    },
+    "Guide": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "guide",
+          "default": "guide",
+          "type": "string"
+        },
+        "on": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "on"
+      ],
+      "title": "Guide",
+      "type": "object"
     },
     "GuideEntryModel": {
       "additionalProperties": false,
@@ -3904,6 +4184,11 @@
       "title": "MountState",
       "type": "object"
     },
+    "Name": {
+      "maxLength": 80,
+      "minLength": 1,
+      "type": "string"
+    },
     "NightGroup": {
       "properties": {
         "exposure": {
@@ -4010,6 +4295,43 @@
       ],
       "title": "NightInfo",
       "type": "object"
+    },
+    "Node": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Cool"
+        },
+        {
+          "$ref": "#/$defs/Warm"
+        },
+        {
+          "$ref": "#/$defs/Unpark"
+        },
+        {
+          "$ref": "#/$defs/Park"
+        },
+        {
+          "$ref": "#/$defs/Slew"
+        },
+        {
+          "$ref": "#/$defs/SelectFilter"
+        },
+        {
+          "$ref": "#/$defs/Autofocus"
+        },
+        {
+          "$ref": "#/$defs/Guide"
+        },
+        {
+          "$ref": "#/$defs/Outputs"
+        },
+        {
+          "$ref": "#/$defs/ExposurePlan"
+        },
+        {
+          "$ref": "#/$defs/Container"
+        }
+      ]
     },
     "NorthSouth": {
       "enum": [
@@ -4168,6 +4490,32 @@
       "title": "OutputRequest",
       "type": "object"
     },
+    "Outputs": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "outputs",
+          "default": "outputs",
+          "type": "string"
+        },
+        "on": {
+          "type": "boolean"
+        },
+        "outputs": {
+          "items": {
+            "$ref": "#/$defs/OutputId"
+          },
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "required": [
+        "outputs",
+        "on"
+      ],
+      "title": "Outputs",
+      "type": "object"
+    },
     "PadRequest": {
       "additionalProperties": false,
       "description": "What the client holds, repeated every 0.25 s while held; all null to let go.\n\nThe mount stops after 1 s without a message, when the socket closes, and on\nany error; after such a stop the client must let go before moving again.",
@@ -4308,6 +4656,18 @@
       "title": "PairedDevice",
       "type": "object"
     },
+    "Park": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "park",
+          "default": "park",
+          "type": "string"
+        }
+      },
+      "title": "Park",
+      "type": "object"
+    },
     "PassphraseRequest": {
       "additionalProperties": false,
       "properties": {
@@ -4432,6 +4792,75 @@
         "error"
       ],
       "title": "Phd2Server",
+      "type": "object"
+    },
+    "PlanRow": {
+      "additionalProperties": false,
+      "properties": {
+        "binning": {
+          "anyOf": [
+            {
+              "maximum": 8,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "count": {
+          "maximum": 10000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "exposure": {
+          "description": "Seconds.",
+          "exclusiveMinimum": 0,
+          "maximum": 7200.0,
+          "type": "number"
+        },
+        "filter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Name"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "None: whatever the wheel holds."
+        },
+        "gain": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "offset": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "exposure",
+        "count"
+      ],
+      "title": "PlanRow",
       "type": "object"
     },
     "PointingOffset": {
@@ -4893,6 +5322,24 @@
       "title": "RoleState",
       "type": "object"
     },
+    "SelectFilter": {
+      "additionalProperties": false,
+      "properties": {
+        "filter": {
+          "$ref": "#/$defs/Name"
+        },
+        "kind": {
+          "const": "filter",
+          "default": "filter",
+          "type": "string"
+        }
+      },
+      "required": [
+        "filter"
+      ],
+      "title": "SelectFilter",
+      "type": "object"
+    },
     "SensorInfo": {
       "additionalProperties": false,
       "properties": {
@@ -4917,6 +5364,284 @@
         "bits"
       ],
       "title": "SensorInfo",
+      "type": "object"
+    },
+    "Sequence": {
+      "additionalProperties": false,
+      "properties": {
+        "end": {
+          "$ref": "#/$defs/Container",
+          "description": "Always runs, once."
+        },
+        "name": {
+          "$ref": "#/$defs/Name"
+        },
+        "start": {
+          "$ref": "#/$defs/Container"
+        },
+        "targets": {
+          "$ref": "#/$defs/Container"
+        },
+        "version": {
+          "const": 1,
+          "default": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "Sequence",
+      "type": "object"
+    },
+    "SequenceEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "started",
+            "resumed_after_restart",
+            "action",
+            "frame",
+            "trigger",
+            "condition",
+            "paused",
+            "resumed",
+            "failed",
+            "ending",
+            "ended"
+          ],
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "time": {
+          "description": "UTC, ISO 8601.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "time",
+        "kind",
+        "message",
+        "path"
+      ],
+      "title": "SequenceEvent",
+      "type": "object"
+    },
+    "SequencePauseRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "now": {
+          "default": false,
+          "description": "Drop the frame in progress instead of waiting.",
+          "type": "boolean"
+        }
+      },
+      "title": "SequencePauseRequest",
+      "type": "object"
+    },
+    "SequencePlan": {
+      "additionalProperties": false,
+      "properties": {
+        "rows": {
+          "items": {
+            "$ref": "#/$defs/SequencePlanRow"
+          },
+          "type": "array"
+        },
+        "target": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "target",
+        "rows"
+      ],
+      "title": "SequencePlan",
+      "type": "object"
+    },
+    "SequencePlanRow": {
+      "additionalProperties": false,
+      "properties": {
+        "count": {
+          "type": "integer"
+        },
+        "done": {
+          "description": "Frames taken.",
+          "type": "integer"
+        },
+        "exposure": {
+          "type": "number"
+        },
+        "filter": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "filter",
+        "exposure",
+        "count",
+        "done"
+      ],
+      "title": "SequencePlanRow",
+      "type": "object"
+    },
+    "SequenceRun": {
+      "additionalProperties": false,
+      "description": "A sequence's run in progress, or the last one (ADR 0031).",
+      "properties": {
+        "current": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Where in the tree: start, targets.0.1, end.0\u2026"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "outcome": {
+          "anyOf": [
+            {
+              "enum": [
+                "completed",
+                "stopped",
+                "failed"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "plans": {
+          "additionalProperties": {
+            "$ref": "#/$defs/SequencePlan"
+          },
+          "description": "Exposure plans by place in the tree.",
+          "type": "object"
+        },
+        "restarts": {
+          "description": "Times it was resumed after nocsd restarted.",
+          "type": "integer"
+        },
+        "run": {
+          "type": "string"
+        },
+        "started": {
+          "description": "UTC, ISO 8601.",
+          "type": "string"
+        },
+        "state": {
+          "enum": [
+            "running",
+            "pausing",
+            "paused",
+            "stopping",
+            "ending",
+            "finished"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "run",
+        "name",
+        "state",
+        "started",
+        "restarts",
+        "current",
+        "plans",
+        "outcome",
+        "error"
+      ],
+      "title": "SequenceRun",
+      "type": "object"
+    },
+    "SequenceState": {
+      "additionalProperties": false,
+      "properties": {
+        "events": {
+          "description": "The run's most recent events, oldest first.",
+          "items": {
+            "$ref": "#/$defs/SequenceEvent"
+          },
+          "type": "array"
+        },
+        "run": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SequenceRun"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "run",
+        "events"
+      ],
+      "title": "SequenceState",
+      "type": "object"
+    },
+    "SequenceStopRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "now": {
+          "default": false,
+          "description": "Drop the frame in progress instead of waiting.",
+          "type": "boolean"
+        },
+        "run_end": {
+          "default": true,
+          "description": "Run the end of the session (park, warm\u2026).",
+          "type": "boolean"
+        }
+      },
+      "title": "SequenceStopRequest",
       "type": "object"
     },
     "SerialPortInfo": {
@@ -5051,6 +5776,19 @@
         "dec"
       ],
       "title": "SkyPosition",
+      "type": "object"
+    },
+    "Slew": {
+      "additionalProperties": false,
+      "description": "Go to the target of the enclosing container.",
+      "properties": {
+        "kind": {
+          "const": "slew",
+          "default": "slew",
+          "type": "string"
+        }
+      },
+      "title": "Slew",
       "type": "object"
     },
     "SnapshotMessage": {
@@ -5645,6 +6383,48 @@
       "title": "SystemState",
       "type": "object"
     },
+    "Target": {
+      "additionalProperties": false,
+      "properties": {
+        "dec": {
+          "anyOf": [
+            {
+              "maximum": 90,
+              "minimum": -90,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "J2000 declination, degrees."
+        },
+        "name": {
+          "$ref": "#/$defs/Name",
+          "description": "Object name: frames carry it, and their folder."
+        },
+        "ra": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 24,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "J2000 right ascension, hours."
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "Target",
+      "type": "object"
+    },
     "TargetRequest": {
       "additionalProperties": false,
       "properties": {
@@ -5775,6 +6555,19 @@
       "title": "TrackingRequest",
       "type": "object"
     },
+    "Trigger": {
+      "discriminator": {
+        "mapping": {
+          "autofocus": "#/$defs/AutofocusTrigger"
+        },
+        "propertyName": "kind"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/AutofocusTrigger"
+        }
+      ]
+    },
     "UnmountedDrive": {
       "additionalProperties": false,
       "properties": {
@@ -5811,6 +6604,37 @@
       "title": "UnmountedDrive",
       "type": "object"
     },
+    "Unpark": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "unpark",
+          "default": "unpark",
+          "type": "string"
+        }
+      },
+      "title": "Unpark",
+      "type": "object"
+    },
+    "UntilTime": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "until_time",
+          "default": "until_time",
+          "type": "string"
+        },
+        "time": {
+          "format": "date-time",
+          "type": "string"
+        }
+      },
+      "required": [
+        "time"
+      ],
+      "title": "UntilTime",
+      "type": "object"
+    },
     "ValueRange": {
       "additionalProperties": false,
       "properties": {
@@ -5826,6 +6650,31 @@
         "max"
       ],
       "title": "ValueRange",
+      "type": "object"
+    },
+    "Warm": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "warm",
+          "default": "warm",
+          "type": "string"
+        },
+        "ramp": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "At most this many \u00b0C per minute; 0: as fast as it can."
+        }
+      },
+      "title": "Warm",
       "type": "object"
     },
     "WeatherState": {

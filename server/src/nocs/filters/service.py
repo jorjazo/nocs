@@ -80,20 +80,30 @@ class FilterWheelService:
 
     def select(self, filter: int | str) -> str:
         """Move to a slot (1-based) or to the named filter; returns the job id."""
+        self._slot(filter)  # refused now, not in the job
+        self._jobs.check_free([RESOURCE])
+
+        async def run(context: JobContext) -> Json:
+            return await self.select_in(context, filter)
+
+        return self._jobs.start("filter", [RESOURCE], run)
+
+    async def select_in(self, context: JobContext, filter: int | str) -> Json:
+        """Move to a slot or a named filter inside ``context``'s job, which holds the wheel."""
+        if self._jobs.holder(RESOURCE) != context.id:
+            raise RuntimeError(f"job {context.id} does not hold the filter wheel")
+        wheel, slot, name = self._slot(filter)
+        context.progress(None, f"changing to {name or f'slot {slot}'}")
+        await wheel.select(slot)
+        return {"slot": slot, "filter": name or None}
+
+    def _slot(self, filter: int | str) -> tuple[FilterWheel, int, str]:
         wheel = self.wheel()
         slot = wheel.slot_of(filter) if isinstance(filter, str) else filter
         if not 1 <= slot <= wheel.slots:
             raise ValueError(f"slot {slot} outside 1..{wheel.slots}")
-        self._jobs.check_free([RESOURCE])
         names = wheel.names
-        name = names[slot - 1].strip() if slot <= len(names) else ""
-
-        async def run(context: JobContext) -> Json:
-            context.progress(None, f"changing to {name or f'slot {slot}'}")
-            await wheel.select(slot)
-            return {"slot": slot, "filter": name or None}
-
-        return self._jobs.start("filter", [RESOURCE], run)
+        return wheel, slot, names[slot - 1].strip() if slot <= len(names) else ""
 
     async def set_names(self, filters: list[str], label: str | None = None) -> None:
         """Say what sits in each slot of the wheel connected now; sent to its driver too."""

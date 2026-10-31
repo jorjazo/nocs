@@ -228,8 +228,11 @@ class MountService:
         await mount.sync(jnow.ra, jnow.dec)
         return jnow
 
-    async def set_tracking(self, on: bool | None, mode: str | None = None) -> None:
-        self._jobs.check_free([RESOURCE])
+    async def set_tracking(
+        self, on: bool | None, mode: str | None = None, *, job: str | None = None
+    ) -> None:
+        """Switch tracking and its rate; refused while a job other than ``job`` holds the mount."""
+        self._check_holder(job)
         mount = self.mount()
         if mode is not None:
             await mount.set_track_mode(mode)
@@ -245,14 +248,23 @@ class MountService:
         self._jobs.check_free([RESOURCE])
 
         async def run(context: JobContext) -> Json:
-            context.progress(None, "parking")
-            await self._slew(mount, mount.park())
+            await self.park_in(context)
             return None
 
         return self._jobs.start("park", [RESOURCE], run)
 
-    async def unpark(self) -> None:
-        self._jobs.check_free([RESOURCE])
+    async def park_in(self, context: JobContext) -> None:
+        """Park inside ``context``'s job, which must hold the mount."""
+        self._check_holder(context.id)
+        mount = self.mount()
+        if not mount.can_park:
+            raise DeviceError(f"{mount.name} cannot park")
+        context.progress(None, "parking")
+        await self._slew(mount, mount.park())
+
+    async def unpark(self, *, job: str | None = None) -> None:
+        """Unpark; refused while a job other than ``job`` holds the mount."""
+        self._check_holder(job)
         await self.mount().unpark()
 
     def home(self) -> str:
@@ -383,6 +395,13 @@ class MountService:
         context.progress(None, f"slewing to RA {_hms(ra)}, Dec {_dms(dec)}")
         await self._slew(mount, mount.goto(to.ra, to.dec))
         return to
+
+    def _check_holder(self, job: str | None) -> None:
+        """Refuse when the mount is held, by anyone but ``job`` when given."""
+        if job is None:
+            self._jobs.check_free([RESOURCE])
+        elif self._jobs.holder(RESOURCE) != job:
+            raise RuntimeError(f"job {job} does not hold the mount")
 
     def _ready_to_slew(self) -> Mount:
         mount = self.mount()

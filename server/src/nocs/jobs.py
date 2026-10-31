@@ -10,6 +10,9 @@ check the lock first and are refused with ``ResourceBusyError``.
 
 Short interactive operations that are not worth a job entry (moving the mount
 with the slew pad) hold the same locks through ``reserve``.
+
+A long job that pauses (a sequence, ADR 0031) lends its locks back with
+``suspend`` and takes them again with ``resume``.
 """
 
 from __future__ import annotations
@@ -71,6 +74,8 @@ class JobManager:
         """Resource → id of the job holding it."""
         self._kinds: dict[str, str] = {}
         self._reservations: set[str] = set()
+        self._suspended: dict[str, list[str]] = {}
+        """Job id → the resources it lent back while paused."""
         self._finished: list[str] = []
         store.set(ROOT, {})
 
@@ -103,6 +108,27 @@ class JobManager:
         del self._kinds[token]
         for resource in [r for r, holder in self._locks.items() if holder == token]:
             del self._locks[resource]
+
+    def suspend(self, job_id: str) -> None:
+        """Free a running job's locks until ``resume``; others may take them meanwhile."""
+        if job_id not in self._tasks:
+            raise KeyError(job_id)
+        if job_id in self._suspended:
+            return
+        resources = [r for r, holder in self._locks.items() if holder == job_id]
+        for resource in resources:
+            del self._locks[resource]
+        self._suspended[job_id] = resources
+
+    def resume(self, job_id: str) -> None:
+        """Take back what ``suspend`` freed; ``ResourceBusyError`` if one was taken since."""
+        resources = self._suspended.get(job_id)
+        if resources is None:
+            return
+        self.check_free(resources)
+        for resource in resources:
+            self._locks[resource] = job_id
+        del self._suspended[job_id]
 
     def active(self) -> list[str]:
         """Kinds of the running jobs and reservations: what a reboot would interrupt."""
@@ -188,6 +214,7 @@ class JobManager:
     ) -> None:
         if self._tasks.pop(job_id, None) is None:
             return  # already finished
+        self._suspended.pop(job_id, None)
         for resource in [r for r, holder in self._locks.items() if holder == job_id]:
             del self._locks[resource]
         with self._store.transaction():

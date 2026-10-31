@@ -55,6 +55,8 @@ from nocs.api.schemas import (
     PairRequest,
     PassphraseRequest,
     PatchMessage,
+    SequencePauseRequest,
+    SequenceStopRequest,
     SerialPortInfo,
     SetPropertyRequest,
     ShutdownRequest,
@@ -67,6 +69,7 @@ from nocs.api.schemas import (
     TrackingRequest,
 )
 from nocs.equipment import Profile
+from nocs.sequence import Sequence
 
 type Mode = Literal["validation", "serialization"]
 
@@ -102,6 +105,9 @@ MODELS: list[tuple[type[BaseModel], Mode]] = [
     (GuideRequest, "validation"),
     (DitherRequest, "validation"),
     (DitherNowRequest, "validation"),
+    (Sequence, "validation"),
+    (SequencePauseRequest, "validation"),
+    (SequenceStopRequest, "validation"),
     (GuideSteps, "serialization"),
     (AutofocusRun, "serialization"),
     (TemperatureRecord, "serialization"),

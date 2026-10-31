@@ -78,8 +78,13 @@ class PowerService(DeviceState):
         duty: float | None = None,
         voltage: float | None = None,
         force: bool = False,
+        job: str | None = None,
     ) -> None:
-        """Change one output; see ``OutputRequest`` for what each kind takes."""
+        """Change one output; see ``OutputRequest`` for what each kind takes.
+
+        Switching off an output that feeds a busy role is refused unless ``force``,
+        or unless ``job`` (a sequence switching off its rig) is what holds it.
+        """
         box = self.box()
         kind, _ = parse_output_id(output_id)
         output = box.output(output_id)
@@ -104,13 +109,13 @@ class PowerService(DeviceState):
                     if target == output.voltage:
                         return
                     if output.on and not force:
-                        self._check_feeds_free(output_id)
+                        self._check_feeds_free(output_id, job)
                     await box.set_voltage(output_id, target)
                 case OutputKind.DC | OutputKind.USB:
                     if on is None or duty is not None or voltage is not None:
                         raise ValueError(f"{output_id} only takes on")
                     if output.on and not on and not force:
-                        self._check_feeds_free(output_id)
+                        self._check_feeds_free(output_id, job)
                     await box.set_on(output_id, on)
         self.publish()
 
@@ -155,11 +160,13 @@ class PowerService(DeviceState):
         config = profile.devices.get(Role.POWER) if profile is not None else None
         return (config.outputs or {}) if config is not None else {}
 
-    def _check_feeds_free(self, output_id: str) -> None:
-        """Raise ``ResourceBusyError`` if what the output feeds is in use."""
+    def _check_feeds_free(self, output_id: str, job: str | None = None) -> None:
+        """Raise ``ResourceBusyError`` if what the output feeds is in use (but by ``job``)."""
         config = self._outputs_config().get(output_id)
         feeds = config.feeds if config is not None and config.feeds else list(Role)
-        self._jobs.check_free(role.value for role in feeds)
+        self._jobs.check_free(
+            role.value for role in feeds if job is None or self._jobs.holder(role.value) != job
+        )
 
     def summary(self, client: IndiClient, device: str) -> dict[str, Json]:
         box = PowerBox(client, device)

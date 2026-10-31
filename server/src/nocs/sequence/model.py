@@ -22,6 +22,7 @@ from typing import Annotated, Literal, Self
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 from nocs.equipment.profiles import OutputId
+from nocs.storage import layout
 
 VERSION = 1
 
@@ -50,6 +51,8 @@ class Target(SequenceModel):
 
     @model_validator(mode="after")
     def _both_or_neither(self) -> Self:
+        if not layout.clean(self.name):
+            raise ValueError("the target name needs letters or digits")
         if (self.ra is None) != (self.dec is None):
             raise ValueError("a target needs both RA and Dec, or neither")
         return self
@@ -61,13 +64,17 @@ class Target(SequenceModel):
 class Cool(SequenceModel):
     kind: Literal["cool"] = "cool"
     temperature: float = Field(ge=-60, le=40, description="Target sensor temperature, °C.")
-    ramp: float | None = Field(default=None, gt=0, description="At most this many °C per minute.")
+    ramp: float | None = Field(
+        default=None, ge=0, description="At most this many °C per minute; 0: as fast as it can."
+    )
     wait: bool = Field(default=True, description="Wait until the sensor gets there.")
 
 
 class Warm(SequenceModel):
     kind: Literal["warm"] = "warm"
-    ramp: float | None = Field(default=None, gt=0, description="At most this many °C per minute.")
+    ramp: float | None = Field(
+        default=None, ge=0, description="At most this many °C per minute; 0: as fast as it can."
+    )
 
 
 class Unpark(SequenceModel):

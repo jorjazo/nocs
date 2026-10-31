@@ -63,6 +63,7 @@ from nocs.api.schemas import (
     TemperatureRecord,
     TemplateRequest,
 )
+from nocs.api.sequences import sequences_router
 from nocs.api.solver import solver_router
 from nocs.api.system import system_router
 from nocs.auth import AuthStore
@@ -100,6 +101,9 @@ from nocs.jobs import JobManager, ResourceBusyError
 from nocs.mount.service import MountService
 from nocs.pointing import CenteringService, PointingService
 from nocs.power.service import PowerService, WeatherService
+from nocs.sequence import CheckpointFile, SequenceStore
+from nocs.sequence.rig import Parts
+from nocs.sequence.service import SequenceService
 from nocs.services.indi_bridge import IndiBridge, NotConnectedError
 from nocs.services.system import OperationUnavailableError, SystemService
 from nocs.solving import Astap, SolverService
@@ -188,6 +192,20 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
     def centering() -> CenteringService:
         assert services.centering is not None
         return services.centering
+
+    def sequences() -> SequenceService:
+        assert services.sequences is not None
+        return services.sequences
+
+    def sequence_parts() -> Parts:
+        return Parts(
+            capture=capture(),
+            filters=filter_wheel(),
+            focus=autofocus(),
+            mount=mount(),
+            guiding=guiding(),
+            power=power(),
+        )
 
     def site_longitude() -> float | None:
         profile = equipment().active_profile
@@ -279,6 +297,14 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
             store, services.jobs, services.pointing, services.mount
         )
         services.capture.use_guider(services.guiding)
+        services.sequences = SequenceService(
+            store,
+            services.jobs,
+            SequenceStore(settings.config_dir),
+            CheckpointFile(settings.data_dir / "sequence" / "run.json"),
+            services.clock,
+            sequence_parts,
+        )
         task = asyncio.create_task(bridge.run(), name="indi-bridge")
         guiding_task = asyncio.create_task(services.guiding.run(), name="phd2")
         system_task = asyncio.create_task(services.system.run(), name="nocs-system")
@@ -314,6 +340,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
     app.include_router(system_router(system))
     app.include_router(solver_router(pointing, centering))
     app.include_router(accessories_router(focuser, filter_wheel, autofocus))
+    app.include_router(sequences_router(sequences))
 
     @app.get("/api/autofocus/runs")
     async def focus_runs(  # pyright: ignore[reportUnusedFunction]
@@ -637,6 +664,7 @@ class _Services:
     guiding: GuidingService | None = None
     environment: EnvironmentLog | None = None
     system: SystemService | None = None
+    sequences: SequenceService | None = None
 
 
 def _iso(time: datetime) -> str:

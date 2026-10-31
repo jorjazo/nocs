@@ -11,6 +11,7 @@ import shutil
 import uuid
 import zipfile
 from collections.abc import AsyncIterator, Callable, Iterator
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -187,6 +188,18 @@ async def test_automatic_saves_to_the_external_drive(rig: Rig, service: StorageS
     assert str(flat.relative).startswith("2026-10-30/Flat/Ha/")
     second = service.save(rig.frame())
     assert second.relative.name.endswith("_0002.fits")
+
+
+async def test_a_frame_may_name_its_own_target(rig: Rig, service: StorageService) -> None:
+    await service.set_target("M 31")
+    service.save(replace(rig.frame(), target="ngc 253"))
+    await service.set_target("NGC 253")
+    saved = service.save(replace(rig.frame(), target="m 31"))
+    assert str(saved.relative).startswith("2026-10-30/Light/M_31/")
+    flat = service.save(replace(rig.frame("flat"), target="M 31"))
+    assert str(flat.relative).startswith("2026-10-30/Flat/")
+    # A sequence's target is the same object as the one typed before, whatever its case.
+    assert [r.row.target for r in service.frames(FrameFilter())] == [None, "M 31", "ngc 253"]
 
 
 async def test_names_are_never_reused(rig: Rig, service: StorageService) -> None:

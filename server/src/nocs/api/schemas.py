@@ -688,6 +688,56 @@ class SystemState(StateModel):
     health: SystemHealth | None = Field(description="None until the first reading.")
 
 
+class SequencePlanRow(StateModel):
+    filter: str | None
+    exposure: float
+    count: int
+    done: int = Field(description="Frames taken.")
+
+
+class SequencePlan(StateModel):
+    target: str | None
+    rows: list[SequencePlanRow]
+
+
+class SequenceRun(StateModel):
+    """A sequence's run in progress, or the last one (ADR 0031)."""
+
+    run: str
+    name: str
+    state: Literal["running", "pausing", "paused", "stopping", "ending", "finished"]
+    started: str = Field(description="UTC, ISO 8601.")
+    restarts: int = Field(description="Times it was resumed after nocsd restarted.")
+    current: str | None = Field(description="Where in the tree: start, targets.0.1, end.0…")
+    plans: dict[str, SequencePlan] = Field(description="Exposure plans by place in the tree.")
+    outcome: Literal["completed", "stopped", "failed"] | None
+    error: str | None
+
+
+class SequenceEvent(StateModel):
+    time: str = Field(description="UTC, ISO 8601.")
+    kind: Literal[
+        "started",
+        "resumed_after_restart",
+        "action",
+        "frame",
+        "trigger",
+        "condition",
+        "paused",
+        "resumed",
+        "failed",
+        "ending",
+        "ended",
+    ]
+    message: str
+    path: str | None
+
+
+class SequenceState(StateModel):
+    run: SequenceRun | None
+    events: list[SequenceEvent] = Field(description="The run's most recent events, oldest first.")
+
+
 class AppState(StateModel):
     """The whole state tree sent in snapshots and modified by patches."""
 
@@ -715,6 +765,7 @@ class AppState(StateModel):
     centering: CenteringState | None = Field(default=None, description="None: never run.")
     guiding: GuidingState | None = None
     system: SystemState | None = None
+    sequence: SequenceState | None = None
 
 
 # -- HTTP --------------------------------------------------------------------
@@ -747,6 +798,19 @@ class SettleRequest(BaseModel):
     pixels: float = Field(default=1.5, gt=0, le=20, description="Within this distance, px…")
     time: float = Field(default=10, ge=0, le=300, description="…for this long, seconds…")
     timeout: float = Field(default=60, gt=0, le=600, description="…or give up after this.")
+
+
+class SequencePauseRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    now: bool = Field(default=False, description="Drop the frame in progress instead of waiting.")
+
+
+class SequenceStopRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    run_end: bool = Field(default=True, description="Run the end of the session (park, warm…).")
+    now: bool = Field(default=False, description="Drop the frame in progress instead of waiting.")
 
 
 class GuideRequest(BaseModel):

@@ -69,6 +69,10 @@ class Executor(Protocol):
         """The run has stopped at a safe point until resumed: lend the devices back."""
         ...
 
+    async def resumed(self) -> None:
+        """The run goes on after a pause, or stops: take the devices back."""
+        ...
+
     def focuser_temperature(self) -> float | None: ...
 
 
@@ -504,6 +508,7 @@ class Runner:
         await self._save()
         await self._executor.paused()
         await self._resume.wait()
+        await self._executor.resumed()
         if self._stop_asked is None:
             self._set_state(RunState.RUNNING)
             self._event(EventKind.RESUMED, "resumed", self._current)

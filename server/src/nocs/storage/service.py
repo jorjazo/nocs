@@ -140,6 +140,8 @@ class FrameFacts:
     """°C, from the weather role (ADR 0017)."""
     humidity: float | None = None
     dew_point: float | None = None
+    target: str | None = None
+    """A light frame's object, instead of the configured target (a sequence's frames)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -359,7 +361,9 @@ class StorageService:
 
         config = self._config
         filter = header.text("FILTER") or facts.filter
-        target = config.target if facts.frame_type == "light" else None
+        target = None
+        if facts.frame_type == "light":
+            target = self.catalog.target(facts.target) if facts.target else config.target
         relative_dir = layout.folder(facts.frame_type, night, target, filter)
         directory = destination.directory / layout.ROOT / relative_dir
         try:

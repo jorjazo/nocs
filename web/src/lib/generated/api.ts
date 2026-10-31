@@ -72,14 +72,40 @@ export type ClientRole = "owner" | "observer";
 export type CameraRoleName = "main_camera" | "guide_camera";
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
- * via the `definition` "DriverName".
+ * via the `definition` "Condition".
  */
-export type DriverName = string;
+export type Condition = UntilTime;
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "Node".
+ */
+export type Node =
+  Cool | Warm | Unpark | Park | Slew | SelectFilter | Autofocus | Guide | Outputs | ExposurePlan | Container;
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "Name".
+ */
+export type Name = string;
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "OutputId".
  */
 export type OutputId = string;
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "Trigger".
+ */
+export type Trigger = AutofocusTrigger;
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "DriverName".
+ */
+export type DriverName = string;
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "FrameKind".
+ */
+export type FrameKind = "light" | "dark" | "flat" | "bias";
 
 export interface NOCSAPI {
   [k: string]: unknown;
@@ -146,6 +172,7 @@ export interface AppState {
    * None: no power box is ready.
    */
   power?: PowerState | null;
+  sequence?: SequenceState | null;
   solver?: SolverState | null;
   storage?: StorageState | null;
   system?: SystemState | null;
@@ -1204,6 +1231,93 @@ export interface PowerOutput {
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "SequenceState".
+ */
+export interface SequenceState {
+  /**
+   * The run's most recent events, oldest first.
+   */
+  events: SequenceEvent[];
+  run: SequenceRun | null;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "SequenceEvent".
+ */
+export interface SequenceEvent {
+  kind:
+    | "started"
+    | "resumed_after_restart"
+    | "action"
+    | "frame"
+    | "trigger"
+    | "condition"
+    | "paused"
+    | "resumed"
+    | "failed"
+    | "ending"
+    | "ended";
+  message: string;
+  path: string | null;
+  /**
+   * UTC, ISO 8601.
+   */
+  time: string;
+}
+/**
+ * A sequence's run in progress, or the last one (ADR 0031).
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "SequenceRun".
+ */
+export interface SequenceRun {
+  /**
+   * Where in the tree: start, targets.0.1, end.0…
+   */
+  current: string | null;
+  error: string | null;
+  name: string;
+  outcome: ("completed" | "stopped" | "failed") | null;
+  /**
+   * Exposure plans by place in the tree.
+   */
+  plans: {
+    [k: string]: SequencePlan;
+  };
+  /**
+   * Times it was resumed after nocsd restarted.
+   */
+  restarts: number;
+  run: string;
+  /**
+   * UTC, ISO 8601.
+   */
+  started: string;
+  state: "running" | "pausing" | "paused" | "stopping" | "ending" | "finished";
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "SequencePlan".
+ */
+export interface SequencePlan {
+  rows: SequencePlanRow[];
+  target: string | null;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "SequencePlanRow".
+ */
+export interface SequencePlanRow {
+  count: number;
+  /**
+   * Frames taken.
+   */
+  done: number;
+  exposure: number;
+  filter: string | null;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "SolverState".
  */
 export interface SolverState {
@@ -1552,6 +1666,15 @@ export interface AutoDewRequest {
   on: boolean;
 }
 /**
+ * Focus with the settings of the profile's imaging train (ADR 0021).
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "Autofocus".
+ */
+export interface Autofocus {
+  kind?: "autofocus";
+}
+/**
  * What is left out comes from the imaging train's sweep and the focuser's backlash.
  *
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -1655,6 +1778,36 @@ export interface AutofocusState1 {
   temperature: number | null;
 }
 /**
+ * Focus before a frame when one of the set reasons applies.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "AutofocusTrigger".
+ */
+export interface AutofocusTrigger {
+  /**
+   * The filter is not the last run's.
+   */
+  filter_change?: boolean;
+  /**
+   * Frames since the last run.
+   */
+  frames?: number | null;
+  hfr_frames?: number;
+  /**
+   * Fraction the median HFR of a filter's last frames grew over its first frames after the last run.
+   */
+  hfr_increase?: number | null;
+  kind?: "autofocus";
+  /**
+   * Time since the last run.
+   */
+  minutes?: number | null;
+  /**
+   * °C the focuser's temperature moved since the last run.
+   */
+  temperature_change?: number | null;
+}
+/**
  * Only the fields present are changed.
  *
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -1745,10 +1898,171 @@ export interface ClockRequest {
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "UntilTime".
+ */
+export interface UntilTime {
+  kind?: "until_time";
+  time: string;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "ConnectRequest".
  */
 export interface ConnectRequest {
   profile: string;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "Container".
+ */
+export interface Container {
+  children?: Node[];
+  conditions?: Condition[];
+  kind?: "container";
+  name?: string;
+  /**
+   * Times to run the children; None: until a condition ends it.
+   */
+  repeat?: number | null;
+  /**
+   * What instructions inside aim at, unless a nested one names another.
+   */
+  target?: Target | null;
+  triggers?: Trigger[];
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "Cool".
+ */
+export interface Cool {
+  kind?: "cool";
+  /**
+   * At most this many °C per minute; 0: as fast as it can.
+   */
+  ramp?: number | null;
+  /**
+   * Target sensor temperature, °C.
+   */
+  temperature: number;
+  /**
+   * Wait until the sensor gets there.
+   */
+  wait?: boolean;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "Warm".
+ */
+export interface Warm {
+  kind?: "warm";
+  /**
+   * At most this many °C per minute; 0: as fast as it can.
+   */
+  ramp?: number | null;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "Unpark".
+ */
+export interface Unpark {
+  kind?: "unpark";
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "Park".
+ */
+export interface Park {
+  kind?: "park";
+}
+/**
+ * Go to the target of the enclosing container.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "Slew".
+ */
+export interface Slew {
+  kind?: "slew";
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "SelectFilter".
+ */
+export interface SelectFilter {
+  filter: Name;
+  kind?: "filter";
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "Guide".
+ */
+export interface Guide {
+  kind?: "guide";
+  on: boolean;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "Outputs".
+ */
+export interface Outputs {
+  kind?: "outputs";
+  on: boolean;
+  /**
+   * @minItems 1
+   */
+  outputs: [OutputId, ...OutputId[]];
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "ExposurePlan".
+ */
+export interface ExposurePlan {
+  batch?: number;
+  frame_type?: "light" | "dark" | "flat" | "bias";
+  kind?: "expose";
+  /**
+   * batches: up to `batch` frames of a row, then the next row with frames left; in_turn: each row to its end.
+   */
+  order?: "batches" | "in_turn";
+  /**
+   * @minItems 1
+   */
+  rows: [PlanRow, ...PlanRow[]];
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "PlanRow".
+ */
+export interface PlanRow {
+  binning?: number | null;
+  count: number;
+  /**
+   * Seconds.
+   */
+  exposure: number;
+  /**
+   * None: whatever the wheel holds.
+   */
+  filter?: Name | null;
+  gain?: number | null;
+  offset?: number | null;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "Target".
+ */
+export interface Target {
+  /**
+   * J2000 declination, degrees.
+   */
+  dec?: number | null;
+  /**
+   * Object name: frames carry it, and their folder.
+   */
+  name: string;
+  /**
+   * J2000 right ascension, hours.
+   */
+  ra?: number | null;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -2423,6 +2737,59 @@ export interface Profile {
   imaging?: Optics | null;
   name: string;
   site?: Site | null;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "Sequence".
+ */
+export interface Sequence {
+  end?: Container1;
+  name: Name;
+  start?: Container;
+  targets?: Container;
+  version?: 1;
+}
+/**
+ * Always runs, once.
+ */
+export interface Container1 {
+  children?: Node[];
+  conditions?: Condition[];
+  kind?: "container";
+  name?: string;
+  /**
+   * Times to run the children; None: until a condition ends it.
+   */
+  repeat?: number | null;
+  /**
+   * What instructions inside aim at, unless a nested one names another.
+   */
+  target?: Target | null;
+  triggers?: Trigger[];
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "SequencePauseRequest".
+ */
+export interface SequencePauseRequest {
+  /**
+   * Drop the frame in progress instead of waiting.
+   */
+  now?: boolean;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "SequenceStopRequest".
+ */
+export interface SequenceStopRequest {
+  /**
+   * Drop the frame in progress instead of waiting.
+   */
+  now?: boolean;
+  /**
+   * Run the end of the session (park, warm…).
+   */
+  run_end?: boolean;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
