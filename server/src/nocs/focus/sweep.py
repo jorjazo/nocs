@@ -33,6 +33,9 @@ class Problem(StrEnum):
     """Too many points of the sweep without enough stars."""
     NOT_TURNING = "not_turning"
     """The HFR keeps falling towards one end: focus lies beyond the sweep."""
+    FLAT = "flat"
+    """The HFR hardly changes across the sweep: no real stars (hot pixels with the cap
+    on, as in the lab), or a step too small to leave focus."""
     BAD_FIT = "bad_fit"
     """The points do not follow a V closely enough."""
     WORSE = "worse"
@@ -56,6 +59,8 @@ class Criteria:
     min_side_points: int = 2
     """Points needed on each side of the lowest one before the curve has turned."""
     min_r_squared: float = 0.8
+    min_contrast: float = 1.2
+    """How many times the smallest HFR the largest one must be for a sweep to show a V."""
 
 
 DEFAULT_CRITERIA = Criteria()
@@ -154,6 +159,11 @@ def assess(
             ),
         )
     hfrs = [p.hfr for p in usable if p.hfr is not None]
+    if max(hfrs) < min(hfrs) * criteria.min_contrast:
+        return Verdict(
+            problem=Problem.FLAT,
+            detail=f"the HFR hardly changes across the sweep ({min(hfrs):.2f} to {max(hfrs):.2f})",
+        )
     lowest = hfrs.index(min(hfrs))
     for side, count in ((Direction.INWARD, lowest), (Direction.OUTWARD, len(usable) - 1 - lowest)):
         if count < criteria.min_side_points:

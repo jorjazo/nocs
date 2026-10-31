@@ -68,6 +68,9 @@ log = logging.getLogger(__name__)
 ROOT: Path = ("autofocus",)
 RESOURCES = (Role.MAIN_CAMERA.value, Role.FOCUSER.value, Role.FILTER_WHEEL.value)
 """What a run of its own locks: a filter change would move the focus under it."""
+SETTLE_INTERVAL = 0.5
+"""How long the position must hold still for a focuser to count as stopped."""
+SETTLE_TIMEOUT = 20.0
 
 
 class FocuserDevice(Protocol):
@@ -474,15 +477,22 @@ class AutofocusService:
         return await (await self._take(context, options, label))()
 
     async def _restore(self, context: JobContext, focuser: FocuserDevice, run: _Run) -> None:
-        """Back to where the run started; never raises."""
+        """Back to where the run started; never raises.
+
+        A run cancelled in the middle of a move leaves the motor going: the ZWO EAF
+        keeps moving to its target and refuses a new one until it gets there
+        ("Error: 5"). So the focuser is stopped and left to settle first, and a
+        refused move is tried once more.
+        """
         run.phase = Phase.RESTORING
         self._publish()
         options = run.options
         overshoot = options.overshoot if options.overshoot is not None else options.step
         with anyio.CancelScope(shield=True):
             try:
-                if focuser.moving and focuser.can_abort:
+                if focuser.can_abort:
                     await focuser.abort()
+                await _settle(focuser)
                 context.progress(None, f"back to {run.start_position}")
                 for position in approach(
                     focuser.position,
@@ -491,7 +501,12 @@ class AutofocusService:
                     overshoot,
                     focuser.max_position,
                 ):
-                    await focuser.move_to(position)
+                    try:
+                        await focuser.move_to(position)
+                    except DeviceError as e:
+                        log.warning("autofocus: moving back to %d refused, again: %s", position, e)
+                        await _settle(focuser)
+                        await focuser.move_to(position)
             except (DeviceError, ConnectionError, TimeoutError, FocuserNotReadyError) as e:
                 log.error("autofocus: could not move the focuser back: %s", e)
 
@@ -524,6 +539,18 @@ class AutofocusService:
     def _publish(self) -> None:
         if self._run is not None:
             self._store.set(ROOT, self._run.summary())
+
+
+async def _settle(focuser: FocuserDevice) -> None:
+    """Wait until the focuser is not moving and its position holds still (or give up)."""
+    with anyio.move_on_after(SETTLE_TIMEOUT):
+        last = focuser.position
+        while True:
+            await anyio.sleep(SETTLE_INTERVAL)
+            now = focuser.position
+            if not focuser.moving and now == last:
+                return
+            last = now
 
 
 def _combine(position: int, measures: Sequence[Measure], criteria: Criteria) -> Measure:

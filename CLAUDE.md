@@ -126,6 +126,8 @@ packages workflow builds and installs the .deb on amd64 and arm64.
   and the 47814 steps `ABS_FOCUS_POSITION` accepts: limits come from the latter.
 - Drivers save filter names in `$HOME/.indi` and turn `FILTER_NAME` to Alert when
   they cannot write it (the dev image sets `HOME` for the unprivileged user).
+- A ZWO EAF move cancelled by NOCS goes on to its target, and the EAF refuses a
+  new move until it gets there ("Error: 5"): abort, wait for it to stop, then move.
 - The ZWO EFW never reports `FILTER_SLOT` Busy while it turns (2–3 s per change):
   a filter change shows only as its job.
 - INDI's Telescope base class ignores a `TELESCOPE_TRACK_STATE` request equal to

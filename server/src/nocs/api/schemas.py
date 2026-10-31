@@ -467,7 +467,7 @@ class AutofocusState(StateModel):
     position: int | None = Field(description="Best focus, once the run checked it.")
     hfr: float | None = Field(description="Of the last frame, at ``position``.")
     stars: int | None
-    problem: Literal["no_stars", "too_few_stars", "not_turning", "bad_fit", "worse"] | None
+    problem: Literal["no_stars", "too_few_stars", "not_turning", "flat", "bad_fit", "worse"] | None
     detail: str | None = Field(description="Why it failed.")
     suggested_step: int | None = Field(
         description="A step that would put the sweep's ends at 2.5 times the best HFR."

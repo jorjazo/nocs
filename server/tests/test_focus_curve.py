@@ -191,3 +191,12 @@ def test_suggested_step_puts_the_ends_at_the_ratio() -> None:
     fit = fit_hyperbola(*zip(*((p, CURVE(p)) for p in range(9000, 11001, 250)), strict=True))
     step = suggest_step(fit, 4)
     assert CURVE(10000 + 4 * step) == pytest.approx(2.5 * CURVE.a, rel=0.01)
+
+
+def test_a_flat_sweep_is_not_a_v() -> None:
+    """Hot pixels under the cap, as on the lab rig: ~20 "stars" at 0.82-0.84 px everywhere."""
+    hfrs = [0.834, 0.832, 0.823, 0.835, 0.824, 0.832, 0.828, 0.83, 0.83]
+    points = [Point(4131 + 300 * i, h, 21) for i, h in enumerate(hfrs)]
+    verdict = assess(points, can_extend=(Direction.INWARD, Direction.OUTWARD))
+    assert verdict.problem is Problem.FLAT
+    assert verdict.detail == "the HFR hardly changes across the sweep (0.82 to 0.83)"

@@ -57,12 +57,17 @@ change, HFR growth, elapsed time). Facts that shape it:
   3. *the curve never turns*: fewer than 2 points on one side of the lowest
      one add points on that side (up to 4, within the travel); still not
      turned, fail;
-  4. *bad fit*: a curve that does not open upwards, a best focus outside the
+  4. *flat*: the largest HFR of the sweep less than 1.2 times the smallest,
+     fail: with the cap on, the lab camera's hot pixels pass as 20 "stars" of
+     0.83 px everywhere;
+  5. *bad fit*: a curve that does not open upwards, a best focus outside the
      points, or R² under 0.8, fail;
-  5. *worse*: a last frame at the best focus with an HFR more than 10 % above
+  6. *worse*: a last frame at the best focus with an HFR more than 10 % above
      the starting one fails the run.
 
-  A failed or cancelled run moves the focuser back to where it started.
+  A failed or cancelled run moves the focuser back to where it started, once it
+  has stopped: a ZWO EAF cancelled mid-move goes on to its target and refuses a
+  new one until then.
 - **Step.** Each successful run suggests a step that would put the ends of the
   sweep at 2.5 times the best HFR (from `b`); the Focus screen offers it. Until a
   first run, the user gives a step.
@@ -91,5 +96,5 @@ change, HFR growth, elapsed time). Facts that shape it:
   field.
 - Filter focus offsets, the temperature compensation of the position and the
   sequencer's triggers build on the stored runs later, without changing this.
-- The thresholds (10 stars, R² 0.8, 10 %, 2.5×) are first guesses to tune under
+- The thresholds (10 stars, contrast 1.2, R² 0.8, 10 %, 2.5×) are first guesses to tune under
   a real sky.

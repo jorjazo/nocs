@@ -417,6 +417,7 @@ export const en = {
         "Too many points had too few stars. Try a longer exposure, or a smaller step if the ends lose their stars.",
       not_turning:
         "The stars kept shrinking towards one end: focus lies beyond the sweep. Move the focuser that way by hand, or use a larger step.",
+      flat: "The stars hardly changed across the sweep: no real stars (hot pixels with the cap on), or a step too small. Check the sky, or use a larger step.",
       bad_fit:
         "The points do not follow a V. Seeing or clouds may have changed during the sweep; try again, perhaps with more frames per point.",
       worse: "The last frame was worse than the first: conditions may have changed. Try again.",

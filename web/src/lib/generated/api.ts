@@ -177,7 +177,7 @@ export interface AutofocusState {
    * Best focus, once the run checked it.
    */
   position: number | null;
-  problem: ("no_stars" | "too_few_stars" | "not_turning" | "bad_fit" | "worse") | null;
+  problem: ("no_stars" | "too_few_stars" | "not_turning" | "flat" | "bad_fit" | "worse") | null;
   stars: number | null;
   start_hfr: number | null;
   start_position: number;
@@ -1234,7 +1234,7 @@ export interface AutofocusState1 {
    * Best focus, once the run checked it.
    */
   position: number | null;
-  problem: ("no_stars" | "too_few_stars" | "not_turning" | "bad_fit" | "worse") | null;
+  problem: ("no_stars" | "too_few_stars" | "not_turning" | "flat" | "bad_fit" | "worse") | null;
   stars: number | null;
   start_hfr: number | null;
   start_position: number;

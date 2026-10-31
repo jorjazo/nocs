@@ -413,6 +413,7 @@ export const es: Messages = {
         "Demasiados puntos con pocas estrellas. Prueba una exposición más larga, o un paso menor si los extremos pierden sus estrellas.",
       not_turning:
         "Las estrellas siguieron achicándose hacia un extremo: el foco está más allá del barrido. Mueve el enfocador hacia ese lado a mano, o usa un paso mayor.",
+      flat: "Las estrellas casi no cambiaron en el barrido: no hay estrellas reales (píxeles calientes con la tapa puesta) o el paso es demasiado chico. Revisa el cielo, o usa un paso mayor.",
       bad_fit:
         "Los puntos no forman una V. El seeing o las nubes pueden haber cambiado durante el barrido; vuelve a intentarlo, quizá con más imágenes por punto.",
       worse: "La última imagen salió peor que la primera: las condiciones pueden haber cambiado. Vuelve a intentarlo.",

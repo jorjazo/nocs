@@ -647,6 +647,7 @@
                 "no_stars",
                 "too_few_stars",
                 "not_turning",
+                "flat",
                 "bad_fit",
                 "worse"
               ],

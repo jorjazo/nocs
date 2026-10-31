@@ -11,8 +11,9 @@ from typing import Any
 
 import pytest
 
+import nocs.focus.autofocus
 from nocs.api.schemas import AutofocusState
-from nocs.devices import FrameType
+from nocs.devices import DeviceError, FrameType
 from nocs.equipment import Role
 from nocs.equipment.profiles import FocusSweep
 from nocs.focus.autofocus import AutofocusOptions, AutofocusService
@@ -25,6 +26,11 @@ from nocs.state import Json, StateStore
 from nocs.storage import FocusRun
 
 CURVE = Hyperbola(a=2.0, b=300, c=10000)
+
+
+@pytest.fixture(autouse=True)
+def quick_settle(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(nocs.focus.autofocus, "SETTLE_INTERVAL", 0.01)
 
 
 class FakeFocuser:
@@ -70,6 +76,36 @@ class FakeFocuser:
 
     async def abort(self) -> None:
         pass
+
+
+class EafLikeFocuser(FakeFocuser):
+    """Like the ZWO EAF: a move goes on to its target when the command is cancelled,
+    and a new move is refused until it gets there."""
+
+    def __init__(self, position: int) -> None:
+        super().__init__(position)
+        self.travel: asyncio.Task[None] | None = None
+        self.refused = 0
+        self.underway = asyncio.Event()
+        """Set when the fourth move starts: the sweep is under way."""
+
+    @property
+    def moving(self) -> bool:
+        return self.travel is not None and not self.travel.done()
+
+    async def move_to(self, position: int) -> None:
+        if self.moving:
+            self.refused += 1
+            raise DeviceError("ZWO EAF.ABS_FOCUS_POSITION failed: Error: 5")
+
+        async def go() -> None:
+            await asyncio.sleep(0.05)
+            await FakeFocuser.move_to(self, position)
+
+        self.travel = asyncio.get_running_loop().create_task(go())
+        if len(self.moves) >= 3:
+            self.underway.set()
+        await asyncio.shield(self.travel)
 
 
 class FakeFocusers:
@@ -123,10 +159,10 @@ class FakeCamera:
 
 
 class Rig:
-    def __init__(self, start: int, backlash: int = 0) -> None:
+    def __init__(self, start: int, backlash: int = 0, focuser: FakeFocuser | None = None) -> None:
         self.store = StateStore()
         self.jobs = JobManager(self.store)
-        self.focuser = FakeFocuser(start, backlash)
+        self.focuser = focuser or FakeFocuser(start, backlash)
         self.camera = FakeCamera(self.focuser, self.jobs)
         self.focusers = FakeFocusers(self.focuser)
         self.sweep: FocusSweep | None = None
@@ -269,6 +305,18 @@ async def test_cancelling_goes_back_to_the_start() -> None:
     assert state["state"] == "cancelled"
     assert state["problem"] is None
     assert rig.focuser.position == 10150
+
+
+async def test_cancelling_mid_move_waits_for_the_focuser_to_stop() -> None:
+    focuser = EafLikeFocuser(10150)
+    rig = Rig(start=10150, focuser=focuser)
+    job_id = rig.service.start(AutofocusOptions(step=200))
+    await focuser.underway.wait()
+    rig.jobs.cancel(job_id)  # in the middle of a move
+    await rig.jobs.wait(job_id)
+    assert rig.job(job_id)["state"] == "cancelled"
+    assert focuser.position == 10150
+    assert focuser.refused == 0
 
 
 async def test_run_needs_a_job_holding_the_focuser() -> None:
