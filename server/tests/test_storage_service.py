@@ -61,6 +61,8 @@ class Rig:
         self.system.mount(device_of(shm), self.usb, "exfat")
         self.store = StateStore()
         self.count = 0
+        self.now = datetime(2026, 10, 31, 1, 5, tzinfo=UTC)
+        """The service's clock: the night of the frames below, whatever today is."""
 
     def service(self) -> StorageService:
         return StorageService(
@@ -71,6 +73,7 @@ class Rig:
             lambda: SITE.longitude,
             paths=self.system.paths,
             search=(self.search,),
+            now=lambda: self.now,
         )
 
     def frame(self, frame_type: str = "light", start: str = "2026-10-31T01:00:00") -> FrameFacts:
