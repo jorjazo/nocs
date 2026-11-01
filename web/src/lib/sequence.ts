@@ -19,6 +19,13 @@ export function sequenceId(name: string): string {
   return slug || "sequence";
 }
 
+// What frames are named after (folder, OBJECT): a catalog target's label ("M 42"),
+// not its display name, which is in the language of whoever chose it (Plan names
+// it "M 42 · Gran Nebulosa de Orión"); typed coordinates keep their name.
+export function frameName(target: PlannedTarget): string {
+  return target.id ? (target.name.split(" · ")[0] ?? target.name) : target.name;
+}
+
 export function newTemplate(
   target: PlannedTarget,
   filter: string | null,
@@ -27,7 +34,7 @@ export function newTemplate(
 ): Template {
   return {
     name: target.name,
-    target: { name: target.name, ra: target.ra, dec: target.dec },
+    target: { name: frameName(target), ra: target.ra, dec: target.dec },
     rows: [{ filter, exposure: DEFAULT_EXPOSURE, count: DEFAULT_COUNT }],
     order: "batches",
     batch: 5,

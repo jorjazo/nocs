@@ -81,7 +81,12 @@ def sequences_router(sequences: Callable[[], SequenceService]) -> APIRouter:
 
     @router.post("/sequences/{sequence_id}/start", status_code=status.HTTP_202_ACCEPTED)
     async def start(sequence_id: str) -> JobStarted:  # pyright: ignore[reportUnusedFunction]
+        """Start a sequence; guiding started by hand is stopped first (the sequence guides
+        under its own job when it is asked to)."""
         with _errors():
+            if sequences().get(sequence_id) is None:
+                raise KeyError(sequence_id)
+            await sequences().take_over_guiding()
             return JobStarted(job=sequences().start(sequence_id))
 
     @router.post("/sequence/pause", status_code=status.HTTP_204_NO_CONTENT)

@@ -18,6 +18,7 @@
   import { i18n } from "../../lib/i18n";
   import { live } from "../../lib/live.svelte";
   import { router } from "../../lib/router.svelte";
+  import { frameName } from "../../lib/sequence";
   import {
     builder,
     endSummary,
@@ -49,7 +50,7 @@
     const target = planned;
     if (!target || !auth.owner) return;
     const draft = builder.draft;
-    if (draft && draft.target.name === target.name && draft.target.ra === target.ra && draft.target.dec === target.dec) {
+    if (draft && draft.target.name === frameName(target) && draft.target.ra === target.ra && draft.target.dec === target.dec) {
       return;
     }
     void builder.open(target, wheel?.filter ?? filters[0] ?? null, canGuide, live.app.solver?.available === true);

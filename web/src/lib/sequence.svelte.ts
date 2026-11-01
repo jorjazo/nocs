@@ -6,7 +6,7 @@ import { listSequences } from "./api";
 import { formatDecimal, formatDuration, formatPlain, formatTemperature, formatTime } from "./format";
 import type { Messages } from "./i18n";
 import type { AutofocusTrigger, DitherTrigger, FlipTrigger, RecenterTrigger } from "./generated/api";
-import { newTemplate, sequenceId } from "./sequence";
+import { frameName, newTemplate, sequenceId } from "./sequence";
 import type { Container, Node, PlannedTarget, PowerOutput, SequenceEvent, SequenceRun, Template } from "./types";
 
 export { isActive, nextFilter, rowSeconds, sequenceId } from "./sequence";
@@ -30,7 +30,7 @@ class Builder {
     this.loading = true;
     const fresh = newTemplate(target, filter, guide, solver);
     try {
-      const stored = (await listSequences())[sequenceId(target.name)]?.template;
+      const stored = (await listSequences())[sequenceId(frameName(target))]?.template;
       this.draft = stored ? { ...fresh, ...stored } : fresh;
       this.saved = stored ? JSON.stringify(this.draft) : "";
     } catch {

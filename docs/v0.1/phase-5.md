@@ -268,11 +268,14 @@ Left for the sequencer:
 - **Starting a sequence while PHD2 already guides** fails with "mount is busy
   (guiding)": the usual order at the rig is to guide by hand first. The sequence
   could stop guiding and start it again under its job (it guides anyway), or the
-  builder could offer "Stop guiding and start".
+  builder could offer "Stop guiding and start". *Done:* starting a sequence stops
+  guiding started by hand (`SequenceService.take_over_guiding`); its guide step starts
+  PHD2 again under the sequence's job.
 - The sequence names folders and OBJECT with the plan's display name (`M_42_Gran_
   Nebulosa_de_Orión`), in the language of whoever chose the target, while Live view
   uses the catalog label (`M_42`) since the QA fix in Plan. The label would keep a
-  target's frames in one folder whoever starts the run.
+  target's frames in one folder whoever starts the run. *Done:* the builder names a
+  catalog target's frames after its label (the sequence's name keeps the display name).
 - The focus screen started with an empty step and an error under it. Fixed: without
   a step in the profile it takes the last run's (or the step that run suggested),
   or else one estimated from the focuser's travel and the imaging train's f-ratio

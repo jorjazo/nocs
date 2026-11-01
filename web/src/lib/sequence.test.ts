@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { currentRow, isActive, newTemplate, nextFilter, runProgress, sequenceId } from "./sequence.ts";
+import { currentRow, frameName, isActive, newTemplate, nextFilter, runProgress, sequenceId } from "./sequence.ts";
 
 test("a target's sequence id is a file name", () => {
   assert.equal(sequenceId("NGC 253"), "ngc-253");
@@ -9,6 +9,14 @@ test("a target's sequence id is a file name", () => {
   assert.equal(sequenceId("Ñandú"), "nandu");
   assert.equal(sequenceId("***"), "sequence");
   assert.ok(/^[a-z0-9][a-z0-9-]{0,63}$/.test(sequenceId("x".repeat(100))));
+});
+
+test("frames are named after a catalog target's label", () => {
+  const m42 = { id: "M 42", name: "M 42 · Gran Nebulosa de Orión", ra: 5.59, dec: -5.39 };
+  assert.equal(frameName(m42), "M 42");
+  assert.equal(newTemplate(m42, null, false).target.name, "M 42");
+  assert.equal(newTemplate(m42, null, false).name, "M 42 · Gran Nebulosa de Orión");
+  assert.equal(frameName({ name: "My field · east", ra: 1, dec: 2 }), "My field · east");
 });
 
 test("a new row takes the first filter no row uses", () => {

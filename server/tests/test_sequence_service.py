@@ -365,6 +365,27 @@ def service_events(setup: Any) -> list[dict[str, Any]]:
     return setup[2].get(("sequence", "events"))
 
 
+async def test_a_sequence_takes_over_guiding_started_by_hand(setup: Any) -> None:
+    service, rig, _, jobs, _ = setup
+    rig.guiding = True
+    hold = jobs.reserve("guiding", ["mount"])
+    original = rig.stop
+
+    async def stop() -> None:
+        await original()
+        jobs.release(hold)  # PHD2 stopped: GuidingService lets the mount go
+
+    rig.stop = stop
+    service.put("m42", lrgb())
+    with pytest.raises(ResourceBusyError, match="guiding"):
+        service.start("m42")
+    assert await service.take_over_guiding() is True
+    job = service.start("m42")
+    await jobs.wait(job)
+    assert rig.calls.count("guide") >= 1  # guiding again, under the sequence
+    assert await service.take_over_guiding() is False  # PHD2 is no longer guiding
+
+
 async def test_a_paused_sequence_lends_the_rig_back(setup: Any) -> None:
     service, rig, store, jobs, checkpoint = setup
     service.put("m42", lrgb())

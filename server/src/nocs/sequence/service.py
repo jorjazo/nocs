@@ -27,7 +27,7 @@ from anyio.streams.memory import MemoryObjectReceiveStream, MemoryObjectSendStre
 
 from nocs.clock import Clock
 from nocs.equipment import Role
-from nocs.jobs import JobContext, JobManager
+from nocs.jobs import JobContext, JobManager, ResourceBusyError
 from nocs.sequence.model import Sequence, Template, needs_site
 from nocs.sequence.rig import Parts, RigExecutor, take_back
 from nocs.sequence.runner import Checkpoint, CheckpointFile, Event, Outcome, Runner
@@ -142,6 +142,25 @@ class SequenceService:
             raise ValueError("this sequence asks about the sky: set the site in the profile")
         self._parts().capture.camera(Role.MAIN_CAMERA)  # refused now, not in the job
         return self._start(sequence_id, sequence, None)
+
+    async def take_over_guiding(self, *, timeout: float = 30.0) -> bool:
+        """Stop guiding that was started by hand, which holds the mount, so a sequence can
+        start; its own guide step starts PHD2 again under its job. Whether it stopped it."""
+        guiding = self._parts().guiding
+        if guiding is None or not guiding.guiding:
+            return False
+        if self._jobs.job_holding(Role.MOUNT.value) is not None:
+            return False  # a job uses the mount: starting is refused as it should be
+        log.info("stopping guiding to start a sequence")
+        await guiding.stop()
+        with anyio.move_on_after(timeout):
+            while True:
+                try:
+                    self._jobs.check_free([Role.MOUNT.value])
+                    break
+                except ResourceBusyError:
+                    await anyio.sleep(0.2)
+        return True
 
     def pause(self, *, now: bool = False) -> None:
         self._active().pause(now=now)
