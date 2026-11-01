@@ -23,6 +23,7 @@
   import Placeholder from "./screens/Placeholder.svelte";
   import ProfileEditor from "./screens/ProfileEditor.svelte";
   import Rig from "./screens/Rig.svelte";
+  import Session from "./screens/session/Session.svelte";
 
   const t = $derived(i18n.t);
   void auth.refresh();
@@ -123,6 +124,8 @@
       <Rig />
     {:else if router.route.screen === "live"}
       <Live />
+    {:else if router.route.screen === "session"}
+      <Session />
     {:else if router.route.screen === "dev"}
       <Dev />
     {:else if router.route.screen === "chart"}

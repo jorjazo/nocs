@@ -158,6 +158,19 @@ Live view (stage 2.7):
   darks). A camera that reports its temperature read-only, like the ASI220MM,
   shows "None" on the cooler tile.
 
+Session: the night's frames (phase 2 field test):
+
+- Until the sequence monitor (phase 5) arrives above it, the Session tab lists
+  the frames saved on a night: the night (a picker when there are several), its
+  frame count, total exposure and size, then one row per type, target and filter,
+  then the frames newest first with their time, stars and HFR, 50 at a time.
+- The night's zip is the screen's primary action and says its size before it
+  starts (a night is several GB); each group and each frame has its own download.
+  Downloads are plain links, so the phone's browser keeps and shows them.
+- Tapping a group lists only its frames. A frame whose drive is not connected is
+  dimmed, without a download, under a banner naming the drive.
+- Only the owner's devices list frames; an observer sees why.
+
 Power box (stage 2.10):
 
 - The power box opens as a sheet from its row in Rig: input voltage, current
