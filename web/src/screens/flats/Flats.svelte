@@ -71,7 +71,8 @@
         }
       }
       rows = [...byFilter.values()];
-      setup = report.groups[0]?.setup ?? null;
+      // The setup of lights that miss flats: a night can mix setups.
+      setup = (report.needs.find((n) => n.kind === "flat") ?? report.groups[0])?.setup ?? null;
     } catch (e) {
       error = errorText(e, t);
     }

@@ -11,6 +11,7 @@ EFW, EAF, PPBA on the lab Pi 5), covering what exists on `main` now. Steps marke
 | [4](phase-4.md), polar half | Polar align from the phone within 1′ | 5 |
 | [4](phase-4.md), guiding half | Guided 300 s sub-frames with dithering, total RMS under 1″, round stars | 14–18 |
 | [5](phase-5.md) | A multi-filter sequence from dusk to a parked dawn, with a meridian flip | 19–20, in part: see there |
+| [Calibration](../beyond/calibration.md) | Sky flats at twilight and the night's darks and bias, matched to its lights | 22–23 |
 
 The rule of every exit: **no laptop and no SSH** during the night. If one is needed,
 note why: that is a finding, and that phase's test is not passed. Note also
@@ -144,7 +145,23 @@ the phone over the night.
 
 **End (phase 2)**
 
-21. Cooler off with the ramp, park, outputs off, disconnect the profile.
+21. Cooler off with the ramp, park, outputs off, disconnect the profile (after
+    step 23 if it runs tonight).
+
+**Calibration (ADR 0036)**
+
+22. **Sky flats.** At dusk before the first target, or at dawn before parking:
+    Session tab → the night's Calibration → Take flats → Twilight sky. The windows
+    (Sun between −1° and −10°) match the clock; started early, it waits for the
+    window. The mount goes high opposite the Sun with tracking off; narrowband
+    filters first at dusk, last at dawn. Note each filter's exposures as the sky
+    darkens (or brightens), how many flats it kept against the count, and whether a
+    filter "ended" because the twilight left the limits. The filter, the focuser
+    at the lights' position and the rotation must not change after the lights.
+23. **Darks and bias.** At the end, the cap on the scope: Calibration → Take darks
+    and bias, leave it running (warm at the end on). It cools to each group's
+    temperature, takes the bias and the darks, and the Calibration card turns
+    complete; the phone can sleep meanwhile.
 
 If the sky allows, also try: a cloud or a lost guide star (an alert, lost frames in
 the graph, whether guiding picks up again by itself, what a running sequence does);
@@ -163,5 +180,9 @@ a 120 s series dithering every 3 frames; autofocus through a cloud or with the c
       against PHD2's guide log on the Pi (`~/PHD2/PHD2_GuideLog_*.txt`).
 - [ ] The session report (5.15) and its events against what happened; the autofocus runs' positions
       and R².
+- [ ] Calibration: the night's zip with "calibration" holds the darks, flats and bias
+      the card shows; their `IMAGETYP` (Dark, Flat, Bias), `CCD-TEMP`, `GAIN`/`OFFSET`
+      and `FILTER`/`FOCUSPOS` (flats) match the lights; Siril calibrates the lights
+      with them (no dust donuts left, no amp glow).
 - [ ] Notes, with every finding as an issue or a next stage; mark the exits that
       passed in each phase's plan with a line on the result.
