@@ -56,9 +56,15 @@ the phone over the night.
 
 **Polar alignment (phase 4)**
 
-5. **Exit, phase 4 polar.** Polar alignment (`#/polar`, from Tonight, Live view or the mount sheet): three solved
-   points, then the error with "Raise / Turn" readouts; adjust until within 1′.
-   Note the time it took and the error after a second check.
+5. **Exit, phase 4 polar.** Polar alignment (`#/polar`, from Tonight, Live view or
+   the mount sheet). It solves frames: if the stars are soft, focus roughly first
+   (step 7). "Go there" takes the mount to the suggested start (Dec −60°, half an
+   hour east of the meridian); 2–5 s, 30° turns. The three points fill in while the
+   mount turns east twice without a flip; "The RA axis turned" should read 30°, 30°.
+   Turn one knob a little and **check the words against the knobs**: "Raise" must
+   raise the axis and "east" turn it east (note the AM5's directions). Adjust until
+   "Aligned" (under 1′), Finish (back to the start), then run it again without
+   touching the knobs: note the time it took and the second run's error.
 
 **Framing and focus (phase 2, phase 5)**
 
