@@ -1496,6 +1496,73 @@ class SolvedFrames(WireModel):
     )
 
 
+class CalibrationSetup(WireModel):
+    """What calibration frames share with their lights (flats need not share gain and offset)."""
+
+    camera: str
+    width: int | None = Field(description="Pixels, as saved (after binning).")
+    height: int | None
+    binning: int | None
+    gain: float | None
+    offset: float | None
+
+
+class CalibrationMatch(WireModel):
+    frames: int = Field(description="Matching frames in the catalog.")
+    nights: list[str] = Field(description="Nights they were taken, newest first.")
+    temperature: float | None = Field(description="Their median sensor temperature, °C.")
+
+
+class CalibrationGroup(WireModel):
+    """Lights that share their darks and flats, and what matches them (ADR 0036)."""
+
+    setup: CalibrationSetup
+    filter: str | None
+    exposure: float = Field(description="Seconds.")
+    temperature: float | None = Field(description="The lights' median sensor temperature, °C.")
+    lights: int = Field(description="Saved, or planned for a sequence.")
+    darks: CalibrationMatch
+    flats: CalibrationMatch
+    bias: CalibrationMatch = Field(description="Bias at the lights' setup.")
+    flat_calibration: CalibrationMatch = Field(
+        description="Bias, or darks of their exposure, for the matched flats."
+    )
+
+
+class CalibrationNeed(WireModel):
+    kind: Literal["dark", "bias", "flat"]
+    setup: CalibrationSetup
+    count: int = Field(description="Frames missing.")
+    exposure: float | None = Field(description="Seconds, for darks.")
+    temperature: float | None = Field(description="°C, for darks and bias.")
+    filter: str | None = Field(description="For flats.")
+
+
+class CalibrationReport(WireModel):
+    night: str | None = Field(description="The night's date; None for a planned sequence.")
+    groups: list[CalibrationGroup]
+    needs: list[CalibrationNeed] = Field(description="What is missing, merged across groups.")
+    frames: int = Field(description="Matched calibration frames, each counted once.")
+
+
+class CalibrationSequenceRequest(BaseModel):
+    """Darks and bias missing for a night's lights, or for a saved sequence's."""
+
+    night: int | None = None
+    sequence: str | None = None
+    darks: int = Field(default=20, ge=0, le=500, description="Wanted per exposure.")
+    bias: int = Field(default=50, ge=0, le=500)
+    warm: bool = Field(default=True, description="Warm the camera at the end.")
+
+
+class CalibrationSequence(WireModel):
+    id: str = Field(description="The sequence kept; start it as any other.")
+    frames: int
+    left_out: list[CalibrationNeed] = Field(
+        description="Darks and bias it cannot take: another camera, or a region of the sensor."
+    )
+
+
 class SessionSummary(WireModel):
     """A sequence's run, as the catalog keeps it (phase 5.15)."""
 

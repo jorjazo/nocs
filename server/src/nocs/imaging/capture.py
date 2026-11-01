@@ -57,6 +57,7 @@ from nocs.solving import field_of_view
 from nocs.state import Json, Path, StateStore
 from nocs.storage import FrameFacts, StorageError, StorageService
 from nocs.storage.environment import number
+from nocs.storage.layout import night_of
 
 log = logging.getLogger(__name__)
 
@@ -657,7 +658,23 @@ class CaptureService:
             humidity=number(self._store, ("weather", "humidity")),
             dew_point=number(self._store, ("weather", "dew_point")),
             target=target,
+            rotation=self._rotation(shot.taken, site),
         )
+
+    def _rotation(self, taken: datetime, site: Site | None) -> float | None:
+        """The camera's rotation from the latest plate solve, if it was this night's."""
+        rotation = number(self._store, ("solver", "last", "rotation"))
+        solved = self._store.get(("solver", "last", "time"))
+        if rotation is None or not isinstance(solved, str):
+            return None
+        try:
+            when = datetime.fromisoformat(solved)
+        except ValueError:
+            return None
+        longitude = site.longitude if site is not None else None
+        if night_of(when, longitude) != night_of(taken, longitude):
+            return None
+        return round(rotation, 2)
 
     def _mount_site(self) -> Site | None:
         """The site the mount has, for a profile without one.

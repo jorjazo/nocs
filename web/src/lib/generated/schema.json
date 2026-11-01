@@ -1155,6 +1155,274 @@
       "title": "BlobInfo",
       "type": "object"
     },
+    "CalibrationGroup": {
+      "description": "Lights that share their darks and flats, and what matches them (ADR 0036).",
+      "properties": {
+        "bias": {
+          "$ref": "#/$defs/CalibrationMatch",
+          "description": "Bias at the lights' setup."
+        },
+        "darks": {
+          "$ref": "#/$defs/CalibrationMatch"
+        },
+        "exposure": {
+          "description": "Seconds.",
+          "type": "number"
+        },
+        "filter": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "flat_calibration": {
+          "$ref": "#/$defs/CalibrationMatch",
+          "description": "Bias, or darks of their exposure, for the matched flats."
+        },
+        "flats": {
+          "$ref": "#/$defs/CalibrationMatch"
+        },
+        "lights": {
+          "description": "Saved, or planned for a sequence.",
+          "type": "integer"
+        },
+        "setup": {
+          "$ref": "#/$defs/CalibrationSetup"
+        },
+        "temperature": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The lights' median sensor temperature, \u00b0C."
+        }
+      },
+      "required": [
+        "setup",
+        "filter",
+        "exposure",
+        "temperature",
+        "lights",
+        "darks",
+        "flats",
+        "bias",
+        "flat_calibration"
+      ],
+      "title": "CalibrationGroup",
+      "type": "object"
+    },
+    "CalibrationMatch": {
+      "properties": {
+        "frames": {
+          "description": "Matching frames in the catalog.",
+          "type": "integer"
+        },
+        "nights": {
+          "description": "Nights they were taken, newest first.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "temperature": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Their median sensor temperature, \u00b0C."
+        }
+      },
+      "required": [
+        "frames",
+        "nights",
+        "temperature"
+      ],
+      "title": "CalibrationMatch",
+      "type": "object"
+    },
+    "CalibrationNeed": {
+      "properties": {
+        "count": {
+          "description": "Frames missing.",
+          "type": "integer"
+        },
+        "exposure": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Seconds, for darks."
+        },
+        "filter": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "For flats."
+        },
+        "kind": {
+          "enum": [
+            "dark",
+            "bias",
+            "flat"
+          ],
+          "type": "string"
+        },
+        "setup": {
+          "$ref": "#/$defs/CalibrationSetup"
+        },
+        "temperature": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "\u00b0C, for darks and bias."
+        }
+      },
+      "required": [
+        "kind",
+        "setup",
+        "count",
+        "exposure",
+        "temperature",
+        "filter"
+      ],
+      "title": "CalibrationNeed",
+      "type": "object"
+    },
+    "CalibrationReport": {
+      "properties": {
+        "frames": {
+          "description": "Matched calibration frames, each counted once.",
+          "type": "integer"
+        },
+        "groups": {
+          "items": {
+            "$ref": "#/$defs/CalibrationGroup"
+          },
+          "type": "array"
+        },
+        "needs": {
+          "description": "What is missing, merged across groups.",
+          "items": {
+            "$ref": "#/$defs/CalibrationNeed"
+          },
+          "type": "array"
+        },
+        "night": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The night's date; None for a planned sequence."
+        }
+      },
+      "required": [
+        "night",
+        "groups",
+        "needs",
+        "frames"
+      ],
+      "title": "CalibrationReport",
+      "type": "object"
+    },
+    "CalibrationSetup": {
+      "description": "What calibration frames share with their lights (flats need not share gain and offset).",
+      "properties": {
+        "binning": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "camera": {
+          "type": "string"
+        },
+        "gain": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "height": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "offset": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "width": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Pixels, as saved (after binning)."
+        }
+      },
+      "required": [
+        "camera",
+        "width",
+        "height",
+        "binning",
+        "gain",
+        "offset"
+      ],
+      "title": "CalibrationSetup",
+      "type": "object"
+    },
     "CameraField": {
       "additionalProperties": false,
       "properties": {

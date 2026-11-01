@@ -145,6 +145,8 @@ class FrameFacts:
     dew_point: float | None = None
     target: str | None = None
     """A light frame's object, instead of the configured target (a sequence's frames)."""
+    rotation: float | None = None
+    """Degrees, from the night's latest plate solve (ADR 0036)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -440,6 +442,10 @@ class StorageService:
                 temperature=temperature,
                 width=int(width) if width is not None else None,
                 height=int(height) if height is not None else None,
+                focus_position=int(focus)
+                if (focus := header.number("FOCUSPOS")) is not None
+                else None,
+                rotation=facts.rotation,
             )
         )
         if config.destination == AUTO and not destination.internal:
@@ -522,6 +528,17 @@ class StorageService:
 
     def frames_by_id(self, frame_ids: list[int]) -> list[FrameRow]:
         return self._require_catalog().frames_by_id(frame_ids)
+
+    def located(self, rows: list[FrameRow]) -> list[Located]:
+        volumes = Volumes(self._paths)
+        return [Located(row, _locate(volumes, row)) for row in rows]
+
+    def calibration_frames(self, cameras: list[str]) -> list[FrameRow]:
+        return self._require_catalog().calibration_frames(cameras)
+
+    def set_level(self, frame_id: int, level: float | None) -> None:
+        if self.catalog is not None:
+            self.catalog.set_level(frame_id, level)
 
     def set_solution(self, frame_id: int, solution: FrameSolution | str) -> None:
         self._require_catalog().set_solution(frame_id, solution)

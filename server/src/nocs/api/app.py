@@ -32,6 +32,7 @@ from nocs import __version__
 from nocs.align.service import PolarAlignmentService
 from nocs.api.accessories import accessories_router
 from nocs.api.auth import REVOKED, AuthMiddleware, Sockets, auth_router, identity
+from nocs.api.calibration import calibration_router
 from nocs.api.guiding import guiding_router
 from nocs.api.mount import mount_router
 from nocs.api.plan import plan_router
@@ -72,6 +73,7 @@ from nocs.api.solver import align_router, saved_frames_router, solver_router
 from nocs.api.system import system_router
 from nocs.api.targets import targets_router
 from nocs.auth import AuthStore
+from nocs.calibration.service import CalibrationService, camera_facts
 from nocs.clock import Clock
 from nocs.config import Settings
 from nocs.devices import Coordinates, DeviceError, Location
@@ -463,6 +465,15 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
             with contextlib.suppress(asyncio.CancelledError):
                 await task
 
+    calibration_library = CalibrationService(
+        storage,
+        lambda sequence_id: sequences().get(sequence_id),
+        lambda sequence_id, sequence: sequences().put(sequence_id, sequence),
+        camera_facts(capture),
+        lambda: clock().now(),
+        site_longitude,
+    )
+
     app = FastAPI(title="NOCS", version=__version__, lifespan=lifespan)
     app.add_middleware(AuthMiddleware, auth=auth, hostnames=settings.hostnames)
     app.include_router(auth_router(auth, sockets))
@@ -476,6 +487,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
     app.include_router(accessories_router(focuser, filter_wheel, autofocus))
     app.include_router(sequences_router(sequences))
     app.include_router(sessions_router(storage, lambda: clock().now()))
+    app.include_router(calibration_router(lambda: calibration_library))
     app.include_router(sky_router(saved_site, clock, _catalog_target))
     app.include_router(targets_router())
     app.include_router(plan_router(plan))
@@ -773,7 +785,10 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
         target: str | None = None,
         type: FrameTypeName | None = None,
         filter: str | None = None,
+        calibration: bool = False,
     ) -> StreamingResponse:
+        """``calibration`` adds the darks, flats and bias of other nights that match its
+        lights (ADR 0036)."""
         service = storage()
         with _catalog_errors():
             found = await anyio.to_thread.run_sync(service.nights, night_id)
@@ -781,6 +796,10 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
                 raise KeyError(night_id)
             query = FrameFilter(night=night_id, target=target, frame_type=type, filter=filter)
             frames = await anyio.to_thread.run_sync(service.frames, query)
+            if calibration:
+                ids = {f.row.id for f in frames}
+                matched = await anyio.to_thread.run_sync(calibration_library.frames, night_id)
+                frames += [f for f in matched if f.row.id not in ids]
             size, chunks = await anyio.to_thread.run_sync(service.zip, frames)
         name = "_".join(
             part

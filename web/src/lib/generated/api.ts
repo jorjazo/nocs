@@ -2413,6 +2413,144 @@ export interface AutofocusTrigger {
   temperature_change?: number | null;
 }
 /**
+ * Lights that share their darks and flats, and what matches them (ADR 0036).
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "CalibrationGroup".
+ */
+export interface CalibrationGroup {
+  bias: CalibrationMatch;
+  darks: CalibrationMatch1;
+  /**
+   * Seconds.
+   */
+  exposure: number;
+  filter: string | null;
+  flat_calibration: CalibrationMatch2;
+  flats: CalibrationMatch1;
+  /**
+   * Saved, or planned for a sequence.
+   */
+  lights: number;
+  setup: CalibrationSetup;
+  /**
+   * The lights' median sensor temperature, °C.
+   */
+  temperature: number | null;
+}
+/**
+ * Bias at the lights' setup.
+ */
+export interface CalibrationMatch {
+  /**
+   * Matching frames in the catalog.
+   */
+  frames: number;
+  /**
+   * Nights they were taken, newest first.
+   */
+  nights: string[];
+  /**
+   * Their median sensor temperature, °C.
+   */
+  temperature: number | null;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "CalibrationMatch".
+ */
+export interface CalibrationMatch1 {
+  /**
+   * Matching frames in the catalog.
+   */
+  frames: number;
+  /**
+   * Nights they were taken, newest first.
+   */
+  nights: string[];
+  /**
+   * Their median sensor temperature, °C.
+   */
+  temperature: number | null;
+}
+/**
+ * Bias, or darks of their exposure, for the matched flats.
+ */
+export interface CalibrationMatch2 {
+  /**
+   * Matching frames in the catalog.
+   */
+  frames: number;
+  /**
+   * Nights they were taken, newest first.
+   */
+  nights: string[];
+  /**
+   * Their median sensor temperature, °C.
+   */
+  temperature: number | null;
+}
+/**
+ * What calibration frames share with their lights (flats need not share gain and offset).
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "CalibrationSetup".
+ */
+export interface CalibrationSetup {
+  binning: number | null;
+  camera: string;
+  gain: number | null;
+  height: number | null;
+  offset: number | null;
+  /**
+   * Pixels, as saved (after binning).
+   */
+  width: number | null;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "CalibrationNeed".
+ */
+export interface CalibrationNeed {
+  /**
+   * Frames missing.
+   */
+  count: number;
+  /**
+   * Seconds, for darks.
+   */
+  exposure: number | null;
+  /**
+   * For flats.
+   */
+  filter: string | null;
+  kind: "dark" | "bias" | "flat";
+  setup: CalibrationSetup;
+  /**
+   * °C, for darks and bias.
+   */
+  temperature: number | null;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "CalibrationReport".
+ */
+export interface CalibrationReport {
+  /**
+   * Matched calibration frames, each counted once.
+   */
+  frames: number;
+  groups: CalibrationGroup[];
+  /**
+   * What is missing, merged across groups.
+   */
+  needs: CalibrationNeed[];
+  /**
+   * The night's date; None for a planned sequence.
+   */
+  night: string | null;
+}
+/**
  * Only the fields present are changed.
  *
  * This interface was referenced by `NOCSAPI`'s JSON-Schema

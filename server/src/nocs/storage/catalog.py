@@ -145,6 +145,13 @@ MIGRATIONS: list[str] = [
     );
     CREATE INDEX solutions_by_dec ON solutions (dec);
     """,
+    """
+    -- What calibration frames are matched by (ADR 0036).
+    ALTER TABLE frames ADD COLUMN focus_position INTEGER;  -- FOCUSPOS, steps
+    ALTER TABLE frames ADD COLUMN rotation REAL;     -- °, from the night's latest plate solve
+    ALTER TABLE frames ADD COLUMN level REAL;        -- a flat's median, ADU (strongest channel)
+    CREATE INDEX frames_by_type ON frames (frame_type, camera);
+    """,
 ]
 VERSION = len(MIGRATIONS)
 
@@ -176,6 +183,8 @@ class NewFrame:
     temperature: float | None
     width: int | None
     height: int | None
+    focus_position: int | None = None
+    rotation: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -207,6 +216,9 @@ class FrameRow:
     guide_rms_total: float | None = None
     guide_steps: int | None = None
     guide_lost: int | None = None
+    focus_position: int | None = None
+    rotation: float | None = None
+    level: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -329,7 +341,8 @@ _FRAME_COLUMNS = """
     f.id, n.night, t.name, v.key, v.label, f.directory, f.path, f.size, f.started,
     f.exposure, f.frame_type, f.filter, f.profile, f.camera, f.gain, f."offset", f.binning,
     f.temperature, f.width, f.height, f.stars, f.hfr,
-    f.guide_rms_ra, f.guide_rms_dec, f.guide_rms_total, f.guide_steps, f.guide_lost
+    f.guide_rms_ra, f.guide_rms_dec, f.guide_rms_total, f.guide_steps, f.guide_lost,
+    f.focus_position, f.rotation, f.level
 """
 _FRAME_JOINS = """
     FROM frames f
@@ -477,8 +490,8 @@ class Catalog:
                 cursor = db.execute(
                     "INSERT INTO frames (night_id, target_id, volume_id, directory, path, size,"
                     ' started, exposure, frame_type, filter, profile, camera, gain, "offset",'
-                    " binning, temperature, width, height)"
-                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    " binning, temperature, width, height, focus_position, rotation)"
+                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (
                         night_id,
                         target_id,
@@ -498,6 +511,8 @@ class Catalog:
                         frame.temperature,
                         frame.width,
                         frame.height,
+                        frame.focus_position,
+                        frame.rotation,
                     ),
                 )
                 db.execute("COMMIT")
@@ -513,6 +528,10 @@ class Catalog:
             self._db.execute(
                 "UPDATE frames SET stars = ?, hfr = ? WHERE id = ?", (stars, hfr, frame_id)
             )
+
+    def set_level(self, frame_id: int, level: float | None) -> None:
+        with self._lock:
+            self._db.execute("UPDATE frames SET level = ? WHERE id = ?", (level, frame_id))
 
     def set_guiding(self, frame_id: int, guiding: Mapping[str, object]) -> None:
         """How guiding went during the frame: RMS in arcseconds, steps, lost frames."""
@@ -721,6 +740,20 @@ class Catalog:
         with self._lock:
             rows = self._db.execute(
                 f"SELECT {_FRAME_COLUMNS} {_FRAME_JOINS} {where} ORDER BY f.id DESC {limit}", args
+            ).fetchall()
+        return [_frame(row) for row in rows]
+
+    def calibration_frames(self, cameras: list[str]) -> list[FrameRow]:
+        """Every dark, bias and flat of these cameras, newest first."""
+        if not cameras:
+            return []
+        marks = ",".join("?" * len(cameras))
+        with self._lock:
+            rows = self._db.execute(
+                f"SELECT {_FRAME_COLUMNS} {_FRAME_JOINS}"
+                f" WHERE f.frame_type IN ('dark', 'bias', 'flat') AND f.camera IN ({marks})"
+                " ORDER BY f.id DESC",
+                cameras,
             ).fetchall()
         return [_frame(row) for row in rows]
 

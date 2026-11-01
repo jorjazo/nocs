@@ -39,7 +39,7 @@ that shape the decision:
 
 ### What is recorded
 
-- **Catalog schema v5:** `frames` gains `focus_position` (`FOCUSPOS` from the
+- **Catalog schema v6:** `frames` gains `focus_position` (`FOCUSPOS` from the
   header), `rotation` (degrees, from the latest plate solve of the same night,
   any frame type; null without one) and `level` (a flat's median in ADU, its
   strongest Bayer channel). An index on `(frame_type, camera)` serves matching.
@@ -129,4 +129,4 @@ the newest matching frames of each kind count, from any night:
   it makes later flats look matching; the same night always matches.
 - Flat panels driven through INDI's light box interface, dark flats taken by the
   wizard itself, a light-leak check and masters are left for later.
-- The catalog moves to schema v5 (a backup is kept, ADR 0013).
+- The catalog moves to schema v6 (a backup is kept, ADR 0013).

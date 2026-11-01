@@ -149,6 +149,12 @@ class Camera(Device):
         return prop.number("CCD_EXPOSURE_VALUE") if prop.state is PropertyState.BUSY else None
 
     @property
+    def exposure_range(self) -> Range | None:
+        """Seconds the driver accepts (bias frames use the shortest)."""
+        element = self._control((("CCD_EXPOSURE", "CCD_EXPOSURE_VALUE"),))
+        return Range(element.min, element.max) if element is not None else None
+
+    @property
     def gain(self) -> float | None:
         element = self._control(_GAIN)
         return element.value if element is not None else None
