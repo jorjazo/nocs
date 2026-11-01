@@ -126,3 +126,14 @@ shared with polar alignment (phase 4) and re-centring and the meridian flip
 - Chart drawing, phone-sized view (375 × 566 chart at 2× pixels, laptop browser): a
   drag redraws every frame at 60 FPS; one draw takes 0.1–0.2 ms at 0.9°, 0.6–0.8 ms at
   9.5°, ~1 ms at 70° (1.5 ms at worst). Not measured on a phone yet.
+
+## QA pass on the simulators (2026-11-01)
+
+Phone width, Night and Dusk, en and es: search, target, Go and centre (centred in 2
+frames), Tonight. Fixed on the spot: choosing tonight's target now also names the
+lights' folder (see the decisions); Tonight without a chosen profile asked for "the
+active profile's" site. Left:
+
+- `plan.target.name` keeps the common name in the language of whoever chose it
+  ("M 42 · Gran Nebulosa de Orión" on an English phone). Showing the catalog's name
+  in the viewer's language, from `plan.target.id`, would fix it for every screen.

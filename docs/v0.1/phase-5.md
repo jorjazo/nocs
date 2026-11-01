@@ -248,3 +248,24 @@ without the driver FIFO.
 6. Through a passing cloud or with the cap on: the run must fail with its reason
    and go back to where it started.
 7. Two filters (L and Ha) for the offsets the sequencer will need later.
+
+## QA pass on the simulators (2026-11-01)
+
+Autofocus from the focus screen (step 3000: focused at 38001, HFR 0.92 → 0.50, R²
+0.98), the sequence builder and a short run (2 × 5 s) watched in the Session tab.
+The run failed its first frame: FITS refused the target name "M 42 · Gran Nebulosa
+de Orión" in OBJECT, fixed since (header text is written as printable ASCII), and
+the end of session then parked, stopped guiding and warmed the camera as it should.
+Left for the sequencer:
+
+- **Starting a sequence while PHD2 already guides** fails with "mount is busy
+  (guiding)": the usual order at the rig is to guide by hand first. The sequence
+  could stop guiding and start it again under its job (it guides anyway), or the
+  builder could offer "Stop guiding and start".
+- The sequence names folders and OBJECT with the plan's display name (`M_42_Gran_
+  Nebulosa_de_Orión`), in the language of whoever chose the target, while Live view
+  uses the catalog label (`M_42`) since the QA fix in Plan. The label would keep a
+  target's frames in one folder whoever starts the run.
+- The focus screen starts with an empty step and an error under it; a step
+  suggested from the focuser (or the last run's) would avoid a dead end on a first
+  night.

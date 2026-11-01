@@ -117,3 +117,15 @@ maintainer having asked the sessions on 2026-11-01 to go ahead and review later:
   polar axis 40′" and "Turn the axis 25′ east"; with `MM_ME` alone, turning it to 15′
   read as "25′ down" from one frame to the next, and to 0.3′ as aligned (18″); the
   turns measured 30.0° and 30.0°. A run takes ~45 s to the first knob reading.
+
+## QA pass on the simulators (2026-11-01)
+
+Phone width, en and es: connect, calibrate and guide (total RMS ~0.4″ on the
+simulators; calibration took ~3½ min there), a dithered series from Live view
+("Dithering" between frames, the guiding link with the RMS), PHD2 still guiding
+across a nocsd restart and picked up again. The Session tab now shows each frame's
+guiding RMS. Left:
+
+- The calibration's progress line is PHD2's own English text ("calibrating: West
+  step 5, dist= 7.7") whatever the app's language: worth turning into "West, step 5
+  of …" from the event's fields.
