@@ -78,7 +78,9 @@ and two more problems showed up. Fixed after the night, approved as a 4-stage pl
   scrolling the preview into view, which cannot show both on a phone.
 - **Shutdown noise:** systemd's SIGTERM killed the worker first and nocsd started
   another mid-shutdown. The worker ignores SIGINT/SIGTERM and nocsd closes it,
-  never starting one again. To confirm on the lab Pi's journal.
+  never starting one again. Confirmed on the lab Pi (2026-11-01): restarting
+  `nocsd@jorjazo` logged the `sem_unlink` tracebacks with the old code and
+  nothing with the new.
 
 ## Measured on the lab Pi 5
 
