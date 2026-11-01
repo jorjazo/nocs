@@ -60,6 +60,26 @@ Pending, without a stage yet:
 - To review in phase 6: an indiserver or driver that hangs without exiting is
   not detected yet.
 
+## Gaps found in the first field test (2026-10-31)
+
+Steps 9 and 10 of the [checklist](field-test.md) could not be done from the phone,
+and two more problems showed up. Fixed after the night, approved as a 4-stage plan:
+
+- **Target name:** a row in Live view above the main camera's settings, with the
+  folder its lights go to, and a sheet with recent targets and catalog search.
+- **Session tab:** the night's frames with stars and HFR, and downloads of a frame,
+  a group or the whole night as a zip, its size shown first. It is a section the
+  sequence monitor (phase 5, 5.14) goes above, not a screen of its own.
+- **Slew pad:** the AM5's driver shows 1440x On without having sent it, so the pad,
+  which skipped a rate equal to the switch, moved at the mount's power-up speed.
+  The pad now sends the speed at every start and shows the driver's labels. In
+  Live view on phones the pad sat far below the preview; it now docks above the
+  shutter while the preview stays pinned with its centre marked. Chosen over
+  scrolling the preview into view, which cannot show both on a phone.
+- **Shutdown noise:** systemd's SIGTERM killed the worker first and nocsd started
+  another mid-shutdown. The worker ignores SIGINT/SIGTERM and nocsd closes it,
+  never starting one again. To confirm on the lab Pi's journal.
+
 ## Measured on the lab Pi 5
 
 See [spikes/pi5-performance.md](../spikes/pi5-performance.md): a 26 MP color
