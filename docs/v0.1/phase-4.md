@@ -8,7 +8,7 @@ the plate solver of phase 3 and gets its own stages once that lands.
 
 **Exit (field test, guiding half):** calibrate and guide from the phone, then take
 guided 300 s sub-frames with dithering between them and a total RMS under 1″ with
-round stars.
+round stars ([checklist](field-test-guiding.md)).
 
 Each stage is testable against the INDI simulators and the headless PHD2 of
 `dev/compose.yaml`. Guiding needs stars, so the lab can check connecting, looping and
@@ -30,7 +30,7 @@ after rotating it) and sits behind the filters.
 | 4.4 | Guiding statistics | Guide steps, lost frames and dithers kept by the server per guiding run (`nocs.guiding.stats`); RMS in RA, Dec and total over the last 100 steps not settling, in pixels and arcseconds, with peaks, in `guiding.stats`; `GET /api/guiding/steps?after=` for the graph (observers too); a PHD2 session recorded from the simulators (`dev/tools/phd2_record.py`) | — | Done |
 | 4.5 | Dithering between frames | Dither in main camera pixels, converted with both trains' scales, waiting for PHD2 to settle; `dither` and `start` run inside a caller's job (the sequencer's), and `POST /api/guiding/dither` as a job of its own; a series of N frames (`count`) with a dither every K (`dither`); guiding RMS, steps and lost frames per saved frame in the catalog (schema version 3) and the frame list ([ADR 0024](../adr/0024-dithering-between-frames.md)) | — | Done |
 | 4.6 | Guiding UI | Guiding screen `#/guiding` (state, graph, RMS, SNR/HFD, calibration; connect, loop, start, recalibrate, dither, stop, disconnect), Live view link with the RMS, guide camera shown as PHD2's, series with dithering; mount sheet and pad wait while guiding with "Stop guiding"; profile editor choice of guiding train; en/es ([ux.md](../ux.md)) | From the phone | Done on the simulators in the browser (calibrate, guide, dither, a 3-frame series with 2 dithers, stop from the mount sheet); the phone waits for the field test |
-| 4.7 | Lab and field test | Lab: connect, loop, pulses; field-test checklist and the test | Exit criterion | |
+| 4.7 | Lab and field test | Lab: connect, loop, pulses; field test ([checklist](field-test-guiding.md)) | Exit criterion | Checklist ready; the lab and field tests are pending |
 
 ## Decisions taken for this phase
 
