@@ -56,6 +56,7 @@ import type {
   SerialPortInfo,
   SessionReport,
   SessionSummary,
+  ShareRequest,
   ShutdownRequest,
   Site,
   SkyChart,
@@ -218,6 +219,11 @@ export function setAccessPoint(body: AccessPointRequest): Promise<void> {
 
 export function setNetworkMode(pin: NetworkModeRequest["pin"]): Promise<void> {
   return request("PUT", "/api/system/network/mode", { pin } satisfies NetworkModeRequest);
+}
+
+// The read-only SMB share of the frames (ADR 0037): on or off, at any time.
+export function setShare(on: boolean): Promise<void> {
+  return request("PUT", "/api/system/share", { on } satisfies ShareRequest);
 }
 
 // Updates from apt (ADR 0025): accepted at once (202). Installing restarts nocsd at

@@ -228,6 +228,23 @@ export const es: Messages = {
     mode: "Modo",
     modes: { auto: "Automático", ap: "Punto de acceso", station: "Redes conocidas" },
   },
+  share: {
+    title: "Compartir archivos",
+    toggle: "Compartir las imágenes con computadores",
+    toggleHint: "Solo lectura y sin contraseña: cualquiera en esta red puede abrirlas.",
+    notRunning: "Compartir está activado pero no funciona. Desactívalo y actívalo otra vez, o reinicia la caja.",
+    clients: (n: number) =>
+      n === 0 ? "Ningún computador conectado" : n === 1 ? "1 computador conectado" : `${n} computadores conectados`,
+    open: "Ábrelo desde un computador",
+    windows: "Windows: Explorador de archivos, Red, o escribe",
+    mac: "Mac: Finder, Ir, Conectarse al servidor",
+    linux: "Linux: el gestor de archivos, Otras ubicaciones",
+    login: "Si pide usuario (Windows 11 lo pide): usuario nocs, contraseña nocs.",
+    folders: "Carpetas compartidas",
+    internal: "En la caja",
+    drive: (label: string) => `Disco USB ${label}`,
+    slow: "Copiar mientras la caja guarda imágenes en su tarjeta microSD puede hacer más lento el guardado.",
+  },
   system: {
     title: "Este equipo",
     temperature: "CPU",

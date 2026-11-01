@@ -243,6 +243,23 @@ export const en = {
     mode: "Mode",
     modes: { auto: "Automatic", ap: "Access point", station: "Known networks" },
   },
+  share: {
+    title: "File sharing",
+    toggle: "Share frames with computers",
+    toggleHint: "Read-only and without a password: anyone on this network can open them.",
+    notRunning: "The share is on but not running. Switch it off and on again, or restart the box.",
+    clients: (n: number) =>
+      n === 0 ? "No computer connected" : n === 1 ? "1 computer connected" : `${n} computers connected`,
+    open: "Open it from a computer",
+    windows: "Windows: File Explorer, Network, or type",
+    mac: "Mac: Finder, Go, Connect to Server",
+    linux: "Linux: the file manager, Other Locations",
+    login: "If it asks for a login (Windows 11 does): user nocs, password nocs.",
+    folders: "Shared folders",
+    internal: "On the box",
+    drive: (label: string) => `USB drive ${label}`,
+    slow: "Copying while the box saves frames to its microSD card can slow the saving down.",
+  },
   system: {
     title: "This computer",
     temperature: "CPU",

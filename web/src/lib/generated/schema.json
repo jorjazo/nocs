@@ -8730,6 +8730,19 @@
       "title": "Share",
       "type": "object"
     },
+    "ShareRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "on": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "on"
+      ],
+      "title": "ShareRequest",
+      "type": "object"
+    },
     "ShareState": {
       "additionalProperties": false,
       "description": "The SMB share of the frames for desktop computers, read-only for guests and the\npublished login nocs / nocs (ADR 0037).",
