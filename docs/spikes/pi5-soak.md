@@ -1,6 +1,6 @@
 # Spike: a whole night on the Raspberry Pi 5 (soak test)
 
-Date: 2026-11-01 · Status: **running** (results follow when the 8 h run on the Pi ends) · Related:
+Date: 2026-11-01 · Status: **PC done; Pi 4.6 h + 1.4 h + 0.7 h** (an 8 h night with every fix is pending) · Related:
 [Pi 5 performance](pi5-performance.md), [ADR 0012](../adr/0012-image-pipeline.md),
 [ADR 0030](../adr/0030-supervision.md), [ADR 0031](../adr/0031-sequences.md),
 [ADR 0032](../adr/0032-sequence-recovery-and-restarts.md), [ADR 0033](../adr/0033-meridian-flip.md)
@@ -121,6 +121,14 @@ profile (20 min) put 6 s of the loop in `unlink`, called by the imaging worker's
 to delete the preview a new one pushes out: ext4 holds an unlink for its journal while the
 card writes back a frame, too. **Fixed**: those deletions run in a thread (test included),
 and the soak appends its own records from a thread, so its waits do not read as nocsd's.
+
+### Lab Pi 5, third night (0.7 h, stopped for the lab)
+
+Every fix in, stopped after 41 minutes when the lab was needed
+([results/pi5-third](../../dev/tools/soak/results/pi5-third/summary.md)): 49 frames, no
+failure, 54–63 °C, `0x0`. **No window had a probe over 300 ms** (the slowest was 43 ms,
+against 6 windows up to 4.1 s in the previous 1.4 h); patches at most 97 ms late. The
+full 8 h night on the Pi is still to run.
 
 ## What the soak found, and what was fixed
 
