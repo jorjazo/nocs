@@ -39,6 +39,20 @@
   const locale = $derived(i18n.locale);
 
   const guiding = $derived(live.app.guiding ?? null);
+
+  // What PHD2 is doing while a guide or dither job runs, in the app's language.
+  const progressLine = $derived.by(() => {
+    const step = guiding?.calibrating ?? null;
+    if (step) {
+      const n = formatPlain(step.step, locale);
+      const moved = formatDecimal(step.distance, locale, 1);
+      return t.guiding.calibrationStep[step.direction](n, moved);
+    }
+    if (guiding?.app_state === "Calibrating") return t.guiding.calibratingNow;
+    if (guiding?.settling) return t.guiding.settlingNow;
+    if (guiding?.app_state !== "Guiding") return t.guiding.findingStar;
+    return "";
+  });
   const reachable = $derived(guiding?.phd2.connected ?? false);
   const phd2State = $derived(guiding?.app_state ?? null);
   const active = $derived(guidingActive(guiding));
@@ -219,7 +233,7 @@
   {#if job}
     <section class="progress" aria-live="polite">
       <p class="body">{job.info.kind === "dither" ? t.guiding.dithering : t.guiding.starting}</p>
-      {#if job.info.message}<p class="caption muted mono">{job.info.message}</p>{/if}
+      {#if progressLine}<p class="caption muted mono">{progressLine}</p>{/if}
     </section>
   {/if}
 

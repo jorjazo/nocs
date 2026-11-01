@@ -136,6 +136,9 @@ simulators; calibration took ~3½ min there), a dithered series from Live view
 across a nocsd restart and picked up again. The Session tab now shows each frame's
 guiding RMS. Left:
 
-- The calibration's progress line is PHD2's own English text ("calibrating: West
-  step 5, dist= 7.7") whatever the app's language: worth turning into "West, step 5
-  of …" from the event's fields.
+- The calibration's progress line was PHD2's own English text ("calibrating: West
+  step 5, dist= 7.7") whatever the app's language. Fixed: `guiding.calibrating` holds
+  the latest step from the event's fields (direction, step, distance), and the
+  guiding screen words it in the app's language ("RA, moving west: step 5, 7.9 px"),
+  as it does finding a star and settling. PHD2 does not say how many steps a
+  direction takes, so there is no "of …".

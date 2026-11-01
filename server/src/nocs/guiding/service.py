@@ -11,6 +11,8 @@ State layout under ``("guiding",)``::
     equipment: PHD2 is connected to the guide camera and the mount
     exposure:  PHD2's exposure, seconds, or None while unknown
     calibration: {ra_angle, ra_rate, dec_angle, dec_rate, declination}, or None
+    calibrating: {direction, step, distance}: PHD2's latest calibration step while it
+               calibrates, or None
     settling:  PHD2 waits for the star to settle (after starting to guide or a dither)
     alert:     {message, kind, time}: the last thing PHD2 warned about, or None
     pixel_scale: of the guide camera as PHD2 has it, arcseconds per pixel, or None
@@ -37,6 +39,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import re
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -217,6 +220,7 @@ class GuidingService:
                 "equipment": False,
                 "exposure": None,
                 "calibration": None,
+                "calibrating": None,
                 "settling": False,
                 "alert": None,
                 "pixel_scale": None,
@@ -510,6 +514,7 @@ class GuidingService:
                         self._store.set((*ROOT, "app_state"), None)
                         self._store.set((*ROOT, "profile"), None)
                         self._store.set((*ROOT, "settling"), False)
+                        self._store.set((*ROOT, "calibrating"), None)
                     self._settling = False
                 log.info("lost connection to PHD2")
             restarting = self._status() is SettingsStatus.APPLYING
@@ -954,10 +959,15 @@ class GuidingService:
                 self._set_settling(True)
             case "SettleDone":
                 self._set_settling(False)
+            case "Calibrating":
+                self._store.set((*ROOT, "calibrating"), _calibration_progress(event.data))
+            case "CalibrationComplete":
+                self._store.set((*ROOT, "calibrating"), None)
             case "StartGuiding":
                 self._history.reset()
                 self._publish_stats(None)
             case "CalibrationFailed":
+                self._store.set((*ROOT, "calibrating"), None)
                 self._alert(f"calibration failed: {event.data.get('Reason', '')}", "error")
                 self._changed.set()
             case _:
@@ -1034,7 +1044,10 @@ class GuidingService:
             return
         was_busy = self._app_state not in IDLE_STATES
         self._app_state = state
-        self._store.set((*ROOT, "app_state"), state)
+        with self._store.transaction():
+            self._store.set((*ROOT, "app_state"), state)
+            if state != "Calibrating":
+                self._store.set((*ROOT, "calibrating"), None)
         self._sync_mount_hold()
         if state in IDLE_STATES or state in LOOPING_STATES:
             self._set_settling(False)
@@ -1066,6 +1079,30 @@ class GuidingService:
             self._store.set((*path, "error"), error)
             if not connected:
                 self._store.set((*path, "version"), None)
+
+
+_DIRECTIONS = {
+    "West": "west",
+    "East": "east",
+    "Backlash": "backlash",
+    "North": "north",
+    "South": "south",
+}
+
+
+def _calibration_progress(data: dict[str, Json]) -> dict[str, Json]:
+    """A ``Calibrating`` event as the app shows it, from its fields rather than its
+    English ``State`` text, whose step number is the one PHD2 shows."""
+    name = str(data.get("dir", ""))
+    direction = _DIRECTIONS.get(name, "nudge" if name.startswith("Nudge") else "other")
+    shown = re.search(r"(\d+)", str(data.get("State", "")))
+    step = data.get("step")
+    distance = data.get("dist")
+    return {
+        "direction": direction,
+        "step": int(shown.group(1)) if shown else int(step) if isinstance(step, int) else 0,
+        "distance": float(distance) if isinstance(distance, int | float) else 0.0,
+    }
 
 
 def _write_settings(path: FsPath, content: str) -> None:

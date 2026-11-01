@@ -30,6 +30,7 @@
   import { live } from "../../lib/live.svelte";
   import { router } from "../../lib/router.svelte";
   import type { AutofocusState, FocusSweep, Profile } from "../../lib/types";
+  import { estimateStep } from "../../lib/focus";
   import VCurve from "./VCurve.svelte";
 
   let { offline = false }: { offline?: boolean } = $props();
@@ -62,15 +63,20 @@
   // The imaging train's sweep comes from the profile as saved.
   let profile = $state<Profile | null>(null);
   const profileId = $derived(live.app.equipment?.active ?? null);
+  let profileTried = $state(false);
   $effect(() => {
     const id = profileId;
-    if (!id) return;
+    if (!id) {
+      profileTried = true;
+      return;
+    }
     getProfile(id)
       .then((loaded) => {
         profile = loaded;
         untrack(() => adopt(loaded.imaging?.autofocus ?? null));
       })
-      .catch(() => (profile = null));
+      .catch(() => (profile = null))
+      .finally(() => (profileTried = true));
   });
 
   let sweepStep = $state<number | null>(untrack(() => live.app.autofocus?.step ?? null));
@@ -90,6 +96,7 @@
 
   function adopt(sweep: FocusSweep | null): void {
     if (!sweep) return;
+    prefilled = null;
     sweepStep = sweep.step;
     points = sweep.points ?? 9;
     exposure = sweep.exposure ?? 2;
@@ -99,12 +106,36 @@
 
   // The last run, also after nocsd restarted (the state starts empty).
   let lastSaved = $state<AutofocusState | null>(null);
+  let lastTried = $state(false);
   $effect(() => {
     autofocusRuns(1)
       .then((runs) => (lastSaved = runs[0]?.run ?? null))
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => (lastTried = true));
   });
   const last = $derived(run && !running ? run : lastSaved);
+
+  // Without a step in the profile, the last run's (or the one it suggested), or
+  // else one estimated from the focuser's travel and the f-ratio: a first night
+  // starts with something to try rather than an empty field.
+  const focalRatio = $derived.by(() => {
+    const optics = profile?.imaging;
+    if (!optics?.aperture) return null;
+    return (optics.focal_length * (optics.reducer ?? 1)) / optics.aperture;
+  });
+  let prefilled = $state<"last" | "estimate" | null>(null);
+  $effect(() => {
+    if (sweepStep !== null || !profileTried || !lastTried) return;
+    const previous = last?.suggested_step ?? last?.step ?? null;
+    const estimate = estimateStep(focuser?.max_position ?? null, focalRatio);
+    const value = previous ?? estimate;
+    if (value === null) return;
+    untrack(() => {
+      sweepStep = value;
+      prefilled = previous !== null ? "last" : "estimate";
+      form += 1;
+    });
+  });
   const temperatureChange = $derived.by(() => {
     const now = focuser?.temperature ?? null;
     const then = last?.temperature ?? null;
@@ -275,7 +306,11 @@
         min={1}
         max={focuser?.max_position ?? 100000}
         step={sweepStep !== null && sweepStep >= 1000 ? 100 : 10}
-        hint={t.autofocus.stepHint} />
+        hint={prefilled === "estimate" && focalRatio !== null
+          ? t.autofocus.stepEstimated(formatDecimal(focalRatio, locale, 1))
+          : prefilled === "last"
+            ? t.autofocus.stepFromLast
+            : t.autofocus.stepHint} />
       <div class="group">
         <span class="label muted">{t.autofocus.points}</span>
         <SegmentedControl

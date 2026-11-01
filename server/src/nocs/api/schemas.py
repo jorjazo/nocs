@@ -688,6 +688,17 @@ class GuidingCalibration(StateModel):
     declination: float | None = Field(description="Where it was calibrated, degrees.")
 
 
+class GuidingCalibrationStep(StateModel):
+    """PHD2's calibration as it goes."""
+
+    direction: Literal["west", "east", "backlash", "north", "south", "nudge", "other"] = Field(
+        description="west, then east back: the RA axis; backlash: clearing Dec's; north,"
+        " then south back: the Dec axis; nudge: bringing the star back to the start."
+    )
+    step: int = Field(description="Of this direction, as PHD2 counts it.")
+    distance: float = Field(description="Pixels the star moved since the direction began.")
+
+
 class GuidingAlert(StateModel):
     message: str
     kind: str = Field(description="PHD2's type: info, question, warning or error.")
@@ -743,6 +754,9 @@ class GuidingState(StateModel):
     )
     exposure: float | None = Field(description="PHD2's exposure, seconds; None while unknown.")
     calibration: GuidingCalibration | None = Field(description="None: PHD2 is not calibrated.")
+    calibrating: GuidingCalibrationStep | None = Field(
+        default=None, description="While PHD2 calibrates: its latest step."
+    )
     settling: bool = Field(description="PHD2 waits for the star to settle.")
     alert: GuidingAlert | None = Field(description="The last thing PHD2 warned about.")
     pixel_scale: float | None = Field(description="Of the guide camera, arcseconds per pixel.")

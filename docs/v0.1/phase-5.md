@@ -273,6 +273,8 @@ Left for the sequencer:
   Nebulosa_de_Orión`), in the language of whoever chose the target, while Live view
   uses the catalog label (`M_42`) since the QA fix in Plan. The label would keep a
   target's frames in one folder whoever starts the run.
-- The focus screen starts with an empty step and an error under it; a step
-  suggested from the focuser (or the last run's) would avoid a dead end on a first
-  night.
+- The focus screen started with an empty step and an error under it. Fixed: without
+  a step in the profile it takes the last run's (or the step that run suggested),
+  or else one estimated from the focuser's travel and the imaging train's f-ratio
+  (`web/src/lib/focus.ts`: 25 µm × f-ratio a step over an assumed 50 mm of travel;
+  110 steps for the lab's EAF at f/4.7, where 100 work), saying where it came from.

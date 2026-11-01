@@ -4118,6 +4118,40 @@
       "title": "GuidingCalibration",
       "type": "object"
     },
+    "GuidingCalibrationStep": {
+      "additionalProperties": false,
+      "description": "PHD2's calibration as it goes.",
+      "properties": {
+        "direction": {
+          "description": "west, then east back: the RA axis; backlash: clearing Dec's; north, then south back: the Dec axis; nudge: bringing the star back to the start.",
+          "enum": [
+            "west",
+            "east",
+            "backlash",
+            "north",
+            "south",
+            "nudge",
+            "other"
+          ],
+          "type": "string"
+        },
+        "distance": {
+          "description": "Pixels the star moved since the direction began.",
+          "type": "number"
+        },
+        "step": {
+          "description": "Of this direction, as PHD2 counts it.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "direction",
+        "step",
+        "distance"
+      ],
+      "title": "GuidingCalibrationStep",
+      "type": "object"
+    },
     "GuidingExposureRequest": {
       "properties": {
         "exposure": {
@@ -4177,6 +4211,18 @@
             }
           ],
           "description": "PHD2's state; None while unknown."
+        },
+        "calibrating": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GuidingCalibrationStep"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "While PHD2 calibrates: its latest step."
         },
         "calibration": {
           "anyOf": [

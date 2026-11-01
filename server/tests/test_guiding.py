@@ -25,9 +25,10 @@ from nocs.guiding import (
     pixel_scale,
     render,
 )
+from nocs.guiding.service import _calibration_progress  # pyright: ignore[reportPrivateUsage]
 from nocs.indi import IndiClient
 from nocs.jobs import JobManager, ResourceBusyError
-from nocs.state import StateStore
+from nocs.state import Json, StateStore
 
 CAMERA = "ZWO CCD ASI220MM Mini"
 MOUNT = "ZWO AM5"
@@ -816,6 +817,8 @@ async def test_stopping_cancels_a_start(phd2: FakePhd2, tmp_path: Path) -> None:
         job_id = service.guide()
         await until(lambda: guiding(store, "app_state") == "Calibrating")
         assert "calibrating" in (job(store, job_id)["message"] or "")
+        await until(lambda: guiding(store, "calibrating") is not None)
+        assert guiding(store, "calibrating") == {"direction": "west", "step": 1, "distance": 0.0}
         await service.stop()
         await finished(service, jobs, job_id)
         assert job(store, job_id)["state"] == "cancelled"
@@ -823,6 +826,7 @@ async def test_stopping_cancels_a_start(phd2: FakePhd2, tmp_path: Path) -> None:
         phd2.finish_calibration()
         await until(lambda: not service.guiding)
         jobs.check_free([Role.MOUNT.value])
+        assert guiding(store, "calibrating") is None
 
 
 async def test_guiding_waits_for_a_mount_nocs_moves(phd2: FakePhd2, tmp_path: Path) -> None:
@@ -1031,3 +1035,32 @@ async def test_a_resuming_sequence_gets_the_mount_back(phd2: FakePhd2, tmp_path:
         await until(lambda: jobs.holder(Role.MOUNT.value) is not None)
         with pytest.raises(ResourceBusyError, match="guiding"):
             jobs.check_free([Role.MOUNT.value])  # the sequence ended, PHD2 still guides
+
+
+@pytest.mark.parametrize(
+    ("event", "shown"),
+    [
+        (
+            {"dir": "West", "step": 4, "dist": 7.91409, "State": "West step   5, dist= 7.9"},
+            {"direction": "west", "step": 5, "distance": 7.91409},
+        ),
+        (
+            {"dir": "East", "step": 3, "dist": 12.447, "State": "East step   3, dist=12.4"},
+            {"direction": "east", "step": 3, "distance": 12.447},
+        ),
+        (
+            {"dir": "Backlash", "step": 1, "dist": 2.09, "State": "Clearing backlash step   2"},
+            {"direction": "backlash", "step": 2, "distance": 2.09},
+        ),
+        (
+            {"dir": "NudgeSouth", "step": 2, "dist": 1.35, "State": "Nudge South   2"},
+            {"direction": "nudge", "step": 2, "distance": 1.35},
+        ),
+        ({"dir": "Sideways", "step": 7}, {"direction": "other", "step": 7, "distance": 0.0}),
+    ],
+)
+def test_calibration_progress_comes_from_the_event_fields(
+    event: dict[str, Json], shown: dict[str, Json]
+) -> None:
+    # Events as recorded from PHD2 2.6.14 (dev/recordings/phd2-simulators-2026-10-31.jsonl).
+    assert _calibration_progress(event) == shown

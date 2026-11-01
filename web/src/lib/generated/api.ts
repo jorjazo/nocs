@@ -1024,6 +1024,10 @@ export interface GuidingState {
    */
   app_state: Phd2AppState | null;
   /**
+   * While PHD2 calibrates: its latest step.
+   */
+  calibrating?: GuidingCalibrationStep | null;
+  /**
    * None: PHD2 is not calibrated.
    */
   calibration: GuidingCalibration | null;
@@ -1079,6 +1083,26 @@ export interface GuidingAlert {
    * UTC, ISO 8601.
    */
   time: string;
+}
+/**
+ * PHD2's calibration as it goes.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "GuidingCalibrationStep".
+ */
+export interface GuidingCalibrationStep {
+  /**
+   * west, then east back: the RA axis; backlash: clearing Dec's; north, then south back: the Dec axis; nudge: bringing the star back to the start.
+   */
+  direction: "west" | "east" | "backlash" | "north" | "south" | "nudge" | "other";
+  /**
+   * Pixels the star moved since the direction began.
+   */
+  distance: number;
+  /**
+   * Of this direction, as PHD2 counts it.
+   */
+  step: number;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
