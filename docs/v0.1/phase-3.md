@@ -25,7 +25,7 @@ shared with polar alignment (phase 4) and re-centring and the meridian flip
 | 3.3 | Centre | `center` job (`nocs.pointing.center`, callable from any job holding the camera and the mount): go to → settle → solve → sync, or aim off by the error → repeat until within tolerance (1′) or N frames (5); a frame that does not solve is taken again without moving; `centering` state with every frame's error; Mount sheet: Go and centre; centring card in the sheet and Live view | Simulators with an injected pointing error; lab: one run on the AM7 | Implemented |
 | 3.4 | Target catalog | OpenNGC (CC BY-SA 4.0) bundled by a pinned build script: Messier, NGC/IC, common names in English and Spanish; search API ([ADR 0019](../adr/0019-bundled-catalogs-and-their-licences.md)) | Tests: parsing, loose ids, NGC 292 / SMC, NGC 253 / Sculptor Galaxy, M 42 in Spanish, aliases, API | Implemented: `dev/catalog/build.py` (OpenNGC v20260501 by SHA-256, `names.tsv`), `nocs.targets`, `GET /api/targets/search`, `/objects/{id}`, `/sources` (observers too) |
 | 3.5 | Tonight's sky | Twilights, Moon (altitude, phase), altitude curves, transit, time above a minimum and above a **horizon profile** by azimuth in the site, distance to the Moon | Against an almanac | Implemented: `nocs.sky` (ERFA: `epv00`, `moon98`), `Site.horizon`, `GET /api/sky/tonight`, `/visibility?target=RA,Dec` (observers too; a catalog id once 3.4 lands); within a minute of USNO |
-| 3.6 | Plan and Tonight UI | Search, target detail with altitude chart, Go / Go and centre; Tonight: night window and Moon | Phone | Implemented: Tonight (night bar, dark window, Moon, tonight's target, get-ready checklist), Plan → Target (search with tonight's time up, `#/plan/<id>` with the altitude chart over the horizon profile, framing chart, Go / Go and centre to where the frame points), `plan.target` (`PUT`/`DELETE /api/plan/target`, kept in `plan.json`), catalog ids in `/api/sky/visibility`; a sync the mount goes back from fails (`SyncNotKeptError`); checked in a phone-sized browser without equipment, not yet on a phone |
+| 3.6 | Plan and Tonight UI | Search, target detail with altitude chart, Go / Go and centre; Tonight: night window and Moon | Phone | Implemented: Tonight (night bar, dark window, Moon, tonight's target, get-ready checklist), Plan → Target (search with tonight's time up, `#/plan/<id>` with the altitude chart over the horizon profile, framing chart, Go / Go and centre to where the frame points), `plan.target` (`PUT`/`DELETE /api/plan/target`, kept in `plan.json`), catalog ids in `/api/sky/visibility`; a sync the mount goes back from is logged as a warning; checked in a phone-sized browser without equipment, not yet on a phone |
 | 3.7a | Framing chart (offline) | Tycho-2 subset to V 10 (CC BY-NC 3.0 IGO) by a pinned build script; chart API (stars and objects around a point); canvas chart: gnomonic, north up, stars by magnitude, DSO outlines with position angle, the camera's frame with rotation, crosshair and coordinates, pan / pinch / wheel, Night mode ([ADR 0020](../adr/0020-framing-chart.md)) | Tests: Tycho-2 records, the star file, queries across 0h and the pole, objects reaching into the circle, API; projection (`pnpm test`); NGC 292 and NGC 253 with the simulator camera's field in the browser | Implemented: `dev/catalog/build_stars.py`, `nocs.targets.stars`, `GET /api/targets/chart`, `SkyChart.svelte` at `#/dev/chart` until 3.6 hosts it |
 | 3.7b | Framing chart (online and own frames) | The maintainer's own solved frames of the target as background; optional online survey (CDS hips2fits, fetched by the browser, opt-in); "turn the camera N°" helper from a solve (needs 3.2) | Simulators | |
 | 3.8 | Field test | Shares the night with phase 2's | Exit criterion | |
@@ -52,11 +52,13 @@ shared with polar alignment (phase 4) and re-centring and the meridian flip
 - NOCS's own English names (`names.tsv`) go before OpenNGC's, in their order:
   OpenNGC listed "Sculptor Filament" first for NGC 253.
 - A sync is watched for 2.5 s: if the mount reports a position more than 1′ from
-  it, the sync fails with that reason instead of succeeding (the AM5 near its home
-  position took a sync and went back at its next poll, on the lab bench and in the
-  first field test). Not inside a centring run: the telescope simulator also reports
-  its old position again after a sync (22.6′ back) yet aims its next go to by it, and
-  centring's next frame shows whether the sync took.
+  it, NOCS logs a warning (the AM5 near its home position took a sync and went back
+  at its next poll, on the lab bench and in the first field test). Not a failure:
+  the telescope simulator also reports its old position again after a sync (22.6′
+  back) yet aims its next go to by it, so going back does not prove the sync was
+  lost. Showing it in the app, and finding whether the AM5 aims by such a sync, is
+  left for the field test. Centring skips the watch: its next frame shows whether
+  the sync took.
 
 ## Measured
 

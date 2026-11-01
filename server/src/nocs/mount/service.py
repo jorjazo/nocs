@@ -273,9 +273,9 @@ class MountService:
 
         ``when`` is the time the position is for (a solved frame's mid-exposure),
         else now. Refused while the mount is parked, slewing or not tracking (the
-        sky would have moved since), or locked by a job other than ``job``. Raises
-        SyncNotKeptError when the mount goes back from the sync within a few seconds,
-        unless ``check`` is false.
+        sky would have moved since), or locked by a job other than ``job``. Logs a
+        warning when the mount goes back from the sync within a few seconds, unless
+        ``check`` is false.
         """
         if not 0 <= ra < 24 or not -90 <= dec <= 90:
             raise ValueError(f"coordinates out of range: RA {ra} h, Dec {dec}°")
@@ -294,7 +294,12 @@ class MountService:
         log.info("syncing %s to RA %s, Dec %s (J2000)", mount.name, _hms(ra), _dms(dec))
         await mount.sync(jnow.ra, jnow.dec)
         if check:
-            await check_sync_kept(mount, jnow)
+            # Only a warning: the telescope simulator also reports its old position
+            # again after a sync, yet aims its next go to by it.
+            try:
+                await check_sync_kept(mount, jnow)
+            except SyncNotKeptError as e:
+                log.warning("%s", e)
         return jnow
 
     async def set_tracking(
