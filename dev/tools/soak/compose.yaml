@@ -1,0 +1,36 @@
+# The soak test's own simulators: the dev images (dev/compose.yaml) under another
+# project name, on other ports and with their own run directory, so a soak never
+# meets the dev stack or a lab Pi's indiserver@ and phd2@ (they keep 7624 and 4400).
+# run.sh starts it; by hand:
+#   SOAK_RUN=$PWD/dev/tools/soak/.run docker compose -p nocs-soak -f dev/tools/soak/compose.yaml up -d --build
+name: nocs-soak
+
+services:
+  indi:
+    build:
+      context: ../../indi
+      dockerfile: Containerfile
+    image: nocs-dev-indi
+    ports:
+      - "127.0.0.1:${SOAK_INDI_PORT:-27624}:7624"
+    volumes:
+      - ${SOAK_RUN:?set SOAK_RUN to the soak's run directory}:/run/indi
+    restart: unless-stopped
+
+  phd2:
+    build:
+      context: ../../phd2
+      dockerfile: Containerfile
+    image: nocs-dev-phd2
+    init: true
+    environment:
+      PHD2_SETTINGS: /run/nocs/phd2.phd
+      PHD2_SETTINGS_DEFAULT: /etc/phd2/simulators.phd
+    volumes:
+      - ../../phd2/simulators.phd:/etc/phd2/simulators.phd:ro
+      - ${SOAK_RUN}:/run/nocs:ro
+    depends_on:
+      - indi
+    ports:
+      - "127.0.0.1:${SOAK_PHD2_PORT:-24400}:4400"
+    restart: unless-stopped

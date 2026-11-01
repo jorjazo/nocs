@@ -3,7 +3,8 @@
 NOCS is a web-first control system for astrophotography rigs on top of INDI.
 Read [docs/design.md](docs/design.md), [docs/roadmap.md](docs/roadmap.md) and the
 [ADRs](docs/adr/) before planning work; [docs/ux.md](docs/ux.md) for UI work;
-[docs/spikes/](docs/spikes/) for measured facts (PHD2 headless, Pi 5 performance).
+[docs/spikes/](docs/spikes/) for measured facts (PHD2 headless, Pi 5 performance, a
+whole night on the Pi).
 
 ## Working with the maintainer
 
@@ -42,7 +43,7 @@ web/      Svelte 5 + TypeScript PWA: styles/ (tokens), lib/ (api, live state,
 dev/      compose.yaml (INDI simulators + GSC catalog + driver FIFO in dev/.run,
           headless PHD2), astap/ (solver install), profiles/ (simulator rig),
           catalog/ (builds the bundled target catalog),
-          tools/ (indi_record, phd2_record, fake_ppba),
+          tools/ (indi_record, phd2_record, fake_ppba; soak/: a long simulated night),
           bench/, spikes/, pi/ (lab Pi flashing and setup)
 packaging/ deb/ (the nocs .deb: build.sh, test.sh), image/ (the Pi 5 image, arm64 only; ADR 0025, 0026)
 docs/     design, roadmap, ux, adr/, spikes/

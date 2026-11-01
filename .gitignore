@@ -44,3 +44,9 @@ dev/.frames/
 
 # Built packages and images
 /packaging/out/
+
+# Soak test results: everything but the summary, the system and the samples
+dev/tools/soak/results/*/*
+!dev/tools/soak/results/*/summary.md
+!dev/tools/soak/results/*/system.txt
+!dev/tools/soak/results/*/samples.jsonl.gz
