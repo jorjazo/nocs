@@ -1269,6 +1269,9 @@ export interface GuideEntryModel {
  * via the `definition` "IndiState".
  */
 export interface IndiState {
+  /**
+   * Every property, for people (#/dev): a property's updates reach it at most once a second, and at once when its state changes (ADR 0037).
+   */
   devices?: {
     [k: string]: IndiDevice;
   };

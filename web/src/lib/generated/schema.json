@@ -5225,6 +5225,7 @@
           "additionalProperties": {
             "$ref": "#/$defs/IndiDevice"
           },
+          "description": "Every property, for people (#/dev): a property's updates reach it at most once a second, and at once when its state changes (ADR 0037).",
           "type": "object"
         },
         "messages": {

@@ -17,6 +17,7 @@ from simfocus import APERTURE, FOCAL_LENGTH, FOCUSER, ORION, SAMPLE_POSITIONS, v
 from nocs.api import create_app
 from nocs.api.schemas import AppState
 from nocs.config import Settings
+from nocs.services.indi_bridge import COALESCE
 
 pytestmark = pytest.mark.indi
 
@@ -58,6 +59,7 @@ def move(api: TestClient, position: int) -> None:
 
 
 def fwhm(api: TestClient) -> float:
+    time.sleep(COALESCE)  # the mirror's last update of a burst can be that late (ADR 0037)
     properties = state(api)["indi"]["devices"][FOCUSER]["properties"]
     return properties["FWHM"]["elements"]["SIM_FWHM"]["value"]
 

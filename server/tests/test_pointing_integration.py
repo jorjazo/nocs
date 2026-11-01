@@ -31,6 +31,7 @@ from owner import pair_owner
 
 from nocs.api import create_app
 from nocs.config import Settings
+from nocs.services.indi_bridge import COALESCE
 from nocs.solving import separation
 
 SIMULATORS = json.loads(
@@ -130,6 +131,7 @@ def mount_model(api: TestClient, dec: float, ha: float) -> None:
         properties = s["indi"]["devices"]["Telescope Simulator"]["properties"]
         return properties[name]["elements"][element]["value"]
 
+    time.sleep(COALESCE)  # the mirror's last update of a slew can be that late (ADR 0037)
     before = state(api)
     sky = telescope(before, "EQUATORIAL_PE", "DEC_PE")
     change = abs(dec - telescope(before, "MOUNT_MODEL", "MM_ID")) / 60

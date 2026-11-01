@@ -84,7 +84,11 @@ class IndiMessage(StateModel):
 
 class IndiState(StateModel):
     server: IndiServer | None = None
-    devices: dict[str, IndiDevice] = Field(default_factory=dict[str, IndiDevice])
+    devices: dict[str, IndiDevice] = Field(
+        default_factory=dict[str, IndiDevice],
+        description="Every property, for people (#/dev): a property's updates reach it at most"
+        " once a second, and at once when its state changes (ADR 0037).",
+    )
     messages: list[IndiMessage] = Field(default_factory=list[IndiMessage])
 
 
