@@ -1,7 +1,6 @@
 # 0037. An SMB share of the frames for desktop computers
 
-Date: 2026-11-01 · Status: Proposed (draft: access, authentication and folders decided
-by the maintainer; the rest are the plan's recommendations)
+Date: 2026-11-01 · Status: Proposed
 
 ## Context
 
@@ -40,7 +39,9 @@ plan is [beyond/smb.md](../beyond/smb.md). Facts that shape the decision:
 - **Anonymous:** every client is the guest (`map to guest = Bad User`, `guest only`),
   read as the `nocs` system user; no password, no passdb. The share holds only
   astronomical images, read-only. Anyone on the box's networks can read them while
-  the share is on, and the user documentation says how to let Windows 11 in.
+  the share is on. For Windows 11, which refuses guests, a fixed and published login
+  `nocs` / `nocs` reads the same; nocs-system puts it in Samba's passdb when the
+  share is switched on.
 - **Only the folders where frames are saved, one share per volume, its `NOCS`
   folder:** `Internal` for the internal destination, and one per USB drive mounted
   by nocs-system, named by its label.
@@ -62,8 +63,8 @@ plan is [beyond/smb.md](../beyond/smb.md). Facts that shape the decision:
 
 - At home a PC finds the box and opens its nights without a password; in the field
   the same works on the access point, at Wi-Fi speed.
-- A Windows 11 PC needs its guest and signing settings changed once, by its
-  administrator, before it can open the share.
+- A Windows 11 PC opens it with the published `nocs` / `nocs` login, or as a guest
+  once its administrator allows guests.
 - Images stay safe from a desktop's mistakes, and the catalog stays right; freeing
   space still needs the app (or a USB drive taken to the PC).
 - Turning the share on lets everyone on the home network (or on the access point)

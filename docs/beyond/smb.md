@@ -1,6 +1,6 @@
 # SMB share plan — the box's images on a desktop PC
 
-Status: proposed (access, authentication and folders decided 2026-11-01; the rest open) · Last updated: 2026-11-01 · Roadmap: [Beyond v0.1](../roadmap.md#beyond-v01-unordered-backlog) · Decision: [ADR 0037](../adr/0037-smb-share.md)
+Status: decided 2026-11-01 (S0 done) · Last updated: 2026-11-01 · Roadmap: [Beyond v0.1](../roadmap.md#beyond-v01-unordered-backlog) · Decision: [ADR 0037](../adr/0037-smb-share.md)
 
 Goal: at home, a desktop PC (Windows, macOS, Linux) opens the box's frames as a
 network folder, without downloading zips through the phone or taking the USB drive
@@ -63,18 +63,18 @@ and nothing announces it.
 - The appliance is the only place where NOCS runs the network and the firewall. On a
   PC, `nocs` alone leaves both to the owner, who has their own file sharing.
 
-## Decisions (open; recommendation first)
+## Decisions (taken 2026-11-01)
 
-1. **Samba itself.** *Recommended:* a dependency of `nocs-appliance` (`samba`, `wsdd`,
+1. **Samba itself.** *Decided:* a dependency of `nocs-appliance` (`samba`, `wsdd`,
    no recommends), so it is on every image and on a flashed Pi after an update, and
    works in the field without internet; **off by default**: the package's
    `smbd`/`nmbd`/`samba-ad-dc` units masked, NOCS's own units started only when the
    owner switches the share on. Cost: disk (Samba pulls Python modules; to measure,
    expected ~100 MB on the 7 GB root), no RAM or open port while off, and Samba's
    security updates downloaded like the rest (6.10).
-   *Alternatives:* an optional `nocs-share` package installed from the app (needs
+   (Rejected: an optional `nocs-share` package installed from the app (needs
    internet at the moment the owner wants it, usually in the field; apt from the app
-   again); in the image only, not a dependency (Pis flashed before never get it).
+   again); in the image only, not a dependency (Pis flashed before never get it).)
 2. **Access.** *Decided:* **read-only.** The share is for taking frames off the
    box; deleting or renaming them behind the catalog leaves it wrong, and writing to
    the microSD can fill the OS disk. Deleting a night belongs in the app, where the
@@ -86,10 +86,12 @@ and nothing announces it.
    the user documentation: **Windows 11 (24H2) refuses guests** until the PC's
    administrator allows them (the command above; Windows 10 Home and Pro need
    nothing), and anyone on the home network, or on the access point once they know
-   its password, can read the frames while the share is on. *Open:* whether to offer
-   besides it a fixed, well-known login (`nocs` / `nocs`, printed in the docs) that
-   Windows 11 accepts without changing its settings; it protects nothing either, and
-   its NT hash would sit in a passdb.
+   its password, can read the frames while the share is on. **Besides the guest, a
+   fixed, well-known login, `nocs` / `nocs`** (printed in the docs and on the
+   screen), which Windows 11 accepts without changing its settings: it protects
+   nothing either. nocs-system writes it into Samba's passdb (`smbpasswd -s` on its
+   standard input, in `/var/lib/nocs-share/`) when the share is switched on; a wrong
+   password for `nocs` is refused, any other user name is the guest.
 4. **Folders.** *Decided:* **only the folders where frames are saved, one share per
    storage volume, each the volume's `NOCS` folder:** `Internal` → `/var/lib/nocs/NOCS`, and each USB drive mounted
    by nocs-system → `/media/nocs/<UUID>/NOCS`, named by its label (`USB-<4 hex of the
@@ -102,7 +104,7 @@ and nothing announces it.
    keeps a link inside a folder from reaching anything else. (Rejected: one `NOCS`
    share with a folder per volume, which needs symlinks across filesystems and
    Samba's `wide links`, or bind mounts.)
-5. **Network exposure.** *Recommended:* the share is reachable **only from the box's
+5. **Network exposure.** *Decided:* the share is reachable **only from the box's
    LAN interfaces** — `wlan0` (access point or home Wi-Fi) and `eth*` — enforced by
    the firewall by interface, not by address (home networks with global IPv6 make
    address lists wrong): TCP 445, WS-Discovery UDP 3702 and TCP 5357, and nothing else
@@ -113,14 +115,14 @@ and nothing announces it.
    registration (`_smb._tcp`, gone when it stops) plus a `_device-info._tcp` record for
    the Finder icon, and `wsdd` on the same interfaces for Windows; both only while the
    share is on.
-6. **Control.** *Recommended:* a **`share` group in nocs-system** (ADR 0027), on in
+6. **Control.** *Decided:* a **`share` group in nocs-system** (ADR 0027), on in
    `appliance.conf`: `share.status` (on, running, the shares, connected clients from
    `smbstatus --json`), `share.enable {on}`, `share.refresh`. The OS keeps the setting (the units enabled or not), so nocs-system
    still holds no state of its own. NOCS's units: `nocs-share.service` (smbd on
    `/etc/nocs/share/smb.conf`, which nocs-system writes) and `nocs-wsdd.service`.
    Switching it on or off is allowed during a job: it does not touch a session.
    nocsd publishes `share` in the state; `PUT /api/system/share`, owner only.
-7. **Pi impact.** *Recommended:* nothing runs while off. While on, smbd and wsdd run
+7. **Pi impact.** *Decided:* nothing runs while off. While on, smbd and wsdd run
    with `Nice=10`, `IOSchedulingClass=best-effort` priority 7 and a `MemoryMax`, so a
    copy yields to frame saving; Samba logs to the journal at level 1 (no
    `/var/log/samba` files), printing is off, and its locking and cache databases go to
@@ -129,20 +131,20 @@ and nothing announces it.
    measures it: memory idle and copying, frame-save times during a copy, and disk
    writes from `/proc/diskstats`. A copy during a session is allowed; the UI says it
    can slow saving on the microSD.
-8. **Where it exists.** *Recommended:* **appliance only.** On a PC `nocs` alone has no
+8. **Where it exists.** *Decided:* **appliance only.** On a PC `nocs` alone has no
    `share` group, and the app hides the section, as it does the network.
-9. **First run.** *Recommended:* not asked at the first run (it already asks for the
+9. **First run.** *Decided:* not asked at the first run (it already asks for the
    access point, country and home Wi-Fi); offered on Rig.
 
 ## Stages
 
 | # | Stage | Contents | Check | Estimate | Status |
 |---|---|---|---|---|---|
-| S0 | Decisions | This plan; ADR 0037 | Review with the maintainer | 2 h | Proposed |
-| S1 | nocs-system `share` | The `share` group: `smb.conf` built from the volumes (a pure function), `status`, `enable`, `refresh`; `systemctl`, `smbcontrol`, `smbstatus` with argument lists | Unit tests with fake tools on the `PATH` (as `test_system.py`, `test_network.py`): the config for no drives, two drives, a label clash, an unlabelled drive; refusals | 3–4 h | |
-| S2 | Packaging | `nocs-appliance`: `Depends` on `samba` and `wsdd`; masks Samba's own units in `postinst`; `nocs-share.service`, `nocs-wsdd.service` (priorities, sandboxing); firewall rules by interface; `share` in `appliance.conf`; image build unchanged but bigger | `packaging/deb/test.sh` with the appliance in the systemd container: switch on with `nocs-system call`, `smbclient -N` lists and reads `Internal` as a guest, refuses a write, sees no `config/`; off: nothing on 445. The image builds and its smoke test passes; its size noted | 4–6 h | |
+| S0 | Decisions | This plan; ADR 0037 | Review with the maintainer | 2 h | Done: decided 2026-11-01 |
+| S1 | nocs-system `share` | The `share` group: `smb.conf` built from the volumes (a pure function), `status`, `enable`, `refresh`; the `nocs` / `nocs` login; `systemctl`, `smbpasswd`, `smbcontrol`, `smbstatus` with argument lists | Unit tests with fake tools on the `PATH` (as `test_system.py`, `test_network.py`): the config for no drives, two drives, a label clash, an unlabelled drive; refusals | 3–4 h | |
+| S2 | Packaging | `nocs-appliance`: `Depends` on `samba` and `wsdd`; masks Samba's own units in `postinst`; `nocs-share.service`, `nocs-wsdd.service` (priorities, sandboxing); firewall rules by interface; `share` in `appliance.conf`; image build unchanged but bigger | `packaging/deb/test.sh` with the appliance in the systemd container: switch on with `nocs-system call`, `smbclient -N` lists and reads `Internal` as a guest, and as `nocs` / `nocs`; refuses a write, a wrong password for `nocs`, and sees no `config/`; off: nothing on 445. The image builds and its smoke test passes; its size noted | 4–6 h | |
 | S3 | nocsd | `share` state (schemas, TS types), refresh when drives change, the endpoint | API tests with a fake helper; the schema test of the live state | 2–3 h | |
-| S4 | Web UI | Rig: "File sharing" under Network: switch (saying anyone on the network can read the frames), the shares and how to open them (`\\<name>.local\Internal`, `smb://<name>.local`), connected computers; en/es; `docs/ux.md`; `docs/user/` (quick start; troubleshooting: Windows 11 and guests) | Browser against a fake helper, phone and wide, Night mode, both languages | 3–4 h | |
+| S4 | Web UI | Rig: "File sharing" under Network: switch (saying anyone on the network can read the frames), the shares and how to open them (`\\<name>.local\Internal`, `smb://<name>.local`, the `nocs` / `nocs` login for Windows 11), connected computers; en/es; `docs/ux.md`; `docs/user/` (quick start; troubleshooting: Windows 11 and guests) | Browser against a fake helper, phone and wide, Night mode, both languages | 3–4 h | |
 | S5 | Test Pi | Windows 11, macOS, Linux on the home network and on the access point; Ethernet; discovery; throughput; frame saving during a copy; memory and disk writes | Test Pi window | 2–3 h | |
 
 Total **16–22 h**. S1 and S2 first (S2 needs S1's config), then S3 and S4, S5 last.
