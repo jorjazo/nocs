@@ -47,6 +47,8 @@ from nocs.storage.catalog import (
     FrameRow,
     NewFrame,
     NightRow,
+    Session,
+    SessionEvent,
     TemperatureSample,
 )
 from nocs.storage.fits import Card, FitsError, Header, place
@@ -480,6 +482,17 @@ class StorageService:
     def add_focus_run(self, run: FocusRun) -> int | None:
         return self.catalog.add_focus_run(run) if self.catalog is not None else None
 
+    def start_session(self, session: Session) -> int | None:
+        return self.catalog.start_session(session) if self.catalog is not None else None
+
+    def end_session(self, session_id: int, ended: str, outcome: str, error: str | None) -> None:
+        if self.catalog is not None:
+            self.catalog.end_session(session_id, ended, outcome, error)
+
+    def add_session_events(self, session_id: int, events: list[SessionEvent]) -> None:
+        if self.catalog is not None:
+            self.catalog.add_session_events(session_id, events)
+
     # -- catalog queries (blocking) ---------------------------------------
 
     def temperatures(self, since: str, until: str | None = None) -> list[TemperatureSample]:
@@ -487,6 +500,16 @@ class StorageService:
 
     def focus_runs(self, limit: int = 20, before: int | None = None) -> list[FocusRun]:
         return self._require_catalog().focus_runs(limit, before)
+
+    def sessions(self, limit: int = 20, before: int | None = None) -> list[Session]:
+        return self._require_catalog().sessions(limit, before)
+
+    def session(self, session_id: int) -> tuple[Session, list[SessionEvent]] | None:
+        catalog = self._require_catalog()
+        session = catalog.session(session_id)
+        if session is None:
+            return None
+        return session, catalog.session_events(session_id)
 
     def nights(self, night_id: int | None = None) -> list[NightRow]:
         return self._require_catalog().nights(night_id)

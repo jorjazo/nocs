@@ -293,12 +293,49 @@ type Node = Annotated[
 Container.model_rebuild()
 
 
+# -- recovery (ADR 0032) ------------------------------------------------------------
+
+type FailureKind = Literal["device", "clouds", "guiding", "focus", "solve", "storage", "other"]
+
+
+class Policy(SequenceModel):
+    """What to do when a step fails with one kind of failure."""
+
+    retries: int | None = Field(
+        default=0, ge=0, description="Tries after the first; None: while the conditions hold."
+    )
+    wait: float = Field(default=0, ge=0, le=3600, description="Seconds before each retry.")
+    then: Literal["skip", "skip_target", "pause", "end"] = Field(
+        default="end",
+        description="When the retries run out: skip the step, skip the target, pause for "
+        "the user, or end the session (run *end*).",
+    )
+
+
+DEFAULT_POLICIES: dict[FailureKind, Policy] = {
+    "clouds": Policy(retries=None, wait=300),
+    "guiding": Policy(retries=3, wait=10),
+    "device": Policy(retries=2, wait=60),
+    "focus": Policy(then="skip"),
+    "solve": Policy(retries=1, then="skip_target"),
+    "storage": Policy(),
+    "other": Policy(),
+}
+
+
 class Sequence(SequenceModel):
     version: Literal[1] = VERSION
     name: Name
     start: Container = Field(default_factory=Container)
     targets: Container = Field(default_factory=Container)
     end: Container = Field(default_factory=Container, description="Always runs, once.")
+    recovery: dict[FailureKind, Policy] = Field(
+        default_factory=dict[FailureKind, Policy],
+        description="Policies that replace the defaults, by kind of failure (ADR 0032).",
+    )
+
+    def policy(self, kind: FailureKind) -> Policy:
+        return self.recovery.get(kind) or DEFAULT_POLICIES[kind]
 
     @model_validator(mode="after")
     def _end_runs_once(self) -> Self:

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import functools
 import logging
+import statistics
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
@@ -34,6 +35,7 @@ from nocs.sequence.model import (
     Condition,
     Container,
     ExposurePlan,
+    FailureKind,
     FocusMemory,
     PathKey,
     PlanRow,
@@ -49,17 +51,36 @@ from nocs.state import Json
 
 log = logging.getLogger(__name__)
 
+CLOUD_STARS = 3
+"""A light frame with fewer stars than this (or a quarter of its row's recent ones) is
+taken under clouds."""
+GOOD_FRAMES = 5
+WAIT_STEP = 5.0
+"""Seconds between safe points while a policy waits."""
+
 
 @dataclass(frozen=True, slots=True)
 class FrameResult:
     stars: int | None = None
     hfr: float | None = None
+    frame: int | None = None
+    """The saved frame's catalog id."""
+
+
+class StepError(Exception):
+    """A step failed with a kind of failure the recovery policies know (ADR 0032)."""
+
+    def __init__(self, kind: FailureKind, message: str) -> None:
+        super().__init__(message)
+        self.kind: FailureKind = kind
 
 
 class Executor(Protocol):
     """Carries out the sequence's steps on the rig."""
 
-    async def action(self, action: Action, target: Target | None) -> None: ...
+    async def action(self, action: Action, target: Target | None) -> dict[str, Json] | None:
+        """Carry out one action; what came of it goes to the session's events."""
+        ...
 
     async def frame(self, plan: ExposurePlan, row: PlanRow, target: Target | None) -> FrameResult:
         """Take and keep one frame of ``row``; the wheel already holds its filter."""
@@ -92,6 +113,8 @@ class Checkpoint(SequenceModel):
 
     version: int = 1
     run: str
+    sequence: str = ""
+    """The sequence's id, to find its definition after a restart."""
     digest: str
     """The sequence's: a checkpoint is never resumed on another definition."""
     started: AwareDatetime
@@ -182,6 +205,7 @@ class EventKind(StrEnum):
     PAUSED = "paused"
     RESUMED = "resumed"
     FAILED = "failed"
+    SKIPPED = "skipped"
     ENDING = "ending"
     ENDED = "ended"
 
@@ -203,6 +227,14 @@ class _Done[T]:
 class _Stop(Exception):
     def __init__(self, run_end: bool) -> None:
         self.run_end = run_end
+
+
+class _Skip(Exception):
+    """A policy gave the step up."""
+
+
+class _SkipTarget(Exception):
+    """A policy gave the step's target up."""
 
 
 class _ConditionEnded(Exception):
@@ -232,9 +264,15 @@ class Runner:
         save: Callable[[Checkpoint], Awaitable[None]] | None = None,
         on_event: Callable[[Event], None] | None = None,
         on_change: Callable[[], None] | None = None,
+        sleep: Callable[[float], Awaitable[None]] = anyio.sleep,
     ) -> None:
         """Run ``sequence`` afresh, or from ``checkpoint`` after a restart."""
         self._sequence = sequence
+        self._sleep = sleep
+        self._reported: BaseException | None = None
+        """The failure that ended the session, already in the events."""
+        self._stars: dict[tuple[PathKey, int], list[int]] = {}
+        """Star counts of a plan row's recent good frames, to tell clouds."""
         self._executor = executor
         self._now = now
         self._save_to = save
@@ -325,7 +363,8 @@ class Runner:
         except Exception as e:
             log.info("sequence %s failed: %s", self._sequence.name, e)
             outcome, self._error = Outcome.FAILED, str(e) or type(e).__name__
-            self._event(EventKind.FAILED, self._error, self._current)
+            if e is not self._reported:
+                self._event(EventKind.FAILED, self._error, self._current)
         self._scopes.clear()
         self._stop_asked, self._pause_asked = None, False
         if run_end:
@@ -389,6 +428,11 @@ class Runner:
                 raise
             self._event(EventKind.CONDITION, f"{ended.condition.kind} ended it", here)
             self._forget_inside(here)
+        except _SkipTarget:
+            if container.target is None:
+                raise
+            self._event(EventKind.SKIPPED, f"target {container.target.name}", here)
+            self._forget_inside(here)
         finally:
             self._scopes.pop()
         checkpoint.iterations.pop(here, None)
@@ -404,16 +448,26 @@ class Runner:
             for p in [p for p in mapping if p.startswith(prefix)]:
                 del mapping[p]
 
-    async def _action(self, action: Action, path: tuple[str, ...], target: Target | None) -> None:
+    async def _action(self, action: Action, path: tuple[str, ...], target: Target | None) -> bool:
+        """Carry out an action; ``False`` when a policy gave it up."""
         here = key(path)
-        while await self._run_step(here, lambda: self._executor.action(action, target)) is None:
-            await self._safe_point()  # dropped by a pause or a stop: they take effect here
+        step = functools.partial(self._executor.action, action, target)
+        try:
+            while (done := await self._attempt(here, step)) is None:
+                await self._safe_point()  # dropped by a pause or a stop: they take effect here
+        except _Skip:
+            self._event(EventKind.SKIPPED, action.kind, here)
+            if isinstance(action, Autofocus):
+                self._focused()  # the triggers try again at their next reason, not now
+            await self._save()
+            return False
         if isinstance(action, SelectFilter):
             self._filter = action.filter
         elif isinstance(action, Autofocus):
             self._focused()
-        self._event(EventKind.ACTION, action.kind, here)
+        self._event(EventKind.ACTION, action.kind, here, done.value)
         await self._save()
+        return True
 
     async def _plan(self, plan: ExposurePlan, path: tuple[str, ...], target: Target | None) -> None:
         here = key(path)
@@ -424,12 +478,17 @@ class Runner:
             # After each of these steps, back to the safe point: a pause there may
             # have let someone change the filter or move the focuser.
             if row.filter is not None and row.filter != self._filter:
-                await self._action(SelectFilter(filter=row.filter), path, target)
+                if not await self._action(SelectFilter(filter=row.filter), path, target):
+                    return
                 continue
             if await self._trigger(here, row, target):
                 continue
-            frame = functools.partial(self._executor.frame, plan, row, target)
-            done = await self._run_step(here, frame)
+            frame = functools.partial(self._frame, here, plan, index, target)
+            try:
+                done = await self._attempt(here, frame)
+            except _Skip:
+                self._event(EventKind.SKIPPED, "the rest of the plan", here)
+                return
             if done is None:
                 continue  # dropped by a pause or a stop
             result = done.value
@@ -442,10 +501,74 @@ class Runner:
                 EventKind.FRAME,
                 f"{row.filter or '-'} {row.exposure:g} s {progress.done[index]}/{row.count}",
                 here,
-                {"row": index, "stars": result.stars, "hfr": result.hfr},
+                {"row": index, "stars": result.stars, "hfr": result.hfr, "id": result.frame},
             )
             await self._save()
             self._on_change()
+
+    async def _frame(
+        self, path: PathKey, plan: ExposurePlan, index: int, target: Target | None
+    ) -> FrameResult:
+        """Take one frame; a light frame with too few stars fails as clouds (ADR 0032)."""
+        result = await self._executor.frame(plan, plan.rows[index], target)
+        if plan.frame_type != "light" or result.stars is None:
+            return result
+        good = self._stars.setdefault((path, index), [])
+        least = max(CLOUD_STARS, statistics.median(good) / 4) if good else CLOUD_STARS
+        if result.stars < least:
+            raise StepError("clouds", f"{result.stars} stars, fewer than {least:g}")
+        good.append(result.stars)
+        del good[:-GOOD_FRAMES]
+        return result
+
+    async def _attempt[T](self, path: PathKey, step: Callable[[], Awaitable[T]]) -> _Done[T] | None:
+        """Run a step under the recovery policies (ADR 0032); ``None`` when a pause or a
+        stop dropped it.
+
+        Raises ``_Skip`` or ``_SkipTarget`` when the policy gives the step or its target
+        up, and the failure itself when it ends the session. *End* tries each step once.
+        """
+        tries = 0
+        while True:
+            try:
+                return await self._run_step(path, step)
+            except Exception as e:
+                if self._state is RunState.ENDING:
+                    raise
+                kind: FailureKind = e.kind if isinstance(e, StepError) else "other"
+                policy = self._sequence.policy(kind)
+                again = policy.retries is None or tries < policy.retries
+                self._event(
+                    EventKind.FAILED,
+                    str(e) or type(e).__name__,
+                    path,
+                    {"kind": kind, "attempt": tries + 1, "then": "retry" if again else policy.then},
+                )
+                if again:
+                    tries += 1
+                    await self._wait(policy.wait)
+                    continue
+                match policy.then:
+                    case "skip":
+                        raise _Skip from e
+                    case "skip_target":
+                        raise _SkipTarget from e
+                    case "pause":
+                        self.pause()
+                        await self._safe_point()
+                        tries = 0
+                    case "end":
+                        self._reported = e
+                        raise
+
+    async def _wait(self, seconds: float) -> None:
+        """Wait, letting stops, pauses and conditions that end take effect meanwhile."""
+        while seconds > 0:
+            await self._safe_point()
+            chunk = min(seconds, WAIT_STEP)
+            await self._sleep(chunk)
+            seconds -= chunk
+        await self._safe_point()
 
     async def _trigger(self, path: PathKey, row: PlanRow, target: Target | None) -> bool:
         """Fire the first trigger that is due before this frame; whether one was."""

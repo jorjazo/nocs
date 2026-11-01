@@ -178,3 +178,21 @@ async def test_a_pc_only_corrects_timestamps(tools: Tools) -> None:
     await TimeKeeper(clock, JobManager(store), FakeHelper()).check()
     assert clock.corrected is True
     assert os.environ["PATH"] == str(tools.dir)
+
+
+def test_a_clock_kept_by_ntp_or_a_gps_is_known_without_a_client() -> None:
+    clock = Clock(StateStore())
+    told: list[bool] = []
+    clock.add_listener(lambda: told.append(clock.known))
+    assert not clock.known
+    clock.set_source("none")
+    clock.set_source("client")  # not trusted across restarts of nocsd yet
+    assert not clock.known
+    assert told == []
+    clock.set_source("ntp")
+    assert clock.known
+    assert told == [True]  # the mount gets the time at once
+    clock.set_source("gps")
+    assert told == [True]
+    clock.set_source("none")
+    assert not clock.known

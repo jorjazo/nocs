@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 import anyio
 import anyio.lowlevel
@@ -26,6 +27,7 @@ from nocs.sequence import (
     Sequence,
     SequenceError,
     SequenceStore,
+    StepError,
     Target,
 )
 from nocs.sequence.model import (
@@ -34,6 +36,7 @@ from nocs.sequence.model import (
     AutofocusTrigger,
     Cool,
     Park,
+    Policy,
     SelectFilter,
     Slew,
     Unpark,
@@ -60,6 +63,19 @@ class Rig:
         """When set, frames wait for it (to be dropped by a pause or stop ``now``)."""
         self.pauses = 0
         self.frames = 0
+        self.stars: Callable[[int], int | None] = lambda _: 50
+        self.errors: dict[str, list[StepError]] = {}
+        """Failures to raise, in turn, for an action kind or ``frame``."""
+        self.slept = 0.0
+
+    async def sleep(self, seconds: float) -> None:
+        self.slept += seconds
+        self.time += timedelta(seconds=seconds)
+        await anyio.lowlevel.checkpoint()
+
+    def _raise(self, what: str) -> None:
+        if errors := self.errors.get(what):
+            raise errors.pop(0)
 
     def now(self) -> datetime:
         return self.time
@@ -74,6 +90,7 @@ class Rig:
         await anyio.lowlevel.checkpoint()
         if action.kind in self.fail:
             raise RuntimeError(f"{action.kind} failed")
+        self._raise(action.kind)
         if action.kind == "autofocus":
             self.time += timedelta(minutes=3)
 
@@ -83,12 +100,13 @@ class Rig:
         await anyio.lowlevel.checkpoint()
         if "frame" in self.fail:
             raise RuntimeError("the camera timed out")
+        self._raise("frame")
         self.frames += 1
         self.time += timedelta(seconds=row.exposure)
         self.calls.append(f"{row.filter or '-'} {row.exposure:g}")
         hfr = self.hfr(self.frames)
         self.on_frame(self.frames)
-        return FrameResult(stars=50, hfr=hfr)
+        return FrameResult(stars=self.stars(self.frames), hfr=hfr, frame=self.frames)
 
     async def paused(self) -> None:
         self.pauses += 1
@@ -544,3 +562,120 @@ async def test_the_checkpoint_file(tmp_path: Path) -> None:
     file.clear()
     file.clear()
     assert file.load() is None
+
+
+# -- recovery (ADR 0032) ------------------------------------------------------------
+
+
+def run(sequence: Sequence, rig: Rig, events: list[Event] | None = None) -> Runner:
+    return Runner(
+        sequence,
+        rig,
+        now=rig.now,
+        sleep=rig.sleep,
+        on_event=(events.append if events is not None else None),
+    )
+
+
+def failures(events: list[Event]) -> list[tuple[str | None, Any, Any]]:
+    return [
+        (e.path, e.data.get("kind"), e.data.get("then"))
+        for e in events
+        if e.kind is EventKind.FAILED
+    ]
+
+
+async def test_frames_under_clouds_are_taken_again_after_a_wait() -> None:
+    rig = Rig()
+    rig.stars = lambda n: 2 if n in (3, 4) else 50  # a cloud passes over frames 3 and 4
+    events: list[Event] = []
+    assert await run(night(target(row("L", 4))), rig, events).run() is Outcome.COMPLETED
+    assert len(frames(rig)) == 6
+    assert rig.slept == 600
+    assert failures(events) == [("targets.0.1", "clouds", "retry")] * 2
+    counted = [e.data["id"] for e in events if e.kind is EventKind.FRAME]
+    assert counted == [1, 2, 5, 6]
+
+
+async def test_clouds_until_the_condition_ends_the_target() -> None:
+    rig = Rig()
+    rig.stars = lambda n: 50 if n == 1 else 0
+    until = UntilTime(time=START + timedelta(hours=1))
+    events: list[Event] = []
+    sequence = night(target(row("L", 100), conditions=[until]))
+    assert await run(sequence, rig, events).run() is Outcome.COMPLETED
+    assert rig.now() >= until.time
+    assert any(e.kind is EventKind.CONDITION for e in events)
+    assert rig.calls[-2:] == ["park", "warm"]
+
+
+async def test_a_device_that_keeps_failing_ends_the_session_parked() -> None:
+    rig = Rig()
+    rig.errors["frame"] = [StepError("device", "the camera timed out")] * 3
+    events: list[Event] = []
+    runner = run(night(target(row("L", 4))), rig, events)
+    assert await runner.run() is Outcome.FAILED
+    assert failures(events) == [
+        ("targets.0.1", "device", "retry"),
+        ("targets.0.1", "device", "retry"),
+        ("targets.0.1", "device", "end"),
+    ]
+    assert rig.slept == 120
+    assert rig.calls[-2:] == ["park", "warm"]
+    assert runner.status()["error"] == "the camera timed out"
+
+
+async def test_a_failed_autofocus_is_skipped_and_waits_for_the_next_reason() -> None:
+    rig = Rig()
+    rig.errors["autofocus"] = [StepError("focus", "a bad fit")]
+    events: list[Event] = []
+    trigger = AutofocusTrigger(filter_change=True, frames=3)
+    await run(night(target(row("L", 6), triggers=[trigger])), rig, events).run()
+    assert [e.message for e in events if e.kind is EventKind.SKIPPED] == ["autofocus"]
+    assert frames_between_focus(rig) == [3, 3]
+
+
+async def test_a_target_the_solver_cannot_find_is_skipped() -> None:
+    rig = Rig()
+    rig.errors["slew"] = [StepError("solve", "no solution")] * 2
+    other = Container(
+        target=Target(name="NGC 253", ra=0.79, dec=-25.29),
+        children=[Slew(), ExposurePlan(rows=[row("R", 1)])],
+    )
+    events: list[Event] = []
+    assert await run(night(target(row("L", 2)), other), rig, events).run() is Outcome.COMPLETED
+    assert [e.message for e in events if e.kind is EventKind.SKIPPED] == ["target M 42"]
+    assert frames(rig) == ["R 60"]
+
+
+async def test_a_policy_may_pause_for_the_user() -> None:
+    rig = Rig()
+    rig.errors["frame"] = [StepError("storage", "the drive is full")]
+    sequence = night(target(row("L", 2)), recovery={"storage": Policy(then="pause")})
+    runner = run(sequence, rig)
+    async with anyio.create_task_group() as tg:
+        tg.start_soon(runner.run)
+        for _ in range(1000):
+            if runner.state is RunState.PAUSED:
+                break
+            await anyio.lowlevel.checkpoint()
+        assert runner.state is RunState.PAUSED
+        runner.resume()
+    assert runner.status()["outcome"] == "completed"
+    assert len(frames(rig)) == 2
+
+
+async def test_a_stop_takes_effect_while_waiting_for_the_sky() -> None:
+    rig = Rig()
+    rig.stars = lambda n: 0
+    runner = run(night(target(row("L", 2))), rig)
+
+    async def sleep(seconds: float) -> None:
+        await rig.sleep(seconds)
+        if rig.slept >= 60:
+            runner.stop()
+
+    runner._sleep = sleep  # pyright: ignore[reportPrivateUsage]
+    assert await runner.run() is Outcome.STOPPED
+    assert rig.slept == 60
+    assert rig.calls[-2:] == ["park", "warm"]

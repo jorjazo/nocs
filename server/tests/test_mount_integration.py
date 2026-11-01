@@ -16,6 +16,7 @@ from nocs.api import create_app
 from nocs.api.schemas import AppState
 from nocs.config import Settings
 from nocs.mount.coords import j2000_to_jnow
+from nocs.services import timekeeping
 
 pytestmark = pytest.mark.indi
 
@@ -58,18 +59,28 @@ def api(tmp_path_factory: pytest.TempPathFactory) -> Iterator[TestClient]:
         config_dir=tmp_path_factory.mktemp("config"),
         data_dir=tmp_path_factory.mktemp("data"),
     )
-    with TestClient(create_app(settings)) as client:
-        pair_owner(client)
-        assert client.put("/api/profiles/mount", json=PROFILE).status_code == 204
-        assert client.post("/api/equipment/connect", json={"profile": "mount"}).status_code == 202
-        wait(client, lambda s: s.get("mount") is not None)
-        if mount(client)["parked"]:
-            assert client.post("/api/mount/unpark").status_code == 204
-        try:
-            yield client
-        finally:
-            client.post("/api/mount/abort")
-            client.post("/api/mount/unpark")
+
+    async def unsynchronised() -> str:
+        return "none"
+
+    # The time is unknown until a client reports it, as on a Pi in the field: this
+    # host's own NTP would make it known at once (ADR 0029).
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(timekeeping, "clock_source", unsynchronised)
+        with TestClient(create_app(settings)) as client:
+            pair_owner(client)
+            assert client.put("/api/profiles/mount", json=PROFILE).status_code == 204
+            assert (
+                client.post("/api/equipment/connect", json={"profile": "mount"}).status_code == 202
+            )
+            wait(client, lambda s: s.get("mount") is not None)
+            if mount(client)["parked"]:
+                assert client.post("/api/mount/unpark").status_code == 204
+            try:
+                yield client
+            finally:
+                client.post("/api/mount/abort")
+                client.post("/api/mount/unpark")
 
 
 def test_state(api: TestClient) -> None:

@@ -11,6 +11,7 @@ from nocs.sequence.runner import (
     Outcome,
     Runner,
     RunState,
+    StepError,
 )
 from nocs.sequence.store import SequenceError, SequenceStore
 
@@ -30,5 +31,6 @@ __all__ = [
     "Sequence",
     "SequenceError",
     "SequenceStore",
+    "StepError",
     "Target",
 ]

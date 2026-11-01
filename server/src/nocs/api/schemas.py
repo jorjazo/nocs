@@ -571,10 +571,16 @@ class AutofocusState(StateModel):
     position: int | None = Field(description="Best focus, once the run checked it.")
     hfr: float | None = Field(description="Of the last frame, at ``position``.")
     stars: int | None
-    problem: Literal["no_stars", "too_few_stars", "not_turning", "flat", "bad_fit", "worse"] | None
+    problem: (
+        Literal["no_stars", "too_few_stars", "not_turning", "flat", "bad_fit", "worse", "backlash"]
+        | None
+    )
     detail: str | None = Field(description="Why it failed.")
     suggested_step: int | None = Field(
         description="A step that would put the sweep's ends at 2.5 times the best HFR."
+    )
+    suggested_overshoot: int | None = Field(
+        default=None, description="For backlash: an overshoot that would take it up."
     )
 
 
@@ -798,11 +804,15 @@ class SequenceEvent(StateModel):
         "paused",
         "resumed",
         "failed",
+        "skipped",
         "ending",
         "ended",
     ]
     message: str
     path: str | None
+    data: dict[str, Any] = Field(
+        description="A frame's row, stars and HFR; an autofocus run's position and HFR…"
+    )
 
 
 class SequenceState(StateModel):

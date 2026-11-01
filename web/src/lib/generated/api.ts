@@ -132,6 +132,11 @@ export type Trigger = AutofocusTrigger;
 export type DriverName = string;
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "FailureKind".
+ */
+export type FailureKind = "device" | "clouds" | "guiding" | "focus" | "solve" | "storage" | "other";
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "FrameKind".
  */
 export type FrameKind = "light" | "dark" | "flat" | "bias";
@@ -409,7 +414,7 @@ export interface AutofocusState {
    * Best focus, once the run checked it.
    */
   position: number | null;
-  problem: ("no_stars" | "too_few_stars" | "not_turning" | "flat" | "bad_fit" | "worse") | null;
+  problem: ("no_stars" | "too_few_stars" | "not_turning" | "flat" | "bad_fit" | "worse" | "backlash") | null;
   stars: number | null;
   start_hfr: number | null;
   start_position: number;
@@ -417,6 +422,10 @@ export interface AutofocusState {
   started: string;
   state: "running" | "succeeded" | "failed" | "cancelled";
   step: number;
+  /**
+   * For backlash: an overshoot that would take it up.
+   */
+  suggested_overshoot?: number | null;
   /**
    * A step that would put the sweep's ends at 2.5 times the best HFR.
    */
@@ -1539,6 +1548,12 @@ export interface SequenceState {
  * via the `definition` "SequenceEvent".
  */
 export interface SequenceEvent {
+  /**
+   * A frame's row, stars and HFR; an autofocus run's position and HFR…
+   */
+  data: {
+    [k: string]: unknown;
+  };
   kind:
     | "started"
     | "resumed_after_restart"
@@ -1549,6 +1564,7 @@ export interface SequenceEvent {
     | "paused"
     | "resumed"
     | "failed"
+    | "skipped"
     | "ending"
     | "ended";
   message: string;
@@ -2097,7 +2113,7 @@ export interface AutofocusState1 {
    * Best focus, once the run checked it.
    */
   position: number | null;
-  problem: ("no_stars" | "too_few_stars" | "not_turning" | "flat" | "bad_fit" | "worse") | null;
+  problem: ("no_stars" | "too_few_stars" | "not_turning" | "flat" | "bad_fit" | "worse" | "backlash") | null;
   stars: number | null;
   start_hfr: number | null;
   start_position: number;
@@ -2105,6 +2121,10 @@ export interface AutofocusState1 {
   started: string;
   state: "running" | "succeeded" | "failed" | "cancelled";
   step: number;
+  /**
+   * For backlash: an overshoot that would take it up.
+   */
+  suggested_overshoot?: number | null;
   /**
    * A step that would put the sweep's ends at 2.5 times the best HFR.
    */
@@ -3161,6 +3181,26 @@ export interface PatchOp {
   };
 }
 /**
+ * What to do when a step fails with one kind of failure.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "Policy".
+ */
+export interface Policy {
+  /**
+   * Tries after the first; None: while the conditions hold.
+   */
+  retries?: number | null;
+  /**
+   * When the retries run out: skip the step, skip the target, pause for the user, or end the session (run *end*).
+   */
+  then?: "skip" | "skip_target" | "pause" | "end";
+  /**
+   * Seconds before each retry.
+   */
+  wait?: number;
+}
+/**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "Profile".
  */
@@ -3190,6 +3230,12 @@ export interface Profile {
 export interface Sequence {
   end?: Container1;
   name: Name;
+  /**
+   * Policies that replace the defaults, by kind of failure (ADR 0032).
+   */
+  recovery?: {
+    [k: string]: Policy;
+  };
   start?: Container;
   targets?: Container;
   version?: 1;

@@ -18,7 +18,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 from owner import pair_owner
-from simfocus import APERTURE, FOCAL_LENGTH, ORION
+from simfocus import APERTURE, FOCAL_LENGTH, FOCUSER, ORION
 
 from nocs.api import create_app
 from nocs.api.schemas import AppState
@@ -178,3 +178,207 @@ def test_a_two_filter_sequence_focuses_takes_its_frames_and_parks(api: TestClien
     saved = api.get("/api/frames", params={"target": "Orion field"}).json()
     assert len(saved) == 3
     assert {f["filter"] for f in saved} == set(names)
+
+
+def set_property(api: TestClient, device: str, name: str, values: dict[str, Any]) -> None:
+    response = api.post(f"/api/indi/devices/{device}/properties/{name}", json={"values": values})
+    assert response.status_code == 202, response.text
+
+
+def test_autofocus_follows_the_temperature_and_the_stars(api: TestClient) -> None:
+    if state(api)["mount"]["parked"]:
+        assert api.post("/api/mount/unpark").status_code == 204
+    target = jnow_to_j2000(*ORION, datetime.now(UTC))
+    trigger = {"kind": "autofocus", "temperature_change": 1, "hfr_increase": 0.3, "hfr_frames": 2}
+    sequence = {
+        "name": "Triggers",
+        "targets": {
+            "children": [
+                {
+                    "kind": "container",
+                    "target": {"name": "Orion field", "ra": target.ra, "dec": target.dec},
+                    "triggers": [trigger],
+                    "children": [
+                        {"kind": "slew"},
+                        {"kind": "autofocus"},
+                        {"kind": "expose", "rows": [{"exposure": 1, "count": 9}]},
+                    ],
+                }
+            ]
+        },
+    }
+    assert api.put("/api/sequences/triggers", json=sequence).status_code == 204
+    response = api.post("/api/sequences/triggers/start")
+    assert response.status_code == 202, response.text
+    job_id = response.json()["job"]
+
+    def events(s: dict[str, Any], kind: str) -> list[dict[str, Any]]:
+        return [e for e in s["sequence"]["events"] if e["kind"] == kind]
+
+    def focused(s: dict[str, Any]) -> list[dict[str, Any]]:
+        return [e for e in events(s, "action") if e["message"] == "autofocus"]
+
+    temperature = state(api)["focuser"]["temperature"]
+    try:
+        # Two frames after the first run, the focuser warms by 2 °C.
+        wait(api, lambda s: len(events(s, "frame")) >= 2 and len(focused(s)) == 1, timeout=180)
+        set_property(api, FOCUSER, "FOCUS_TEMPERATURE", {"TEMPERATURE": temperature + 2})
+        wait(api, lambda s: len(focused(s)) == 2, timeout=180)
+        # Two frames after that run, someone knocks the focuser well out of focus.
+        start = len(events(state(api), "frame"))
+        wait(api, lambda s: len(events(s, "frame")) >= start + 2, timeout=60)
+        position = state(api)["focuser"]["position"]
+        set_property(
+            api, FOCUSER, "ABS_FOCUS_POSITION", {"FOCUS_ABSOLUTE_POSITION": position + 15000}
+        )
+        wait(api, finished(job_id), timeout=240)
+    finally:
+        set_property(api, FOCUSER, "FOCUS_TEMPERATURE", {"TEMPERATURE": temperature})
+
+    current = state(api)
+    assert current["jobs"][job_id]["state"] == "succeeded", current["sequence"]["events"]
+    reasons = [e["message"] for e in events(current, "trigger")]
+    assert len(reasons) == 2, reasons
+    assert reasons[0].startswith("autofocus: temperature +2.0")
+    assert reasons[1].startswith("autofocus: HFR +")
+    runs = focused(current)
+    assert len(runs) == 3
+    assert all(run["data"]["position"] is not None for run in runs)
+    # The last run brought the focuser back near where the first one put it.
+    assert abs(runs[2]["data"]["position"] - runs[0]["data"]["position"]) < 4000
+
+
+def orion_plan(name: str, count: int, **sequence: Any) -> dict[str, Any]:
+    target = jnow_to_j2000(*ORION, datetime.now(UTC))
+    return {
+        "name": name,
+        "targets": {
+            "children": [
+                {
+                    "kind": "container",
+                    "target": {"name": "Orion field", "ra": target.ra, "dec": target.dec},
+                    "children": [
+                        {"kind": "slew"},
+                        {"kind": "expose", "rows": [{"exposure": 1, "count": count}]},
+                    ],
+                }
+            ]
+        },
+        **sequence,
+    }
+
+
+def test_frames_under_clouds_are_taken_again(api: TestClient) -> None:
+    if state(api)["mount"]["parked"]:
+        assert api.post("/api/mount/unpark").status_code == 204
+    clouds = {"clouds": {"retries": 5, "wait": 3}}
+    response = api.put("/api/sequences/clouds", json=orion_plan("Clouds", 3, recovery=clouds))
+    assert response.status_code == 204, response.text
+    response = api.post("/api/sequences/clouds/start")
+    assert response.status_code == 202, response.text
+    job_id = response.json()["job"]
+
+    def events(s: dict[str, Any], kind: str) -> list[dict[str, Any]]:
+        return [e for e in s["sequence"]["events"] if e["kind"] == kind]
+
+    try:
+        wait(api, lambda s: len(events(s, "frame")) >= 1, timeout=120)
+        set_property(api, "CCD Simulator", "SIMULATOR_SETTINGS", {"SIM_LIMITINGMAG": 0})
+        wait(api, lambda s: any(e["data"].get("kind") == "clouds" for e in events(s, "failed")))
+    finally:
+        set_property(api, "CCD Simulator", "SIMULATOR_SETTINGS", {"SIM_LIMITINGMAG": 17})
+    wait(api, finished(job_id), timeout=120)
+    current = state(api)
+    assert current["jobs"][job_id]["state"] == "succeeded", current["sequence"]["events"]
+    assert len(events(current, "frame")) == 3
+    failed = events(current, "failed")
+    assert failed
+    assert {e["data"]["kind"] for e in failed} == {"clouds"}
+    assert {e["data"]["then"] for e in failed} == {"retry"}
+
+
+@pytest.fixture
+def restartable(tmp_path: Path) -> tuple[Settings, dict[str, Any]]:
+    value = os.environ.get("NOCS_TEST_INDI")
+    if not value:
+        pytest.skip("NOCS_TEST_INDI not set")
+    host, _, port = value.rpartition(":")
+    settings = Settings(
+        indi_host=host,
+        indi_port=int(port),
+        config_dir=tmp_path / "config",
+        data_dir=tmp_path / "data",
+    )
+    roles = {"main_camera", "mount"}
+    profile = {
+        **SIMULATORS,
+        "devices": {k: v for k, v in SIMULATORS["devices"].items() if k in roles},
+        "imaging": {"focal_length": FOCAL_LENGTH, "aperture": APERTURE},
+        "site": {
+            "name": "Sim",
+            "latitude": LATITUDE,
+            "longitude": longitude_for_orion(datetime.now(UTC)),
+        },
+    }
+    return settings, profile
+
+
+def outcome(s: dict[str, Any]) -> str | None:
+    run = s["sequence"]["run"]
+    return None if run is None else run["outcome"]
+
+
+def report_clock(client: TestClient) -> None:
+    now = datetime.now(UTC).isoformat()
+    response = client.post("/api/clock", json={"utc": now, "utc_offset": 0})
+    assert response.status_code == 200, response.text
+
+
+def test_a_restarted_nocsd_finishes_the_run(restartable: tuple[Settings, dict[str, Any]]) -> None:
+    settings, profile = restartable
+    with TestClient(create_app(settings)) as client:
+        pair_owner(client)
+        assert client.put("/api/profiles/restart", json=profile).status_code == 204
+        response = client.post("/api/equipment/connect", json={"profile": "restart"})
+        assert response.status_code == 202, response.text
+        wait(client, lambda s: s.get("mount") is not None and "main_camera" in s["cameras"])
+        report_clock(client)
+        wait(client, lambda s: s["mount"]["site_sent"] and s["mount"]["time_sent"])
+        if state(client)["mount"]["parked"]:
+            assert client.post("/api/mount/unpark").status_code == 204
+        pointing = {
+            "ra": state(client)["mount"]["ra_j2000"],
+            "dec": state(client)["mount"]["dec_j2000"],
+        }
+        assert client.put("/api/sequences/night", json=orion_plan("Night", 4)).status_code == 204
+        assert client.post("/api/sequences/night/start").status_code == 202
+        wait(
+            client,
+            lambda s: sum(e["kind"] == "frame" for e in s["sequence"]["events"]) >= 2,
+            timeout=120,
+        )
+        run = state(client)["sequence"]["run"]["run"]
+    # nocsd went away mid-run (the app stopped); it starts again on the same disks.
+    try:
+        with TestClient(create_app(settings)) as client:
+            pair_owner(client)
+            report_clock(client)  # a phone, NTP or a GPS: the mount needs the time
+            wait(client, lambda s: outcome(s) == "completed", timeout=180)
+            current = state(client)
+            again = current["sequence"]["run"]
+            assert (again["run"], again["restarts"]) == (run, 1)
+            [plan] = again["plans"].values()
+            assert plan["rows"][0]["done"] == 4
+            frames = [e for e in current["sequence"]["events"] if e["kind"] == "frame"]
+            assert 2 <= len(frames) <= 3  # the frame in progress at the restart is taken again
+    finally:
+        with TestClient(create_app(settings)) as client:
+            pair_owner(client)
+            client.post("/api/equipment/connect", json={"profile": "restart"})
+            wait(client, lambda s: s.get("mount") is not None)
+            report_clock(client)
+            wait(client, lambda s: s["mount"]["time_sent"])
+            goto = {"frame": "j2000", **pointing, "force": True}
+            response = client.post("/api/mount/goto", json=goto)
+            if response.status_code == 202:
+                wait(client, finished(response.json()["job"]))

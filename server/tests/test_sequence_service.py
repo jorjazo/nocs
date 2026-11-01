@@ -28,6 +28,7 @@ from nocs.sequence.model import Autofocus, Cool, Guide, Outputs, Park, Slew, Tar
 from nocs.sequence.rig import Parts
 from nocs.sequence.service import SequenceBusyError, SequenceService
 from nocs.state import Json, StateStore
+from nocs.storage import Session, SessionEvent
 
 M42 = Target(name="M 42", ra=5.588, dec=-5.39)
 
@@ -45,14 +46,18 @@ class Camera:
 class Rig:
     """Every service a sequence drives, recording what it is asked."""
 
-    def __init__(self, jobs: JobManager) -> None:
+    def __init__(self, jobs: JobManager, store: StateStore) -> None:
         self.jobs = jobs
+        self.store = store
         self.calls: list[str] = []
         self.sensor = Camera()
         self.gate: anyio.Event | None = None
         self.guiding = False
         self.under: list[str | None] = []
         self.fail_park = False
+        self.taken = 0
+        self.hold_from: int | None = None
+        """Frames from this one on never end (nocsd is about to crash)."""
 
     # capture
     def camera(self, role: Role) -> Camera:
@@ -81,6 +86,9 @@ class Rig:
         target: str | None = None,
     ) -> Captured:
         assert self.jobs.holder(role.value) == context.id
+        self.taken += 1
+        if self.hold_from is not None and self.taken >= self.hold_from:
+            await anyio.sleep_forever()
         if self.gate is not None:
             await self.gate.wait()
         await anyio.lowlevel.checkpoint()
@@ -124,11 +132,13 @@ class Rig:
     async def start(self, context: JobContext) -> Json:
         self.calls.append("guide")
         self.guiding = True
+        self.store.set(("guiding", "app_state"), "Guiding")
         return None
 
     async def stop(self) -> None:
         self.calls.append("stop guiding")
         self.guiding = False
+        self.store.set(("guiding", "app_state"), "Stopped")
 
     def guide_under(self, job_id: str | None) -> None:
         self.under.append(job_id)
@@ -168,7 +178,7 @@ async def until(condition: Callable[[], bool]) -> None:
 def setup(tmp_path: Path) -> tuple[SequenceService, Rig, StateStore, JobManager, CheckpointFile]:
     store = StateStore()
     jobs = JobManager(store)
-    rig = Rig(jobs)
+    rig = Rig(jobs, store)
     checkpoint = CheckpointFile(tmp_path / "data" / "sequence" / "run.json")
     service = SequenceService(
         store,
@@ -202,6 +212,7 @@ async def test_a_sequence_runs_as_one_job_holding_the_rig(setup: Any) -> None:
         "slew 5.588 -5.39",
         "autofocus",
         "filter L",
+        "guide",  # again, after the slew stopped it
         "frame M 42 1",
         "frame M 42 1",
         "stop guiding",
@@ -227,7 +238,7 @@ async def test_a_paused_sequence_lends_the_rig_back(setup: Any) -> None:
     service.put("m42", lrgb())
     rig.gate = anyio.Event()
     job = service.start("m42")
-    await until(lambda: bool(rig.calls) and rig.calls[-1] == "filter L")
+    await until(lambda: "filter L" in rig.calls)
     service.pause()
     assert store.get(("sequence", "run", "state")) == "pausing"
     rig.gate.set()
@@ -257,7 +268,7 @@ async def test_stopping_a_paused_sequence_takes_the_rig_back_for_the_end(setup: 
     service.put("m42", lrgb())
     rig.gate = anyio.Event()
     job = service.start("m42")
-    await until(lambda: bool(rig.calls) and rig.calls[-1] == "filter L")
+    await until(lambda: "filter L" in rig.calls)
     service.pause(now=True)
     await until(lambda: store.get(("sequence", "run", "state")) == "paused")
     service.stop()
@@ -340,3 +351,151 @@ def test_the_api_keeps_and_starts_sequences(tmp_path: Path) -> None:
         assert state["sequence"] == {"run": None, "events": []}
         assert client.delete("/api/sequences/m42").status_code == 204
         assert client.delete("/api/sequences/m42").status_code == 404
+
+
+# -- the catalog and restarts (ADR 0032) ---------------------------------------------
+
+
+class Recorder:
+    def __init__(self) -> None:
+        self.sessions: list[Session] = []
+        self.events: list[SessionEvent] = []
+        self.ended: list[tuple[int, str, str | None]] = []
+
+    def start_session(self, session: Session) -> int | None:
+        self.sessions.append(session)
+        return 1
+
+    def end_session(self, session_id: int, ended: str, outcome: str, error: str | None) -> None:
+        self.ended.append((session_id, outcome, error))
+
+    def add_session_events(self, session_id: int, events: list[SessionEvent]) -> None:
+        self.events.extend(events)
+
+
+def service_on(
+    tmp_path: Path, store: StateStore, jobs: JobManager, rig: Rig, recorder: Recorder
+) -> SequenceService:
+    return SequenceService(
+        store,
+        jobs,
+        SequenceStore(tmp_path),
+        CheckpointFile(tmp_path / "data" / "sequence" / "run.json"),
+        Clock(store),
+        rig.parts,
+        recorder=recorder,
+        profile=lambda: "lab",
+    )
+
+
+async def test_a_run_and_its_events_go_to_the_catalog(tmp_path: Path) -> None:
+    store = StateStore()
+    jobs = JobManager(store)
+    rig, recorder = Rig(jobs, store), Recorder()
+    service = service_on(tmp_path, store, jobs, rig, recorder)
+    service.put("m42", lrgb())
+    await jobs.wait(service.start("m42"))
+    [session] = recorder.sessions
+    assert (session.sequence, session.name, session.profile, session.restarts) == (
+        "m42",
+        "tonight",
+        "lab",
+        0,
+    )
+    assert Sequence.model_validate_json(session.definition) == lrgb()
+    kinds = [e.kind for e in recorder.events]
+    assert kinds[0] == "started"
+    assert kinds[-1] == "ended"
+    assert kinds.count("frame") == 2
+    assert recorder.ended == [(1, "completed", None)]
+
+
+async def interrupted(tmp_path: Path, frames: int) -> CheckpointFile:
+    """A run of ``lrgb`` cut after ``frames`` frames, as a crash of nocsd would leave it."""
+    store = StateStore()
+    jobs = JobManager(store)
+    rig = Rig(jobs, store)
+    service = service_on(tmp_path, store, jobs, rig, Recorder())
+    service.put("m42", lrgb())
+    rig.hold_from = frames + 1
+    job = service.start("m42")
+    await until(lambda: rig.taken > frames)
+    await anyio.sleep(0.05)  # the last frame's checkpoint is written
+    jobs.cancel(job)
+    await jobs.wait(job)
+    return CheckpointFile(tmp_path / "data" / "sequence" / "run.json")
+
+
+async def test_a_restarted_nocsd_resumes_the_run(tmp_path: Path) -> None:
+    checkpoint = await interrupted(tmp_path, frames=1)
+    saved = checkpoint.load()
+    assert saved is not None
+    assert (saved.sequence, saved.plans["targets.0.2"].done) == ("m42", [1])
+
+    store = StateStore()
+    jobs = JobManager(store)
+    rig, recorder = Rig(jobs, store), Recorder()
+    service = service_on(tmp_path, store, jobs, rig, recorder)
+    connected: list[bool] = []
+    ready = iter([False, False, True])
+    sleeps: list[float] = []
+
+    async def sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+
+    job = await service.recover(
+        lambda: connected.append(True), lambda: next(ready, True), sleep=sleep
+    )
+    assert job is not None
+    assert connected == [True]
+    assert len(sleeps) == 2
+    await jobs.wait(job)
+    assert rig.calls.count("frame M 42 1") == 1  # the one left
+    assert rig.calls[:3] == ["cooling True -10.0", "unpark", "guide"]  # *start* again
+    assert recorder.sessions[0].restarts == 1
+    assert recorder.sessions[0].run == saved.run
+    assert recorder.events[0].kind == "resumed_after_restart"
+    assert checkpoint.load() is None
+    assert await service.recover(lambda: None, lambda: True) is None  # nothing left
+
+
+async def test_without_the_rig_or_after_three_restarts_only_the_end_runs(
+    tmp_path: Path,
+) -> None:
+    checkpoint = await interrupted(tmp_path, frames=1)
+    store = StateStore()
+    jobs = JobManager(store)
+    rig = Rig(jobs, store)
+    service = service_on(tmp_path, store, jobs, rig, Recorder())
+
+    async def sleep(seconds: float) -> None:
+        await anyio.lowlevel.checkpoint()
+
+    job = await service.recover(lambda: None, lambda: False, wait=10, poll=2, sleep=sleep)
+    assert job is not None
+    await jobs.wait(job)
+    # A fresh camera is warm already: no ramp, the cooler goes off.
+    assert rig.calls == ["stop guiding", "park", "cooling False None", "output dc:1 False"]
+    assert checkpoint.load() is None
+
+    checkpoint = await interrupted(tmp_path, frames=1)
+    saved = checkpoint.load()
+    assert saved is not None
+    await checkpoint.save(saved.model_copy(update={"restarts": 3}))
+    rig = Rig(jobs, store)
+    service = service_on(tmp_path, store, jobs, rig, Recorder())
+    job = await service.recover(lambda: None, lambda: True)
+    assert job is not None
+    await jobs.wait(job)
+    assert "frame M 42 1" not in rig.calls
+    assert rig.calls[-1] == "output dc:1 False"
+
+
+async def test_a_run_of_a_deleted_sequence_is_forgotten(tmp_path: Path) -> None:
+    checkpoint = await interrupted(tmp_path, frames=1)
+    SequenceStore(tmp_path).delete("m42")
+    store = StateStore()
+    jobs = JobManager(store)
+    service = service_on(tmp_path, store, jobs, Rig(jobs, store), Recorder())
+    assert await service.recover(lambda: None, lambda: True) is None
+    assert checkpoint.load() is None

@@ -921,7 +921,8 @@
                 "not_turning",
                 "flat",
                 "bad_fit",
-                "worse"
+                "worse",
+                "backlash"
               ],
               "type": "string"
             },
@@ -977,6 +978,18 @@
         },
         "step": {
           "type": "integer"
+        },
+        "suggested_overshoot": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "For backlash: an overshoot that would take it up."
         },
         "suggested_step": {
           "anyOf": [
@@ -2552,6 +2565,18 @@
       ],
       "title": "ExposurePlan",
       "type": "object"
+    },
+    "FailureKind": {
+      "enum": [
+        "device",
+        "clouds",
+        "guiding",
+        "focus",
+        "solve",
+        "storage",
+        "other"
+      ],
+      "type": "string"
     },
     "FilterNamesRequest": {
       "additionalProperties": false,
@@ -5710,6 +5735,45 @@
       "title": "PointingOffset",
       "type": "object"
     },
+    "Policy": {
+      "additionalProperties": false,
+      "description": "What to do when a step fails with one kind of failure.",
+      "properties": {
+        "retries": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": 0,
+          "description": "Tries after the first; None: while the conditions hold."
+        },
+        "then": {
+          "default": "end",
+          "description": "When the retries run out: skip the step, skip the target, pause for the user, or end the session (run *end*).",
+          "enum": [
+            "skip",
+            "skip_target",
+            "pause",
+            "end"
+          ],
+          "type": "string"
+        },
+        "wait": {
+          "default": 0,
+          "description": "Seconds before each retry.",
+          "maximum": 3600,
+          "minimum": 0,
+          "type": "number"
+        }
+      },
+      "title": "Policy",
+      "type": "object"
+    },
     "PowerInputState": {
       "additionalProperties": false,
       "properties": {
@@ -6199,6 +6263,16 @@
         "name": {
           "$ref": "#/$defs/Name"
         },
+        "recovery": {
+          "additionalProperties": {
+            "$ref": "#/$defs/Policy"
+          },
+          "description": "Policies that replace the defaults, by kind of failure (ADR 0032).",
+          "propertyNames": {
+            "$ref": "#/$defs/FailureKind"
+          },
+          "type": "object"
+        },
         "start": {
           "$ref": "#/$defs/Container"
         },
@@ -6220,6 +6294,11 @@
     "SequenceEvent": {
       "additionalProperties": false,
       "properties": {
+        "data": {
+          "additionalProperties": true,
+          "description": "A frame's row, stars and HFR; an autofocus run's position and HFR\u2026",
+          "type": "object"
+        },
         "kind": {
           "enum": [
             "started",
@@ -6231,6 +6310,7 @@
             "paused",
             "resumed",
             "failed",
+            "skipped",
             "ending",
             "ended"
           ],
@@ -6258,7 +6338,8 @@
         "time",
         "kind",
         "message",
-        "path"
+        "path",
+        "data"
       ],
       "title": "SequenceEvent",
       "type": "object"

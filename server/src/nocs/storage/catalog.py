@@ -100,6 +100,32 @@ MIGRATIONS: list[str] = [
     ALTER TABLE frames ADD COLUMN guide_steps INTEGER;
     ALTER TABLE frames ADD COLUMN guide_lost INTEGER;    -- frames without the guide star
     """,
+    """
+    -- Sequence runs and their events, for the session report (phase 5.12, ADR 0032).
+    CREATE TABLE sessions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        run TEXT NOT NULL UNIQUE,          -- the run's id, the same across restarts of nocsd
+        sequence TEXT NOT NULL,            -- the sequence's id
+        name TEXT NOT NULL,
+        profile TEXT,
+        started TEXT NOT NULL,             -- UTC ISO 8601
+        ended TEXT,
+        outcome TEXT,                      -- completed, stopped, failed; NULL until it ends
+        error TEXT,
+        restarts INTEGER NOT NULL DEFAULT 0,
+        definition TEXT NOT NULL           -- the sequence as it ran (JSON)
+    );
+    CREATE TABLE session_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id INTEGER NOT NULL REFERENCES sessions (id),
+        time TEXT NOT NULL,                -- UTC ISO 8601
+        kind TEXT NOT NULL,
+        message TEXT NOT NULL,
+        path TEXT,                         -- where in the sequence's tree
+        data TEXT NOT NULL                 -- JSON: a frame's id, stars and HFR; a failure's kind…
+    );
+    CREATE INDEX session_events_by_session ON session_events (session_id, id);
+    """,
 ]
 VERSION = len(MIGRATIONS)
 
@@ -223,6 +249,35 @@ class FrameFilter:
     limit: int | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class Session:
+    run: str
+    sequence: str
+    name: str
+    profile: str | None
+    started: str
+    ended: str | None
+    outcome: str | None
+    error: str | None
+    restarts: int
+    definition: str
+    """The sequence as it ran, as JSON."""
+    id: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class SessionEvent:
+    time: str
+    kind: str
+    message: str
+    path: str | None
+    data: str
+    """JSON."""
+
+
+_SESSION_COLUMNS = (
+    "run, sequence, name, profile, started, ended, outcome, error, restarts, definition"
+)
 _RUN_COLUMNS = (
     "started, finished, profile, filter, state, problem, start_position, position,"
     " start_hfr, hfr, focuser_temperature, ambient_temperature, run"
@@ -455,6 +510,73 @@ class Catalog:
                 (since, until, until),
             ).fetchall()
         return [TemperatureSample(*tuple(row)) for row in rows]
+
+    def start_session(self, session: Session) -> int:
+        """Record a run as it starts, or again after a restart (same ``run``); its id."""
+        with self._lock:
+            self._db.execute(
+                f"INSERT INTO sessions ({_SESSION_COLUMNS}) VALUES ({', '.join('?' * 10)})"
+                " ON CONFLICT (run) DO UPDATE SET restarts = excluded.restarts",
+                (
+                    session.run,
+                    session.sequence,
+                    session.name,
+                    session.profile,
+                    session.started,
+                    session.ended,
+                    session.outcome,
+                    session.error,
+                    session.restarts,
+                    session.definition,
+                ),
+            )
+            row = self._db.execute(
+                "SELECT id FROM sessions WHERE run = ?", (session.run,)
+            ).fetchone()
+        session_id: int = row[0]
+        return session_id
+
+    def end_session(self, session_id: int, ended: str, outcome: str, error: str | None) -> None:
+        with self._lock:
+            self._db.execute(
+                "UPDATE sessions SET ended = ?, outcome = ?, error = ? WHERE id = ?",
+                (ended, outcome, error, session_id),
+            )
+
+    def add_session_events(self, session_id: int, events: list[SessionEvent]) -> None:
+        with self._lock:
+            self._db.executemany(
+                "INSERT INTO session_events (session_id, time, kind, message, path, data)"
+                " VALUES (?, ?, ?, ?, ?, ?)",
+                [(session_id, e.time, e.kind, e.message, e.path, e.data) for e in events],
+            )
+
+    def sessions(self, limit: int = 20, before: int | None = None) -> list[Session]:
+        """Newest first."""
+        with self._lock:
+            rows = self._db.execute(
+                f"SELECT {_SESSION_COLUMNS}, id FROM sessions WHERE (? IS NULL OR id < ?)"
+                " ORDER BY id DESC LIMIT ?",
+                (before, before, limit),
+            ).fetchall()
+        return [Session(*tuple(row)) for row in rows]
+
+    def session(self, session_id: int) -> Session | None:
+        with self._lock:
+            row = self._db.execute(
+                f"SELECT {_SESSION_COLUMNS}, id FROM sessions WHERE id = ?", (session_id,)
+            ).fetchone()
+        return Session(*tuple(row)) if row is not None else None
+
+    def session_events(self, session_id: int) -> list[SessionEvent]:
+        """Oldest first."""
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT time, kind, message, path, data FROM session_events"
+                " WHERE session_id = ? ORDER BY id",
+                (session_id,),
+            ).fetchall()
+        return [SessionEvent(*tuple(row)) for row in rows]
 
     def focus_runs(self, limit: int = 20, before: int | None = None) -> list[FocusRun]:
         """Newest first."""

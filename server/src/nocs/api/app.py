@@ -74,6 +74,7 @@ from nocs.config import Settings
 from nocs.devices import DeviceError
 from nocs.devices.camera import Region
 from nocs.equipment import (
+    Connection,
     EquipmentBusyError,
     EquipmentService,
     Profile,
@@ -106,6 +107,7 @@ from nocs.pointing import CenteringService, PointingService
 from nocs.power.service import PowerService, WeatherService
 from nocs.sequence import CheckpointFile, SequenceStore
 from nocs.sequence.rig import Parts
+from nocs.sequence.service import RESOURCES as SEQUENCE_RESOURCES
 from nocs.sequence.service import SequenceService
 from nocs.services import watchdog
 from nocs.services.gps import GpsService, NoFixError
@@ -130,6 +132,8 @@ from nocs.system.client import HelperUnavailableError
 from nocs.system.protocol import HelperError
 
 log = logging.getLogger(__name__)
+
+SEQUENCE_ROLES = [Role(r) for r in SEQUENCE_RESOURCES]
 
 _HELLO_TIMEOUT = 5.0
 
@@ -221,6 +225,22 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
             guiding=guiding(),
             power=power(),
         )
+
+    def connect_rig() -> None:
+        """After a restart, for a sequence to resume: the profile that was active."""
+        active = equipment().active
+        if active is not None and equipment().connection is Connection.DISCONNECTED:
+            equipment().connect(active)
+
+    def rig_ready() -> bool:
+        """The roles a sequence uses that the profile has are ready, and the time is known."""
+        profile = equipment().active_profile
+        if profile is None:
+            return False
+        roles = [r for r in SEQUENCE_ROLES if r in profile.devices]
+        if any(equipment().ready_device(role) is None for role in roles):
+            return False
+        return Role.MOUNT not in roles or clock().known
 
     def site_longitude() -> float | None:
         profile = equipment().active_profile
@@ -325,6 +345,8 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
             CheckpointFile(settings.data_dir / "sequence" / "run.json"),
             services.clock,
             sequence_parts,
+            recorder=services.storage,
+            profile=lambda: equipment().active,
         )
         task = asyncio.create_task(bridge.run(), name="indi-bridge")
         guiding_task = asyncio.create_task(services.guiding.run(), name="phd2")
@@ -334,10 +356,20 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
         services.gps = GpsService(store, services.equipment, settings.gpsd_host, settings.gpsd_port)
         gps_task = asyncio.create_task(services.gps.run(), name="gpsd")
         watchdog_task = asyncio.create_task(watchdog.run(), name="systemd-watchdog")
+        recovery_task = asyncio.create_task(
+            services.sequences.recover(connect_rig, rig_ready), name="sequence-recovery"
+        )
         try:
             yield
         finally:
-            for background in (watchdog_task, gps_task, time_task, system_task, guiding_task):
+            for background in (
+                recovery_task,
+                watchdog_task,
+                gps_task,
+                time_task,
+                system_task,
+                guiding_task,
+            ):
                 background.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
                     await background

@@ -14,6 +14,8 @@ from nocs.storage.catalog import (
     FocusRun,
     FrameFilter,
     NewFrame,
+    Session,
+    SessionEvent,
     TemperatureSample,
 )
 
@@ -242,3 +244,38 @@ def test_frames_keep_how_guiding_went(db: Catalog) -> None:
     row = db.frame(frame_id)
     assert row is not None
     assert (row.guide_rms_total, row.guide_steps) == (None, 3)
+
+
+def test_sessions_keep_their_events_across_restarts(db: Catalog) -> None:
+    session = Session(
+        run="r1",
+        sequence="m42",
+        name="M 42 LRGB",
+        profile="lab",
+        started="2026-11-01T00:00:00+00:00",
+        ended=None,
+        outcome=None,
+        error=None,
+        restarts=0,
+        definition="{}",
+    )
+    first = db.start_session(session)
+    db.add_session_events(first, [SessionEvent("t1", "started", "M 42 LRGB", None, "{}")])
+    # nocsd restarted mid-run: the same session goes on.
+    assert db.start_session(replace(session, restarts=1)) == first
+    db.add_session_events(
+        first, [SessionEvent("t2", "frame", "L 60 s 1/10", "targets.0.1", '{"id": 7}')]
+    )
+    db.end_session(first, "2026-11-01T06:00:00+00:00", "completed", None)
+    other = db.start_session(replace(session, run="r2"))
+
+    assert [s.id for s in db.sessions()] == [other, first]
+    stored = db.session(first)
+    assert stored is not None
+    assert (stored.restarts, stored.outcome, stored.ended) == (
+        1,
+        "completed",
+        "2026-11-01T06:00:00+00:00",
+    )
+    assert [e.kind for e in db.session_events(first)] == ["started", "frame"]
+    assert db.session(999) is None

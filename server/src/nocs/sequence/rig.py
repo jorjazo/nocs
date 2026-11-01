@@ -8,8 +8,9 @@ stops it before every slew and park.
 
 from __future__ import annotations
 
+import contextlib
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Generator
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -17,9 +18,15 @@ import anyio
 
 from nocs.devices import Coordinates, DeviceError, FrameType
 from nocs.equipment import Role
-from nocs.focus.autofocus import AutofocusOptions
-from nocs.imaging.capture import FRAME_TYPES, CameraSettings, Captured
+from nocs.filters.service import FilterWheelNotReadyError
+from nocs.focus.autofocus import AutofocusError, AutofocusOptions
+from nocs.focus.service import FocuserNotReadyError
+from nocs.focus.sweep import Problem
+from nocs.guiding import GuidingError, GuidingNotReadyError, Phd2ConnectionError, Phd2Error
+from nocs.imaging.capture import FRAME_TYPES, CameraNotReadyError, CameraSettings, Captured
 from nocs.jobs import JobContext, JobManager
+from nocs.mount.service import MountNotReadyError, PointingError
+from nocs.pointing import CenteringError
 from nocs.sequence.model import (
     Action,
     Autofocus,
@@ -35,13 +42,17 @@ from nocs.sequence.model import (
     Unpark,
     Warm,
 )
-from nocs.sequence.runner import FrameResult
+from nocs.sequence.runner import FrameResult, StepError
+from nocs.solving import SolveError
 from nocs.state import Json, StateStore
+from nocs.storage import StorageError
 from nocs.storage.environment import number
 
 log = logging.getLogger(__name__)
 
 CAMERA = Role.MAIN_CAMERA
+FOCUS_FACTS = ("position", "hfr", "start_position", "start_hfr", "temperature", "filter")
+"""What a sequence's events keep of an autofocus run."""
 COOLING_TOLERANCE = 1.0
 """°C from the target that count as there."""
 WARM_TOLERANCE = 2.0
@@ -140,6 +151,35 @@ def take_back(jobs: JobManager, job: str, guiding: Guiding | None) -> None:
     jobs.resume(job)
 
 
+@contextlib.contextmanager
+def _classified() -> Generator[None]:
+    """Turn the rig's failures into the kinds the recovery policies know (ADR 0032)."""
+    try:
+        yield
+    except StepError:
+        raise
+    except AutofocusError as e:
+        clouds = e.problem in (Problem.NO_STARS, Problem.TOO_FEW_STARS)
+        raise StepError("clouds" if clouds else "focus", f"autofocus: {e}") from e
+    except (GuidingError, GuidingNotReadyError, Phd2Error, Phd2ConnectionError) as e:
+        raise StepError("guiding", str(e) or type(e).__name__) from e
+    except (SolveError, CenteringError) as e:
+        raise StepError("solve", str(e) or type(e).__name__) from e
+    except StorageError as e:
+        raise StepError("storage", str(e) or type(e).__name__) from e
+    except (
+        DeviceError,
+        TimeoutError,
+        ConnectionError,
+        CameraNotReadyError,
+        FilterWheelNotReadyError,
+        FocuserNotReadyError,
+        MountNotReadyError,
+        PointingError,
+    ) as e:
+        raise StepError("device", str(e) or type(e).__name__) from e
+
+
 class RigExecutor:
     def __init__(
         self,
@@ -155,14 +195,26 @@ class RigExecutor:
         self._store = store
         self._parts = parts
         self._sleep = sleep
+        self._guided = False
+        """The sequence asked for guiding: frames are taken guided."""
 
-    async def action(self, action: Action, target: Target | None) -> None:
+    async def action(self, action: Action, target: Target | None) -> dict[str, Json] | None:
+        with _classified():
+            return await self._action(action, target)
+
+    async def frame(self, plan: ExposurePlan, row: PlanRow, target: Target | None) -> FrameResult:
+        with _classified():
+            await self._keep_guiding()
+            return await self._frame(plan, row, target)
+
+    async def _action(self, action: Action, target: Target | None) -> dict[str, Json] | None:
         context, parts = self._context, self._parts
         match action:
             case Cool():
                 await parts.capture.set_cooling(CAMERA, True, action.temperature, action.ramp)
                 if action.wait:
                     await self._reach(action.temperature, COOLING_TOLERANCE, action.ramp)
+                return {"temperature": parts.capture.camera(CAMERA).temperature}
             case Warm():
                 await self._warm(action.ramp)
             case Unpark():
@@ -187,10 +239,12 @@ class RigExecutor:
             case Autofocus():
                 if parts.focus is None:
                     raise ValueError("the rig has no focuser")
-                await parts.focus.run(context, parts.focus.options())
+                run = await parts.focus.run(context, parts.focus.options())
+                return {k: run.get(k) for k in FOCUS_FACTS}
             case Guide():
                 if parts.guiding is None:
                     raise ValueError("the rig has no guiding")
+                self._guided = action.on
                 if action.on:
                     await parts.guiding.start(context)
                 else:
@@ -201,7 +255,7 @@ class RigExecutor:
                 for output in action.outputs:
                     await parts.power.set_output(output, on=action.on, job=context.id)
 
-    async def frame(self, plan: ExposurePlan, row: PlanRow, target: Target | None) -> FrameResult:
+    async def _frame(self, plan: ExposurePlan, row: PlanRow, target: Target | None) -> FrameResult:
         capture = self._parts.capture
         camera = capture.camera(CAMERA)
         settings = CameraSettings(
@@ -221,7 +275,25 @@ class RigExecutor:
             save=True,
             target=target.name if target is not None and plan.frame_type == "light" else None,
         )
-        return FrameResult(stars=captured.stars, hfr=captured.hfr)
+        guiding = captured.result.get("guiding")
+        if self._guided and isinstance(guiding, dict) and (lost := guiding.get("lost")):
+            raise StepError("guiding", f"the guide star was lost {lost} times during the frame")
+        frame = captured.result.get("id")
+        return FrameResult(
+            stars=captured.stars, hfr=captured.hfr, frame=frame if isinstance(frame, int) else None
+        )
+
+    async def _keep_guiding(self) -> None:
+        """Guide again before a frame when the sequence guides and PHD2 does not (any more)."""
+        guiding = self._parts.guiding
+        if not self._guided or guiding is None:
+            return
+        if self._store.get(("guiding", "app_state")) == "Guiding":
+            return
+        if guiding.guiding:  # lost its star, or still calibrating
+            await guiding.stop()
+        self._context.progress(None, "guiding again")
+        await guiding.start(self._context)
 
     async def paused(self) -> None:
         self._jobs.suspend(self._context.id)
