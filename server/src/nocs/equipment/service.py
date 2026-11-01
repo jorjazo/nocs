@@ -37,7 +37,7 @@ from nocs.devices import (
     WeatherSensor,
 )
 from nocs.devices.base import device_interfaces
-from nocs.equipment.profiles import DeviceConfig, Profile, ProfileStore, Role
+from nocs.equipment.profiles import DeviceConfig, Profile, ProfileError, ProfileStore, Role, Site
 from nocs.indi import IndiClient, IndiEvent, PropertyDeleted, PropertyUpdated, TextElement
 from nocs.indi.drivers import DriverControlError, DriverFifo
 from nocs.state import Json, Path, StateStore
@@ -199,6 +199,17 @@ class EquipmentService:
         """Create or replace a profile. Changes to the connected one apply on next connect."""
         self._profiles.put(profile_id, profile)
         self._publish_profiles()
+
+    def set_site(self, site: Site) -> None:
+        """Change the active profile's site, at once even while it is connected: unlike its
+        devices, nothing needs reconnecting (a site from a GPS, ADR 0029)."""
+        if self._profile_id is None or self._profile is None:
+            raise ProfileError("no profile is selected")
+        profile = self._profile.model_copy(update={"site": site})
+        self._profiles.put(self._profile_id, profile)
+        self._profile = profile
+        self._publish_profiles()
+        self._notify()
 
     def delete_profile(self, profile_id: str) -> bool:
         if profile_id == self._profile_id:

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Boot an image's root filesystem in a container and check that NOCS comes up
 # (ADR 0026): its services run, nocsd answers and is connected to indiserver,
-# indiserver starts a driver through the FIFO, PHD2 listens, and ASTAP has D50.
+# indiserver starts a driver through the FIFO, PHD2 listens, ASTAP has D50, and
+# chrony reads a GPS through gpsd (ADR 0029).
 #
 #   sudo packaging/image/smoke-test.sh <mounted root filesystem>
 #
@@ -55,6 +56,10 @@ for _ in $(seq 60); do (echo > /dev/tcp/127.0.0.1/4400) 2>/dev/null && break; sl
 [[ -x /opt/astap/astap_cli ]] || fail "no ASTAP"
 [[ $(find /opt/astap -name 'd50_*' | wc -l) -gt 100 ]] || fail "no D50 database"
 [[ $(hostname) == nocs ]] || fail "the host name is $(hostname), not nocs"
+chronyd -p 2>/dev/null | grep -q '^refclock SHM 0' || fail "chrony does not read the GPS"
+[[ $(systemctl is-enabled gpsd.socket) == enabled ]] || fail "gpsd is not enabled"
+runuser -u nocs -- /opt/nocs/venv/bin/nocs-system call hello | grep -q '"time.set"' \
+    || fail "nocs-system does not offer the appliance's operations"
 [[ ! -e /snap ]] && ! command -v snap >/dev/null || fail "snapd is still there"
 echo PASS
 CHECK

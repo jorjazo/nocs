@@ -80,7 +80,7 @@ from nocs.equipment import (
     Role,
     serial_ports,
 )
-from nocs.equipment.profiles import FocusSweep
+from nocs.equipment.profiles import FocusSweep, Site
 from nocs.filters.service import FilterWheelService
 from nocs.filters.wheels import WheelStore
 from nocs.focus.autofocus import AutofocusService
@@ -98,14 +98,16 @@ from nocs.imaging.capture import DitherPlan, UploadDirs
 from nocs.imaging.worker import ImageWorker
 from nocs.indi.drivers import DriverFifo, load_catalog
 from nocs.jobs import JobManager, ResourceBusyError
-from nocs.mount.service import MountService
+from nocs.mount.service import MountNotReadyError, MountService
 from nocs.pointing import CenteringService, PointingService
 from nocs.power.service import PowerService, WeatherService
 from nocs.sequence import CheckpointFile, SequenceStore
 from nocs.sequence.rig import Parts
 from nocs.sequence.service import SequenceService
+from nocs.services.gps import GpsService, NoFixError
 from nocs.services.indi_bridge import IndiBridge, NotConnectedError
 from nocs.services.system import OperationUnavailableError, SystemService
+from nocs.services.timekeeping import TimeKeeper
 from nocs.solving import Astap, SolverService
 from nocs.state import Resync, StateStore
 from nocs.storage import (
@@ -308,10 +310,14 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
         task = asyncio.create_task(bridge.run(), name="indi-bridge")
         guiding_task = asyncio.create_task(services.guiding.run(), name="phd2")
         system_task = asyncio.create_task(services.system.run(), name="nocs-system")
+        time_keeper = TimeKeeper(services.clock, services.jobs, services.system)
+        time_task = asyncio.create_task(time_keeper.run(), name="timekeeping")
+        services.gps = GpsService(store, services.equipment, settings.gpsd_host, settings.gpsd_port)
+        gps_task = asyncio.create_task(services.gps.run(), name="gpsd")
         try:
             yield
         finally:
-            for background in (system_task, guiding_task):
+            for background in (gps_task, time_task, system_task, guiding_task):
                 background.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
                     await background
@@ -520,6 +526,23 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
             raise HTTPException(status.HTTP_409_CONFLICT, str(e)) from e
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
+    @app.post("/api/gps/site")
+    async def gps_site() -> Site:  # pyright: ignore[reportUnusedFunction]
+        """Make the GPS's position the active profile's site, and the mount's (ADR 0029)."""
+        assert services.gps is not None
+        try:
+            site = services.gps.apply_site()
+        except NoFixError as e:
+            raise HTTPException(status.HTTP_409_CONFLICT, str(e)) from e
+        except ProfileError as e:
+            raise HTTPException(status.HTTP_409_CONFLICT, str(e)) from e
+        try:
+            await mount().send_site(site)
+        except (MountNotReadyError, ResourceBusyError, DeviceError) as e:
+            # It gets the profile's site whenever it becomes ready, or with the next go to.
+            log.info("the mount keeps its site for now: %s", e)
+        return site
+
     @app.post(
         "/api/storage/destinations/{destination_id}/eject",
         status_code=status.HTTP_204_NO_CONTENT,
@@ -665,6 +688,7 @@ class _Services:
     environment: EnvironmentLog | None = None
     system: SystemService | None = None
     sequences: SequenceService | None = None
+    gps: GpsService | None = None
 
 
 def _iso(time: datetime) -> str:

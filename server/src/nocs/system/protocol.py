@@ -24,6 +24,7 @@ GROUPS: dict[str, str] = {
     "hostname.set": "hostname",
     "storage.mount": "storage",
     "storage.eject": "storage",
+    "time.set": "time",
 }
 """Every operation nocs-system knows, with the group that enables it."""
 

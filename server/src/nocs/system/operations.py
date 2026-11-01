@@ -187,10 +187,51 @@ def _own_frames_folder(where: Path, owner: str) -> None:
         os.chown(folder, user.pw_uid, user.pw_gid)
 
 
+# -- time ---------------------------------------------------------------------
+
+EARLIEST = 1767225600.0
+"""2026-01-01 UTC: no client clock earlier than this is believed."""
+LATEST = 4102444800.0
+"""2100-01-01 UTC."""
+
+
+async def set_time(_: Context, args: Message) -> Message:
+    """Step the system clock to a client's time, unless something keeps it already
+    (ADR 0029): chrony with a source (GPS, NTP), or systemd-timesyncd."""
+    utc = args.get("utc")
+    if isinstance(utc, bool) or not isinstance(utc, int | float) or set(args) != {"utc"}:
+        raise HelperError("invalid", "the arguments are {utc: <seconds since 1970>}")
+    if not EARLIEST <= utc <= LATEST:
+        raise HelperError("invalid", f"{utc} is not a believable time")
+    if keeper := await synchronised():
+        raise HelperError("invalid", f"the clock is kept by {keeper}: NOCS leaves it alone")
+    await run("date", "--utc", f"--set=@{utc:.3f}")
+    try:  # so that a Pi with a battery on its RTC boots with the right time
+        await run("hwclock", "--systohc", "--utc")
+    except HelperError as e:
+        log.info("cannot set the RTC: %s", e)
+    return {}
+
+
+async def synchronised() -> str | None:
+    """What keeps the system clock right now, if anything."""
+    try:
+        tracking = await run("chronyc", "-c", "tracking")
+    except HelperError:
+        try:
+            synced = await run("timedatectl", "show", "--property=NTPSynchronized", "--value")
+        except HelperError:
+            return None
+        return "systemd-timesyncd" if synced.strip() == "yes" else None
+    fields = tracking.strip().split(",")
+    return "chrony" if len(fields) >= 14 and fields[13] != "Not synchronised" else None
+
+
 OPERATIONS: dict[str, Operation] = {
     "power.reboot": reboot,
     "power.poweroff": power_off,
     "hostname.set": set_hostname,
     "storage.mount": mount,
     "storage.eject": eject,
+    "time.set": set_time,
 }

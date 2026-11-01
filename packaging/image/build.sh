@@ -114,7 +114,8 @@ in_image apt-get install -y --no-install-recommends software-properties-common
 in_image add-apt-repository -y --no-update ppa:mutlaqja/ppa
 in_image add-apt-repository -y --no-update ppa:pch/phd2
 in_image apt-get update
-in_image apt-get install -y /tmp/nocs.deb indi-bin indi-3rdparty-drivers phd2 xvfb avahi-daemon
+in_image apt-get install -y /tmp/nocs.deb indi-bin indi-3rdparty-drivers phd2 xvfb avahi-daemon \
+    chrony gpsd
 in_image dpkg -i /tmp/d50.deb
 mkdir -p "$root/opt/astap"
 unzip -o -q "$CACHE/astap/astap_cli_aarch64.zip" -d "$root/opt/astap"
@@ -138,6 +139,30 @@ mkdir -p "$root/etc/needrestart/conf.d"
 cat > "$root/etc/needrestart/conf.d/nocs.conf" <<'EOF'
 # NOCS (ADR 0025): list the services an upgrade affects, restart none of them.
 $nrconf{restart} = 'l';
+EOF
+# A USB GPS gives chrony the time (and nocsd the site) through gpsd (ADR 0029).
+cat > "$root/etc/default/gpsd" <<'EOF'
+# NOCS (ADR 0029): find USB GPS receivers when they are plugged in, and read them
+# without waiting for a client, so that chrony always gets their time.
+DEVICES=""
+USBAUTO="true"
+GPSD_OPTIONS="-n"
+EOF
+grep -q '^confdir /etc/chrony/conf.d' "$root/etc/chrony/chrony.conf" ||
+    sed -i '1i confdir /etc/chrony/conf.d' "$root/etc/chrony/chrony.conf"
+mkdir -p "$root/etc/chrony/conf.d"
+cat > "$root/etc/chrony/conf.d/nocs-gps.conf" <<'EOF'
+# NOCS (ADR 0029): a USB GPS's time, from gpsd's shared memory. Without a PPS signal
+# it is good to tens of milliseconds: plenty for pointing and FITS headers.
+refclock SHM 0 refid GPS precision 1e-1 offset 0.1 delay 0.2
+EOF
+# The box is the appliance: nocs-system does everything nocsd may ask (ADR 0027).
+mkdir -p "$root/etc/nocs/system.conf.d"
+cat > "$root/etc/nocs/system.conf.d/appliance.conf" <<'EOF'
+# NOCS appliance (ADR 0027): restart, shut down, rename, mount and eject USB drives,
+# and set the clock from a client when nothing else keeps it.
+[operations]
+enabled = power hostname storage time
 EOF
 echo nocs > "$root/etc/hostname"
 sed -i '/^127\.0\.1\.1/d' "$root/etc/hosts"

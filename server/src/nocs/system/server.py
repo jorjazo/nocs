@@ -3,7 +3,8 @@
     nocs-system                       serve on the socket (run by nocs-system.service)
     nocs-system call <op> [<json>]    perform one operation, as nocsd would
 
-Configuration in ``/etc/nocs/system.conf`` (``NOCS_SYSTEM_CONFIG``)::
+Configuration in ``/etc/nocs/system.conf`` (``NOCS_SYSTEM_CONFIG``), then the files
+in ``/etc/nocs/system.conf.d/``::
 
     [helper]
     user = nocs                 # the only user served, besides root
@@ -65,9 +66,11 @@ class Config:
 
 
 def load_config(path: Path, socket_path: Path = SOCKET) -> Config:
-    """Read ``path``; a missing file serves ``nocs`` with every operation off."""
+    """Read ``path``, then ``<path>.d/*.conf`` in order, later settings winning (the
+    appliance switches its operations on there); none serves ``nocs`` with every
+    operation off."""
     parser = configparser.ConfigParser(inline_comment_prefixes=("#",))
-    parser.read(path)
+    parser.read([path, *sorted(path.with_name(f"{path.name}.d").glob("*.conf"))])
     user = pwd.getpwnam(parser.get("helper", "user", fallback="nocs"))
     groups = parser.get("operations", "enabled", fallback="").replace(",", " ").split()
     known = set(GROUPS.values())

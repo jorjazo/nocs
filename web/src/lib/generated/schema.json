@@ -115,6 +115,17 @@
           "default": null,
           "description": "None: no focuser is ready."
         },
+        "gps": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GpsState"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "guiding": {
           "anyOf": [
             {
@@ -1577,12 +1588,30 @@
             }
           ],
           "description": "Seconds the clients' clock is ahead of the system clock; None until a client reports it."
+        },
+        "source": {
+          "anyOf": [
+            {
+              "enum": [
+                "gps",
+                "ntp",
+                "client",
+                "none"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "What keeps the system clock: a GPS or NTP servers (through chrony or systemd-timesyncd), a client's time that NOCS set it to (ADR 0029), or nothing; None until NOCS has looked."
         }
       },
       "required": [
         "offset",
         "measured",
-        "corrected"
+        "corrected",
+        "source"
       ],
       "title": "ClockState",
       "type": "object"
@@ -2816,6 +2845,90 @@
         "flat"
       ],
       "type": "string"
+    },
+    "GpsState": {
+      "additionalProperties": false,
+      "description": "A USB GPS through gpsd (ADR 0029); positions to 4 decimals, at most every 10 s.",
+      "properties": {
+        "connected": {
+          "description": "gpsd answers (a GPS may still be missing).",
+          "type": "boolean"
+        },
+        "elevation": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Metres above sea level; 3D fixes only."
+        },
+        "fix": {
+          "enum": [
+            "none",
+            "2d",
+            "3d"
+          ],
+          "type": "string"
+        },
+        "latitude": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Degrees, north positive."
+        },
+        "longitude": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Degrees, east positive."
+        },
+        "site_differs": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "A 3D fix more than 0.01\u00b0 or 50 m from the active profile's site, or a profile without one: the app offers the GPS's site. None without a 3D fix or profile."
+        },
+        "time": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The GPS's time of the fix, UTC."
+        }
+      },
+      "required": [
+        "connected",
+        "fix",
+        "latitude",
+        "longitude",
+        "elevation",
+        "time",
+        "site_differs"
+      ],
+      "title": "GpsState",
+      "type": "object"
     },
     "Guide": {
       "additionalProperties": false,

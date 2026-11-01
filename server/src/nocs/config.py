@@ -50,6 +50,9 @@ class Settings(BaseSettings):
     phd2_indi_host: str | None = None
     """indiserver as PHD2 reaches it, when that differs from ``indi_host`` (containers)."""
     phd2_indi_port: int | None = None
+    gpsd_host: str = "localhost"
+    gpsd_port: int = 2947
+    """gpsd, for a USB GPS's position (ADR 0029); without it, the GPS is simply absent."""
     system_socket: Path = Path("/run/nocs-system/socket")
     """nocs-system's socket (ADR 0027); without it, NOCS cannot reboot the box or rename it."""
     config_dir: Path = Field(default_factory=_default_config_dir)

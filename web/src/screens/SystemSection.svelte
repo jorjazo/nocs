@@ -5,10 +5,10 @@
   import Button from "../components/Button.svelte";
   import ConfirmButton from "../components/ConfirmButton.svelte";
   import TextField from "../components/TextField.svelte";
-  import { ApiError, DIAGNOSTICS_URL, powerOff, reboot, setHostname } from "../lib/api";
+  import { ApiError, DIAGNOSTICS_URL, powerOff, reboot, setHostname, useGpsSite } from "../lib/api";
   import { auth } from "../lib/auth.svelte";
   import { errorText } from "../lib/errors";
-  import { formatBytes, formatPlain, formatTemperature, formatTime } from "../lib/format";
+  import { formatBytes, formatDecimal, formatPlain, formatTemperature, formatTime } from "../lib/format";
   import { i18n } from "../lib/i18n";
   import { live } from "../lib/live.svelte";
 
@@ -17,6 +17,15 @@
 
   const system = $derived(live.app.system ?? null);
   const health = $derived(system?.health ?? null);
+  const timeSource = $derived(live.app.clock?.source ?? null);
+  // Only where gpsd runs (the appliance, ADR 0029).
+  const gps = $derived(live.app.gps?.connected ? live.app.gps : null);
+  const gpsPosition = $derived.by(() => {
+    if (!gps || gps.latitude === null || gps.longitude === null) return null;
+    const parts = [`${formatDecimal(gps.latitude, locale, 4)}°`, `${formatDecimal(gps.longitude, locale, 4)}°`];
+    if (gps.elevation !== null) parts.push(t.system.gpsElevation(formatPlain(gps.elevation, locale)));
+    return parts.join(" · ");
+  });
   const can = (op: string) => auth.owner && (system?.operations.includes(op) ?? false);
 
   const readouts = $derived.by(() => {
@@ -30,6 +39,8 @@
     if (health.disk_free !== null) {
       items.push({ label: t.system.disk, value: t.system.free(formatBytes(health.disk_free, locale)) });
     }
+    if (timeSource) items.push({ label: t.system.time, value: t.system.timeSource[timeSource] });
+    if (gps) items.push({ label: t.system.gps, value: gpsPosition ?? t.system.gpsNoFix });
     if (health.under_voltage !== null) {
       const low = health.under_voltage;
       items.push({ label: t.system.supply, value: low ? t.system.supplyLow : t.system.supplyOk, low });
@@ -48,12 +59,12 @@
 
   // -- Actions --------------------------------------------------------------------
 
-  type Action = "rename" | "restart" | "shutDown";
+  type Action = "rename" | "restart" | "shutDown" | "gps";
   let busy = $state<Action | null>(null);
   let error = $state("");
   // A restart or shut down refused because something runs: offer to force it.
   let refused = $state<Action | null>(null);
-  let done = $state<"restarting" | "shuttingDown" | null>(null);
+  let done = $state<"restarting" | "shuttingDown" | "gpsUsed" | null>(null);
 
   async function act(action: Action, run: () => Promise<void>): Promise<boolean> {
     busy = action;
@@ -91,6 +102,10 @@
     if (await act("restart", () => reboot(force))) done = "restarting";
   }
 
+  async function useGps(): Promise<void> {
+    if (await act("gps", async () => void (await useGpsSite()))) done = "gpsUsed";
+  }
+
   async function shutDown(force = false): Promise<void> {
     if (await act("shutDown", () => powerOff(force))) done = "shuttingDown";
   }
@@ -116,6 +131,13 @@
           </div>
         {/each}
       </dl>
+    {/if}
+
+    {#if gps?.site_differs && auth.owner}
+      <div class="gps">
+        <span class="muted">{t.system.gpsUseHint}</span>
+        <Button busy={busy === "gps"} onclick={useGps}>{t.system.gpsUse}</Button>
+      </div>
     {/if}
 
     <div class="name">
@@ -216,6 +238,12 @@
   }
   .low {
     color: var(--error);
+  }
+  .gps {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-2);
   }
   .name {
     display: flex;

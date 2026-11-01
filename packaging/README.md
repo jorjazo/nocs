@@ -61,7 +61,9 @@ On arm64 only (CI: the Image workflow, on an `ubuntu-24.04-arm` runner), as root
 It takes Ubuntu's own preinstalled server image for the Raspberry Pi (checked
 against its `SHA256SUMS`), grows its root filesystem and, in a chroot that starts no
 services, adds the INDI and PHD2 PPAs, installs `nocs`, INDI's drivers, PHD2 and
-avahi, puts ASTAP and D50 in `/opt/astap`, removes snapd, makes unattended-upgrades
+avahi, chrony and gpsd (a USB GPS as chrony's reference clock, ADR 0029), puts
+ASTAP and D50 in `/opt/astap`, switches every operation of nocs-system on
+(`/etc/nocs/system.conf.d/appliance.conf`), removes snapd, makes unattended-upgrades
 only download and needrestart only list, names the box `nocs`, replaces the boot
 partition's `user-data` with one that creates no login user, and empties the
 machine id and SSH host keys so each Pi makes its own.
@@ -73,5 +75,5 @@ driver started through the FIFO, PHD2 and D50. The outputs are
 in it. Write it with Raspberry Pi Imager ("Use custom"), whose customisation
 (Wi-Fi, SSH key) cloud-init applies at first boot; booting it on a Pi 5, from a
 microSD card and from a USB SSD, is checked by hand ([ADR 0026](../docs/adr/0026-raspberry-pi-image.md)).
-NetworkManager and the access point (6.6), gpsd (6.8) and `nocs-appliance` come
-in later stages.
+NetworkManager and the access point (6.6) and `nocs-appliance`, which will take
+over the appliance's configuration from this script, come in later stages.

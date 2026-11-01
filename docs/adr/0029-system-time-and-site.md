@@ -16,7 +16,9 @@ builds nocs-system (ADR 0027). Facts:
   its first updates, then slews, and keeps the RTC in step.
 - timedated refuses to set the time while network time synchronisation is on.
   chrony accepts manual time (`chronyc settime`) when its configuration has the
-  `manual` directive.
+  `manual` directive, but only as one more sample for its own estimate; with no
+  source at all, nothing else adjusts the clock, and stepping it directly is
+  exact.
 - **gpsd** reads USB GPS receivers and feeds chrony as a reference clock (shared
   memory or socket). A GPS without a PPS signal gives time to within tens or
   hundreds of milliseconds, plenty for pointing and FITS headers; it also gives
@@ -31,10 +33,11 @@ builds nocs-system (ADR 0027). Facts:
 - **chrony is the only thing that disciplines the clock**, with three kinds of
   source, best first: a GPS through gpsd, NTP servers when the box is online, and
   the client's time.
-- **Client time sets the system clock** through nocs-system (`time` operation,
-  as `chronyc settime`, with `manual` in the appliance's chrony configuration)
-  when chrony has no synchronised source and the client's time differs by more
-  than 5 s. It is not applied while a job runs, so a clock never jumps in the
+- **Client time sets the system clock** through nocs-system (`time.set`: `date
+  --set`, then `hwclock --systohc` where there is an RTC) when chrony has no
+  synchronised source (nor systemd-timesyncd, on a PC) and the client's time
+  differs by more than 5 s. nocs-system checks that again itself, and refuses
+  times before 2026 or after 2100. It is not applied while a job runs, so a clock never jumps in the
   middle of an exposure; the first client to connect after boot usually comes
   before any job.
 - **nocsd's own correction stays** (ADR 0015): it covers installs without

@@ -32,6 +32,7 @@ import type {
   Profile,
   SerialPortInfo,
   ShutdownRequest,
+  Site,
   SolveRequest,
   TrackingRequest,
 } from "./types";
@@ -148,6 +149,11 @@ export function powerOff(force = false): Promise<void> {
 
 export function setHostname(name: string): Promise<void> {
   return request("PUT", "/api/system/hostname", { name } satisfies HostnameRequest);
+}
+
+// The GPS's position becomes the active profile's site, and the mount's (ADR 0029).
+export function useGpsSite(): Promise<Site> {
+  return request("POST", "/api/gps/site");
 }
 
 // A zip for bug reports: versions, the state and the last day of logs.

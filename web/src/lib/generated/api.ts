@@ -156,6 +156,7 @@ export interface AppState {
    * None: no focuser is ready.
    */
   focuser?: FocuserState | null;
+  gps?: GpsState | null;
   guiding?: GuidingState | null;
   indi?: IndiState | null;
   /**
@@ -621,6 +622,10 @@ export interface ClockState {
    * Seconds the clients' clock is ahead of the system clock; None until a client reports it.
    */
   offset: number | null;
+  /**
+   * What keeps the system clock: a GPS or NTP servers (through chrony or systemd-timesyncd), a client's time that NOCS set it to (ADR 0029), or nothing; None until NOCS has looked.
+   */
+  source: ("gps" | "ntp" | "client" | "none") | null;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -744,6 +749,39 @@ export interface FocuserBacklash {
    * Steps past a target when moving the other way; None: one sweep step.
    */
   overshoot: number | null;
+}
+/**
+ * A USB GPS through gpsd (ADR 0029); positions to 4 decimals, at most every 10 s.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "GpsState".
+ */
+export interface GpsState {
+  /**
+   * gpsd answers (a GPS may still be missing).
+   */
+  connected: boolean;
+  /**
+   * Metres above sea level; 3D fixes only.
+   */
+  elevation: number | null;
+  fix: "none" | "2d" | "3d";
+  /**
+   * Degrees, north positive.
+   */
+  latitude: number | null;
+  /**
+   * Degrees, east positive.
+   */
+  longitude: number | null;
+  /**
+   * A 3D fix more than 0.01° or 50 m from the active profile's site, or a profile without one: the app offers the GPS's site. None without a 3D fix or profile.
+   */
+  site_differs: boolean | null;
+  /**
+   * The GPS's time of the fix, UTC.
+   */
+  time: string | null;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema

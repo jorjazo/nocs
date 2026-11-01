@@ -182,6 +182,9 @@ def test_load_config(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     loaded = load_config(path)
     assert (loaded.uid, loaded.gid, loaded.enabled) == (user.pw_uid, user.pw_gid, {"power"})
     assert "unknown group of operations 'magic'" in caplog.text
+    (tmp_path / "system.conf.d").mkdir()
+    (tmp_path / "system.conf.d/appliance.conf").write_text("[operations]\nenabled = time storage\n")
+    assert load_config(path).enabled == {"time", "storage"}
 
 
 def test_update_hosts_adds_the_entry_after_localhost(tmp_path: Path) -> None:

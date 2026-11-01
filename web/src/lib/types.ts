@@ -43,6 +43,7 @@ export type {
   FocuserState,
   FrameInfo,
   FrameTypeName,
+  GpsState,
   Health,
   HealthWarningName,
   Hello,

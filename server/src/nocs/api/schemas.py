@@ -343,6 +343,11 @@ class ClockState(StateModel):
         description="The system clock is more than 5 s off: NOCS uses the clients' time for"
         " frame times, nights and the mount."
     )
+    source: Literal["gps", "ntp", "client", "none"] | None = Field(
+        description="What keeps the system clock: a GPS or NTP servers (through chrony or"
+        " systemd-timesyncd), a client's time that NOCS set it to (ADR 0029), or nothing;"
+        " None until NOCS has looked."
+    )
 
 
 type OutputKindName = Literal["dc", "dew", "usb", "variable"]
@@ -654,6 +659,21 @@ class GuidingState(StateModel):
 type HealthWarningName = Literal["under_voltage", "throttled", "hot", "memory", "disk"]
 
 
+class GpsState(StateModel):
+    """A USB GPS through gpsd (ADR 0029); positions to 4 decimals, at most every 10 s."""
+
+    connected: bool = Field(description="gpsd answers (a GPS may still be missing).")
+    fix: Literal["none", "2d", "3d"]
+    latitude: float | None = Field(description="Degrees, north positive.")
+    longitude: float | None = Field(description="Degrees, east positive.")
+    elevation: int | None = Field(description="Metres above sea level; 3D fixes only.")
+    time: str | None = Field(description="The GPS's time of the fix, UTC.")
+    site_differs: bool | None = Field(
+        description="A 3D fix more than 0.01° or 50 m from the active profile's site, or a"
+        " profile without one: the app offers the GPS's site. None without a 3D fix or profile."
+    )
+
+
 class SystemHealth(StateModel):
     """Read every few seconds; None where the computer does not report it."""
 
@@ -766,6 +786,7 @@ class AppState(StateModel):
     guiding: GuidingState | None = None
     system: SystemState | None = None
     sequence: SequenceState | None = None
+    gps: GpsState | None = None
 
 
 # -- HTTP --------------------------------------------------------------------

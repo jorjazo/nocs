@@ -5,10 +5,11 @@ wherever it stopped. Clients report their own clock when they connect; when the
 system clock is more than ``THRESHOLD`` seconds off, NOCS keeps time from the
 client's report (advanced with the monotonic clock, which a later correction of
 the system clock does not move) for what it timestamps itself: frame start times
-and nights (ADR 0015), the mount's clock, and the horizon check. The system clock
-itself is left alone; setting it is a privileged operation (phase 6).
+and nights (ADR 0015), the mount's clock, and the horizon check. Where nocs-system
+can, ``nocs.services.timekeeping`` also sets the system clock from the client's
+report when nothing else keeps it (ADR 0029); this correction then drops to zero.
 
-State under ``("clock",)``: ``{offset, measured, corrected}``.
+State under ``("clock",)``: ``{offset, measured, corrected, source}``.
 """
 
 from __future__ import annotations
@@ -42,7 +43,8 @@ class Clock:
         """A client's time and the monotonic clock when it was reported."""
         self._utc_offset: float | None = None
         self._listeners: list[Callable[[], None]] = []
-        store.set(ROOT, {"offset": None, "measured": None, "corrected": False})
+        self._source: str | None = None
+        store.set(ROOT, {"offset": None, "measured": None, "corrected": False, "source": None})
 
     @property
     def known(self) -> bool:
@@ -88,13 +90,26 @@ class Clock:
         assert offset is not None
         if abs(offset) > THRESHOLD:
             log.warning("system clock is %.1f s off the client's; using the client's", -offset)
+        self.refresh()
+        for listener in list(self._listeners):
+            listener()
+        return offset
+
+    def refresh(self) -> None:
+        """Publish the offset again: after the system clock was set, it is close to zero."""
+        offset = self.offset
+        if offset is None:
+            return
         with self._store.transaction():
             self._store.set((*ROOT, "offset"), round(offset, 3))
             self._store.set((*ROOT, "measured"), self.now().isoformat(timespec="seconds"))
             self._store.set((*ROOT, "corrected"), abs(offset) > THRESHOLD)
-        for listener in list(self._listeners):
-            listener()
-        return offset
+
+    def set_source(self, source: str | None) -> None:
+        """Where the system time comes from: gps, ntp, client or none (ADR 0029)."""
+        if source != self._source:
+            self._source = source
+            self._store.set((*ROOT, "source"), source)
 
     def add_listener(self, listener: Callable[[], None]) -> Callable[[], None]:
         """Call ``listener`` after every client report."""
