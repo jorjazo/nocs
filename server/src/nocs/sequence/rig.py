@@ -141,9 +141,8 @@ class MountControl(Protocol):
 class Guiding(Protocol):
     @property
     def guiding(self) -> bool: ...
-    async def start(self, context: JobContext) -> Json: ...
+    async def start(self, context: JobContext, *, recalibrate: bool = False) -> Json: ...
     def guide_pixels(self, main_pixels: float) -> float: ...
-    async def flip_calibration(self) -> None: ...
     async def dither(
         self,
         context: JobContext,
@@ -283,6 +282,8 @@ class RigExecutor:
         self._sleep = sleep
         self._guided = False
         """The sequence asked for guiding: frames are taken guided."""
+        self._recalibrate = False
+        """The mount flipped: PHD2 calibrates again when it next starts guiding."""
         self._cooling: Cool | None = None
         """The cooling asked for, to ask again after the camera's driver restarts."""
 
@@ -355,7 +356,7 @@ class RigExecutor:
                     raise ValueError("the rig has no guiding")
                 self._guided = action.on
                 if action.on:
-                    await parts.guiding.start(context)
+                    await self._start_guiding()
                 else:
                     await self._stop_guiding()  # PHD2 may be someone else's when not guiding
             case Dither():
@@ -418,7 +419,13 @@ class RigExecutor:
         if guiding.guiding:  # lost its star, or still calibrating
             await guiding.stop()
         self._context.progress(None, "guiding again")
-        await guiding.start(self._context)
+        await self._start_guiding()
+
+    async def _start_guiding(self) -> None:
+        guiding = self._parts.guiding
+        assert guiding is not None
+        await guiding.start(self._context, recalibrate=self._recalibrate)
+        self._recalibrate = False
 
     async def paused(self) -> None:
         self._jobs.suspend(self._context.id)
@@ -464,12 +471,13 @@ class RigExecutor:
         done["pier_side"] = after
         if isinstance(before, str) and before == after:
             raise StepError("flip", f"the mount is still on the {after} side of the pier")
-        guiding = self._parts.guiding
-        if after is None and guiding is not None and self._guided:
-            # PHD2 cannot tell from the mount: flip its calibration (with a side
-            # reported, PHD2 flips it by itself).
-            await guiding.flip_calibration()
-            done["calibration"] = "flipped"
+        if self._guided:
+            # PHD2 turns its calibration for the new side when the mount reports one,
+            # but whether Dec must be reversed too depends on the mount: on the
+            # simulators Dec guiding ran away and no dither settled again (soak test,
+            # 2026-11-01). Calibrating again is right on any mount.
+            self._recalibrate = True
+            done["calibration"] = "again"
         return done
 
     async def stop_tracking(self) -> None:

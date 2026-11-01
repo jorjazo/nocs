@@ -41,6 +41,11 @@ A spike on the simulators (2026-11-01, INDI's Telescope Simulator with
   its calibration (`flip_calibration`); with a side reported PHD2 flips it itself.
   Guiding starts again before the next frame, as after any slew. A flip that fails
   is a `flip` failure: one retry 10 s later, then the session ends (park).
+  (2026-11-01, soak test: on the simulators PHD2 turned its calibration's RA for the
+  reported side but Dec guiding then ran away, 0.2 to 23 px in 20 s, and no dither
+  settled until the guiding policy ended the night. Whether Dec must be reversed
+  after a flip depends on the mount, so guiding now calibrates again after every
+  flip, a few minutes once a night, instead of `flip_calibration`.)
 - **The guard.** While a run exists, paused included, a task looks every 30 s: a
   target pointed east and now 15 minutes past its flip point with no flip under way
   makes NOCS stop tracking, once per pointing, with an event. Resuming flips first.

@@ -34,6 +34,7 @@ from nocs.sequence.model import (
     Cool,
     Dither,
     DitherTrigger,
+    Flip,
     Guide,
     Outputs,
     Park,
@@ -155,8 +156,8 @@ class Rig:
         return Coordinates(ra, dec)
 
     # guiding
-    async def start(self, context: JobContext) -> Json:
-        self.calls.append("guide")
+    async def start(self, context: JobContext, *, recalibrate: bool = False) -> Json:
+        self.calls.append("guide, calibrating" if recalibrate else "guide")
         self.guiding = True
         self.store.set(("guiding", "app_state"), "Guiding")
         return None
@@ -168,9 +169,6 @@ class Rig:
 
     def guide_under(self, job_id: str | None) -> None:
         self.under.append(job_id)
-
-    async def flip_calibration(self) -> None:
-        self.calls.append("flip calibration")
 
     def guide_pixels(self, main_pixels: float) -> float:
         return main_pixels / 2
@@ -352,6 +350,30 @@ async def test_a_frame_counts_unless_its_guide_star_was_lost_for_long(setup: Any
     failed = [e for e in service_events(setup) if e["kind"] == "failed"]
     assert [e["message"] for e in failed] == ["the guide star was lost in 60 of 150 guide frames"]
     assert failed[0]["data"]["kind"] == "guiding"
+
+
+async def test_guiding_calibrates_again_after_a_flip(setup: Any) -> None:
+    # Whether Dec must be reversed after a flip depends on the mount: on the simulators
+    # PHD2's own turn of its calibration ran away in Dec (soak test, 2026-11-01).
+    service, rig, _, jobs, _ = setup
+    plan = ExposurePlan(rows=[PlanRow(filter="L", exposure=60, count=1)])
+    later = ExposurePlan(rows=[PlanRow(filter="L", exposure=60, count=2)])
+    imaging = Container(target=M42, children=[Slew(), Guide(on=True), plan, Flip(), later])
+    service.put("flip", Sequence(name="flip", targets=Container(children=[imaging])))
+    await jobs.wait(service.start("flip"))
+    steps = [c for c in rig.calls if c.startswith(("guide", "stop guiding", "slew", "frame"))]
+    assert steps == [
+        "slew 5.588 -5.39",
+        "guide",
+        "frame M 42 60",
+        "stop guiding",
+        "slew 5.588 -5.39",
+        "guide, calibrating",
+        "frame M 42 60",
+        "frame M 42 60",
+    ]
+    [flip] = [e for e in service_events(setup) if e["kind"] == "action" and e["message"] == "flip"]
+    assert flip["data"]["calibration"] == "again"
 
 
 async def test_a_target_is_centred_and_checked_every_n_frames(setup: Any) -> None:
