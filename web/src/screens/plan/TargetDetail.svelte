@@ -12,6 +12,7 @@
   import EmptyState from "../../components/EmptyState.svelte";
   import Icon from "../../components/Icon.svelte";
   import SkyChart from "../../components/SkyChart.svelte";
+  import Toggle from "../../components/Toggle.svelte";
   import { ApiError, centerOn, choosePlanTarget, getTarget, getVisibility, gotoMount, setTarget } from "../../lib/api";
   import { auth } from "../../lib/auth.svelte";
   import { holder } from "../../lib/camera.svelte";
@@ -20,6 +21,7 @@
   import { i18n } from "../../lib/i18n";
   import { live } from "../../lib/live.svelte";
   import { formatDec, formatRa, mountActivity } from "../../lib/mount.svelte";
+  import { prefs } from "../../lib/prefs.svelte";
   import { href } from "../../lib/router.svelte";
   import { separation, type Sky } from "../../lib/sky/projection";
   import { commonNames, objectSummary } from "../../lib/targets";
@@ -100,6 +102,14 @@
   // How far the frame was moved off the object, arcminutes.
   const offset = $derived(object ? separation(center, object) * 60 : 0);
   const moved = $derived(offset > 0.5);
+
+  // The last solved frame: drawn where it landed, and the camera's angle as it is.
+  const last = $derived(live.app.solver?.last ?? null);
+  const solved = $derived(
+    last ? { ra: last.ra, dec: last.dec, width: last.fov[0] ?? 0, height: last.fov[1] ?? 0, rotation: last.rotation } : null,
+  );
+  // How far to turn the camera for the framing's angle, -180..180°.
+  const turn = $derived(last ? ((((rotation - last.rotation) % 360) + 540) % 360) - 180 : null);
 
   const chosen = $derived.by(() => {
     const o = object;
@@ -259,7 +269,15 @@
       {#if !field}<p class="muted">{t.plan.noField}</p>{/if}
       <div class="chart">
         {#key object.id}
-          <SkyChart target={{ ra: object.ra, dec: object.dec }} bind:center {span} {field} {rotation} highlight={object.id} />
+          <SkyChart
+            target={{ ra: object.ra, dec: object.dec }}
+            bind:center
+            {span}
+            {field}
+            {rotation}
+            {solved}
+            survey={prefs.survey}
+            highlight={object.id} />
         {/key}
       </div>
       <p class="caption muted">
@@ -275,6 +293,21 @@
         <input type="range" min="0" max="359" step="1" bind:value={rotation} />
         <span class="caption muted">{t.plan.rotationHint}</span>
       </label>
+      {#if last && turn !== null}
+        <div class="turn">
+          <p class="caption">
+            {Math.abs(turn) < 1
+              ? t.plan.turnDone(formatDecimal(last.rotation % 360, locale, 0))
+              : t.plan.turn(
+                  formatDecimal(Math.abs(turn), locale, 0),
+                  formatDecimal(last.rotation % 360, locale, 0),
+                  formatDecimal(rotation, locale, 0),
+                )}
+          </p>
+          <Button variant="text" onclick={() => (rotation = Math.round(last.rotation) % 360)}>{t.plan.useCamera}</Button>
+        </div>
+      {/if}
+      <Toggle label={t.plan.survey} hint={t.plan.surveyHint} checked={prefs.survey} onchange={(on) => prefs.setSurvey(on)} />
     </section>
 
     <section class="card actions" aria-label={t.plan.actions}>
@@ -392,6 +425,13 @@
   .rotation input {
     min-height: var(--touch);
     accent-color: var(--accent);
+  }
+  .turn {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+    flex-wrap: wrap;
   }
   .link {
     padding: 0;

@@ -113,6 +113,29 @@ export function frameCorners(view: View, width: number, height: number, rotation
   }));
 }
 
+// Corners of a frame centred anywhere on the chart (a solved frame), in the same
+// order as `frameCorners`; null when its centre is behind the view. Near its
+// centre the chart's scale stands for the frame's own tangent plane.
+export function skyFrameCorners(view: View, center: Sky, width: number, height: number, rotation: number): Point[] | null {
+  const at = project(view, center);
+  const angle = screenAngle(view, center, rotation);
+  if (!at || angle === null) return null;
+  const top = { x: Math.cos(angle), y: Math.sin(angle) };
+  // A quarter turn clockwise on the canvas: west, for a frame that is not mirrored.
+  const right = { x: -top.y, y: top.x };
+  const halfWidth = ((width * RAD) / 2) * view.scale;
+  const halfHeight = ((height * RAD) / 2) * view.scale;
+  return [
+    [-1, 1],
+    [1, 1],
+    [1, -1],
+    [-1, -1],
+  ].map(([sx = 0, sy = 0]) => ({
+    x: at.x + sx * halfWidth * right.x + sy * halfHeight * top.x,
+    y: at.y + sx * halfWidth * right.y + sy * halfHeight * top.y,
+  }));
+}
+
 // Degrees between two sky points.
 export function separation(a: Sky, b: Sky): number {
   const d1 = a.dec * RAD;

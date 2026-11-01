@@ -1,5 +1,6 @@
-// Per-device preferences: theme and language. They are about this screen, not
-// the rig, so they live in the browser rather than on the server.
+// Per-device preferences: theme, language, and whether the framing chart may
+// fetch survey images from the internet. They are about this screen, not the
+// rig, so they live in the browser rather than on the server.
 
 export type Theme = "dusk" | "night";
 export type Locale = "en" | "es";
@@ -39,6 +40,8 @@ function browserLocale(): Locale {
 class Prefs {
   theme: Theme = $state(read("nocs.theme", THEMES) ?? "dusk");
   locale: Locale = $state(read("nocs.locale", LOCALES) ?? browserLocale());
+  // Off until the user turns it on: the rig is often offline, and it asks CDS.
+  survey: boolean = $state(read("nocs.survey", ["on"] as const) === "on");
 
   constructor() {
     this.#apply();
@@ -58,6 +61,11 @@ class Prefs {
     this.locale = locale;
     write("nocs.locale", locale);
     this.#apply();
+  }
+
+  setSurvey(on: boolean): void {
+    this.survey = on;
+    write("nocs.survey", on ? "on" : "off");
   }
 
   #apply(): void {

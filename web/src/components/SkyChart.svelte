@@ -11,6 +11,7 @@
     scaleFor,
     screenAngle,
     separation,
+    skyFrameCorners,
     type Point,
     type Sky,
     type View,
@@ -30,6 +31,8 @@
     field = null,
     rotation = 0,
     highlight = null,
+    solved = null,
+    survey = false,
   }: {
     // Where the chart opens and a double tap returns.
     target: Sky;
@@ -41,6 +44,11 @@
     rotation?: number;
     // Id of the object to stand out (the target).
     highlight?: string | null;
+    // The last solved frame, drawn dashed where it landed (degrees, J2000).
+    solved?: { ra: number; dec: number; width: number; height: number; rotation: number } | null;
+    // Draw a survey image under the chart, fetched by this browser from CDS
+    // hips2fits (ADR 0020): only when the user turned it on, and online.
+    survey?: boolean;
   } = $props();
 
   const MIN_SPAN = 0.2;
@@ -100,6 +108,103 @@
 
   $effect(() => () => clearTimeout(pending));
 
+  // -- Survey image -----------------------------------------------------------------
+
+  // CDS hips2fits first (colour); NASA SkyView when CDS does not answer (it did
+  // not, from Chile, on 2026-11-01). Both give a gnomonic image, north up, east left.
+  type Source = "cds" | "skyview";
+  const SOURCES: Source[] = ["cds", "skyview"];
+  // CDS answers in a second or two when it is up; SkyView makes the image (3 s for 400 px).
+  const SURVEY_TIMEOUT: Record<Source, number> = { cds: 12_000, skyview: 30_000 };
+  type SurveyImage = { image: HTMLImageElement; ra: number; dec: number; fov: number; source: Source };
+  let surveySource: Source = $state("cds");
+  let surveyImage: SurveyImage | null = $state(null);
+  let surveyStatus: "off" | "loading" | "failed" | "ready" = $state("off");
+  let surveyTimer: ReturnType<typeof setTimeout> | undefined;
+
+  $effect(() => {
+    if (!survey || width === 0 || height === 0) {
+      surveyStatus = "off";
+      return;
+    }
+    const v = view;
+    const shown = untrack(() => surveyImage);
+    const span = (Math.max(v.width, v.height) / v.scale) / RAD;
+    // What is loaded still serves: about the same place and size.
+    if (shown && separation(v.center, shown) < span * 0.25 && Math.abs(shown.fov / span - 1) < 0.3) return;
+    clearTimeout(surveyTimer);
+    surveyTimer = setTimeout(() => loadSurvey(v), 600);
+  });
+  $effect(() => () => clearTimeout(surveyTimer));
+
+  function surveyUrl(source: Source, v: View, w: number, h: number, fov: number): string {
+    const ra = (v.center.ra * 15).toFixed(5);
+    const dec = v.center.dec.toFixed(5);
+    if (source === "cds") {
+      const params = new URLSearchParams({
+        hips: "CDS/P/DSS2/color",
+        width: String(w),
+        height: String(h),
+        fov: fov.toFixed(4),
+        projection: "TAN",
+        coordsys: "icrs",
+        ra,
+        dec,
+        format: "jpg",
+      });
+      return `https://alasky.cds.unistra.fr/hips-image-services/hips2fits?${params}`;
+    }
+    const params = new URLSearchParams({
+      Survey: "DSS2 Red",
+      Position: `${ra},${dec}`,
+      Size: `${fov.toFixed(4)},${((fov * h) / w).toFixed(4)}`,
+      Pixels: `${w},${h}`,
+      Projection: "Tan",
+      Coordinates: "J2000",
+      Return: "JPEG",
+    });
+    return `https://skyview.gsfc.nasa.gov/current/cgi/runquery.pl?${params}`;
+  }
+
+  let surveyRequest = 0;
+  function loadSurvey(v: View): void {
+    // The longer side; a phone's pixels, capped (the services are free, be kind).
+    const long = Math.max(v.width, v.height);
+    const pixels = Math.min(800, Math.round(long * Math.min(2, window.devicePixelRatio || 1)));
+    const w = Math.round((pixels * v.width) / long);
+    const h = Math.round((pixels * v.height) / long);
+    const fov = v.width / v.scale / RAD; // across the image's width
+    const id = ++surveyRequest;
+    surveyStatus = "loading";
+    const attempt = (index: number): void => {
+      const source = SOURCES[index];
+      if (source === undefined) {
+        if (id === surveyRequest) surveyStatus = "failed";
+        return;
+      }
+      const image = new Image();
+      const timer = setTimeout(() => {
+        image.onload = image.onerror = null;
+        image.src = "";
+        attempt(index + 1);
+      }, SURVEY_TIMEOUT[source]);
+      image.onload = () => {
+        clearTimeout(timer);
+        if (id !== surveyRequest) return;
+        surveyImage = { image, ra: v.center.ra, dec: v.center.dec, fov, source };
+        surveySource = source;
+        surveyStatus = "ready";
+      };
+      image.onerror = () => {
+        clearTimeout(timer);
+        attempt(index + 1);
+      };
+      image.src = surveyUrl(source, v, w, h, fov);
+    };
+    // Start where the last image came from.
+    attempt(Math.max(0, SOURCES.indexOf(surveySource)));
+  }
+
   // -- Drawing --------------------------------------------------------------------
 
   type Palette = { bg: string; star: string; object: string; accent: string; line: string; text: string };
@@ -135,7 +240,7 @@
   }
 
   $effect(() => {
-    void [view, magnitude, chart, field, rotation, highlight];
+    void [view, magnitude, chart, field, rotation, highlight, solved, survey, surveyImage];
     schedule();
   });
 
@@ -153,12 +258,51 @@
     context.fillStyle = colors.bg;
     context.fillRect(0, 0, width, height);
     const v = view;
+    if (survey && surveyImage) drawSurvey(context, v, surveyImage);
     if (chart) {
       drawObjects(context, v, chart.objects, colors);
       drawStars(context, v, chart.stars, colors);
     }
+    drawSolved(context, v, colors);
     drawFrame(context, v, colors);
     drawCrosshair(context, colors);
+  }
+
+  function drawSurvey(context: CanvasRenderingContext2D, v: View, shown: SurveyImage): void {
+    const at = project(v, shown);
+    if (!at) return;
+    // The image's tangent plane at its own centre, scaled to the chart's.
+    const w = shown.fov * RAD * v.scale;
+    const h = (w * shown.image.naturalHeight) / shown.image.naturalWidth;
+    context.save();
+    if (prefs.theme === "night") {
+      // Night mode: its light in red only, never white (docs/ux.md).
+      context.filter = "grayscale(1) brightness(0.8)";
+      context.drawImage(shown.image, at.x - w / 2, at.y - h / 2, w, h);
+      context.filter = "none";
+      context.globalCompositeOperation = "multiply";
+      context.fillStyle = "#ff0000";
+      context.fillRect(at.x - w / 2, at.y - h / 2, w, h);
+    } else {
+      context.globalAlpha = 0.85;
+      context.drawImage(shown.image, at.x - w / 2, at.y - h / 2, w, h);
+    }
+    context.restore();
+  }
+
+  function drawSolved(context: CanvasRenderingContext2D, v: View, palette: Palette): void {
+    if (!solved) return;
+    const corners = skyFrameCorners(v, solved, solved.width, solved.height, solved.rotation);
+    if (!corners) return;
+    context.save();
+    context.strokeStyle = palette.star;
+    context.lineWidth = 1.5;
+    context.setLineDash([6, 4]);
+    context.beginPath();
+    corners.forEach((c, i) => (i === 0 ? context.moveTo(c.x, c.y) : context.lineTo(c.x, c.y)));
+    context.closePath();
+    context.stroke();
+    context.restore();
   }
 
   function drawStars(context: CanvasRenderingContext2D, v: View, stars: number[][], palette: Palette): void {
@@ -410,7 +554,9 @@
     <span class="mono">{formatRa(center.ra)} {formatDec(center.dec)}</span>
     <span>{field ? `${frameText} · ` : ""}{t.chart.view(degrees(viewSpan(view)))}</span>
   </div>
-  <div class="credit">{t.chart.credit}</div>
+  <div class="credit">
+    {t.chart.credit}{#if survey}<br />{surveyStatus === "failed" ? t.chart.surveyFailed : surveyStatus === "loading" ? t.chart.surveyLoading : t.chart.surveyCredit[surveySource]}{/if}
+  </div>
 </div>
 
 <style>
@@ -468,5 +614,7 @@
     right: var(--space-3);
     top: var(--space-2);
     font-size: 11px;
+    text-align: right;
+    text-shadow: 0 0 3px var(--bg);
   }
 </style>

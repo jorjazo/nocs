@@ -347,6 +347,12 @@ Tonight and Plan (stage 3.6):
   way back. Go and centre is the primary action, then Go and "Make tonight's
   target"; going also makes it tonight's target, and the centring card follows
   the run.
+- The framing chart (stage 3.7b) draws the last solved frame dashed where it
+  landed, and under the rotation slider says how far to turn the camera from that
+  frame's angle to the framing's, with "Use the camera's angle". "Survey image" (off
+  by default, kept per device) puts a DSS image under the chart, fetched by the
+  phone itself from CDS, or NASA SkyView when CDS does not answer; in Night mode
+  it is drawn in red only.
 
 Sequence builder (stage 5.13):
 

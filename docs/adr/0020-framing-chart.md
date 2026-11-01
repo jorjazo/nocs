@@ -95,3 +95,9 @@ position angle of its top east of north as a plate solution gives it (ADR 0018).
   Hipparcos magnitudes (Hp) for a few bright stars.
 - 3.7b adds the survey background from CDS hips2fits (fetched by the browser,
   opt-in), the user's solved frames, and the rotation helper to this chart.
+- Amended in 3.7b (2026-11-01): the browser falls back to NASA SkyView (DSS2 red)
+  when CDS does not answer within 12 s; on that day no CDS host answered from the
+  maintainer's network, while SkyView made a 400-pixel image in 3 s. Both give a
+  gnomonic image, north up and east left, like the chart. The user's own solved
+  frames move to a stage of their own (3.7c): they need the solutions kept with
+  the saved frames on the server.

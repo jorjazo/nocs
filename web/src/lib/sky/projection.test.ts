@@ -8,6 +8,7 @@ import {
   scaleFor,
   screenAngle,
   separation,
+  skyFrameCorners,
   unproject,
   type Sky,
   type View,
@@ -143,4 +144,19 @@ test("the camera frame is a rectangle turned by its rotation", () => {
   close(top.y, 0, 1e-9);
   assert(right.y < 0);
   close(right.x, 0, 1e-9);
+});
+
+test("a frame at the view's centre has the same corners either way", () => {
+  const view: View = { center: { ra: 0.88, dec: -72.8 }, scale: scaleFor(4, 400, 600), width: 400, height: 600 };
+  for (const rotation of [0, 30, 135, 290]) {
+    const centred = frameCorners(view, 2.3, 1.5, rotation);
+    const anywhere = skyFrameCorners(view, view.center, 2.3, 1.5, rotation);
+    assert.ok(anywhere);
+    centred.forEach((corner, i) => {
+      const other = anywhere[i];
+      assert.ok(other);
+      close(other.x, corner.x, 0.5, `rotation ${rotation} corner ${i} x`);
+      close(other.y, corner.y, 0.5, `rotation ${rotation} corner ${i} y`);
+    });
+  }
 });
