@@ -99,13 +99,19 @@ def api(tmp_path_factory: pytest.TempPathFactory) -> Iterator[TestClient]:
         response = client.post("/api/clock", json={"utc": now.isoformat(), "utc_offset": 0})
         assert response.status_code == 200, response.text
         wait(client, lambda s: s["mount"]["site_sent"] and s["mount"]["time_sent"])
+        focus = state(client)["focuser"]["position"]
         try:
             yield client
         finally:
+            # Leave the simulators as found: autofocus at 1000 mm makes stars too small
+            # for the solver's tests at 250 mm.
             client.post("/api/sequence/stop", json={"run_end": False, "now": True})
             client.post("/api/mount/abort")
             if state(client)["mount"]["parked"]:
                 client.post("/api/mount/unpark")
+            response = client.post("/api/focuser/move", json={"position": focus})
+            if response.status_code == 202:
+                wait(client, finished(response.json()["job"]))
 
 
 def test_a_two_filter_sequence_focuses_takes_its_frames_and_parks(api: TestClient) -> None:
