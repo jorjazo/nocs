@@ -1,10 +1,18 @@
 """Test doubles shared by the unit tests."""
 
+import asyncio
 from collections.abc import Callable, Mapping
 from pathlib import Path
 
 from nocs.devices import DeviceInterface
-from nocs.indi import IndiClient, Property, PropertyState, PropertyType, PropertyUpdated
+from nocs.indi import (
+    IndiClient,
+    Property,
+    PropertyDefined,
+    PropertyState,
+    PropertyType,
+    PropertyUpdated,
+)
 from nocs.indi.properties import BlobElement, NumberElement, SwitchElement, TextElement
 from nocs.indi.protocol import (
     DefineProperty,
@@ -27,6 +35,26 @@ class FakeClient(IndiClient):
         super().__init__()
         self.sent: list[tuple[str, str, dict[str, str | float | bool]]] = []
         self.responder: Responder = lambda device, name, values: None
+        self.answering = True
+        """Drivers answer a getProperties (a probe, ADR 0030); False: they hang."""
+
+    async def get_properties(self, device: str | None = None, name: str | None = None) -> None:
+        if not self.answering:
+            return
+        loop = asyncio.get_running_loop()
+        for properties in list(self.devices.values()):
+            for prop in list(properties.values()):
+                if device in (None, prop.device) and name in (None, prop.name):
+                    loop.call_soon(self.define, prop)
+        if (
+            device is not None
+            and name == "CONNECTION"
+            and device in self.devices
+            and not self.get_property(device, name)
+        ):
+            # A device the test defined without CONNECTION answers a probe all the same.
+            answer = PropertyDefined(Property(device, name, PropertyType.SWITCH))
+            loop.call_soon(self._emit, answer)  # pyright: ignore[reportPrivateUsage]
 
     async def send(self, device: str, name: str, values: Mapping[str, str | float | bool]) -> None:
         self.sent.append((device, name, dict(values)))

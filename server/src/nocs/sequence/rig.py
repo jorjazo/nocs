@@ -288,11 +288,11 @@ class RigExecutor:
         """The cooling asked for, to ask again after the camera's driver restarts."""
 
     async def action(self, action: Action, target: Target | None) -> dict[str, Json] | None:
-        with _classified(_role(action)):
+        with self._blamed(), _classified(_role(action)):
             return await self._action(action, target)
 
     async def frame(self, plan: ExposurePlan, row: PlanRow, target: Target | None) -> FrameResult:
-        with _classified(CAMERA):
+        with self._blamed(), _classified(CAMERA):
             await self._keep_guiding()
             return await self._frame(plan, row, target)
 
@@ -457,6 +457,31 @@ class RigExecutor:
         return done
 
     # -- internals --------------------------------------------------------------------
+
+    @contextlib.contextmanager
+    def _blamed(self) -> Generator[None]:
+        """A step that fails while a device is unresponsive fails because of it, whichever
+        step it was (a centring's exposure, an autofocus's move): a ``device`` failure of
+        that role, so that the runner restarts its driver at once (ADR 0030)."""
+        try:
+            yield
+        except Exception as e:
+            role = self._unresponsive()
+            if role is None or (
+                isinstance(e, StepError) and e.kind == "device" and e.role == role.value
+            ):
+                raise
+            message = f"{str(e) or type(e).__name__} (the {role.value} is not answering)"
+            raise StepError("device", message, role=role.value) from e
+
+    def _unresponsive(self) -> Role | None:
+        devices = self._store.get(("equipment", "devices"))
+        if not isinstance(devices, dict):
+            return None
+        for role, device in devices.items():
+            if isinstance(device, dict) and device.get("status") == "unresponsive":
+                return Role(role)
+        return None
 
     async def _flip(self, action: Flip, aim: tuple[float, float]) -> dict[str, Json]:
         """Go to the target again on the other side of the pier (ADR 0033)."""

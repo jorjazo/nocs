@@ -2730,7 +2730,8 @@
         "connecting",
         "ready",
         "error",
-        "disconnected"
+        "disconnected",
+        "unresponsive"
       ],
       "type": "string"
     },
@@ -8014,14 +8015,27 @@
           ]
         },
         "status": {
-          "$ref": "#/$defs/DeviceStatusName"
+          "$ref": "#/$defs/DeviceStatusName",
+          "description": "unresponsive: connected, but it stopped answering a command (ADR 0030)."
+        },
+        "unresponsive_since": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "When it was noticed unresponsive, UTC."
         }
       },
       "required": [
         "driver",
         "device",
         "status",
-        "error"
+        "error",
+        "unresponsive_since"
       ],
       "title": "RoleState",
       "type": "object"

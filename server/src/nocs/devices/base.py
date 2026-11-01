@@ -9,9 +9,11 @@ so workflows never have to reason about raw property states.
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import Awaitable, Callable, Mapping
 from enum import IntFlag
 from typing import ClassVar, Self
+from weakref import WeakKeyDictionary
 
 from nocs.indi import (
     ConnectionLost,
@@ -19,13 +21,20 @@ from nocs.indi import (
     IndiEvent,
     MessageReceived,
     Property,
+    PropertyDefined,
     PropertyDeleted,
     PropertyState,
     PropertyUpdated,
     TextElement,
 )
 
+log = logging.getLogger(__name__)
+
 DEFAULT_TIMEOUT = 30.0
+SILENCE = 15.0
+"""Seconds a device may send nothing while a command of its waits before it is probed."""
+PROBE_TIMEOUT = 10.0
+"""Seconds a probed device has to define its ``CONNECTION`` again (ADR 0030)."""
 SERIAL_PROPERTIES = ("Serial Number", "SERIAL_NUMBER")
 """Where drivers publish a device's serial number; INDI has no standard property (ZWO: SN)."""
 
@@ -67,6 +76,47 @@ def device_interfaces(client: IndiClient, device: str) -> DeviceInterface:
 
 class DeviceError(Exception):
     """A device rejected a command, is missing a property, or went away."""
+
+
+class DeviceUnresponsive(DeviceError):
+    """A device stopped answering: silent or past a command's deadline, it did not
+    answer a probe either (ADR 0030)."""
+
+    def __init__(self, device: str, message: str) -> None:
+        super().__init__(message)
+        self.device = device
+
+
+type UnresponsiveListener = Callable[[str, str], None]
+_unresponsive: WeakKeyDictionary[IndiClient, list[UnresponsiveListener]] = WeakKeyDictionary()
+
+
+def on_unresponsive(client: IndiClient, listener: UnresponsiveListener) -> Callable[[], None]:
+    """Call ``listener(device, reason)`` whenever a facade on ``client`` finds a device
+    unresponsive; returns a function that stops it."""
+    listeners = _unresponsive.setdefault(client, [])
+    listeners.append(listener)
+    return lambda: listeners.remove(listener)
+
+
+def _report_unresponsive(client: IndiClient, device: str, reason: str) -> None:
+    log.warning("%s", reason)
+    for listener in list(_unresponsive.get(client, ())):
+        try:
+            listener(device, reason)
+        except Exception:
+            log.exception("unresponsive listener failed")
+
+
+def event_device(event: IndiEvent) -> str | None:
+    """The device an event comes from, if any."""
+    match event:
+        case PropertyDefined(property=prop) | PropertyUpdated(property=prop):
+            return prop.device
+        case PropertyDeleted(device=device) | MessageReceived(device=device):
+            return device
+        case _:
+            return None
 
 
 class Device:
@@ -114,6 +164,8 @@ class Device:
                 {"CONNECT": True, "DISCONNECT": False},
                 timeout=timeout,
                 done=lambda p: p.switch("CONNECT"),
+                # Drivers connect on their main thread, silent until they are done.
+                watch_silence=False,
             )
         await self.wait_ready(timeout)
 
@@ -137,6 +189,7 @@ class Device:
             done=lambda p: p.switch("DISCONNECT"),
             # Drivers report a closed connection as Idle, not Ok.
             accept=frozenset({PropertyState.OK, PropertyState.IDLE}),
+            watch_silence=False,
         )
 
     @property
@@ -176,6 +229,7 @@ class Device:
         timeout: float = DEFAULT_TIMEOUT,
         done: Callable[[Property], bool] | None = None,
         accept: frozenset[PropertyState] = frozenset({PropertyState.OK}),
+        watch_silence: bool = True,
     ) -> Property:
         """Send new values and wait for the driver to report the property ``Ok``.
 
@@ -183,6 +237,8 @@ class Device:
         reached) for drivers that report ``Ok`` before the action is complete.
         ``accept`` widens the states that count as completion, for properties
         whose state encodes the result (e.g. tracking: ``Busy`` on, ``Idle`` off).
+        ``watch_silence`` probes a device that goes quiet before the deadline
+        (``supervise``), for commands its driver does not carry out on its main thread.
         """
         self.prop(name)
         return await self.send_and_wait(
@@ -191,6 +247,7 @@ class Device:
             timeout=timeout,
             done=done,
             accept=accept,
+            watch_silence=watch_silence,
         )
 
     async def send_and_wait(
@@ -201,6 +258,7 @@ class Device:
         timeout: float,
         done: Callable[[Property], bool] | None = None,
         accept: frozenset[PropertyState] = frozenset({PropertyState.OK}),
+        watch_silence: bool = True,
     ) -> Property:
         """Run ``send`` and wait for the next qualifying update of property ``name``.
 
@@ -214,7 +272,12 @@ class Device:
         result: asyncio.Future[Property] = loop.create_future()
         messages: list[str] = []
 
+        heard = loop.time()
+
         def on_event(event: IndiEvent) -> None:
+            nonlocal heard
+            if event_device(event) == self.name:
+                heard = loop.time()
             if result.done():
                 return
             match event:
@@ -239,9 +302,82 @@ class Device:
         remove = self.client.add_listener(on_event)
         try:
             await send()
-            async with asyncio.timeout(timeout):
-                return await result
-        except TimeoutError as e:
-            raise DeviceError(f"{self.name}.{name}: no response within {timeout:g} s") from e
+            return await self.supervise(
+                result,
+                loop.time() + timeout,
+                lambda: heard,
+                f"{self.name}.{name}: no response within {timeout:g} s",
+                watch_silence=watch_silence,
+            )
         finally:
             remove()
+
+    async def supervise[T](
+        self,
+        result: asyncio.Future[T],
+        deadline: float,
+        heard: Callable[[], float],
+        missed: str,
+        *,
+        watch_silence: bool = True,
+    ) -> T:
+        """Wait for ``result`` until ``deadline`` (event loop time), probing the device
+        when it sends nothing for ``SILENCE`` seconds or the deadline passes (ADR 0030).
+
+        ``heard`` says when the device last sent anything. A probe unanswered fails
+        with ``DeviceUnresponsive``, reported to ``on_unresponsive``'s listeners; an
+        answered one after the deadline fails with ``DeviceError(missed)``, and after
+        a silence lets the wait go on: a quiet device is not a hung one. Without
+        ``watch_silence``, only the deadline is watched.
+        """
+        loop = asyncio.get_running_loop()
+        answered_at = loop.time()
+        while not result.done():
+            now = loop.time()
+            last = max(heard(), answered_at)
+            wake = min(deadline, last + SILENCE) if watch_silence else deadline
+            if wake > now:
+                await asyncio.wait({result}, timeout=wake - now)
+                continue
+            late = now >= deadline
+            answered = await self.probe()
+            if result.done():
+                break
+            if not answered:
+                why = missed if late else f"silent for {now - last:.0f} s"
+                reason = f"{self.name} is not answering ({why})"
+                _report_unresponsive(self.client, self.name, reason)
+                raise DeviceUnresponsive(self.name, reason)
+            if late:
+                raise DeviceError(missed)
+            answered_at = loop.time()
+        return result.result()
+
+    async def probe(self, timeout: float | None = None) -> bool:
+        """Whether the driver answers: asked for its ``CONNECTION``, it defines it again.
+
+        indiserver answers pings itself, so only the driver's own answer proves that
+        it works (ADR 0030).
+        """
+        loop = asyncio.get_running_loop()
+        answered: asyncio.Future[None] = loop.create_future()
+
+        def on_event(event: IndiEvent) -> None:
+            match event:
+                case PropertyDefined(property=prop) if (
+                    prop.key == (self.name, "CONNECTION") and not answered.done()
+                ):
+                    answered.set_result(None)
+                case _:
+                    pass
+
+        remove = self.client.add_listener(on_event)
+        try:
+            await self.client.get_properties(self.name, "CONNECTION")
+            async with asyncio.timeout(PROBE_TIMEOUT if timeout is None else timeout):
+                await answered
+        except TimeoutError:
+            return False
+        finally:
+            remove()
+        return True

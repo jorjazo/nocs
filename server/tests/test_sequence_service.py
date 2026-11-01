@@ -736,3 +736,31 @@ async def test_a_failed_device_is_restarted_then_power_cycled(setup: Any) -> Non
     mount = StepError("device", "no answer", role="mount")
     assert await executor.recover(mount, 1) == "restarted the mount's driver"
     assert await executor.recover(mount, 2) is None  # never power cycled
+
+
+async def test_a_step_that_fails_while_a_device_is_unresponsive_blames_it(setup: Any) -> None:
+    """A centring that fails because the camera hung is the camera's failure, not the
+    solver's: the runner restarts the camera's driver (ADR 0030)."""
+    _, rig, _, jobs, _ = setup
+    from nocs.pointing import CenteringError
+    from nocs.sequence import rig as rig_module
+    from nocs.sequence.runner import StepError
+
+    store = StateStore()
+    store.set(("equipment", "devices"), {"main_camera": {"status": "ready"}})
+    executor = rig_module.RigExecutor(JobContext(jobs, "job"), jobs, store, rig.parts())
+
+    async def fails(*args: object, **kwargs: object) -> dict[str, Json]:
+        raise CenteringError("no solution")
+
+    rig.center = fails  # pyright: ignore[reportAttributeAccessIssue]
+    with pytest.raises(StepError) as failed:
+        await executor.action(Center(), M42)
+    assert (failed.value.kind, failed.value.role) == ("solve", None)
+
+    store.set(("equipment", "devices", "main_camera", "status"), "unresponsive")
+    with pytest.raises(StepError) as failed:
+        await executor.action(Center(), M42)
+    assert (failed.value.kind, failed.value.role) == ("device", "main_camera")
+    assert str(failed.value) == "no solution (the main_camera is not answering)"
+    assert await executor.recover(failed.value, 1) == "restarted the main_camera's driver"

@@ -7,7 +7,8 @@ from pathlib import Path
 import pytest
 from fakes import FakeClient, driver_info, number_property, switch_property
 
-from nocs.devices import DeviceInterface
+from nocs.devices import DeviceInterface, DeviceUnresponsive, Focuser
+from nocs.devices import base as devices_base
 from nocs.equipment import (
     DeviceConfig,
     DriverRestartError,
@@ -445,6 +446,59 @@ async def test_restarts_a_roles_driver_and_connects_it_again(
     service.disconnect()
     await until(store, lambda: equipment(store, "connection") == "disconnected")
     assert fifo.commands[2:] == []
+
+
+async def test_a_device_that_stops_answering_is_unresponsive_until_restarted(
+    make_service: Factory, store: StateStore, server: Server, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A probe unanswered marks the roles unresponsive; a restart makes them ready (ADR 0030)."""
+    monkeypatch.setattr(devices_base, "SILENCE", 0.05)
+    monkeypatch.setattr(devices_base, "PROBE_TIMEOUT", 0.05)
+    loop = asyncio.get_running_loop()
+    fifo = FakeFifo(
+        lambda driver: loop.call_soon(server.run, driver),
+        lambda driver: loop.call_soon(server.client.delete, Server.DEVICES[driver][0]),
+    )
+    server.run(FOCUSER_DRIVER)
+    server.run(POWER_DRIVER)
+    service = make_service(fifo)
+    service.connect("rig")
+    await connected(store)
+
+    server.client.answering = False
+    with pytest.raises(DeviceUnresponsive):
+        await Focuser(server.client, "Focuser").move_to(20, timeout=10)
+    assert statuses(store) == {"focuser": "unresponsive", "weather": "ready"}
+    focuser = equipment(store, "devices", "focuser")
+    assert isinstance(focuser, dict)
+    assert focuser["error"] == "Focuser is not answering (silent for 0 s)"
+    assert isinstance(focuser["unresponsive_since"], str)
+    assert service.ready_device(Role.FOCUSER) is None
+
+    server.client.answering = True
+    await service.restart_driver(Role.FOCUSER)
+    assert statuses(store) == {"focuser": "ready", "weather": "ready"}
+    assert equipment(store, "devices", "focuser", "unresponsive_since") is None
+
+
+async def test_an_unresponsive_device_that_answers_again_is_ready(
+    make_service: Factory, store: StateStore, server: Server, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(devices_base, "SILENCE", 0.05)
+    monkeypatch.setattr(devices_base, "PROBE_TIMEOUT", 0.05)
+    server.run(FOCUSER_DRIVER)
+    server.run(POWER_DRIVER)
+    service = make_service(None)
+    service.connect("rig")
+    await connected(store)
+    server.client.answering = False
+    with pytest.raises(DeviceUnresponsive):
+        await Focuser(server.client, "Focuser").move_to(20, timeout=10)
+    assert statuses(store)["focuser"] == "unresponsive"
+    # Its driver was only stopped for a while (SIGCONT): it talks again.
+    server.client.update("Focuser", "ABS_FOCUS_POSITION", PropertyState.OK)
+    assert statuses(store)["focuser"] == "ready"
+    assert service.ready_device(Role.FOCUSER) == "Focuser"
 
 
 async def test_a_driver_that_does_not_stop_is_reported(

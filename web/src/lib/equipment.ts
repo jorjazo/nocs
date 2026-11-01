@@ -33,6 +33,8 @@ export function roleTone(status: DeviceStatusName, connection: ConnectionName): 
       return "accent";
     case "error":
       return "error";
+    case "unresponsive":
+      return "warning";
     case "disconnected":
       // Expected while the equipment is off; lost while it should be on.
       return connection === "connected" ? "error" : "neutral";

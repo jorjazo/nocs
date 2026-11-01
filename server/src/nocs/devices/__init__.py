@@ -1,6 +1,13 @@
 """Typed device facades (camera, mount, focuser, filter wheel, power box, weather sensor)."""
 
-from nocs.devices.base import Device, DeviceError, DeviceInterface, device_interfaces
+from nocs.devices.base import (
+    Device,
+    DeviceError,
+    DeviceInterface,
+    DeviceUnresponsive,
+    device_interfaces,
+    on_unresponsive,
+)
 from nocs.devices.camera import Camera, Frame, FrameType, SensorInfo
 from nocs.devices.filter_wheel import FilterWheel
 from nocs.devices.focuser import Focuser
@@ -27,6 +34,7 @@ __all__ = [
     "Device",
     "DeviceError",
     "DeviceInterface",
+    "DeviceUnresponsive",
     "Direction",
     "Environment",
     "FilterWheel",
@@ -47,5 +55,6 @@ __all__ = [
     "WeatherSensor",
     "device_interfaces",
     "dew_point",
+    "on_unresponsive",
     "parse_output_id",
 ]

@@ -1,6 +1,6 @@
 # Phase 6 plan — Appliance
 
-Status: in progress (6.1–6.8 and 6.11 done, 6.9 and 6.10 in part; ADRs proposed, open points decided) · Last updated: 2026-10-31 · Roadmap: [Phase 6](../roadmap.md#phase-6--appliance)
+Status: in progress (6.1–6.8 and 6.11 done, 6.9 and 6.10 in part; ADRs proposed, open points decided) · Last updated: 2026-11-01 · Roadmap: [Phase 6](../roadmap.md#phase-6--appliance)
 
 Goal: anyone flashes an image onto a Raspberry Pi 5 and runs a full night from a
 phone, with no other computer involved. PC users install the same software from
@@ -28,7 +28,7 @@ no other session is using: the lab Pi stays as it is.
 | 6.6 | Network | Access point `NOCS-xxxx`, joining a network from the app with a fallback, Ethernet, country, firewall closing indiserver and PHD2 to the network, nocsd on port 80, SSH off by default ([ADR 0028](../adr/0028-networking.md)) | Phones (iOS, Android) on the access point and on home Wi-Fi; the fallback when the network goes | 12–16 h | Implemented: `nocs.system.network` (one actor: the access point `NOCS-xxxx` with DNS for `<host>.local`, joining with test-and-revert, the fallback, pinned modes, country) and its `network.*` operations; `network` state and API; the image on NetworkManager with nftables (only 22, 80, mDNS, DHCP, DNS from outside), nocsd on port 80 and SSH by key only; Network on Rig. Checked against a simulated NetworkManager and in a browser; phones on a real access point wait for a test Pi |
 | 6.7 | First boot | Presets from Raspberry Pi Imager (cloud-init) or a file on the boot partition; first run asks for the access point's password, the country, the name, time and site, storage and home Wi-Fi; `_http._tcp` over mDNS | Fresh image to first frame from a phone | 6–8 h | Implemented: after pairing, the owner sets the access point's country and own password, and may join a home network, before anything else (`POST /api/system/network/setup`; the access point restarts after the reply); Raspberry Pi Imager's presets (Wi-Fi, host name, SSH key) through cloud-init; `_http._tcp` over avahi. Checked in a browser; the whole first boot on a Pi waits for a test Pi |
 | 6.8 | Time and site | chrony sets the system clock from NTP, a USB GPS (gpsd) or the client; the GPS site is offered to the profile ([ADR 0029](../adr/0029-system-time-and-site.md)) | Pi without network or RTC battery; a USB GPS | 6–8 h | Implemented: `time.set` in nocs-system; nocsd reads the clock's source (`chronyc -c sources`, else timedatectl) into `clock.source` and sets the clock from a client's report when nothing keeps it and no job runs; gpsd's fix in `gps`, `POST /api/gps/site` for the active profile and the mount; the image has gpsd (USB autodetect) and chrony reading it, and enables every operation of nocs-system (`/etc/nocs/system.conf.d/appliance.conf`). Checked with fake tools and a fake gpsd; a real GPS waits for a test Pi. nocsd remembers, across its restarts, that a client's time set the clock this boot (the boot's id in `/var/lib/nocs/clock-set-from-client`), so the time stays known and a sequence can resume (phase 5.12) |
-| 6.9 | Supervision | Spike (a frozen driver and indiserver); detection of hung indiserver, drivers and PHD2; recovery ladder; nocsd's systemd watchdog; the hardware watchdog ([ADR 0030](../adr/0030-supervision.md)) | Simulators frozen with `SIGSTOP`; a camera unplugged mid-exposure | 8–10 h | Partly implemented: the spike (in ADR 0030); indiserver pinged every 10 s and, hung, restarted through nocs-system (`services.restart`, also from the app) and reconnected; nocsd under systemd's watchdog (`Type=notify`, 30 s); the hardware watchdog on in the image. 6.9b: `EquipmentService.restart_driver` (stop and start through the FIFO, wait for its devices to go, connect every role on it again; a driver NOCS found running keeps running after a disconnect) and `PowerService.power_cycle` (the output whose `feeds` names the role off 5 s, back as it was, then the driver; never the mount or an output that feeds it); the runner asks the rig to recover before each `device` retry, first a driver restart, then a power cycle, as `recovery` events, and cooling is asked again after the camera's driver restarts; `POST /api/equipment/roles/{role}/restart` and `/power-cycle`, offered on Rig under a device that dropped out. Checked on the simulators: a driver frozen with `SIGSTOP` is killed by indiserver and back, ready, in 0.5 s. Left: per-device "unresponsive" detection by command deadlines (ADR 0030; today a sequence's failure or the owner starts it), a camera unplugged mid-exposure on the rig, and USB reset after v0.1 |
+| 6.9 | Supervision | Spike (a frozen driver and indiserver); detection of hung indiserver, drivers and PHD2; recovery ladder; nocsd's systemd watchdog; the hardware watchdog ([ADR 0030](../adr/0030-supervision.md)) | Simulators frozen with `SIGSTOP`; a camera unplugged mid-exposure | 8–10 h | Partly implemented: the spike (in ADR 0030); indiserver pinged every 10 s and, hung, restarted through nocs-system (`services.restart`, also from the app) and reconnected; nocsd under systemd's watchdog (`Type=notify`, 30 s); the hardware watchdog on in the image. 6.9b: `EquipmentService.restart_driver` (stop and start through the FIFO, wait for its devices to go, connect every role on it again; a driver NOCS found running keeps running after a disconnect) and `PowerService.power_cycle` (the output whose `feeds` names the role off 5 s, back as it was, then the driver; never the mount or an output that feeds it); the runner asks the rig to recover before each `device` retry, first a driver restart, then a power cycle, as `recovery` events, and cooling is asked again after the camera's driver restarts; `POST /api/equipment/roles/{role}/restart` and `/power-cycle`, offered on Rig under a device that dropped out. Checked on the simulators: a driver frozen with `SIGSTOP` is killed by indiserver and back, ready, in 0.5 s. 6.9c (below): devices that stop answering are noticed by their commands (15 s of silence or a missed deadline, then an unanswered probe), shown `unresponsive` on Rig with restart and power cycle, and blamed for the step a sequence was on, so it restarts that driver at once; on the simulators a camera frozen mid-exposure and a mount frozen mid-go-to are noticed in ~25 s (6 s with the test's shorter thresholds), restarted from the API and ready again. Left: a camera unplugged mid-exposure on the rig, and USB reset after v0.1 |
 | 6.10 | Updates | Signed apt repository with `stable` and `testing`; update from the app only when asked and never during a job; OS updates downloaded, not installed by themselves; rollback to the previous version | Update a test Pi from one build to the next and back | 8–10 h | In part: nocs-system's `update` group (check with apt; install and roll back in a transient `nocs-update` unit, so that restarting nocs-system and nocsd does not kill apt; the previous NOCS reinstalled from apt's cache), `updates` state, the API (installing refused while a job runs, unless forced) and Updates on Rig; unattended-upgrades only downloads and needrestart only lists (6.2). `nocs-appliance` (configuration only: network, firewall as `nocs-firewall.service`, port 80, nocs-system's operations, the GPS, the watchdog), so a flashed Pi gets fixes to them by updating; the image installs it and a rollback puts it back too. The repository's tools ([ADR 0035](../adr/0035-apt-repository-and-release-publishing.md)): `packaging/repo/publish.py` (suites from their own indices, pruning, signing; images), `new-key.sh`, and the Packages and Image workflows publishing to R2 and to GitHub releases; checked against a local repository that apt on Ubuntu 26.04 installs from. Left: the maintainer's domain, bucket, token and key, then updating a test Pi from one `testing` build to the next and back |
 | 6.11 | User documentation | Quick start, supported hardware (tested, and anything INDI supports), troubleshooting, PC install | Someone else follows the quick start | 6–8 h | Written: `docs/user/` (quick start, supported hardware, troubleshooting, PC install). Screens and names to check against the release; someone else following it waits for the release candidate |
 | 6.12 | Release | Licenses of what the image redistributes; ADRs 0025–0030 and 0035 accepted; `v0.1.0-rc.1` (package `0.1.0~rc1`) published to `stable`; the hardware checks left from 6.2–6.8 on the lab Pi booted from a spare SSD; a night from a freshly flashed Pi with only a phone ([checklist](release.md)); v0.1 | Exit criterion | 4–6 h + a night | |
@@ -47,6 +47,45 @@ Order: 6.0 → 6.1 → 6.3 → 6.4 → 6.2 → 6.5 → 6.8 → 6.6 → 6.7 → 6
 - **Wait for other phases:** the recovery half of 6.9 (it acts through the phase 5
   sequencer's recovery policies, and PHD2 must reconnect after indiserver restarts),
   the final image and 6.12 (after the field tests of phases 3–5).
+
+### 6.9c: unresponsive devices
+
+Implemented 2026-11-01. What ADR 0030 calls detection of hung drivers, by command
+deadlines. Measured on the simulators (INDI 2.2.5): every simulator sends an update at least every 0.25 s while
+it exposes or slews, and a driver answers a `getProperties` for its `CONNECTION` in
+under 2 ms; the focuser simulator moves in 0.3 s.
+
+1. **Facades** (`nocs.devices`): each command already has a deadline (the exposure
+   plus 60 s, 120 s for a focuser move, 300 s for a go to, 60 s for a filter change,
+   30 s otherwise). A device that stays silent for 15 s while a command of its waits,
+   or misses the deadline, is probed: asked for its `CONNECTION` again, it must define
+   it within 10 s. Unanswered, the command fails at once as `DeviceUnresponsive` and
+   listeners on that connection hear of it; answered, a missed deadline fails as
+   before. A hung camera is noticed ~25 s after it froze, whatever the exposure.
+   Connecting and disconnecting are not probed for silence: drivers do both on
+   their main thread and answer nothing until they are done.
+2. **State:** the roles of that device become `unresponsive`, with the reason and
+   when it was noticed (`equipment.devices.<role>.unresponsive_since`); it counts as
+   not ready, and anything the device sends again (a driver that comes back by itself)
+   makes it ready again, as does a driver restart. Schema and TS types.
+3. **Rig:** an unresponsive role shows as such, with the restart and power-cycle
+   actions it already offers for a device that dropped out (en, es).
+4. **Sequences:** a step that fails while a role is unresponsive is a `device` failure
+   of that role, whichever step it was (a centring's exposure, an autofocus's move), so
+   the runner restarts that driver at once instead of skipping the target or waiting
+   for the deadline.
+5. **Checks:** unit tests with a fake device that goes silent; on the simulators, a
+   camera frozen with `SIGSTOP` mid-exposure and a mount frozen mid-go-to are noticed,
+   restarted from the API and ready again (`NOCS_TEST_INDI_CONTAINER` names the
+   container whose drivers the test may freeze).
+
+Not done: ADR 0030's automatic driver restart outside a sequence (the owner restarts
+from Rig; a sequence restarts on its own), and showing PHD2 as unresponsive in the
+state (its JSON-RPC calls already fail after 15 s). The thresholds are constants in
+`nocs.devices.base` (`SILENCE`, `PROBE_TIMEOUT`), to become settings once real nights
+say how they should be tuned. Checked in a browser on the simulators (en, es): a frozen
+camera shows "Not answering" / "No responde" with the time it was noticed, and Restart
+driver brings it back online.
 
 ## Decisions taken for this phase
 

@@ -39,6 +39,7 @@ jobs:
         env:
           NOCS_TEST_INDI: 127.0.0.1:7624
           NOCS_TEST_INDI_FIFO: ../dev/.run/fifo
+          NOCS_TEST_INDI_CONTAINER: dev-indi-1
           NOCS_TEST_INDI_UPLOADS: ../dev/.run/uploads
           NOCS_TEST_PHD2: 127.0.0.1:4400
           NOCS_TEST_PHD2_SETTINGS: ../dev/.run/phd2.phd

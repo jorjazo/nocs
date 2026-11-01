@@ -25,7 +25,14 @@
   import { slotLabel } from "../lib/camera.svelte";
   import { connectionTone, ROLE_ICONS, ROLES, roles, roleTone } from "../lib/equipment";
   import { errorText } from "../lib/errors";
-  import { formatBytes, formatDateTime, formatDecimal, formatPlain, formatTemperature } from "../lib/format";
+  import {
+    formatBytes,
+    formatDateTime,
+    formatDecimal,
+    formatPlain,
+    formatTemperature,
+    formatTime,
+  } from "../lib/format";
   import { i18n, LANGUAGE_NAMES } from "../lib/i18n";
   import { live } from "../lib/live.svelte";
   import { formatDec, formatRa, mountActivity } from "../lib/mount.svelte";
@@ -38,7 +45,7 @@
   import NetworkSection from "./NetworkSection.svelte";
   import StorageDrives from "./StorageDrives.svelte";
   import SystemSection from "./SystemSection.svelte";
-  import type { CameraState, Optics, PairedDevice, Profile, Role, RoleState } from "../lib/types";
+  import type { CameraState, DeviceStatusName, Optics, PairedDevice, Profile, Role, RoleState } from "../lib/types";
 
   const t = $derived(i18n.t);
   const locale = $derived(i18n.locale);
@@ -66,7 +73,8 @@
     return ROLES.flatMap((role): [Role, RoleState][] => {
       const config = profile?.devices?.[role];
       if (!config) return [];
-      return [[role, { driver: config.driver, device: config.device ?? null, status: "disconnected", error: null }]];
+      const device = config.device ?? null;
+      return [[role, { driver: config.driver, device, status: "disconnected", error: null, unresponsive_since: null }]];
     });
   });
   const devicesByRole = $derived(Object.fromEntries(roleList) as Partial<Record<Role, RoleState>>);
@@ -75,12 +83,12 @@
   let busy = $state<"connect" | "disconnect" | `restart:${Role}` | `cycle:${Role}` | null>(null);
   let actionError = $state("");
 
-  // Devices of a connected profile that dropped out: the owner can restart their driver,
-  // or cut the power of the output that feeds them (never the mount's, ADR 0030).
+  // Devices of a connected profile that dropped out or stopped answering: the owner can
+  // restart their driver, or cut the power of the output that feeds them (never the
+  // mount's, ADR 0030).
+  const FAILING: readonly DeviceStatusName[] = ["error", "disconnected", "unresponsive"];
   const failing = $derived(
-    connection === "connected" && auth.owner
-      ? roleList.filter(([, device]) => device.status === "error" || device.status === "disconnected")
-      : [],
+    connection === "connected" && auth.owner ? roleList.filter(([, device]) => FAILING.includes(device.status)) : [],
   );
   function fed(role: Role): boolean {
     return role !== "mount" && (power?.outputs.some((output) => output.feeds.includes(role)) ?? false);
@@ -368,7 +376,11 @@
           {/each}
           {#each failing as [role, device] (role)}
             <li class="recover">
-              <span>{t.rig.recover(device.device ?? t.roles[role])}</span>
+              <span>
+                {device.unresponsive_since
+                  ? t.rig.notAnsweringSince(device.device ?? t.roles[role], formatTime(device.unresponsive_since, locale))
+                  : t.rig.recover(device.device ?? t.roles[role])}
+              </span>
               <Button busy={busy === `restart:${role}`} onclick={() => run(`restart:${role}`, () => restartDriver(role))}>
                 {t.rig.restartDriver}
               </Button>

@@ -57,7 +57,7 @@ cd server && uv sync
 uv run ruff check . && uv run ruff format --check . && uv run pyright   # strict
 dev/astap/install.sh  # ASTAP + D05 in dev/.astap (slow download; ADR 0018)
 NOCS_TEST_INDI=localhost:7624 NOCS_TEST_INDI_FIFO=../dev/.run/fifo \
-  NOCS_TEST_INDI_UPLOADS=../dev/.run/uploads NOCS_TEST_ASTAP=../dev/.astap/astap_cli \
+  NOCS_TEST_INDI_CONTAINER=dev-indi-1 NOCS_TEST_INDI_UPLOADS=../dev/.run/uploads NOCS_TEST_ASTAP=../dev/.astap/astap_cli \
   NOCS_TEST_PHD2=localhost:4400 NOCS_TEST_PHD2_SETTINGS=../dev/.run/phd2.phd uv run pytest
 # real night frames for the solver: NOCS_TEST_FRAMES=<dir of FITS lights>, with D50
 # (NOCS_TEST_ASTAP_DB=<dir>): D05 fails dense Milky Way fields

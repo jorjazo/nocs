@@ -40,7 +40,9 @@ would not stop a slewing mount. Facts:
   - **devices:** a command without `Ok` or `Alert` before its deadline, or an
     exposure not received 60 s after it should have ended, marks the device
     **unresponsive**; a probe of that device (its `CONNECTION` property) confirms
-    it.
+    it. A device that sends nothing for 15 s while a command of its waits is probed
+    too, so a hung camera is noticed long before a long exposure's deadline (stage
+    6.9c).
   - **PHD2:** a JSON-RPC call without an answer for 15 s.
   - The state shows each as `unresponsive` with the time it was noticed.
 - **Recovery ladder**, one step at a time, each only if the previous one did not

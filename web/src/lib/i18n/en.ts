@@ -116,6 +116,7 @@ export const en = {
     ready: "Online",
     error: "Error",
     disconnected: "Offline",
+    unresponsive: "Not answering",
   } satisfies Record<DeviceStatusName, string>,
   connection: {
     disconnected: "Disconnected",
@@ -158,6 +159,7 @@ export const en = {
     advanced: "INDI properties",
     advancedHint: "Every property of every driver, for troubleshooting.",
     recover: (device: string) => `${device} is not answering`,
+    notAnsweringSince: (device: string, time: string) => `${device} has not answered since ${time}`,
     restartDriver: "Restart driver",
     powerCycle: "Power cycle",
     confirmPowerCycle: "Tap again: power off 5 s",

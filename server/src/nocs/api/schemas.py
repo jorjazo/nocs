@@ -90,7 +90,9 @@ class IndiState(StateModel):
 
 type CameraRoleName = Literal["main_camera", "guide_camera"]
 type ConnectionName = Literal["disconnected", "connecting", "connected", "disconnecting"]
-type DeviceStatusName = Literal["waiting", "connecting", "ready", "error", "disconnected"]
+type DeviceStatusName = Literal[
+    "waiting", "connecting", "ready", "error", "disconnected", "unresponsive"
+]
 
 
 class ProfileSummary(StateModel):
@@ -100,8 +102,11 @@ class ProfileSummary(StateModel):
 class RoleState(StateModel):
     driver: str
     device: str | None = Field(description="INDI device name, once known.")
-    status: DeviceStatusName
+    status: DeviceStatusName = Field(
+        description="unresponsive: connected, but it stopped answering a command (ADR 0030)."
+    )
     error: str | None
+    unresponsive_since: str | None = Field(description="When it was noticed unresponsive, UTC.")
 
 
 class EquipmentState(StateModel):

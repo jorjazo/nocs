@@ -100,6 +100,7 @@ export const es: Messages = {
     ready: "En línea",
     error: "Error",
     disconnected: "Desconectado",
+    unresponsive: "No responde",
   },
   connection: {
     disconnected: "Desconectado",
@@ -142,6 +143,7 @@ export const es: Messages = {
     advanced: "Propiedades INDI",
     advancedHint: "Todas las propiedades de todos los drivers, para diagnosticar problemas.",
     recover: (device) => `${device} no responde`,
+    notAnsweringSince: (device, time) => `${device} no responde desde las ${time}`,
     restartDriver: "Reiniciar driver",
     powerCycle: "Cortar la energía",
     confirmPowerCycle: "Toca otra vez: 5 s sin energía",

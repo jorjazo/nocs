@@ -22,11 +22,6 @@ export type SolveFailureReason = "unavailable" | "no_database" | "no_stars" | "n
 export type ConnectionName = "disconnected" | "connecting" | "connected" | "disconnecting";
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
- * via the `definition` "DeviceStatusName".
- */
-export type DeviceStatusName = "waiting" | "connecting" | "ready" | "error" | "disconnected";
-/**
- * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "Phd2AppState".
  */
 export type Phd2AppState = "Stopped" | "Selected" | "Calibrating" | "Guiding" | "LostLock" | "Paused" | "Looping";
@@ -145,6 +140,11 @@ export type Darkness = "civil" | "nautical" | "astronomical";
  * via the `definition` "Trigger".
  */
 export type Trigger = AutofocusTrigger | DitherTrigger | RecenterTrigger | FlipTrigger;
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "DeviceStatusName".
+ */
+export type DeviceStatusName = "waiting" | "connecting" | "ready" | "error" | "disconnected" | "unresponsive";
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "DriverName".
@@ -893,7 +893,14 @@ export interface RoleState {
   device: string | null;
   driver: string;
   error: string | null;
-  status: DeviceStatusName;
+  /**
+   * unresponsive: connected, but it stopped answering a command (ADR 0030).
+   */
+  status: "waiting" | "connecting" | "ready" | "error" | "disconnected" | "unresponsive";
+  /**
+   * When it was noticed unresponsive, UTC.
+   */
+  unresponsive_since: string | null;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
