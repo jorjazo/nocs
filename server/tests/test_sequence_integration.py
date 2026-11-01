@@ -99,19 +99,26 @@ def api(tmp_path_factory: pytest.TempPathFactory) -> Iterator[TestClient]:
         response = client.post("/api/clock", json={"utc": now.isoformat(), "utc_offset": 0})
         assert response.status_code == 200, response.text
         wait(client, lambda s: s["mount"]["site_sent"] and s["mount"]["time_sent"])
-        focus = state(client)["focuser"]["position"]
+        before = state(client)
+        focus = before["focuser"]["position"]
+        pointing = {"ra": before["mount"]["ra_j2000"], "dec": before["mount"]["dec_j2000"]}
         try:
             yield client
         finally:
-            # Leave the simulators as found: autofocus at 1000 mm makes stars too small
-            # for the solver's tests at 250 mm.
+            # Leave the simulators as found. Autofocus at 1000 mm makes stars too small
+            # for the solver's tests at 250 mm, and the simulator parks on the meridian,
+            # where the next test's field would cross it between two frames.
             client.post("/api/sequence/stop", json={"run_end": False, "now": True})
             client.post("/api/mount/abort")
             if state(client)["mount"]["parked"]:
                 client.post("/api/mount/unpark")
-            response = client.post("/api/focuser/move", json={"position": focus})
-            if response.status_code == 202:
-                wait(client, finished(response.json()["job"]))
+            for path, body in (
+                ("/api/focuser/move", {"position": focus}),
+                ("/api/mount/goto", {"frame": "j2000", **pointing, "force": True}),
+            ):
+                response = client.post(path, json=body)
+                if response.status_code == 202:
+                    wait(client, finished(response.json()["job"]))
 
 
 def test_a_two_filter_sequence_focuses_takes_its_frames_and_parks(api: TestClient) -> None:
