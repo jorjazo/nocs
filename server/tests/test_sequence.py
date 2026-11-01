@@ -293,7 +293,13 @@ async def test_a_condition_ends_its_container_after_the_frame_in_progress() -> N
     )
     assert len(frames(rig)) == 5  # 60 s each: the fifth ends at 00:05
     assert rig.calls[-2:] == ["park", "warm"]
-    assert any(e.kind is EventKind.CONDITION and e.path == "targets.0" for e in events)
+    assert any(
+        e.kind is EventKind.CONDITION
+        and e.path == "targets.0"
+        and e.data == {"condition": "until_time"}
+        for e in events
+    )
+    assert any(e.kind is EventKind.ACTION and e.data == {"filter": "L"} for e in events)
 
 
 async def test_an_outer_condition_ends_the_containers_inside_it() -> None:
@@ -419,6 +425,8 @@ async def test_a_pause_now_drops_the_frame_and_takes_it_again() -> None:
         while runner.status()["current"] != "targets.0.1" or rig.calls[-1] != "filter L":
             await anyio.lowlevel.checkpoint()
         await anyio.lowlevel.checkpoint()
+        # The monitor shows what the run is doing: a frame of the plan.
+        assert runner.status()["step"] == {"kind": "expose", "frame_type": "light"}
         runner.pause(now=True)
         while runner.state is not RunState.PAUSED:
             await anyio.lowlevel.checkpoint()

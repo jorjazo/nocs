@@ -373,10 +373,37 @@ Sequence builder (stage 5.13):
   targets, end, with each container's conditions and triggers). The draft lives
   while the page is open; a reload goes back to what was saved.
 
+Session monitor (stage 5.14):
+
+- The Session tab shows the sequence's run in progress, or the last one, above
+  the night's frames: the target and when it started, the run's name and a chip
+  with its state (Running, Pausing, Paused, Stopping, Ending, then Completed,
+  Stopped or Failed); frames done of all, the time left and when it would end, and
+  a bar.
+- The frame in progress: a thumbnail of the latest frame, "Exposing R · frame 12
+  of 15", a countdown and its bar; between frames, what the run is doing (a slew,
+  autofocus, waiting for dusk). Tiles for the latest HFR, the guiding RMS and the
+  sensor's temperature; the guiding graph while PHD2 guides; each filter's frames
+  with a bar; the events, newest first (six, then all of them), in this language.
+- Pause waits for the frame in progress, and while it waits offers Pause now;
+  Resume takes the rig back or says what holds it. Stop… asks how: after this
+  frame then park and warm, now then park and warm, or now leaving the rig as it is.
+  On a phone Pause and Stop stay docked above the tab bar; on a tablet they sit in
+  the header.
+- Tablet (from 1000 px): two columns, the latest frame large with its exposure, HFR
+  and stars on the left, and under it a strip of the recent frames (filter, number
+  and HFR: the server keeps no thumbnail of each frame); everything else on the
+  right.
+- A running or paused sequence puts a dot on the Session tab (accent, or amber
+  while paused), from any screen.
+- "Pause the sequence and do it" (design §6): Live view, the mount, focuser and
+  filter wheel sheets and the Focus screen say when the sequence holds their
+  device, with Pause the sequence (at once: the frame in progress is taken again
+  later); while it is paused they say so, with Resume. A paused sequence's job
+  lends its devices (`suspended` in the jobs' state), so their controls work.
+
 ## 8. Open UX questions
 
-- Persistent "session running" indicator on non-session screens (banner vs.
-  tab badge).
 - How to expose the full sequence tree editor (advanced) without cluttering the
   template view (v0.1 shows the tree read only under Advanced).
 - Image interaction on phones: star inspection, FITS header view (pinch-zoom is

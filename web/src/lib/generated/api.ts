@@ -1284,6 +1284,10 @@ export interface JobInfo {
   };
   started: string;
   state: JobStateName;
+  /**
+   * Its locks are lent to others until it resumes (a paused sequence).
+   */
+  suspended?: boolean;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -1827,6 +1831,12 @@ export interface SequenceRun {
    */
   started: string;
   state: "running" | "pausing" | "paused" | "stopping" | "ending" | "finished";
+  /**
+   * The instruction at `current` as stored (an exposure plan only as its kind and frame_type); None at a container or between steps.
+   */
+  step?: {
+    [k: string]: unknown;
+  } | null;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema

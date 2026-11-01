@@ -53,3 +53,32 @@ export function rowSeconds(row: PlanRow): number {
 export function isActive(run: SequenceRun | null | undefined): run is SequenceRun {
   return !!run && run.state !== "finished";
 }
+
+export type RowProgress = { filter: string | null; exposure: number; count: number; done: number };
+
+// How far a run is: its frames done and in all, the time its frames still take
+// (with `overhead` seconds each), and its rows, by filter in the order of the plans.
+export function runProgress(
+  run: SequenceRun,
+  overhead = 3,
+): { done: number; total: number; left: number; rows: RowProgress[] } {
+  const rows = Object.values(run.plans).flatMap((plan) => plan.rows);
+  let done = 0;
+  let total = 0;
+  let left = 0;
+  for (const row of rows) {
+    done += Math.min(row.done, row.count);
+    total += row.count;
+    left += Math.max(0, row.count - row.done) * (row.exposure + overhead);
+  }
+  return { done, total, left, rows };
+}
+
+// The row a frame in progress belongs to: the plan's row with the wheel's filter
+// that still has frames left, else its first unfinished one.
+export function currentRow(run: SequenceRun, filter: string | null): RowProgress | null {
+  const plan = run.current ? run.plans[run.current] : undefined;
+  if (!plan) return null;
+  const open = plan.rows.filter((row) => row.done < row.count);
+  return open.find((row) => row.filter === filter) ?? open[0] ?? null;
+}

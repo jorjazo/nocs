@@ -4,6 +4,7 @@
   // can be sent into place to check by eye which filter it holds.
   import { untrack } from "svelte";
   import Banner from "../../components/Banner.svelte";
+  import SequenceHold from "../../components/SequenceHold.svelte";
   import Button from "../../components/Button.svelte";
   import Icon from "../../components/Icon.svelte";
   import Sheet from "../../components/Sheet.svelte";
@@ -118,6 +119,7 @@
 
     {#if locked && auth.owner}<p class="caption muted">{t.wheel.locked}</p>{/if}
     {#if duplicate}<p class="caption error">{t.wheel.duplicate(duplicate)}</p>{/if}
+    <SequenceHold resources={["filter_wheel"]} />
     {#if error}<Banner icon="alert" tone="error">{error}</Banner>{/if}
   {/if}
 

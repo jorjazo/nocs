@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { isActive, newTemplate, nextFilter, sequenceId } from "./sequence.ts";
+import { currentRow, isActive, newTemplate, nextFilter, runProgress, sequenceId } from "./sequence.ts";
 
 test("a target's sequence id is a file name", () => {
   assert.equal(sequenceId("NGC 253"), "ngc-253");
@@ -24,4 +24,33 @@ test("a new template images the target from dusk to dawn", () => {
   assert.equal(template.rows[0].filter, "L");
   assert.equal(template.start_at_dusk, true);
   assert.equal(isActive(null), false);
+});
+
+test("a run's progress adds its rows up", () => {
+  const run = {
+    run: "r",
+    name: "NGC 253",
+    state: "running" as const,
+    started: "2026-11-01T01:00:00+00:00",
+    restarts: 0,
+    current: "targets.0.1.3",
+    plans: {
+      "targets.0.1.3": {
+        target: "NGC 253",
+        rows: [
+          { filter: "L", exposure: 120, count: 10, done: 10 },
+          { filter: "R", exposure: 60, count: 5, done: 2 },
+        ],
+      },
+    },
+    outcome: null,
+    error: null,
+  };
+  const progress = runProgress(run);
+  assert.equal(progress.done, 12);
+  assert.equal(progress.total, 15);
+  assert.equal(progress.left, 3 * 63);
+  assert.equal(currentRow(run, "L")?.filter, "R");
+  assert.equal(currentRow(run, "R")?.done, 2);
+  assert.equal(currentRow({ ...run, current: "end.0" }, "R"), null);
 });

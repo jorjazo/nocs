@@ -39,7 +39,7 @@
   const wheel = $derived(live.app.filter_wheel ?? null);
   const filters = $derived((wheel?.names ?? []).filter((name) => name));
   const outputs = $derived(live.app.power?.outputs ?? []);
-  const camera = $derived(live.app.cameras?.main ?? null);
+  const camera = $derived(live.app.cameras?.main_camera ?? null);
   const running = $derived(isActive(live.app.sequence?.run) ? live.app.sequence?.run : null);
   // The profile has a guide camera: PHD2 is connected when the sequence starts guiding.
   const canGuide = $derived(!!live.app.equipment?.devices.guide_camera);

@@ -23,7 +23,8 @@ export function cameraJobs(
   let running: CameraJob | null = null;
   let latest: CameraJob | null = null;
   for (const [id, info] of Object.entries(jobs ?? {})) {
-    if (!info.resources.includes(role)) continue;
+    // A paused sequence lends its devices (ADR 0031): it holds nothing meanwhile.
+    if (!info.resources.includes(role) || info.suspended) continue;
     if (info.state === "running") running = { id, info };
     if (!latest || info.started > latest.info.started) latest = { id, info };
   }
@@ -36,7 +37,7 @@ export function cameraJobs(
 // (which locks both, so a frame is never spoiled; loops lock only the camera).
 export function holder(jobs: Record<string, JobInfo> | null | undefined, resource: Role): CameraJob | null {
   for (const [id, info] of Object.entries(jobs ?? {})) {
-    if (info.state === "running" && info.resources.includes(resource)) return { id, info };
+    if (info.state === "running" && !info.suspended && info.resources.includes(resource)) return { id, info };
   }
   return null;
 }

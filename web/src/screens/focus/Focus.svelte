@@ -5,6 +5,7 @@
   // follows it, and cancelling takes the focuser back to where it started.
   import { untrack } from "svelte";
   import Banner from "../../components/Banner.svelte";
+  import SequenceHold from "../../components/SequenceHold.svelte";
   import Button from "../../components/Button.svelte";
   import Chip from "../../components/Chip.svelte";
   import Icon from "../../components/Icon.svelte";
@@ -330,6 +331,7 @@
 
     <div class="actions">
       {#if blocked}<p class="caption muted">{blocked}</p>{/if}
+      <SequenceHold resources={["focuser", "main_camera"]} />
       {#if error}<Banner icon="alert" tone="error">{error}</Banner>{/if}
       <Button variant="primary" wide {busy} disabled={!!blocked || !valid} onclick={start}>
         {t.autofocus.start}

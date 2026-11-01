@@ -119,6 +119,7 @@ class JobManager:
         for resource in resources:
             del self._locks[resource]
         self._suspended[job_id] = resources
+        self._update(job_id, suspended=True)
 
     def resume(self, job_id: str) -> None:
         """Take back what ``suspend`` freed; ``ResourceBusyError`` if one was taken since."""
@@ -129,6 +130,7 @@ class JobManager:
         for resource in resources:
             self._locks[resource] = job_id
         del self._suspended[job_id]
+        self._update(job_id, suspended=False)
 
     def active(self) -> list[str]:
         """Kinds of the running jobs and reservations: what a reboot would interrupt."""
@@ -159,6 +161,7 @@ class JobManager:
                 "result": None,
                 "started": _now(),
                 "finished": None,
+                "suspended": False,
             },
         )
         task = asyncio.create_task(self._run(job_id, run), name=f"job-{kind}")

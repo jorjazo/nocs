@@ -234,6 +234,10 @@ class JobInfo(StateModel):
     result: Any = Field(description="Kind-specific; for exposures, a FrameInfo.")
     started: str
     finished: str | None
+    suspended: bool = Field(
+        default=False,
+        description="Its locks are lent to others until it resumes (a paused sequence).",
+    )
 
 
 class StorageDestination(StateModel):
@@ -866,6 +870,11 @@ class SequenceRun(StateModel):
     started: str = Field(description="UTC, ISO 8601.")
     restarts: int = Field(description="Times it was resumed after nocsd restarted.")
     current: str | None = Field(description="Where in the tree: start, targets.0.1, end.0…")
+    step: dict[str, Any] | None = Field(
+        default=None,
+        description="The instruction at `current` as stored (an exposure plan only as its kind "
+        "and frame_type); None at a container or between steps.",
+    )
     plans: dict[str, SequencePlan] = Field(description="Exposure plans by place in the tree.")
     outcome: Literal["completed", "stopped", "failed"] | None
     error: str | None

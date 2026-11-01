@@ -136,9 +136,11 @@ async def test_a_suspended_job_lends_its_locks_until_it_resumes(store: StateStor
     job_id = manager.start("sequence", ["camera", "mount"], run)
     with pytest.raises(KeyError):
         manager.suspend("nonsense")
+    assert store.get(("jobs", job_id, "suspended")) is False
     manager.suspend(job_id)
     manager.suspend(job_id)
     assert manager.holder("camera") is None
+    assert store.get(("jobs", job_id, "suspended")) is True
     token = manager.reserve("move", ["mount"])
     with pytest.raises(ResourceBusyError, match="mount is busy"):
         manager.resume(job_id)
@@ -147,6 +149,7 @@ async def test_a_suspended_job_lends_its_locks_until_it_resumes(store: StateStor
     manager.resume(job_id)
     manager.resume(job_id)
     assert manager.holder("camera") == manager.holder("mount") == job_id
+    assert store.get(("jobs", job_id, "suspended")) is False
 
     manager.suspend(job_id)
     go_on.set()

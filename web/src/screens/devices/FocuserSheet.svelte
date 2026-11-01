@@ -3,6 +3,7 @@
   // stop. Opened from Live view and from Rig.
   import { untrack } from "svelte";
   import Banner from "../../components/Banner.svelte";
+  import SequenceHold from "../../components/SequenceHold.svelte";
   import Button from "../../components/Button.svelte";
   import SegmentedControl from "../../components/SegmentedControl.svelte";
   import Sheet from "../../components/Sheet.svelte";
@@ -99,6 +100,7 @@
     <Button wide onclick={() => router.go({ screen: "focus" })}>{t.autofocus.open}</Button>
 
     {#if locked && auth.owner}<p class="caption muted">{t.focuser.locked}</p>{/if}
+    <SequenceHold resources={["focuser"]} />
     {#if error}<Banner icon="alert" tone="error">{error}</Banner>{/if}
   {/if}
 </Sheet>

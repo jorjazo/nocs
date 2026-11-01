@@ -3,10 +3,10 @@
 // and back loses nothing; and the words for a template and its steps.
 
 import { listSequences } from "./api";
-import { formatPlain, formatTemperature, formatTime } from "./format";
+import { formatDecimal, formatDuration, formatPlain, formatTemperature, formatTime } from "./format";
 import type { Messages } from "./i18n";
 import { newTemplate, sequenceId } from "./sequence";
-import type { Container, Node, PlannedTarget, PowerOutput, Template } from "./types";
+import type { Container, Node, PlannedTarget, PowerOutput, SequenceEvent, SequenceRun, Template } from "./types";
 
 export { isActive, nextFilter, rowSeconds, sequenceId } from "./sequence";
 
@@ -146,4 +146,88 @@ export function describeContainer(container: Container, t: Messages, locale: str
 
 function capitalize(text: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+// One line of the session's timeline, from the event's kind and data (the
+// server's messages are English).
+export function describeEvent(event: SequenceEvent, t: Messages, locale: string): string {
+  const e = t.session.event;
+  const n = t.sequence.node;
+  const data = event.data as Record<string, unknown>;
+  const number = (key: string): number | null => (typeof data[key] === "number" ? data[key] : null);
+  switch (event.kind) {
+    case "started":
+      return e.started;
+    case "resumed_after_restart":
+      return e.resumed_after_restart;
+    case "paused":
+      return e.paused;
+    case "resumed":
+      return e.resumed;
+    case "ending":
+      return e.ending;
+    case "ended": {
+      const outcome = event.message as keyof typeof t.session.states;
+      const ended = e.ended(t.session.states[outcome] ?? event.message);
+      return typeof data.error === "string" ? `${ended} · ${data.error}` : ended;
+    }
+    case "failed":
+      return e.failed(event.message);
+    case "recovery":
+      return e.recovery(event.message);
+    case "skipped":
+      return e.skipped(event.message);
+    case "trigger":
+      return e.trigger(event.message.replace(/^autofocus: /, ""));
+    case "condition": {
+      const condition = data.condition as keyof typeof e.condition;
+      return e.condition[condition] ?? event.message;
+    }
+    case "frame": {
+      const parts = [e.frame(event.message)];
+      const hfr = number("hfr");
+      const stars = number("stars");
+      if (hfr !== null) parts.push(`HFR ${formatDecimal(hfr, locale, 2)}`);
+      if (stars !== null) parts.push(t.session.stars(stars));
+      return parts.join(" · ");
+    }
+    case "action":
+      switch (event.message) {
+        case "autofocus": {
+          const position = number("position");
+          const hfr = number("hfr");
+          return position !== null && hfr !== null
+            ? e.focused(formatPlain(position, locale), formatDecimal(hfr, locale, 2))
+            : n.autofocus;
+        }
+        case "cool": {
+          const temperature = number("temperature");
+          return temperature !== null ? e.cooled(formatTemperature(temperature, locale)) : n.cool("—");
+        }
+        case "wait":
+          return e.waited(t.session.step.wait, formatDuration(number("waited") ?? 0));
+        case "filter":
+          return n.filter(String(data.filter ?? ""));
+        case "guide":
+          return data.on === false ? n.guideOff : n.guideOn;
+        case "unpark":
+          return n.unpark;
+        case "park":
+          return n.park;
+        case "slew":
+          return n.slew;
+        case "warm":
+          return n.warm;
+        default:
+          return event.message;
+      }
+  }
+}
+
+// What the run is doing between frames: the step at `run.current`.
+export function describeStep(run: SequenceRun, t: Messages, locale: string, outputs: PowerOutput[]): string {
+  const step = run.step as Node | null | undefined;
+  if (!step) return t.session.step.between;
+  if (step.kind === "expose") return t.session.step.expose;
+  return describeNode(step, t, locale, outputs);
 }

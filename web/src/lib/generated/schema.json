@@ -4472,6 +4472,11 @@
         },
         "state": {
           "$ref": "#/$defs/JobStateName"
+        },
+        "suspended": {
+          "default": false,
+          "description": "Its locks are lent to others until it resumes (a paused sequence).",
+          "type": "boolean"
         }
       },
       "required": [
@@ -7222,6 +7227,19 @@
             "finished"
           ],
           "type": "string"
+        },
+        "step": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The instruction at `current` as stored (an exposure plan only as its kind and frame_type); None at a container or between steps."
         }
       },
       "required": [

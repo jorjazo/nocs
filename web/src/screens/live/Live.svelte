@@ -23,6 +23,7 @@
     MAX_SERIES,
     slotLabel,
   } from "../../lib/camera.svelte";
+  import SequenceHold from "../../components/SequenceHold.svelte";
   import { errorText } from "../../lib/errors";
   import { formatDecimal, formatPlain, formatSeconds, formatTemperature } from "../../lib/format";
   import { i18n } from "../../lib/i18n";
@@ -74,7 +75,8 @@
   // -- Jobs -------------------------------------------------------------------------
 
   const jobs = $derived(cameraJobs(live.app.jobs, role));
-  const running = $derived(jobs.running);
+  // A sequence's job is never this screen's to cancel: SequenceHold offers a pause.
+  const running = $derived(jobs.running?.info.kind === "sequence" ? null : jobs.running);
   const looping = $derived(running?.info.kind === "loop");
   // The server records the exposure a job uses, and refuses changes while it runs.
   const exposure = $derived(camera?.exposure ?? null);
@@ -488,6 +490,7 @@
       <!-- On phones the actions stay above the tab bar while the panel scrolls:
            the primary action and what went wrong are always in reach. -->
       <div class="dock">
+        <SequenceHold resources={[role, "filter_wheel", "focuser"]} />
         {#if actionError}
           <Banner icon="alert" tone="error">
             {actionError}

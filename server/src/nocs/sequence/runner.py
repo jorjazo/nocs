@@ -38,6 +38,8 @@ from nocs.sequence.model import (
     ExposurePlan,
     FailureKind,
     FocusMemory,
+    Guide,
+    Node,
     PathKey,
     PlanRow,
     SelectFilter,
@@ -448,7 +450,12 @@ class Runner:
         except _ConditionEnded as ended:
             if ended.container != here:
                 raise
-            self._event(EventKind.CONDITION, f"{ended.condition.kind} ended it", here)
+            self._event(
+                EventKind.CONDITION,
+                f"{ended.condition.kind} ended it",
+                here,
+                {"condition": ended.condition.kind},
+            )
             self._forget_inside(here)
         except _SkipTarget:
             if container.target is None:
@@ -483,11 +490,15 @@ class Runner:
                 self._focused()  # the triggers try again at their next reason, not now
             await self._save()
             return False
+        data = dict(done.value or {})
         if isinstance(action, SelectFilter):
             self._filter = action.filter
+            data["filter"] = action.filter
         elif isinstance(action, Autofocus):
             self._focused()
-        self._event(EventKind.ACTION, action.kind, here, done.value)
+        elif isinstance(action, Guide):
+            data["on"] = action.on
+        self._event(EventKind.ACTION, action.kind, here, data)
         await self._save()
         return True
 
@@ -745,10 +756,33 @@ class Runner:
             "started": checkpoint.started.isoformat(timespec="seconds"),
             "restarts": checkpoint.restarts,
             "current": self._current,
+            "step": self._describe(self._current),
             "plans": rows,
             "outcome": self._outcome.value if self._outcome is not None else None,
             "error": self._error,
         }
+
+    def _describe(self, path: PathKey | None) -> dict[str, Json] | None:
+        """The node at ``path``, as the monitor shows it (an exposure plan by its kind)."""
+        node = self._node(path)
+        if node is None or isinstance(node, Container):
+            return None
+        if isinstance(node, ExposurePlan):
+            return {"kind": node.kind, "frame_type": node.frame_type}
+        return node.model_dump(mode="json")
+
+    def _node(self, path: PathKey | None) -> Node | None:
+        if not path:
+            return None
+        first, *rest = path.split(".")
+        parts = {"start": self._sequence.start, "targets": self._sequence.targets}
+        node: Node | None = parts.get(first, self._sequence.end if first == "end" else None)
+        for part in rest:
+            if not isinstance(node, Container) or not part.isdigit():
+                return None
+            children = node.children
+            node = children[int(part)] if int(part) < len(children) else None
+        return node
 
     def _set_state(self, state: RunState) -> None:
         self._state = state

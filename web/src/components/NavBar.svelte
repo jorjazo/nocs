@@ -1,6 +1,7 @@
 <script lang="ts">
   // Bottom tab bar on phones, left navigation rail from 768 px (docs/ux.md §1).
   import { i18n } from "../lib/i18n";
+  import { live } from "../lib/live.svelte";
   import { href, router, TABS, type Tab } from "../lib/router.svelte";
   import Icon from "./Icon.svelte";
   import ThemeButton from "./ThemeButton.svelte";
@@ -14,6 +15,11 @@
     if (screen === "focus" || screen === "guiding" || screen === "polar") return "tonight";
     return screen;
   });
+
+  // A sequence that runs (or waits paused) is one tap away from any screen: a dot
+  // on the Session tab, which says how it stands to screen readers too.
+  const run = $derived(live.app.sequence?.run ?? null);
+  const session = $derived(run && run.state !== "finished" ? run.state : null);
 </script>
 
 <nav class="nav" aria-label={i18n.t.tabs.label}>
@@ -22,8 +28,14 @@
     {#each TABS as tab (tab)}
       <li>
         <a href={href({ screen: tab })} aria-current={tab === current ? "page" : undefined}>
-          <Icon name={tab} />
+          <span class="icon">
+            <Icon name={tab} />
+            {#if tab === "session" && session}
+              <span class="badge" class:paused={session === "paused" || session === "pausing"}></span>
+            {/if}
+          </span>
           <span class="name">{i18n.t.tabs[tab]}</span>
+          {#if tab === "session" && session}<span class="visually-hidden">{i18n.t.session.states[session]}</span>{/if}
         </a>
       </li>
     {/each}
@@ -63,6 +75,23 @@
     border-radius: var(--radius-button);
     color: var(--muted);
     text-decoration: none;
+  }
+  .icon {
+    position: relative;
+    display: inline-flex;
+  }
+  .badge {
+    position: absolute;
+    top: -2px;
+    right: -4px;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 0 2px var(--surface);
+  }
+  .badge.paused {
+    background: var(--warning);
   }
   .name {
     font-size: 13px;

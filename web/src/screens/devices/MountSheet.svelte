@@ -3,6 +3,7 @@
   // and centre, tracking, park and home, the site and time it was given, and the limits it
   // keeps. Opened from Rig and from Live view.
   import Banner from "../../components/Banner.svelte";
+  import SequenceHold from "../../components/SequenceHold.svelte";
   import Button from "../../components/Button.svelte";
   import Chip from "../../components/Chip.svelte";
   import ConfirmButton from "../../components/ConfirmButton.svelte";
@@ -192,6 +193,7 @@
       {#if progress}<p class="caption muted" role="status">{progress}</p>{/if}
     </div>
 
+    <SequenceHold resources={["mount"]} />
     {#if error}<Banner icon="alert" tone="error">{error}</Banner>{/if}
 
     <section class="group" aria-labelledby="goto-title">
