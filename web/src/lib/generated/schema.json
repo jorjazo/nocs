@@ -1673,6 +1673,59 @@
       "title": "CatalogSource",
       "type": "object"
     },
+    "Center": {
+      "additionalProperties": false,
+      "description": "Go to the target of the enclosing container and centre it by plate solving.",
+      "properties": {
+        "attempts": {
+          "default": 5,
+          "maximum": 10,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "binning": {
+          "anyOf": [
+            {
+              "maximum": 8,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "exposure": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "maximum": 120,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Seconds; the camera's current one when None."
+        },
+        "kind": {
+          "const": "center",
+          "default": "center",
+          "type": "string"
+        },
+        "tolerance": {
+          "default": 1.0,
+          "description": "Arcminutes.",
+          "exclusiveMinimum": 0,
+          "maximum": 60,
+          "type": "number"
+        }
+      },
+      "title": "Center",
+      "type": "object"
+    },
     "CenterRequest": {
       "additionalProperties": false,
       "properties": {
@@ -2317,6 +2370,51 @@
       ],
       "type": "string"
     },
+    "Dither": {
+      "additionalProperties": false,
+      "description": "Move the guiding lock position a little and wait until PHD2 settles (ADR 0024).\n\nOnly while the sequence guides; otherwise there is nothing to dither.",
+      "properties": {
+        "kind": {
+          "const": "dither",
+          "default": "dither",
+          "type": "string"
+        },
+        "pixels": {
+          "default": 5,
+          "description": "Main camera pixels, at most this far.",
+          "exclusiveMinimum": 0,
+          "maximum": 50,
+          "type": "number"
+        },
+        "ra_only": {
+          "default": false,
+          "type": "boolean"
+        },
+        "settle_pixels": {
+          "default": 1.5,
+          "description": "Settled within this\u2026",
+          "exclusiveMinimum": 0,
+          "maximum": 20,
+          "type": "number"
+        },
+        "settle_time": {
+          "default": 10,
+          "description": "\u2026for this long, seconds\u2026",
+          "maximum": 300,
+          "minimum": 0,
+          "type": "number"
+        },
+        "settle_timeout": {
+          "default": 60,
+          "description": "\u2026or give up after this.",
+          "exclusiveMinimum": 0,
+          "maximum": 600,
+          "type": "number"
+        }
+      },
+      "title": "Dither",
+      "type": "object"
+    },
     "DitherNowRequest": {
       "additionalProperties": false,
       "properties": {
@@ -2366,6 +2464,28 @@
         }
       },
       "title": "DitherRequest",
+      "type": "object"
+    },
+    "DitherTrigger": {
+      "additionalProperties": false,
+      "description": "Dither before a frame once ``every`` frames were taken since the last dither.",
+      "properties": {
+        "dither": {
+          "$ref": "#/$defs/Dither"
+        },
+        "every": {
+          "default": 1,
+          "maximum": 1000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "kind": {
+          "const": "dither",
+          "default": "dither",
+          "type": "string"
+        }
+      },
+      "title": "DitherTrigger",
       "type": "object"
     },
     "Driver": {
@@ -5312,6 +5432,12 @@
           "$ref": "#/$defs/Slew"
         },
         {
+          "$ref": "#/$defs/Center"
+        },
+        {
+          "$ref": "#/$defs/Recenter"
+        },
+        {
           "$ref": "#/$defs/SelectFilter"
         },
         {
@@ -5319,6 +5445,9 @@
         },
         {
           "$ref": "#/$defs/Guide"
+        },
+        {
+          "$ref": "#/$defs/Dither"
         },
         {
           "$ref": "#/$defs/Outputs"
@@ -6781,6 +6910,51 @@
         "Alert"
       ],
       "type": "string"
+    },
+    "Recenter": {
+      "additionalProperties": false,
+      "description": "Solve a frame where the mount is; centre again when it drifted past ``drift``.",
+      "properties": {
+        "center": {
+          "$ref": "#/$defs/Center"
+        },
+        "drift": {
+          "default": 2.0,
+          "description": "Arcminutes.",
+          "exclusiveMinimum": 0,
+          "maximum": 60,
+          "type": "number"
+        },
+        "kind": {
+          "const": "recenter",
+          "default": "recenter",
+          "type": "string"
+        }
+      },
+      "title": "Recenter",
+      "type": "object"
+    },
+    "RecenterTrigger": {
+      "additionalProperties": false,
+      "description": "Check the pointing once ``every`` frames were taken since the last check.",
+      "properties": {
+        "every": {
+          "default": 10,
+          "maximum": 1000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "kind": {
+          "const": "recenter",
+          "default": "recenter",
+          "type": "string"
+        },
+        "recenter": {
+          "$ref": "#/$defs/Recenter"
+        }
+      },
+      "title": "RecenterTrigger",
+      "type": "object"
     },
     "Region": {
       "additionalProperties": false,
@@ -8815,6 +8989,11 @@
           "minimum": 1,
           "type": "integer"
         },
+        "center": {
+          "default": false,
+          "description": "Centre the target by plate solving instead of only going.",
+          "type": "boolean"
+        },
         "cooling": {
           "anyOf": [
             {
@@ -8845,6 +9024,27 @@
           "$ref": "#/$defs/Darkness",
           "default": "astronomical",
           "description": "The twilight that starts and ends the night."
+        },
+        "dither_every": {
+          "anyOf": [
+            {
+              "maximum": 1000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Dither every so many frames while guiding."
+        },
+        "dither_pixels": {
+          "default": 5,
+          "description": "Main camera pixels.",
+          "exclusiveMinimum": 0,
+          "maximum": 50,
+          "type": "number"
         },
         "end": {
           "$ref": "#/$defs/EndPlan"
@@ -8887,6 +9087,27 @@
             "in_turn"
           ],
           "type": "string"
+        },
+        "recenter_drift": {
+          "default": 2.0,
+          "description": "Arcminutes.",
+          "exclusiveMinimum": 0,
+          "maximum": 60,
+          "type": "number"
+        },
+        "recenter_every": {
+          "anyOf": [
+            {
+              "maximum": 1000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Check the pointing every so many frames."
         },
         "recovery": {
           "additionalProperties": {
@@ -8991,13 +9212,21 @@
     "Trigger": {
       "discriminator": {
         "mapping": {
-          "autofocus": "#/$defs/AutofocusTrigger"
+          "autofocus": "#/$defs/AutofocusTrigger",
+          "dither": "#/$defs/DitherTrigger",
+          "recenter": "#/$defs/RecenterTrigger"
         },
         "propertyName": "kind"
       },
       "oneOf": [
         {
           "$ref": "#/$defs/AutofocusTrigger"
+        },
+        {
+          "$ref": "#/$defs/DitherTrigger"
+        },
+        {
+          "$ref": "#/$defs/RecenterTrigger"
         }
       ]
     },

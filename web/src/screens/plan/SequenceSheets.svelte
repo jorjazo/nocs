@@ -1,5 +1,5 @@
 <script lang="ts" module>
-  export type SheetKind = "focus" | "night" | "cooling" | "end";
+  export type SheetKind = "focus" | "pointing" | "dither" | "night" | "cooling" | "end";
 </script>
 
 <script lang="ts">
@@ -10,8 +10,10 @@
   import NumberField from "../../components/NumberField.svelte";
   import SegmentedControl from "../../components/SegmentedControl.svelte";
   import Sheet from "../../components/Sheet.svelte";
+  import Stepper from "../../components/Stepper.svelte";
   import Toggle from "../../components/Toggle.svelte";
   import { i18n } from "../../lib/i18n";
+  import { live } from "../../lib/live.svelte";
   import type { PowerOutput, Template } from "../../lib/types";
 
   let {
@@ -31,7 +33,7 @@
   const t = $derived(i18n.t);
   const s = $derived(t.sequence);
   const title = $derived(
-    { focus: s.autofocus, night: s.night, cooling: s.cooling, end: s.whenFinished }[kind],
+    { focus: s.autofocus, pointing: s.pointing, dither: s.dither, night: s.night, cooling: s.cooling, end: s.whenFinished }[kind],
   );
 
   const focus = $derived(
@@ -45,6 +47,11 @@
   let altitude: number | null = $state(initial.min_altitude ?? null);
   let cooling: number | null = $state(initial.cooling ?? -10);
   let ramp: number | null = $state(initial.cooling_ramp ?? null);
+  let every: number | null = $state(initial.dither_every ?? 3);
+  let checkEvery: number | null = $state(initial.recenter_every ?? 10);
+  let drift: number | null = $state(initial.recenter_drift ?? 2);
+  const solver = $derived(live.app.solver?.available === true);
+  let pixels: number | null = $state(initial.dither_pixels ?? 5);
 
   function setFocus(change: Partial<NonNullable<Template["focus"]>>): void {
     template.focus = { ...focus, ...change };
@@ -55,6 +62,16 @@
   });
   $effect(() => {
     if (kind === "night") template.min_altitude = altitude;
+  });
+  $effect(() => {
+    if (kind !== "pointing") return;
+    if (drift !== null) template.recenter_drift = drift;
+    if (template.recenter_every != null && checkEvery !== null) template.recenter_every = checkEvery;
+  });
+  $effect(() => {
+    if (kind !== "dither") return;
+    if (pixels !== null) template.dither_pixels = pixels;
+    if (template.dither_every != null && every !== null) template.dither_every = every;
   });
   $effect(() => {
     if (kind !== "cooling") return;
@@ -84,6 +101,38 @@
       <NumberField label={s.focusSheet.temperature} bind:value={temperature} min={0.1} max={20} unit="°C" hint={s.focusSheet.emptyOff} />
       <NumberField label={s.focusSheet.hfr} bind:value={hfr} min={1} max={200} unit="%" hint={s.focusSheet.hfrHint} />
       <NumberField label={s.focusSheet.minutes} bind:value={minutes} min={1} max={600} unit="min" hint={s.focusSheet.emptyOff} />
+    {:else if kind === "pointing"}
+      {#if !solver}<p class="muted">{s.pointingSheet.noSolver}</p>{/if}
+      <Toggle
+        label={s.pointingSheet.center}
+        hint={s.pointingSheet.centerHint}
+        checked={template.center ?? false}
+        disabled={!solver && !template.center}
+        onchange={(on) => {
+          template.center = on;
+          if (!on) template.recenter_every = null;
+        }} />
+      {#if template.center}
+        <Toggle
+          label={s.pointingSheet.check}
+          hint={s.pointingSheet.checkHint}
+          checked={template.recenter_every != null}
+          onchange={(on) => (template.recenter_every = on ? (checkEvery ?? 10) : null)} />
+        {#if template.recenter_every != null}
+          <Stepper label={s.pointingSheet.every} bind:value={checkEvery} min={1} max={200} unit={t.sequence.row.count.toLowerCase()} />
+          <NumberField label={s.pointingSheet.drift} bind:value={drift} min={0.1} max={60} unit="′" />
+        {/if}
+      {/if}
+    {:else if kind === "dither"}
+      <Toggle
+        label={s.ditherSheet.on}
+        hint={s.ditherSheet.onHint}
+        checked={template.dither_every != null}
+        onchange={(on) => (template.dither_every = on ? (every ?? 3) : null)} />
+      {#if template.dither_every != null}
+        <Stepper label={s.ditherSheet.every} bind:value={every} min={1} max={50} unit={t.sequence.row.count.toLowerCase()} />
+        <NumberField label={s.ditherSheet.pixels} bind:value={pixels} min={0.5} max={50} unit="px" hint={s.ditherSheet.pixelsHint} />
+      {/if}
     {:else if kind === "night"}
       <Toggle
         label={s.nightSheet.startAtDusk}

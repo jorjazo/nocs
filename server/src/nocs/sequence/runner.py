@@ -33,8 +33,10 @@ from nocs.sequence import sky
 from nocs.sequence.model import (
     Action,
     Autofocus,
+    Center,
     Condition,
     Container,
+    DitherTrigger,
     ExposurePlan,
     FailureKind,
     FocusMemory,
@@ -42,9 +44,11 @@ from nocs.sequence.model import (
     Node,
     PathKey,
     PlanRow,
+    RecenterTrigger,
     SelectFilter,
     Sequence,
     SequenceModel,
+    Slew,
     Target,
     Trigger,
     UntilDawn,
@@ -145,6 +149,10 @@ class Checkpoint(SequenceModel):
     iterations: dict[PathKey, int] = Field(default_factory=dict[PathKey, int])
     plans: dict[PathKey, PlanProgress] = Field(default_factory=dict[PathKey, PlanProgress])
     focus: FocusMemory = Field(default_factory=FocusMemory)
+    since_dither: int = 0
+    """Frames taken since the last dither (or the start)."""
+    since_recenter: int = 0
+    """Frames taken since the pointing was last checked or centred."""
     ending: bool = False
     """*End* has begun: a resumed run goes straight to it."""
     ended: AwareDatetime | None = None
@@ -502,6 +510,8 @@ class Runner:
             self._focused()
         elif isinstance(action, Guide):
             data["on"] = action.on
+        elif isinstance(action, Center | Slew):
+            self._checkpoint.since_recenter = 0  # pointed afresh
         self._event(EventKind.ACTION, action.kind, here, data)
         await self._save()
         return True
@@ -532,6 +542,8 @@ class Runner:
             count_frame(plan, progress, index)
             focus = self._checkpoint.focus
             focus.frames += 1
+            self._checkpoint.since_dither += 1
+            self._checkpoint.since_recenter += 1
             if result.hfr is not None:
                 focus.add_hfr(row.filter, result.hfr)
             self._event(
@@ -625,13 +637,27 @@ class Runner:
         """Fire the first trigger that is due before this frame; whether one was."""
         for trigger in [t for scope in self._scopes for t in scope.container.triggers]:
             reason = self._due(trigger, row)
-            if reason is not None:
-                self._event(EventKind.TRIGGER, f"{trigger.kind}: {reason}", path)
-                await self._action(Autofocus(), tuple(path.split(".")), target)
-                return True
+            if reason is None:
+                continue
+            self._event(EventKind.TRIGGER, f"{trigger.kind}: {reason}", path)
+            here = tuple(path.split("."))
+            # Counted from now whether it worked or was given up: never twice in a row.
+            if isinstance(trigger, DitherTrigger):
+                self._checkpoint.since_dither = 0
+                await self._action(trigger.dither, here, target)
+            elif isinstance(trigger, RecenterTrigger):
+                self._checkpoint.since_recenter = 0
+                await self._action(trigger.recenter, here, target)
+            else:
+                await self._action(Autofocus(), here, target)
+            return True
         return False
 
     def _due(self, trigger: Trigger, row: PlanRow) -> str | None:
+        if isinstance(trigger, DitherTrigger):
+            return trigger.due(self._checkpoint.since_dither)
+        if isinstance(trigger, RecenterTrigger):
+            return trigger.due(self._checkpoint.since_recenter)
         return trigger.due(
             self._checkpoint.focus,
             filter=row.filter if row.filter is not None else self._filter,

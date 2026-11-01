@@ -5,8 +5,8 @@ The tree a template makes::
     start:   cool (and wait for it) · unpark · wait for dusk
     targets: the target, until dawn
                wait until it is above the minimum altitude
-               while above it, with the autofocus triggers:
-                 slew · guide · autofocus · the exposure plan
+               while above it, with the autofocus, re-centring and dither triggers:
+                 slew (or centre) · guide · autofocus · the exposure plan
     end:     stop guiding · park · warm · outputs off
 
 The wait for the altitude sits outside the container that holds while the target
@@ -22,14 +22,19 @@ from nocs.sequence import sky
 from nocs.sequence.model import (
     Autofocus,
     AutofocusTrigger,
+    Center,
     Condition,
     Container,
     Cool,
+    Dither,
+    DitherTrigger,
     ExposurePlan,
     Guide,
     Node,
     Outputs,
     Park,
+    Recenter,
+    RecenterTrigger,
     Sequence,
     Slew,
     Template,
@@ -56,7 +61,7 @@ def expand(template: Template) -> Sequence:
     if template.start_at_dusk:
         start.append(Wait(dusk=template.darkness))
 
-    imaging: list[Node] = [Slew()]
+    imaging: list[Node] = [Center() if template.center else Slew()]
     if template.guide:
         imaging.append(Guide(on=True))
     triggers: list[Trigger] = []
@@ -74,6 +79,12 @@ def expand(template: Template) -> Sequence:
                     minutes=focus.minutes,
                 )
             )
+    if template.recenter_every is not None:
+        recenter = Recenter(drift=template.recenter_drift)
+        triggers.append(RecenterTrigger(every=template.recenter_every, recenter=recenter))
+    if template.guide and template.dither_every is not None:
+        dither = Dither(pixels=template.dither_pixels)
+        triggers.append(DitherTrigger(every=template.dither_every, dither=dither))
     imaging.append(ExposurePlan(rows=template.rows, order=template.order, batch=template.batch))
     above: list[Condition] = []
     if template.min_altitude is not None:

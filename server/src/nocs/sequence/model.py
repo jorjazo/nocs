@@ -91,6 +91,26 @@ class Slew(SequenceModel):
     kind: Literal["slew"] = "slew"
 
 
+class Center(SequenceModel):
+    """Go to the target of the enclosing container and centre it by plate solving."""
+
+    kind: Literal["center"] = "center"
+    tolerance: float = Field(default=1.0, gt=0, le=60, description="Arcminutes.")
+    attempts: int = Field(default=5, ge=1, le=10)
+    exposure: float | None = Field(
+        default=None, gt=0, le=120, description="Seconds; the camera's current one when None."
+    )
+    binning: int | None = Field(default=None, ge=1, le=8)
+
+
+class Recenter(SequenceModel):
+    """Solve a frame where the mount is; centre again when it drifted past ``drift``."""
+
+    kind: Literal["recenter"] = "recenter"
+    drift: float = Field(default=2.0, gt=0, le=60, description="Arcminutes.")
+    center: Center = Field(default_factory=Center)
+
+
 class SelectFilter(SequenceModel):
     kind: Literal["filter"] = "filter"
     filter: Name
@@ -107,6 +127,22 @@ class Guide(SequenceModel):
     on: bool
 
 
+class Dither(SequenceModel):
+    """Move the guiding lock position a little and wait until PHD2 settles (ADR 0024).
+
+    Only while the sequence guides; otherwise there is nothing to dither.
+    """
+
+    kind: Literal["dither"] = "dither"
+    pixels: float = Field(
+        default=5, gt=0, le=50, description="Main camera pixels, at most this far."
+    )
+    settle_pixels: float = Field(default=1.5, gt=0, le=20, description="Settled within this…")
+    settle_time: float = Field(default=10, ge=0, le=300, description="…for this long, seconds…")
+    settle_timeout: float = Field(default=60, gt=0, le=600, description="…or give up after this.")
+    ra_only: bool = False
+
+
 class Outputs(SequenceModel):
     kind: Literal["outputs"] = "outputs"
     outputs: list[OutputId] = Field(min_length=1)
@@ -114,7 +150,18 @@ class Outputs(SequenceModel):
 
 
 type Action = Annotated[
-    Cool | Warm | Unpark | Park | Slew | SelectFilter | Autofocus | Guide | Outputs,
+    Cool
+    | Warm
+    | Unpark
+    | Park
+    | Slew
+    | Center
+    | Recenter
+    | SelectFilter
+    | Autofocus
+    | Guide
+    | Dither
+    | Outputs,
     Field(discriminator="kind"),
 ]
 
@@ -177,9 +224,12 @@ type Instruction = Annotated[
     | Unpark
     | Park
     | Slew
+    | Center
+    | Recenter
     | SelectFilter
     | Autofocus
     | Guide
+    | Dither
     | Outputs
     | Wait
     | ExposurePlan,
@@ -298,7 +348,31 @@ class AutofocusTrigger(SequenceModel):
         return None
 
 
-type Trigger = Annotated[AutofocusTrigger, Field(discriminator="kind")]
+class DitherTrigger(SequenceModel):
+    """Dither before a frame once ``every`` frames were taken since the last dither."""
+
+    kind: Literal["dither"] = "dither"
+    every: int = Field(default=1, ge=1, le=1000)
+    dither: Dither = Field(default_factory=Dither)
+
+    def due(self, frames: int) -> str | None:
+        return f"{frames} frames" if frames >= self.every else None
+
+
+class RecenterTrigger(SequenceModel):
+    """Check the pointing once ``every`` frames were taken since the last check."""
+
+    kind: Literal["recenter"] = "recenter"
+    every: int = Field(default=10, ge=1, le=1000)
+    recenter: Recenter = Field(default_factory=Recenter)
+
+    def due(self, frames: int) -> str | None:
+        return f"{frames} frames" if frames >= self.every else None
+
+
+type Trigger = Annotated[
+    AutofocusTrigger | DitherTrigger | RecenterTrigger, Field(discriminator="kind")
+]
 
 # -- containers and sequences -------------------------------------------------------
 
@@ -332,9 +406,12 @@ type Node = Annotated[
     | Unpark
     | Park
     | Slew
+    | Center
+    | Recenter
     | SelectFilter
     | Autofocus
     | Guide
+    | Dither
     | Outputs
     | Wait
     | ExposurePlan
@@ -434,6 +511,17 @@ class Template(SequenceModel):
     cooling_ramp: float | None = Field(default=None, ge=0)
     focus: FocusPlan | None = Field(default_factory=FocusPlan)
     guide: bool = False
+    dither_every: int | None = Field(
+        default=None, ge=1, le=1000, description="Dither every so many frames while guiding."
+    )
+    dither_pixels: float = Field(default=5, gt=0, le=50, description="Main camera pixels.")
+    center: bool = Field(
+        default=False, description="Centre the target by plate solving instead of only going."
+    )
+    recenter_every: int | None = Field(
+        default=None, ge=1, le=1000, description="Check the pointing every so many frames."
+    )
+    recenter_drift: float = Field(default=2.0, gt=0, le=60, description="Arcminutes.")
     end: EndPlan = Field(default_factory=EndPlan)
     recovery: dict[FailureKind, Policy] = Field(default_factory=dict[FailureKind, Policy])
 

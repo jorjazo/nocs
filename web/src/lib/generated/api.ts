@@ -109,7 +109,21 @@ export type Condition = UntilTime | UntilDawn | WhileAbove;
  * via the `definition` "Node".
  */
 export type Node =
-  Cool | Warm | Unpark | Park | Slew | SelectFilter | Autofocus | Guide | Outputs | Wait | ExposurePlan | Container;
+  | Cool
+  | Warm
+  | Unpark
+  | Park
+  | Slew
+  | Center
+  | Recenter
+  | SelectFilter
+  | Autofocus
+  | Guide
+  | Dither
+  | Outputs
+  | Wait
+  | ExposurePlan
+  | Container;
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "Name".
@@ -129,7 +143,7 @@ export type Darkness = "civil" | "nautical" | "astronomical";
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "Trigger".
  */
-export type Trigger = AutofocusTrigger;
+export type Trigger = AutofocusTrigger | DitherTrigger | RecenterTrigger;
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "DriverName".
@@ -2498,6 +2512,25 @@ export interface CatalogSource {
   version: string;
 }
 /**
+ * Go to the target of the enclosing container and centre it by plate solving.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "Center".
+ */
+export interface Center {
+  attempts?: number;
+  binning?: number | null;
+  /**
+   * Seconds; the camera's current one when None.
+   */
+  exposure?: number | null;
+  kind?: "center";
+  /**
+   * Arcminutes.
+   */
+  tolerance?: number;
+}
+/**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "CenterRequest".
  */
@@ -2677,6 +2710,20 @@ export interface Slew {
   kind?: "slew";
 }
 /**
+ * Solve a frame where the mount is; centre again when it drifted past ``drift``.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "Recenter".
+ */
+export interface Recenter {
+  center?: Center;
+  /**
+   * Arcminutes.
+   */
+  drift?: number;
+  kind?: "recenter";
+}
+/**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "SelectFilter".
  */
@@ -2691,6 +2738,34 @@ export interface SelectFilter {
 export interface Guide {
   kind?: "guide";
   on: boolean;
+}
+/**
+ * Move the guiding lock position a little and wait until PHD2 settles (ADR 0024).
+ *
+ * Only while the sequence guides; otherwise there is nothing to dither.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "Dither".
+ */
+export interface Dither {
+  kind?: "dither";
+  /**
+   * Main camera pixels, at most this far.
+   */
+  pixels?: number;
+  ra_only?: boolean;
+  /**
+   * Settled within this…
+   */
+  settle_pixels?: number;
+  /**
+   * …for this long, seconds…
+   */
+  settle_time?: number;
+  /**
+   * …or give up after this.
+   */
+  settle_timeout?: number;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -2776,6 +2851,28 @@ export interface Target {
    * J2000 right ascension, hours.
    */
   ra?: number | null;
+}
+/**
+ * Dither before a frame once ``every`` frames were taken since the last dither.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "DitherTrigger".
+ */
+export interface DitherTrigger {
+  dither?: Dither;
+  every?: number;
+  kind?: "dither";
+}
+/**
+ * Check the pointing once ``every`` frames were taken since the last check.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "RecenterTrigger".
+ */
+export interface RecenterTrigger {
+  every?: number;
+  kind?: "recenter";
+  recenter?: Recenter;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -3704,6 +3801,10 @@ export interface Container1 {
 export interface Template {
   batch?: number;
   /**
+   * Centre the target by plate solving instead of only going.
+   */
+  center?: boolean;
+  /**
    * Sensor °C.
    */
   cooling?: number | null;
@@ -3712,6 +3813,14 @@ export interface Template {
    * The twilight that starts and ends the night.
    */
   darkness?: "civil" | "nautical" | "astronomical";
+  /**
+   * Dither every so many frames while guiding.
+   */
+  dither_every?: number | null;
+  /**
+   * Main camera pixels.
+   */
+  dither_pixels?: number;
   end?: EndPlan;
   focus?: FocusPlan | null;
   guide?: boolean;
@@ -3721,6 +3830,14 @@ export interface Template {
   min_altitude?: number | null;
   name: Name;
   order?: "batches" | "in_turn";
+  /**
+   * Arcminutes.
+   */
+  recenter_drift?: number;
+  /**
+   * Check the pointing every so many frames.
+   */
+  recenter_every?: number | null;
   recovery?: {
     [k: string]: Policy;
   };

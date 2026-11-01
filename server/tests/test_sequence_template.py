@@ -17,9 +17,12 @@ from nocs.sequence import sky as night_sky
 from nocs.sequence.model import (
     Autofocus,
     AutofocusTrigger,
+    Center,
     Cool,
+    DitherTrigger,
     FocusPlan,
     Guide,
+    RecenterTrigger,
     Slew,
     Template,
     Unpark,
@@ -90,6 +93,26 @@ def test_options_change_the_tree() -> None:
     assert sequence.end.children[0] == Guide(on=False)
     assert [c.kind for c in sequence.end.children] == ["guide", "warm", "outputs"]
     assert expand(ngc253(focus=None)).targets != sequence.targets
+
+
+def test_a_guided_template_dithers_every_n_frames() -> None:
+    def triggers(template: Template) -> list[str]:
+        [target] = expand(template).targets.children
+        assert isinstance(target, Container)
+        imaging = target.children[-1]
+        assert isinstance(imaging, Container)
+        return [t.kind for t in imaging.triggers]
+
+    assert triggers(ngc253(guide=True, dither_every=3)) == ["autofocus", "dither"]
+    # Without guiding there is nothing to dither.
+    assert triggers(ngc253(dither_every=3)) == ["autofocus"]
+    [target] = expand(ngc253(guide=True, dither_every=3, dither_pixels=8)).targets.children
+    assert isinstance(target, Container)
+    imaging = target.children[-1]
+    assert isinstance(imaging, Container)
+    dither = imaging.triggers[-1]
+    assert isinstance(dither, DitherTrigger)
+    assert (dither.every, dither.dither.pixels) == (3, 8)
 
 
 async def test_a_night_from_a_template_on_a_fake_rig() -> None:
@@ -178,3 +201,14 @@ def test_the_api_builds_a_sequence_from_a_template(tmp_path: Path) -> None:
         assert expanded.json()["end"]["children"][0] == {"kind": "park"}
         bad = {**body, "target": {"name": "somewhere"}}
         assert client.put("/api/sequences/x/template", json=bad).status_code == 422
+
+
+def test_a_template_centres_and_checks_the_pointing() -> None:
+    [target] = expand(ngc253(center=True, recenter_every=10, recenter_drift=3)).targets.children
+    assert isinstance(target, Container)
+    imaging = target.children[-1]
+    assert isinstance(imaging, Container)
+    assert imaging.children[0] == Center()
+    recenter = imaging.triggers[-1]
+    assert isinstance(recenter, RecenterTrigger)
+    assert (recenter.every, recenter.recenter.drift) == (10, 3)

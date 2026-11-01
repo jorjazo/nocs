@@ -7,7 +7,8 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from types import SimpleNamespace
+from typing import Any, cast
 
 import anyio
 import anyio.lowlevel
@@ -22,15 +23,22 @@ from nocs.devices import Coordinates, DeviceError, FrameType
 from nocs.devices.camera import SensorInfo
 from nocs.equipment import Role
 from nocs.focus.autofocus import AutofocusOptions
+from nocs.guiding import Settle
 from nocs.imaging.capture import CameraSettings, Captured
 from nocs.jobs import JobContext, JobManager, ResourceBusyError
+from nocs.pointing import CenterOptions, FrameSolve, SolveOptions
 from nocs.sequence import CheckpointFile, Container, ExposurePlan, PlanRow, Sequence, SequenceStore
 from nocs.sequence.model import (
     Autofocus,
+    Center,
     Cool,
+    Dither,
+    DitherTrigger,
     Guide,
     Outputs,
     Park,
+    Recenter,
+    RecenterTrigger,
     Slew,
     Target,
     Unpark,
@@ -71,6 +79,8 @@ class Rig:
         self.taken = 0
         self.hold_from: int | None = None
         """Frames from this one on never end (nocsd is about to crash)."""
+        self.drifts: list[float] = []
+        """Arcminutes each pointing check finds the frame off the target."""
 
     # capture
     def camera(self, role: Role) -> Camera:
@@ -156,6 +166,20 @@ class Rig:
     def guide_under(self, job_id: str | None) -> None:
         self.under.append(job_id)
 
+    def guide_pixels(self, main_pixels: float) -> float:
+        return main_pixels / 2
+
+    async def dither(
+        self,
+        context: JobContext,
+        pixels: float,
+        *,
+        settle: Settle | None = None,
+        ra_only: bool = False,
+    ) -> Json:
+        self.calls.append(f"dither {pixels:g}")
+        return None
+
     # power
     async def set_output(
         self, output_id: str, *, on: bool | None = None, job: str | None = None
@@ -169,6 +193,27 @@ class Rig:
     async def power_cycle(self, role: Role, *, job: str | None = None) -> None:
         self.calls.append(f"power cycle {role.value} for {job}")
 
+    # centring and solving
+    async def center(
+        self,
+        context: JobContext,
+        ra: float,
+        dec: float,
+        options: CenterOptions,
+        role: Role = Role.MAIN_CAMERA,
+    ) -> dict[str, Json]:
+        self.calls.append(f"center {ra:g} {dec:g} within {options.tolerance:g}'")
+        return {"attempts": [{"error": {"angle": 3.0}}, {"error": {"angle": 0.4}}]}
+
+    async def solve_frame(
+        self, context: JobContext, options: SolveOptions, role: Role = Role.MAIN_CAMERA
+    ) -> FrameSolve:
+        drift = self.drifts.pop(0)
+        self.calls.append(f"solve (sync {options.sync})")
+        # Only what the sequence reads of a solve: where the frame's centre is.
+        solution = SimpleNamespace(ra=M42.ra, dec=(M42.dec or 0) + drift / 60)
+        return cast(FrameSolve, SimpleNamespace(result=SimpleNamespace(solution=solution)))
+
     def parts(self) -> Parts:
         return Parts(
             capture=self,
@@ -178,6 +223,8 @@ class Rig:
             guiding=self,
             power=self,
             recovery=self,
+            centering=self,
+            pointing=self,
         )
 
 
@@ -259,6 +306,60 @@ async def test_a_sequence_runs_as_one_job_holding_the_rig(setup: Any) -> None:
     assert checkpoint.load() is None
     assert jobs.holder("mount") is None
     assert rig.under[-1] is None
+
+
+async def test_a_guided_sequence_dithers_every_n_frames(setup: Any) -> None:
+    service, rig, _, jobs, _ = setup
+    plan = ExposurePlan(rows=[PlanRow(filter="L", exposure=1, count=5)])
+    every = DitherTrigger(every=2, dither=Dither(pixels=8))
+    imaging = Container(target=M42, triggers=[every], children=[Slew(), Guide(on=True), plan])
+    service.put("dither", Sequence(name="dither", targets=Container(children=[imaging])))
+    await jobs.wait(service.start("dither"))
+    taken = [c for c in rig.calls if c.startswith(("frame", "dither"))]
+    # Before the 3rd and the 5th frame; in guide camera pixels.
+    assert taken == ["frame M 42 1"] * 2 + ["dither 4"] + ["frame M 42 1"] * 2 + ["dither 4"] + [
+        "frame M 42 1"
+    ]
+
+    # Without guiding there is nothing to dither: the step says so and the frames go on.
+    unguided = imaging.model_copy(update={"children": [Slew(), plan]})
+    service.put("dither", Sequence(name="dither", targets=Container(children=[unguided])))
+    rig.calls.clear()
+    await jobs.wait(service.start("dither"))
+    assert not any(c.startswith("dither") for c in rig.calls)
+    events = service_events(setup)
+    assert {"skipped": "not guiding"} in [e["data"] for e in events if e["message"] == "dither"]
+
+
+async def test_a_target_is_centred_and_checked_every_n_frames(setup: Any) -> None:
+    service, rig, _, jobs, _ = setup
+    rig.drifts = [0.5, 3.0]
+    plan = ExposurePlan(rows=[PlanRow(filter="L", exposure=1, count=5)])
+    every = RecenterTrigger(every=2, recenter=Recenter(drift=2))
+    imaging = Container(target=M42, triggers=[every], children=[Center(tolerance=0.5), plan])
+    service.put("centre", Sequence(name="centre", targets=Container(children=[imaging])))
+    await jobs.wait(service.start("centre"))
+    steps = [c for c in rig.calls if c.startswith(("frame", "center", "solve"))]
+    assert steps == [
+        "center 5.588 -5.39 within 0.5'",
+        "frame M 42 1",
+        "frame M 42 1",
+        "solve (sync False)",  # 0.5' off: good enough
+        "frame M 42 1",
+        "frame M 42 1",
+        "solve (sync False)",  # 3' off: centred again
+        "center 5.588 -5.39 within 1'",
+        "frame M 42 1",
+    ]
+    data = [e["data"] for e in service_events(setup) if e["message"] in ("center", "recenter")]
+    assert data[0] == {"centered": True, "attempts": 2, "error": 0.4}
+    assert data[1] == {"drift": 0.5}
+    assert data[2]["drift"] == pytest.approx(3.0, abs=0.01)
+    assert data[2]["centered"] is True
+
+
+def service_events(setup: Any) -> list[dict[str, Any]]:
+    return setup[2].get(("sequence", "events"))
 
 
 async def test_a_paused_sequence_lends_the_rig_back(setup: Any) -> None:

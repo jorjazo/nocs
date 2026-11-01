@@ -26,20 +26,29 @@ from nocs.filters.service import FilterWheelNotReadyError
 from nocs.focus.autofocus import AutofocusError, AutofocusOptions
 from nocs.focus.service import FocuserNotReadyError
 from nocs.focus.sweep import Problem
-from nocs.guiding import GuidingError, GuidingNotReadyError, Phd2ConnectionError, Phd2Error
+from nocs.guiding import (
+    GuidingError,
+    GuidingNotReadyError,
+    Phd2ConnectionError,
+    Phd2Error,
+    Settle,
+)
 from nocs.imaging.capture import FRAME_TYPES, CameraNotReadyError, CameraSettings, Captured
 from nocs.jobs import JobContext, JobManager
 from nocs.mount.service import MountNotReadyError, PointingError
-from nocs.pointing import CenteringError
+from nocs.pointing import CenteringError, CenterOptions, FrameSolve, SolveOptions, offset
 from nocs.sequence.model import (
     Action,
     Autofocus,
+    Center,
     Cool,
+    Dither,
     ExposurePlan,
     Guide,
     Outputs,
     Park,
     PlanRow,
+    Recenter,
     SelectFilter,
     Slew,
     Target,
@@ -128,8 +137,34 @@ class Guiding(Protocol):
     @property
     def guiding(self) -> bool: ...
     async def start(self, context: JobContext) -> Json: ...
+    def guide_pixels(self, main_pixels: float) -> float: ...
+    async def dither(
+        self,
+        context: JobContext,
+        pixels: float,
+        *,
+        settle: Settle | None = None,
+        ra_only: bool = False,
+    ) -> Json: ...
     async def stop(self) -> None: ...
     def guide_under(self, job_id: str | None) -> None: ...
+
+
+class Centering(Protocol):
+    async def center(
+        self,
+        context: JobContext,
+        ra: float,
+        dec: float,
+        options: CenterOptions,
+        role: Role = Role.MAIN_CAMERA,
+    ) -> dict[str, Json]: ...
+
+
+class Pointing(Protocol):
+    async def solve_frame(
+        self, context: JobContext, options: SolveOptions, role: Role = Role.MAIN_CAMERA
+    ) -> FrameSolve: ...
 
 
 class Power(Protocol):
@@ -154,6 +189,8 @@ class Parts:
     guiding: Guiding | None
     power: Power | None
     recovery: Recovery | None = None
+    centering: Centering | None = None
+    pointing: Pointing | None = None
 
 
 def take_back(jobs: JobManager, job: str, guiding: Guiding | None) -> None:
@@ -194,6 +231,12 @@ def _classified(role: Role | None = None) -> Generator[None]:
         raise StepError("device", str(e) or type(e).__name__, role=role_name) from e
 
 
+def _aim(target: Target | None) -> tuple[float, float]:
+    if target is None or target.ra is None or target.dec is None:
+        raise ValueError("this step needs a target with coordinates")
+    return target.ra, target.dec
+
+
 def _role(action: Action) -> Role | None:
     """The device an action drives, for a device failure."""
     match action:
@@ -201,10 +244,14 @@ def _role(action: Action) -> Role | None:
             return CAMERA
         case Unpark() | Park() | Slew():
             return Role.MOUNT
+        case Center() | Recenter():
+            return None  # a failure to solve or centre is the solver's ("solve")
         case SelectFilter():
             return Role.FILTER_WHEEL
         case Autofocus():
             return Role.FOCUSER
+        case Dither():
+            return None  # PHD2's, a guiding failure
         case Outputs():
             return Role.POWER
         case _:
@@ -263,10 +310,27 @@ class RigExecutor:
                     log.info("not parking: %s; switching tracking off", e)
                     await mount.set_tracking(False, job=context.id)
             case Slew():
-                if target is None or target.ra is None or target.dec is None:
-                    raise ValueError("a slew needs a target with coordinates")
+                ra, dec = _aim(target)
                 await self._stop_guiding()
-                await self._mount().slew(context, target.ra, target.dec)
+                await self._mount().slew(context, ra, dec)
+            case Center():
+                return await self._center(action, _aim(target))
+            case Recenter():
+                ra, dec = _aim(target)
+                if parts.pointing is None:
+                    raise ValueError("the rig cannot solve frames")
+                options = SolveOptions(exposure=action.center.exposure, sync=False)
+                # A check that fails (a cloud, a satellite) costs the check, not the target.
+                try:
+                    solved = await parts.pointing.solve_frame(context, options)
+                    at = solved.result.solution
+                    drift = offset(ra, dec, at.ra, at.dec).angle
+                    done: dict[str, Json] = {"drift": round(drift, 2)}
+                    if drift > action.drift:
+                        done.update(await self._center(action.center, (ra, dec)))
+                except (SolveError, CenteringError) as e:
+                    return {"error": str(e) or type(e).__name__}
+                return done
             case SelectFilter():
                 if parts.filters is None:
                     raise ValueError("the rig has no filter wheel")
@@ -284,6 +348,14 @@ class RigExecutor:
                     await parts.guiding.start(context)
                 else:
                     await self._stop_guiding()  # PHD2 may be someone else's when not guiding
+            case Dither():
+                guiding = parts.guiding
+                if not self._guided or guiding is None or not guiding.guiding:
+                    return {"skipped": "not guiding"}
+                pixels = guiding.guide_pixels(action.pixels)
+                settle = Settle(action.settle_pixels, action.settle_time, action.settle_timeout)
+                await guiding.dither(context, pixels, settle=settle, ra_only=action.ra_only)
+                return {"pixels": round(pixels, 2)}
             case Outputs():
                 if parts.power is None:
                     raise ValueError("the rig has no power box")
@@ -360,6 +432,27 @@ class RigExecutor:
         return done
 
     # -- internals --------------------------------------------------------------------
+
+    async def _center(self, action: Center, aim: tuple[float, float]) -> dict[str, Json]:
+        """Centre ``aim`` (3.3's centring); how many frames it took and how far it was."""
+        centering = self._parts.centering
+        if centering is None:
+            raise ValueError("the rig cannot centre (no solver?)")
+        await self._stop_guiding()
+        options = CenterOptions(
+            tolerance=action.tolerance,
+            attempts=action.attempts,
+            exposure=action.exposure,
+            binning=action.binning,
+        )
+        run = await centering.center(self._context, *aim, options)
+        attempts = run.get("attempts")
+        error: Json = None
+        if isinstance(attempts, list) and attempts and isinstance(attempts[-1], dict):
+            last = attempts[-1].get("error")
+            error = last.get("angle") if isinstance(last, dict) else None
+        count = len(attempts) if isinstance(attempts, list) else None
+        return {"centered": True, "attempts": count, "error": error}
 
     def _mount(self) -> MountControl:
         if self._parts.mount is None:

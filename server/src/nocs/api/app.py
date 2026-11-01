@@ -256,6 +256,8 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
             guiding=guiding(),
             power=power(),
             recovery=RigRecovery(),
+            centering=centering(),
+            pointing=pointing(),
         )
 
     def sequence_place() -> Place | None:

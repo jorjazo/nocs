@@ -19,7 +19,12 @@ export function sequenceId(name: string): string {
   return slug || "sequence";
 }
 
-export function newTemplate(target: PlannedTarget, filter: string | null, guide: boolean): Template {
+export function newTemplate(
+  target: PlannedTarget,
+  filter: string | null,
+  guide: boolean,
+  solver = false,
+): Template {
   return {
     name: target.name,
     target: { name: target.name, ra: target.ra, dec: target.dec },
@@ -34,6 +39,11 @@ export function newTemplate(target: PlannedTarget, filter: string | null, guide:
     cooling_ramp: null,
     focus: { at_start: true, filter_change: false, temperature_change: 1, hfr_increase: null, minutes: null },
     guide,
+    dither_every: guide ? 3 : null,
+    dither_pixels: 5,
+    center: solver,
+    recenter_every: solver ? 10 : null,
+    recenter_drift: 2,
     end: { park: true, warm: true, outputs: [] },
     recovery: {},
   };

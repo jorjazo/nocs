@@ -367,6 +367,9 @@ Sequence builder (stage 5.13):
   binning, Remove; Add filter takes the first filter of the wheel no row uses);
   During the night: Autofocus (a sheet: at the start, on filter change, every so
   many °C, when stars grow, every so many minutes), Guiding (with a guide camera),
+  Centring (go only, or centre by plate solving and check the pointing every so many
+  frames, centring again past a drift in arcminutes; on by default with a solver),
+  Dither (while guiding: every so many frames, up to so many main camera pixels),
   Rotate filters (in turns of 5, or each filter to its end), Night (dusk, the
   twilight, dawn, the minimum altitude), Cooling (with a cooled camera) and When
   finished (park, warm, power outputs off).

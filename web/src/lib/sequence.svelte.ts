@@ -5,6 +5,7 @@
 import { listSequences } from "./api";
 import { formatDecimal, formatDuration, formatPlain, formatTemperature, formatTime } from "./format";
 import type { Messages } from "./i18n";
+import type { AutofocusTrigger, DitherTrigger, RecenterTrigger } from "./generated/api";
 import { newTemplate, sequenceId } from "./sequence";
 import type { Container, Node, PlannedTarget, PowerOutput, SequenceEvent, SequenceRun, Template } from "./types";
 
@@ -25,9 +26,9 @@ class Builder {
   }
 
   // Edit the target's saved sequence, or a new one.
-  async open(target: PlannedTarget, filter: string | null, guide: boolean): Promise<void> {
+  async open(target: PlannedTarget, filter: string | null, guide: boolean, solver: boolean): Promise<void> {
     this.loading = true;
-    const fresh = newTemplate(target, filter, guide);
+    const fresh = newTemplate(target, filter, guide, solver);
     try {
       const stored = (await listSequences())[sequenceId(target.name)]?.template;
       this.draft = stored ? { ...fresh, ...stored } : fresh;
@@ -105,6 +106,12 @@ export function describeNode(node: Node, t: Messages, locale: string, outputs: P
       return n.autofocus;
     case "guide":
       return node.on ? n.guideOn : n.guideOff;
+    case "dither":
+      return n.dither;
+    case "center":
+      return n.center;
+    case "recenter":
+      return n.recenter;
     case "outputs":
       return n.outputs(outputLabels(node.outputs, outputs), node.on);
     case "wait":
@@ -131,8 +138,17 @@ export function describeContainer(container: Container, t: Messages, locale: str
     else if (condition.kind === "until_dawn") parts.push(n.untilDawn(t.sequence.darkness[condition.darkness ?? "astronomical"]));
     else if ("altitude" in condition) parts.push(n.whileAbove(formatPlain(condition.altitude ?? 30, locale)));
   }
-  for (const trigger of container.triggers ?? []) {
+  for (const each of container.triggers ?? []) {
     const s = t.sequence;
+    if (each.kind === "dither") {
+      parts.push(n.ditherEvery((each as DitherTrigger).every ?? 1));
+      continue;
+    }
+    if (each.kind === "recenter") {
+      parts.push(n.recenterEvery((each as RecenterTrigger).every ?? 10));
+      continue;
+    }
+    const trigger = each as AutofocusTrigger;
     const reasons: string[] = [];
     if (trigger.filter_change) reasons.push(s.focusFilter);
     if (trigger.temperature_change != null) reasons.push(s.focusTemperature(formatPlain(trigger.temperature_change, locale)));
@@ -210,6 +226,18 @@ export function describeEvent(event: SequenceEvent, t: Messages, locale: string)
           return n.filter(String(data.filter ?? ""));
         case "guide":
           return data.on === false ? n.guideOff : n.guideOn;
+        case "center": {
+          const attempts = number("attempts");
+          return attempts !== null ? e.centered(attempts, formatDecimal(number("error") ?? 0, locale, 1)) : n.center;
+        }
+        case "recenter": {
+          const drift = number("drift");
+          if (typeof data.error === "string") return e.checkFailed(data.error);
+          if (drift === null) return n.recenter;
+          return data.centered ? e.recentered(formatDecimal(drift, locale, 1)) : e.checked(formatDecimal(drift, locale, 1));
+        }
+        case "dither":
+          return typeof data.skipped === "string" ? e.ditherSkipped : e.dithered(formatDecimal(number("pixels") ?? 0, locale, 1));
         case "unpark":
           return n.unpark;
         case "park":

@@ -14,7 +14,7 @@
   import { estimateTemplate, expandTemplate, saveTemplate, startSequence } from "../../lib/api";
   import { auth } from "../../lib/auth.svelte";
   import { errorText } from "../../lib/errors";
-  import { formatBytes, formatDuration, formatSeconds, formatTemperature, formatTime } from "../../lib/format";
+  import { formatBytes, formatDuration, formatPlain, formatSeconds, formatTemperature, formatTime } from "../../lib/format";
   import { i18n } from "../../lib/i18n";
   import { live } from "../../lib/live.svelte";
   import { router } from "../../lib/router.svelte";
@@ -52,7 +52,7 @@
     if (draft && draft.target.name === target.name && draft.target.ra === target.ra && draft.target.dec === target.dec) {
       return;
     }
-    void builder.open(target, wheel?.filter ?? filters[0] ?? null, canGuide);
+    void builder.open(target, wheel?.filter ?? filters[0] ?? null, canGuide, live.app.solver?.available === true);
   });
 
   const draft = $derived(builder.draft);
@@ -219,6 +219,21 @@
           </button>
         </li>
         <li>
+          <button type="button" class="option" onclick={() => (sheet = "pointing")}>
+            <span class="text">
+              <span class="name">{t.sequence.pointing}</span>
+              <span class="muted small">
+                {!draft.center
+                  ? t.sequence.pointingGo
+                  : draft.recenter_every != null
+                    ? t.sequence.pointingCheck(draft.recenter_every, formatPlain(draft.recenter_drift ?? 2, locale))
+                    : t.sequence.pointingCenter}
+              </span>
+            </span>
+            <Icon name="chevronRight" />
+          </button>
+        </li>
+        <li>
           <Toggle
             label={t.sequence.guiding}
             hint={canGuide || draft.guide ? t.sequence.guidingHint : t.sequence.noGuiding}
@@ -226,6 +241,21 @@
             disabled={!canGuide && !draft.guide}
             onchange={(on) => (draft.guide = on)} />
         </li>
+        {#if draft.guide}
+          <li>
+            <button type="button" class="option" onclick={() => (sheet = "dither")}>
+              <span class="text">
+                <span class="name">{t.sequence.dither}</span>
+                <span class="muted small">
+                  {draft.dither_every != null
+                    ? t.sequence.ditherOn(draft.dither_every, formatPlain(draft.dither_pixels ?? 5, locale))
+                    : t.sequence.off}
+                </span>
+              </span>
+              <Icon name="chevronRight" />
+            </button>
+          </li>
+        {/if}
         {#if draft.rows.length > 1}
           <li>
             <Toggle
