@@ -127,3 +127,31 @@ def test_darks_and_bias_for_a_night(api: TestClient) -> None:
     assert [n["kind"] for n in report["needs"]] == ["flat"]
     types = {g["frame_type"] for g in api.get("/api/nights").json()[0]["groups"]}
     assert types == {"light", "dark", "bias"}
+
+
+def test_panel_flats(api: TestClient) -> None:
+    """The CCD simulator's flats are uniform and grow with the exposure, like a panel."""
+    wheel = state(api)["filter_wheel"]
+    names = [name for name in wheel["names"] if name][:2]
+    plan = {
+        "filters": [{"filter": name, "count": 2} for name in names],
+        "level": 0.4,
+        "max_exposure": 20,
+    }
+    response = api.post("/api/flats", json=plan)
+    assert response.status_code == 202, response.text
+    job_id = response.json()["job"]
+    wait(api, finished(job_id), timeout=300)
+    current = state(api)
+    assert current["jobs"][job_id]["state"] == "succeeded", (
+        current["jobs"][job_id],
+        current["flats"],
+    )
+    flats = current["flats"]
+    assert [(f["filter"], f["done"], f["state"]) for f in flats["filters"]] == [
+        (name, 2, "done") for name in names
+    ]
+    frames = api.get("/api/frames", params={"type": "flat"}).json()
+    assert len(frames) == 4
+    assert {f["filter"] for f in frames} == set(names)
+    assert all(f["path"].split("/")[1] == "Flat" for f in frames)

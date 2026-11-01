@@ -60,6 +60,7 @@ class Light:
     night: date
     count: int = 1
     rotation: float | None = None
+    focus: int | None = None
 
 
 @dataclass(slots=True)
@@ -99,6 +100,8 @@ class Group:
     temperature: float | None
     lights: int
     nights: set[date]
+    focus: int | None = None
+    """The focuser's position for the newest of these lights: their flats' position."""
     darks: Match = field(default_factory=Match)
     flats: Match = field(default_factory=Match)
     bias: Match = field(default_factory=Match)
@@ -127,6 +130,7 @@ def setup_of(row: FrameRow) -> Setup:
 
 
 def lights_of(rows: Iterable[FrameRow]) -> list[Light]:
+    """Lights of catalog rows, newest first as the catalog lists them."""
     return [
         Light(
             setup_of(row),
@@ -135,6 +139,7 @@ def lights_of(rows: Iterable[FrameRow]) -> list[Light]:
             row.temperature,
             date.fromisoformat(row.night),
             rotation=row.rotation,
+            focus=row.focus_position,
         )
         for row in rows
         if row.frame_type == "light"
@@ -207,10 +212,17 @@ def _groups(lights: list[Light]) -> list[Group]:
                     round(statistics.median(temperatures), 1) if temperatures else None,
                     sum(m.count for m in cluster),
                     {m.night for m in cluster},
+                    _newest_focus(members, cluster),
                 )
             )
     groups.sort(key=lambda g: (g.setup.camera, g.filter or "", g.exposure, g.temperature or 0))
     return groups
+
+
+def _newest_focus(members: list[Light], cluster: list[Light]) -> int | None:
+    """``members`` are newest first; the cluster is sorted by temperature."""
+    inside = {id(m) for m in cluster}
+    return next((m.focus for m in members if id(m) in inside and m.focus is not None), None)
 
 
 def _temperature(light: Light) -> float:

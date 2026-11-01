@@ -103,6 +103,15 @@ class ImageWorker:
             self._died()
             raise
 
+    async def level(self, fits_path: str, bayer: str | None) -> float:
+        """A flat's level in ADU (``pipeline.level``)."""
+        loop = asyncio.get_running_loop()
+        try:
+            return await loop.run_in_executor(self._executor(), pipeline.level, fits_path, bayer)
+        except BrokenProcessPool:
+            self._died()
+            raise
+
     def preview_path(self, name: str) -> Path | None:
         """The file of a preview by name, if it is one of ours and still exists."""
         if not PREVIEW_NAME.fullmatch(name):

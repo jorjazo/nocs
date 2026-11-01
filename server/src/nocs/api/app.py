@@ -73,10 +73,11 @@ from nocs.api.solver import align_router, saved_frames_router, solver_router
 from nocs.api.system import system_router
 from nocs.api.targets import targets_router
 from nocs.auth import AuthStore
+from nocs.calibration.flats import FlatsService
 from nocs.calibration.service import CalibrationService, camera_facts
 from nocs.clock import Clock
 from nocs.config import Settings
-from nocs.devices import Coordinates, DeviceError, Location
+from nocs.devices import Coordinates, DeviceError, Focuser, Location
 from nocs.devices.camera import Region
 from nocs.equipment import (
     Connection,
@@ -96,7 +97,7 @@ from nocs.filters.service import FilterWheelService
 from nocs.filters.wheels import WheelStore
 from nocs.focus.autofocus import AutofocusService
 from nocs.focus.focusers import FocuserStore
-from nocs.focus.service import FocuserService
+from nocs.focus.service import FocuserNotReadyError, FocuserService
 from nocs.guiding import GuidingService, Settle
 from nocs.imaging import (
     FRAME_TYPES,
@@ -207,6 +208,16 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
     def filter_wheel() -> FilterWheelService:
         assert services.filter_wheel is not None
         return services.filter_wheel
+
+    def ready_focuser() -> Focuser | None:
+        try:
+            return focuser().focuser()
+        except FocuserNotReadyError:
+            return None
+
+    def flats() -> FlatsService:
+        assert services.flats is not None
+        return services.flats
 
     def guiding() -> GuidingService:
         assert services.guiding is not None
@@ -408,6 +419,14 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
         services.plan = PlanService(store, settings.config_dir)
         services.capture.use_guider(services.guiding)
         services.capture.use_pointing(lambda: _pointing(services.mount))
+        services.flats = FlatsService(
+            store,
+            services.jobs,
+            services.capture,
+            filter_wheel,
+            ready_focuser,
+            services.storage,
+        )
         services.sequences = SequenceService(
             store,
             services.jobs,
@@ -487,7 +506,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
     app.include_router(accessories_router(focuser, filter_wheel, autofocus))
     app.include_router(sequences_router(sequences))
     app.include_router(sessions_router(storage, lambda: clock().now()))
-    app.include_router(calibration_router(lambda: calibration_library))
+    app.include_router(calibration_router(lambda: calibration_library, flats))
     app.include_router(sky_router(saved_site, clock, _catalog_target))
     app.include_router(targets_router())
     app.include_router(plan_router(plan))
@@ -867,6 +886,7 @@ class _Services:
     environment: EnvironmentLog | None = None
     system: SystemService | None = None
     sequences: SequenceService | None = None
+    flats: FlatsService | None = None
     gps: GpsService | None = None
 
 

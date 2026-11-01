@@ -923,6 +923,29 @@ class SequenceState(StateModel):
     events: list[SequenceEvent] = Field(description="The run's most recent events, oldest first.")
 
 
+class FlatFilterState(StateModel):
+    filter: str | None
+    count: int
+    done: int = Field(description="Flats kept.")
+    exposure: float | None = Field(description="Seconds, the latest try.")
+    level: float | None = Field(description="ADU of the latest frame (its strongest channel).")
+    state: Literal["pending", "running", "done", "ended", "failed", "cancelled"] = Field(
+        description="ended: the twilight left the limits after some flats."
+    )
+    message: str | None
+
+
+class FlatsState(StateModel):
+    """The flats wizard's run in progress or the last one (ADR 0036)."""
+
+    source: Literal["panel", "sky"]
+    state: Literal["running", "succeeded", "failed", "cancelled"]
+    target: float = Field(description="ADU wanted.")
+    tolerance: float = Field(description="Fraction of full scale around it.")
+    filters: list[FlatFilterState]
+    error: str | None
+
+
 class AppState(StateModel):
     """The whole state tree sent in snapshots and modified by patches."""
 
@@ -947,6 +970,7 @@ class AppState(StateModel):
     )
     solver: SolverState | None = None
     autofocus: AutofocusState | None = Field(default=None, description="None: never run.")
+    flats: FlatsState | None = Field(default=None, description="None: never run (ADR 0036).")
     centering: CenteringState | None = Field(default=None, description="None: never run.")
     polar_alignment: PolarAlignmentState | None = Field(
         default=None, description="None: never run."
@@ -1535,6 +1559,7 @@ class CalibrationGroup(WireModel):
     exposure: float = Field(description="Seconds.")
     temperature: float | None = Field(description="The lights' median sensor temperature, °C.")
     lights: int = Field(description="Saved, or planned for a sequence.")
+    focus: int | None = Field(description="Focuser position of the newest light: its flats'.")
     darks: CalibrationMatch
     flats: CalibrationMatch
     bias: CalibrationMatch = Field(description="Bias at the lights' setup.")

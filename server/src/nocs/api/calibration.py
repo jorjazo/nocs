@@ -17,17 +17,33 @@ from nocs.api.schemas import (
     CalibrationSequence,
     CalibrationSequenceRequest,
     CalibrationSetup,
+    JobStarted,
 )
 from nocs.calibration.darks import SEQUENCE_ID, frames
+from nocs.calibration.flats import FlatPlan, FlatsService
 from nocs.calibration.library import Match, Need, Report, Setup, Wanted
 from nocs.calibration.service import CalibrationError, CalibrationService
+from nocs.imaging import CameraNotReadyError
+from nocs.jobs import ResourceBusyError
 from nocs.storage import StorageError
 
 type Count = Annotated[int, Query(ge=0, le=500)]
 
 
-def calibration_router(calibration: Callable[[], CalibrationService]) -> APIRouter:
+def calibration_router(
+    calibration: Callable[[], CalibrationService], flats: Callable[[], FlatsService]
+) -> APIRouter:
     router = APIRouter(prefix="/api")
+
+    @router.post("/flats", status_code=status.HTTP_202_ACCEPTED)
+    async def take_flats(plan: FlatPlan) -> JobStarted:  # pyright: ignore[reportUnusedFunction]
+        """The flats wizard: each filter's exposure found, then its flats (ADR 0036)."""
+        try:
+            return JobStarted(job=flats().start(plan))
+        except ResourceBusyError as e:
+            raise HTTPException(status.HTTP_409_CONFLICT, str(e)) from e
+        except CameraNotReadyError as e:
+            raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(e)) from e
 
     @router.get("/calibration")
     async def library(  # pyright: ignore[reportUnusedFunction]
@@ -90,6 +106,7 @@ def wire(report: Report, night: str | None) -> CalibrationReport:
                 exposure=g.exposure,
                 temperature=g.temperature,
                 lights=g.lights,
+                focus=g.focus,
                 darks=_match(g.darks),
                 flats=_match(g.flats),
                 bias=_match(g.bias),

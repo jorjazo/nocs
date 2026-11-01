@@ -293,6 +293,18 @@
           "default": null,
           "description": "None: no filter wheel is ready."
         },
+        "flats": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlatsState"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "None: never run (ADR 0036)."
+        },
         "focuser": {
           "anyOf": [
             {
@@ -1186,6 +1198,17 @@
         "flats": {
           "$ref": "#/$defs/CalibrationMatch"
         },
+        "focus": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Focuser position of the newest light: its flats'."
+        },
         "lights": {
           "description": "Saved, or planned for a sequence.",
           "type": "integer"
@@ -1211,6 +1234,7 @@
         "exposure",
         "temperature",
         "lights",
+        "focus",
         "darks",
         "flats",
         "bias",
@@ -3171,6 +3195,139 @@
         "confirmed"
       ],
       "title": "FilterWheelState",
+      "type": "object"
+    },
+    "FlatFilterState": {
+      "additionalProperties": false,
+      "properties": {
+        "count": {
+          "type": "integer"
+        },
+        "done": {
+          "description": "Flats kept.",
+          "type": "integer"
+        },
+        "exposure": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Seconds, the latest try."
+        },
+        "filter": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "level": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "ADU of the latest frame (its strongest channel)."
+        },
+        "message": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "state": {
+          "description": "ended: the twilight left the limits after some flats.",
+          "enum": [
+            "pending",
+            "running",
+            "done",
+            "ended",
+            "failed",
+            "cancelled"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "filter",
+        "count",
+        "done",
+        "exposure",
+        "level",
+        "state",
+        "message"
+      ],
+      "title": "FlatFilterState",
+      "type": "object"
+    },
+    "FlatsState": {
+      "additionalProperties": false,
+      "description": "The flats wizard's run in progress or the last one (ADR 0036).",
+      "properties": {
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "filters": {
+          "items": {
+            "$ref": "#/$defs/FlatFilterState"
+          },
+          "type": "array"
+        },
+        "source": {
+          "enum": [
+            "panel",
+            "sky"
+          ],
+          "type": "string"
+        },
+        "state": {
+          "enum": [
+            "running",
+            "succeeded",
+            "failed",
+            "cancelled"
+          ],
+          "type": "string"
+        },
+        "target": {
+          "description": "ADU wanted.",
+          "type": "number"
+        },
+        "tolerance": {
+          "description": "Fraction of full scale around it.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "source",
+        "state",
+        "target",
+        "tolerance",
+        "filters",
+        "error"
+      ],
+      "title": "FlatsState",
       "type": "object"
     },
     "Flip": {

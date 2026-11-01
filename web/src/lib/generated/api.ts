@@ -359,6 +359,10 @@ export interface AppState {
    */
   filter_wheel?: FilterWheelState | null;
   /**
+   * None: never run (ADR 0036).
+   */
+  flats?: FlatsState | null;
+  /**
    * None: no focuser is ready.
    */
   focuser?: FocuserState | null;
@@ -930,6 +934,51 @@ export interface FilterWheelState {
    */
   slot: number | null;
   slots: number;
+}
+/**
+ * The flats wizard's run in progress or the last one (ADR 0036).
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "FlatsState".
+ */
+export interface FlatsState {
+  error: string | null;
+  filters: FlatFilterState[];
+  source: "panel" | "sky";
+  state: "running" | "succeeded" | "failed" | "cancelled";
+  /**
+   * ADU wanted.
+   */
+  target: number;
+  /**
+   * Fraction of full scale around it.
+   */
+  tolerance: number;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "FlatFilterState".
+ */
+export interface FlatFilterState {
+  count: number;
+  /**
+   * Flats kept.
+   */
+  done: number;
+  /**
+   * Seconds, the latest try.
+   */
+  exposure: number | null;
+  filter: string | null;
+  /**
+   * ADU of the latest frame (its strongest channel).
+   */
+  level: number | null;
+  message: string | null;
+  /**
+   * ended: the twilight left the limits after some flats.
+   */
+  state: "pending" | "running" | "done" | "ended" | "failed" | "cancelled";
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -2452,6 +2501,10 @@ export interface CalibrationGroup {
   filter: string | null;
   flat_calibration: CalibrationMatch2;
   flats: CalibrationMatch1;
+  /**
+   * Focuser position of the newest light: its flats'.
+   */
+  focus: number | null;
   /**
    * Saved, or planned for a sequence.
    */

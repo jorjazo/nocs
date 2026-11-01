@@ -141,6 +141,17 @@ def measure_frame(fits_path: str, bayer: str | None = None) -> StarMetrics:
     return StarMetrics(stars=stars, hfr=hfr, seconds=round(time.perf_counter() - start, 3))
 
 
+def level(fits_path: str, bayer: str | None = None) -> float:
+    """A flat's level: the median of the frame, or of its strongest Bayer channel, in
+    ADU of the 16-bit scale (ADR 0036). Every fourth pixel of a channel is enough."""
+    data, header_bayer, _ = load(fits_path)
+    if header_bayer or bayer:
+        channels = [data[y::2, x::2][::2, ::2] for y in (0, 1) for x in (0, 1)]
+    else:
+        channels = [data[::2, ::2]]
+    return max(float(np.median(channel)) for channel in channels)
+
+
 def load(path: str) -> tuple[Mono16, str | None, bool]:
     """Pixels as 16-bit, the Bayer pattern if the header has one, and whether rows are bottom-up."""
     with _fits.open(path, memmap=False) as hdul:

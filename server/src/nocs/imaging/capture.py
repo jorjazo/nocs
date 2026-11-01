@@ -581,6 +581,35 @@ class CaptureService:
         guiding = None
         if role is Role.MAIN_CAMERA and self._guider is not None:
             guiding = self._guider.frame_guiding(started, ended)
+        return await self._finish(
+            context, role, shot, save=save, target=target, label=label, guiding=guiding
+        )
+
+    async def keep(self, context: JobContext, role: Role, shot: Shot, label: str = "") -> Captured:
+        """Save and preview a frame from ``take`` that the caller chose to keep (a flat
+        within its level), as ``capture`` does with its own."""
+        if self._jobs.holder(role.value) != context.id:
+            raise RuntimeError(f"job {context.id} does not hold the {role.value}")
+        return await self._finish(
+            context, role, shot, save=True, target=None, label=label, guiding=None
+        )
+
+    async def level(self, shot: Shot) -> float:
+        """A frame's level in ADU (its strongest Bayer channel's median); the file stays."""
+        return await self._worker.level(str(shot.path), shot.bayer)
+
+    async def _finish(
+        self,
+        context: JobContext,
+        role: Role,
+        shot: Shot,
+        *,
+        save: bool,
+        target: str | None,
+        label: str,
+        guiding: dict[str, Json] | None,
+    ) -> Captured:
+        seconds = shot.exposure
         result: dict[str, Json] = {
             "exposure": seconds,
             "frame_type": FRAME_TYPE_NAMES[shot.frame_type],
