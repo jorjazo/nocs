@@ -1,5 +1,5 @@
 """Reboot, power off, rename and network the box through nocs-system (ADR 0027,
-ADR 0028); diagnostics."""
+ADR 0028), share its frames (ADR 0037); diagnostics."""
 
 from __future__ import annotations
 
@@ -16,6 +16,7 @@ from nocs.api.schemas import (
     NetworkJoinRequest,
     NetworkModeRequest,
     NetworkSetupRequest,
+    ShareRequest,
     ShutdownRequest,
 )
 from nocs.services.system import OperationUnavailableError, SystemBusyError, SystemService
@@ -103,6 +104,15 @@ def system_router(system: Callable[[], SystemService]) -> APIRouter:
     async def network_mode(request: NetworkModeRequest) -> Response:  # pyright: ignore[reportUnusedFunction]
         with _system_errors():
             await system().network("network.mode", {"pin": request.pin})
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    # -- SMB share (ADR 0037) ----------------------------------------------------
+
+    @router.put("/share", status_code=status.HTTP_204_NO_CONTENT)
+    async def share(request: ShareRequest) -> Response:  # pyright: ignore[reportUnusedFunction]
+        """Switch the read-only SMB share of the frames on or off."""
+        with _system_errors():
+            await system().share(request.on)
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     @router.get("/diagnostics")

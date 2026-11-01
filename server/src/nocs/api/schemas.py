@@ -814,6 +814,24 @@ class UpdatesState(StateModel):
     log: list[str] = Field(description="The last lines apt or dpkg wrote, while installing.")
 
 
+class Share(StateModel):
+    name: str = Field(description="The share's name, as a desktop shows it.")
+    volume: str = Field(description='"internal", or the drive\'s filesystem UUID.')
+    label: str | None = Field(description="The drive's label.")
+
+
+class ShareState(StateModel):
+    """The SMB share of the frames for desktop computers, read-only for guests and the
+    published login nocs / nocs (ADR 0037)."""
+
+    on: bool = Field(description="The owner switched it on.")
+    running: bool = Field(description="smbd is running.")
+    shares: list[Share] = Field(
+        description="One per volume: its NOCS folder (Internal, then each USB drive)."
+    )
+    clients: int = Field(description="Computers connected now.")
+
+
 class GpsState(StateModel):
     """A USB GPS through gpsd (ADR 0029); positions to 4 decimals, at most every 10 s."""
 
@@ -986,6 +1004,9 @@ class AppState(StateModel):
     )
     network: NetworkState | None = Field(
         default=None, description="None where NOCS does not manage the network (a PC)."
+    )
+    share: ShareState | None = Field(
+        default=None, description="None where NOCS does not share the frames (a PC)."
     )
 
 
@@ -1252,6 +1273,12 @@ class NetworkModeRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     pin: Literal["auto", "ap", "station"]
+
+
+class ShareRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    on: bool
 
 
 class EjectRequest(BaseModel):

@@ -45,6 +45,7 @@ NETWORK = 10.0
 """Seconds between readings of the Wi-Fi's state, where nocs-system manages it."""
 NETWORK_ROOT = ("network",)
 UPDATES_ROOT = ("updates",)
+SHARE_ROOT = ("share",)
 
 
 class SystemBusyError(Exception):
@@ -77,6 +78,7 @@ class SystemService:
         self._health: dict[str, Json] | None = None
         self._under_voltage_seen: str | None = None
         self._published: dict[str, Json] | None = None
+        self._share: Json = None
         self._network: Json = None
         self._updates: Json = None
         self._publish()
@@ -94,6 +96,7 @@ class SystemService:
             if anyio.current_time() >= next_network:
                 await self.read_network()
                 await self.read_updates()
+                await self.read_share()
                 next_network = anyio.current_time() + NETWORK
             await anyio.sleep(SAMPLE)
 
@@ -187,6 +190,30 @@ class SystemService:
         if state != self._updates:
             self._updates = state
             self._store.set(UPDATES_ROOT, state)
+
+    async def read_share(self) -> None:
+        """Publish the SMB share's state (ADR 0037), ``None`` where there is none (a PC).
+        While it is on, nocs-system first shares what is mounted now: a drive pulled out
+        without ejecting leaves the share within one reading."""
+        state: Json = None
+        if self.offers("share.status"):
+            try:
+                if isinstance(self._share, dict) and self._share.get("on"):
+                    await client.call("share.refresh", socket=self._socket)
+                state = _share_state(await client.call("share.status", socket=self._socket))
+            except (HelperUnavailableError, HelperError) as e:
+                log.info("cannot read the SMB share's state: %s", e)
+                return
+        if state != self._share:
+            self._share = state
+            self._store.set(SHARE_ROOT, state)
+
+    async def share(self, on: bool) -> None:
+        """Switch the SMB share on or off; it does not touch a session, so a running job
+        does not stop it."""
+        log.info("switching the SMB share %s", "on" if on else "off")
+        await self._call("share.enable", {"on": on})
+        await self.read_share()
 
     async def update(self, task: str, *, force: bool = False) -> None:
         """Check for updates, install them or go back to the previous NOCS. Installing
@@ -286,6 +313,31 @@ def _network_state(status: Message) -> Json:
         "last_join": last_join,
     }
     return state
+
+
+def _share_state(status: Message) -> Json:
+    """nocs-system's share status as the state shows it."""
+    shares: list[Json] = []
+    listed = status.get("shares")
+    if isinstance(listed, list):
+        for item in cast(list[object], listed):
+            if isinstance(item, dict):
+                entry = cast(dict[str, object], item)
+                label = entry.get("label")
+                shares.append(
+                    {
+                        "name": str(entry.get("name", "")),
+                        "volume": str(entry.get("volume", "")),
+                        "label": label if isinstance(label, str) else None,
+                    }
+                )
+    clients = status.get("clients")
+    return {
+        "on": bool(status.get("on")),
+        "running": bool(status.get("running")),
+        "shares": shares,
+        "clients": clients if isinstance(clients, int) and not isinstance(clients, bool) else 0,
+    }
 
 
 def _updates_state(status: Message) -> Json:

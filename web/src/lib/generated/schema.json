@@ -435,6 +435,18 @@
           ],
           "default": null
         },
+        "share": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ShareState"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "None where NOCS does not share the frames (a PC)."
+        },
         "solver": {
           "anyOf": [
             {
@@ -8685,6 +8697,70 @@
         }
       },
       "title": "SettleRequest",
+      "type": "object"
+    },
+    "Share": {
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The drive's label."
+        },
+        "name": {
+          "description": "The share's name, as a desktop shows it.",
+          "type": "string"
+        },
+        "volume": {
+          "description": "\"internal\", or the drive's filesystem UUID.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "volume",
+        "label"
+      ],
+      "title": "Share",
+      "type": "object"
+    },
+    "ShareState": {
+      "additionalProperties": false,
+      "description": "The SMB share of the frames for desktop computers, read-only for guests and the\npublished login nocs / nocs (ADR 0037).",
+      "properties": {
+        "clients": {
+          "description": "Computers connected now.",
+          "type": "integer"
+        },
+        "on": {
+          "description": "The owner switched it on.",
+          "type": "boolean"
+        },
+        "running": {
+          "description": "smbd is running.",
+          "type": "boolean"
+        },
+        "shares": {
+          "description": "One per volume: its NOCS folder (Internal, then each USB drive).",
+          "items": {
+            "$ref": "#/$defs/Share"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "on",
+        "running",
+        "shares",
+        "clients"
+      ],
+      "title": "ShareState",
       "type": "object"
     },
     "ShutdownRequest": {

@@ -1,3 +1,6 @@
+# Starlette's TestClient is typed against the `httpx2` package; with plain `httpx`
+# installed its response types are unknown to pyright.
+# pyright: reportUnknownMemberType=false, reportUnknownVariableType=false, reportUnknownArgumentType=false
 """nocs-system's SMB share (ADR 0037), with fake tools on the PATH."""
 
 import json
@@ -6,10 +9,19 @@ import pwd
 from pathlib import Path
 
 import pytest
+from fastapi.testclient import TestClient
+from owner import pair_owner
+from test_system import config, serving
 
+from nocs.api import create_app
+from nocs.api.schemas import AppState, ShareState
+from nocs.config import Settings
+from nocs.jobs import JobManager
+from nocs.services.system import SystemService
+from nocs.state import StateStore
 from nocs.system.operations import Context, eject, set_hostname
 from nocs.system.protocol import HelperError
-from nocs.system.server import load_config
+from nocs.system.server import Config, load_config
 from nocs.system.share import Folder, Share, SharePaths, folders, share_name, smb_conf
 
 OWNER = pwd.getpwuid(os.getuid()).pw_name
@@ -291,3 +303,62 @@ async def test_a_new_host_name_restarts_the_share(tmp_path: Path, tools: Path) -
     assert calls(tools, "systemctl") == [
         "systemctl try-restart nocs-share.service nocs-wsdd.service"
     ]
+
+
+def test_the_api_switches_the_share_and_publishes_it(tmp_path: Path, tools: Path) -> None:
+    mounted(tmp_path, tools, ("AB12-CD34", "SSD"))
+    base = config(tmp_path, enabled=frozenset({"share"}))
+    cfg = Config(
+        uid=base.uid,
+        gid=base.gid,
+        enabled=base.enabled,
+        socket=base.socket,
+        context=Context(share=Share(paths(tmp_path), owner=OWNER)),
+    )
+    with serving(cfg):
+        settings = Settings(
+            indi_host="127.0.0.1",
+            indi_port=9,
+            gpsd_port=9,
+            config_dir=tmp_path / "config",
+            data_dir=tmp_path / "nocsd",
+            system_socket=cfg.socket,
+        )
+        with TestClient(create_app(settings)) as client:
+            assert client.put("/api/system/share", json={"on": True}).status_code == 401
+            pair_owner(client)
+            assert client.put("/api/system/share", json={"on": "x"}).status_code == 422
+            response = client.put("/api/system/share", json={"on": True})
+            assert response.status_code == 204, response.text
+            state = client.get("/api/state").json()["state"]
+            AppState.model_validate(state)
+            assert state["share"] == {
+                "on": True,
+                "running": True,
+                "shares": [
+                    {"name": "Internal", "volume": "internal", "label": None},
+                    {"name": "SSD", "volume": "AB12-CD34", "label": "SSD"},
+                ],
+                "clients": 0,
+            }
+            assert client.put("/api/system/share", json={"on": False}).status_code == 204
+            assert client.get("/api/state").json()["state"]["share"]["on"] is False
+
+
+async def test_nocsd_refreshes_a_share_left_on(tmp_path: Path, tools: Path) -> None:
+    mounted(tmp_path, tools, ("AB12-CD34", "SSD"))
+    base = config(tmp_path, enabled=frozenset({"share"}))
+    share = Share(paths(tmp_path), owner=OWNER)
+    cfg = Config(base.uid, base.gid, base.enabled, base.socket, Context(share=share))
+    with serving(cfg):
+        store = StateStore()
+        service = SystemService(store, JobManager(store), cfg.socket)
+        await service.refresh()
+        await service.read_share()
+        assert ShareState.model_validate(store.get(("share",))).on is False
+        await service.share(True)
+        assert len(ShareState.model_validate(store.get(("share",))).shares) == 2
+        mounted(tmp_path, tools)  # pulled out without ejecting
+        await service.read_share()
+        state = ShareState.model_validate(store.get(("share",)))
+        assert [share.name for share in state.shares] == ["Internal"]
