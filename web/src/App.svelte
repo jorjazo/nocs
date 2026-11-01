@@ -15,15 +15,16 @@
   import { boxSetup } from "./lib/setup.svelte";
   import AuthScreen from "./screens/AuthScreen.svelte";
   import BoxSetup from "./screens/BoxSetup.svelte";
-  import ChartPreview from "./screens/dev/ChartPreview.svelte";
   import Dev from "./screens/dev/Dev.svelte";
   import Focus from "./screens/focus/Focus.svelte";
   import Guiding from "./screens/guiding/Guiding.svelte";
   import Live from "./screens/live/Live.svelte";
-  import Placeholder from "./screens/Placeholder.svelte";
+  import Plan from "./screens/plan/Plan.svelte";
+  import TargetDetail from "./screens/plan/TargetDetail.svelte";
   import ProfileEditor from "./screens/ProfileEditor.svelte";
   import Rig from "./screens/Rig.svelte";
   import Session from "./screens/session/Session.svelte";
+  import Tonight from "./screens/tonight/Tonight.svelte";
 
   const t = $derived(i18n.t);
   void auth.refresh();
@@ -128,12 +129,14 @@
       <Session />
     {:else if router.route.screen === "dev"}
       <Dev />
-    {:else if router.route.screen === "chart"}
-      <ChartPreview />
+    {:else if router.route.screen === "tonight"}
+      <Tonight />
+    {:else if router.route.screen === "plan"}
+      <Plan />
+    {:else if router.route.screen === "target"}
+      {#key router.route.id}<TargetDetail id={router.route.id} />{/key}
     {:else if router.route.screen === "profile"}
       {#key router.route.id}<ProfileEditor id={router.route.id} />{/key}
-    {:else}
-      <Placeholder tab={router.route.screen} />
     {/if}
   </main>
 {/if}

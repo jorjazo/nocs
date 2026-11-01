@@ -174,7 +174,8 @@ def test_build_merges_nocs_names() -> None:
         "IC0011\tes\tNebulosa Pacman\n"  # a duplicate's name reaches its object
     )
     targets = {t.id: t for t in build([NGC], names)}
-    assert targets["NGC 253"].names == ("Sculptor Filament", "Silver Coin", "Sculptor Galaxy")
+    # NOCS's names come first: clients show the first one.
+    assert targets["NGC 253"].names == ("Sculptor Galaxy", "Sculptor Filament", "Silver Coin")
     assert targets["NGC 253"].names_es == ("Galaxia del Escultor", "Moneda de Plata")
     assert targets["NGC 281"].names_es == ("Nebulosa Pacman",)
 

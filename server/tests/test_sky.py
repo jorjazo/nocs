@@ -334,10 +334,20 @@ def test_visibility_endpoint(client: TestClient) -> None:
     assert (m31["above_horizon"], m31["best"]) == (0, None)
 
 
+def test_visibility_of_catalog_objects(client: TestClient) -> None:
+    params = {"target": ["ngc292", "0.8818,-72.8"], "date": "2026-11-15"}
+    response = client.get("/api/sky/visibility", params=params)
+    assert response.status_code == 200, response.text
+    by_id, by_position = response.json()["targets"]
+    assert by_id["target"] == "ngc292"
+    assert (by_id["ra"], by_id["dec"]) == pytest.approx((0.8791, -72.8286), abs=1e-3)
+    assert by_id["transit"][:15] == by_position["transit"][:15]
+
+
 @pytest.mark.parametrize(
     "params",
     [
-        {"target": "NGC 292"},
+        {"target": "Nowhere Nebula"},
         {"target": "25,10"},
         {"target": "1,-91"},
         {"target": "1,2", "min_altitude": "95"},

@@ -9,7 +9,8 @@
   // flows (autofocus, guiding) belong to Tonight.
   const current = $derived.by<Tab>(() => {
     const screen = router.route.screen;
-    if (screen === "dev" || screen === "chart" || screen === "profile") return "rig";
+    if (screen === "dev" || screen === "profile") return "rig";
+    if (screen === "target") return "plan";
     if (screen === "focus" || screen === "guiding") return "tonight";
     return screen;
   });

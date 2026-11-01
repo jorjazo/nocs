@@ -94,13 +94,15 @@ def sky_router(
             Query(
                 min_length=1,
                 max_length=MAX_TARGETS,
-                description='"RA,Dec": J2000 hours and degrees, e.g. "0.88,-72.8".',
+                description='"RA,Dec" (J2000 hours and degrees, e.g. "0.88,-72.8") '
+                "or a catalog id (NGC 292).",
             ),
         ],
         date: Annotated[date | None, Query(description="The night's first date.")] = None,
         min_altitude: Annotated[float, Query(ge=-10, le=90)] = 30.0,
     ) -> SkyVisibility:
-        targets = [_target(t, resolve) for t in target]
+        # The first catalog lookup loads the catalog (0.36 s on the Pi 5).
+        targets = await anyio.to_thread.run_sync(lambda: [_target(t, resolve) for t in target])
         where, n = await night_at(_checked(date))
         results = await anyio.to_thread.run_sync(
             lambda: visibility(n, targets, min_altitude=min_altitude, horizon=where.horizon)

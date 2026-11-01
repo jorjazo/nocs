@@ -31,7 +31,7 @@ server/   Python package `nocs` (nocsd): indi/ (protocol + async client, driver
           solving/ (ASTAP, fields of view), pointing/ (solve and sync, centre),
           sky/ (a night's almanac at the site, targets' visibility),
           targets/ (bundled OpenNGC catalog and its search, ADR 0019; Tycho-2
-          stars for the framing chart, ADR 0020),
+          stars for the framing chart, ADR 0020; tonight's target, `plan`),
           system/ (nocs-system, the root helper: stdlib + anyio only, ADR 0027),
           state/ (versioned store), services/ (indi_bridge), api/ (FastAPI
           REST + WebSocket, schemas, schema export)

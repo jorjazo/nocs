@@ -315,6 +315,33 @@ Centre (stage 3.3):
   of frames says how far it still was and what to check. The card stays with the
   latest run until the next one.
 
+Tonight and Plan (stage 3.6):
+
+- Tonight is the home screen: the conditions, then the night as one bar from
+  sunset to sunrise (daylight and the three twilights lighter, the dark window
+  black, a line at now, the Moon's time up under it) with sunset, the dark
+  window and sunrise under it; the dark window's length (or how dark it gets when
+  it never gets fully dark) and the Moon's phase, light and rise and set. Without
+  a site in the active profile it says so and leads to Rig.
+- Tonight's target, when one is chosen, shows its altitude now and how long it
+  is above 30° in the dark, and opens its page. The get-ready checklist lists
+  Connect, Focus (with a focuser), Frame the target and Guide (with a guide
+  camera); each step says how it stands, and the first pending one carries the
+  screen's primary button. Polar alignment and the sequence join in their phases.
+- Plan opens on tonight's target (Open, Forget with a second tap) and the search:
+  a designation or a name, in either language and without accents; a few targets
+  to start from when it is empty. Each result says what it is (type,
+  constellation, magnitude, size) and how long it is up in the dark tonight.
+- A target's page (`#/plan/<id>`): its names and what it is, its altitude through
+  the night (twilight shaded, the site's horizon profile as ground under it, the
+  30° minimum dashed, the Moon dotted, now), the highest point, the best window
+  and the distance to the Moon; the framing chart with the main camera's frame and
+  a rotation slider (it starts at tonight's target's, else at the last solved
+  frame's); dragging the sky frames off the object, which the caption says with a
+  way back. Go and centre is the primary action, then Go and "Make tonight's
+  target"; going also makes it tonight's target, and the centring card follows
+  the run.
+
 ## 8. Open UX questions
 
 - Persistent "session running" indicator on non-session screens (banner vs.

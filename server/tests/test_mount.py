@@ -16,6 +16,7 @@ from fakes import FakeClient, driver_info, switch_property
 from nocs.clock import Clock
 from nocs.devices import (
     STOPPED,
+    Coordinates,
     DeviceError,
     DeviceInterface,
     Direction,
@@ -33,6 +34,7 @@ from nocs.mount.coords import (
     jnow_to_j2000,
 )
 from nocs.mount.pad import Pad, PadCommand, PadStatus, drive
+from nocs.mount.service import SyncNotKeptError, check_sync_kept
 from nocs.state import StateStore
 
 NAME = "Mount"
@@ -546,3 +548,33 @@ async def test_interrupt_latches_and_frees_the_mount(
     status = await pad.apply(PadCommand(NORTH))
     assert status.latched
     assert Mount(client, NAME).motion == STOPPED
+
+
+# -- A sync the mount does not keep --------------------------------------------
+
+
+class Drifting:
+    """A mount that reports ``positions`` one after another, then stays on the last."""
+
+    name = "AM5"
+
+    def __init__(self, *positions: Coordinates) -> None:
+        self._positions = list(positions)
+
+    @property
+    def coordinates(self) -> Coordinates:
+        return self._positions.pop(0) if len(self._positions) > 1 else self._positions[0]
+
+
+async def test_a_kept_sync_passes() -> None:
+    synced = Coordinates(5.0, -60.0)
+    mount = Drifting(synced, Coordinates(5.0, -60.005))
+    await check_sync_kept(mount, synced, watch=0.05, every=0.01)
+
+
+async def test_a_sync_the_mount_goes_back_from_fails() -> None:
+    # The AM5 at home: it took a sync 4° off the pole, then reported the pole again.
+    synced = Coordinates(5.0, -86.0)
+    mount = Drifting(synced, synced, Coordinates(5.0, -90.0))
+    with pytest.raises(SyncNotKeptError, match=r"AM5 did not keep the sync: it went back 4\.0°"):
+        await check_sync_kept(mount, synced, watch=1, every=0.01)

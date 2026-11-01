@@ -70,7 +70,7 @@ def build(tables: Iterable[str], extra_names: str = "") -> list[Target]:
     """Targets from OpenNGC's tables (NGC.csv, addendum.csv) and NOCS's own names.
 
     ``extra_names`` is a TSV of ``<OpenNGC name>  <en|es>  <name>[, <name>…]``:
-    English names OpenNGC lacks, and Spanish ones.
+    English names OpenNGC lacks, and Spanish ones; they go before OpenNGC's.
     """
     rows = [row for text in tables for row in read_rows(text)]
     objects: dict[str, _Object] = {}
@@ -133,7 +133,10 @@ def build(tables: Iterable[str], extra_names: str = "") -> list[Target]:
         if language not in ("en", "es"):
             raise OpenNgcError(f"names line {number}: unknown language {language}")
         target_names = obj.names if language == "en" else obj.names_es
-        target_names.extend(n for n in _split(names) if n not in target_names)
+        # NOCS's names lead, in its order, also those OpenNGC has: clients show the
+        # first, and OpenNGC's order put "Sculptor Filament" before NGC 253's usual name.
+        own = _split(names)
+        target_names[:] = [*own, *(n for n in target_names if n not in own)]
 
     return [_target(name, obj) for name, obj in objects.items()]
 

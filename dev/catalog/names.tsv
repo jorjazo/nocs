@@ -1,6 +1,7 @@
 # Common names NOCS adds to OpenNGC's (ADR 0019), merged by dev/catalog/build.py.
 # <OpenNGC name> TAB <en|es> TAB <name>[, <name>…]
-# English: names OpenNGC lacks. Spanish: names that differ from the English ones.
+# English: names OpenNGC lacks, shown before OpenNGC's. Spanish: names that differ
+# from the English ones.
 # Licensed CC BY-SA 4.0, like the data it is merged into.
 NGC0224	es	Galaxia de Andrómeda
 NGC0253	en	Sculptor Galaxy
@@ -147,5 +148,5 @@ IC1805	en	Heart Nebula
 IC1805	es	Nebulosa del Corazón
 IC1848	en	Soul Nebula
 IC1848	es	Nebulosa del Alma
-NGC0292	en	SMC
-ESO056-115	en	LMC
+NGC0292	en	Small Magellanic Cloud, SMC
+ESO056-115	en	Large Magellanic Cloud, LMC

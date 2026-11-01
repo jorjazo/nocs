@@ -4,26 +4,26 @@
 export type Tab = "tonight" | "live" | "plan" | "session" | "rig";
 export const TABS: readonly Tab[] = ["tonight", "live", "plan", "session", "rig"];
 
-// The profile editor hangs off Rig: #/rig/profile/<id>, or #/rig/profile/new.
+// The profile editor hangs off Rig: #/rig/profile/<id>, or #/rig/profile/new; a
+// target's page off Plan: #/plan/<catalog id>.
 // Autofocus (#/focus) and guiding (#/guiding) are full-screen flows over
 // whichever tab opened them.
 export type Route =
   | { screen: Tab }
   | { screen: "dev" }
-  | { screen: "chart" }
   | { screen: "focus" }
   | { screen: "guiding" }
-  | { screen: "profile"; id: string | null };
+  | { screen: "profile"; id: string | null }
+  | { screen: "target"; id: string };
 
 const DEFAULT: Route = { screen: "tonight" };
 
 function parse(hash: string): Route {
   const [first, second, third] = hash.replace(/^#\/?/, "").split("/");
-  // The framing chart's preview until the Plan screen hosts it (3.6).
-  if (first === "dev" && second === "chart") return { screen: "chart" };
   if (first === "dev") return { screen: "dev" };
   if (first === "focus") return { screen: "focus" };
   if (first === "guiding") return { screen: "guiding" };
+  if (first === "plan" && second) return { screen: "target", id: decodeURIComponent(second) };
   if (first === "rig" && second === "profile" && third) {
     return { screen: "profile", id: third === "new" ? null : decodeURIComponent(third) };
   }
@@ -33,7 +33,7 @@ function parse(hash: string): Route {
 
 export function href(route: Route): string {
   if (route.screen === "profile") return `#/rig/profile/${route.id === null ? "new" : encodeURIComponent(route.id)}`;
-  if (route.screen === "chart") return "#/dev/chart";
+  if (route.screen === "target") return `#/plan/${encodeURIComponent(route.id)}`;
   return `#/${route.screen}`;
 }
 

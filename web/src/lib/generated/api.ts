@@ -364,6 +364,7 @@ export interface AppState {
    * None where NOCS does not manage the network (a PC).
    */
   network?: NetworkState | null;
+  plan?: PlanState | null;
   /**
    * None: no power box is ready.
    */
@@ -1472,6 +1473,44 @@ export interface LastJoin {
   error: string | null;
   ok: boolean;
   ssid: string;
+}
+/**
+ * What the Plan screen chose for tonight (stage 3.6).
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "PlanState".
+ */
+export interface PlanState {
+  /**
+   * None: no target chosen.
+   */
+  target: PlannedTarget | null;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "PlannedTarget".
+ */
+export interface PlannedTarget {
+  /**
+   * J2000 degrees where the frame points.
+   */
+  dec: number;
+  /**
+   * Catalog id (e.g. NGC 292); None: coordinates.
+   */
+  id?: string | null;
+  /**
+   * What to call it.
+   */
+  name: string;
+  /**
+   * J2000 hours where the frame points.
+   */
+  ra: number;
+  /**
+   * Wanted angle of the frame's top, degrees east of north; None: any.
+   */
+  rotation?: number | null;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema

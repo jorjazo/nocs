@@ -33,6 +33,7 @@ from nocs.api.accessories import accessories_router
 from nocs.api.auth import REVOKED, AuthMiddleware, Sockets, auth_router, identity
 from nocs.api.guiding import guiding_router
 from nocs.api.mount import mount_router
+from nocs.api.plan import plan_router
 from nocs.api.power import power_router
 from nocs.api.schemas import (
     AutofocusRun,
@@ -115,6 +116,7 @@ from nocs.services.gps import GpsService, NoFixError
 from nocs.services.indi_bridge import IndiBridge, NotConnectedError
 from nocs.services.system import OperationUnavailableError, SystemService
 from nocs.services.timekeeping import TimeKeeper
+from nocs.sky import Target as SkyTarget
 from nocs.solving import Astap, SolverService
 from nocs.state import Resync, StateStore
 from nocs.storage import (
@@ -131,6 +133,8 @@ from nocs.storage.layout import clean
 from nocs.storage.service import DriveBusyError, EjectUnavailableError
 from nocs.system.client import HelperUnavailableError
 from nocs.system.protocol import HelperError
+from nocs.targets import TargetCatalog, bundled_catalog, loaded_catalog
+from nocs.targets.plan import PlanService
 
 log = logging.getLogger(__name__)
 
@@ -212,6 +216,10 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
     def centering() -> CenteringService:
         assert services.centering is not None
         return services.centering
+
+    def plan() -> PlanService:
+        assert services.plan is not None
+        return services.plan
 
     def sequences() -> SequenceService:
         assert services.sequences is not None
@@ -346,6 +354,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
         services.centering = CenteringService(
             store, services.jobs, services.pointing, services.mount
         )
+        services.plan = PlanService(store, settings.config_dir)
         services.capture.use_guider(services.guiding)
         services.sequences = SequenceService(
             store,
@@ -409,8 +418,9 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
     app.include_router(solver_router(pointing, centering))
     app.include_router(accessories_router(focuser, filter_wheel, autofocus))
     app.include_router(sequences_router(sequences))
-    app.include_router(sky_router(saved_site, clock))
+    app.include_router(sky_router(saved_site, clock, _catalog_target))
     app.include_router(targets_router())
+    app.include_router(plan_router(plan))
 
     @app.get("/api/autofocus/runs")
     async def focus_runs(  # pyright: ignore[reportUnusedFunction]
@@ -747,6 +757,7 @@ class _Services:
     solver: SolverService | None = None
     pointing: PointingService | None = None
     centering: CenteringService | None = None
+    plan: PlanService | None = None
     autofocus: AutofocusService | None = None
     guiding: GuidingService | None = None
     environment: EnvironmentLog | None = None
@@ -930,3 +941,11 @@ async def _stream_state(
         # The client may be gone already; then there is nobody to tell.
         with contextlib.suppress(WebSocketDisconnect, RuntimeError):
             await websocket.close(REVOKED, "revoked")
+
+
+def _catalog_target(name: str) -> SkyTarget | None:
+    """A catalog object's position, for the sky's visibility (run off the event loop:
+    the first call loads the catalog)."""
+    catalog: TargetCatalog = loaded_catalog() or bundled_catalog()
+    found = catalog.get(name)
+    return SkyTarget(found.ra, found.dec) if found else None

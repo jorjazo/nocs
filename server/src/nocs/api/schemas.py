@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from nocs.equipment import Role, Site
 from nocs.state import Patch
 from nocs.targets import TargetType
+from nocs.targets.plan import PlannedTarget
 
 # -- State -------------------------------------------------------------------
 # These models document the shape of the state tree for clients (and generate the
@@ -518,6 +519,12 @@ class CenteringAttempt(StateModel):
     failure: CenteringFailure | None = Field(description="Why the frame was not solved.")
 
 
+class PlanState(StateModel):
+    """What the Plan screen chose for tonight (stage 3.6)."""
+
+    target: PlannedTarget | None = Field(description="None: no target chosen.")
+
+
 class CenteringState(StateModel):
     """The running centring, or the most recent one."""
 
@@ -848,6 +855,7 @@ class AppState(StateModel):
     solver: SolverState | None = None
     autofocus: AutofocusState | None = Field(default=None, description="None: never run.")
     centering: CenteringState | None = Field(default=None, description="None: never run.")
+    plan: PlanState | None = None
     guiding: GuidingState | None = None
     system: SystemState | None = None
     sequence: SequenceState | None = None

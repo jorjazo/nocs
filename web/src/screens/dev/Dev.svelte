@@ -49,7 +49,6 @@
 <div class="dev">
   <a class="back" href={href({ screen: "rig" })}><Icon name="chevronLeft" />{i18n.t.tabs.rig}</a>
   <h1 class="title">INDI properties</h1>
-  <p><a href={href({ screen: "chart" })}>Framing chart preview</a></p>
 
   {#if camera}
     <section class="device box">

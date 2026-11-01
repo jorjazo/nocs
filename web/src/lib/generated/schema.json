@@ -377,6 +377,17 @@
           "default": null,
           "description": "None where NOCS does not manage the network (a PC)."
         },
+        "plan": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PlanState"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "power": {
           "anyOf": [
             {
@@ -5810,6 +5821,85 @@
         "count"
       ],
       "title": "PlanRow",
+      "type": "object"
+    },
+    "PlanState": {
+      "additionalProperties": false,
+      "description": "What the Plan screen chose for tonight (stage 3.6).",
+      "properties": {
+        "target": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PlannedTarget"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "None: no target chosen."
+        }
+      },
+      "required": [
+        "target"
+      ],
+      "title": "PlanState",
+      "type": "object"
+    },
+    "PlannedTarget": {
+      "additionalProperties": false,
+      "properties": {
+        "dec": {
+          "description": "J2000 degrees where the frame points.",
+          "maximum": 90,
+          "minimum": -90,
+          "type": "number"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 50,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Catalog id (e.g. NGC 292); None: coordinates."
+        },
+        "name": {
+          "description": "What to call it.",
+          "maxLength": 100,
+          "minLength": 1,
+          "type": "string"
+        },
+        "ra": {
+          "description": "J2000 hours where the frame points.",
+          "exclusiveMaximum": 24,
+          "minimum": 0,
+          "type": "number"
+        },
+        "rotation": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 360,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Wanted angle of the frame's top, degrees east of north; None: any."
+        }
+      },
+      "required": [
+        "name",
+        "ra",
+        "dec"
+      ],
+      "title": "PlannedTarget",
       "type": "object"
     },
     "PointingOffset": {

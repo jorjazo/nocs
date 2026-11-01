@@ -19,9 +19,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 from collections.abc import Coroutine
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any, Literal, Protocol
 
 import anyio
 
@@ -52,6 +53,13 @@ PROPERTY_WAIT = 10.0
 """Seconds to wait for a property drivers define just after the mount is ready."""
 SETTLE_TIMEOUT = 300.0
 """Seconds a slew may still go on after the go to that started it."""
+SYNC_WATCH = 2.5
+"""Seconds NOCS watches the position after a sync: the AM5 (and the AM7 behind its
+driver) reported a sync near its home position at once and went back at its next
+poll, about a second later."""
+SYNC_KEPT = 1.0
+"""Arcminutes the position may stray from a sync before NOCS says it was not kept;
+the simulators reported 0.05-0.2'."""
 
 type Frame = Literal["j2000", "jnow"]
 
@@ -84,6 +92,42 @@ class MountNotReadyError(Exception):
 
 class PointingError(Exception):
     """A go to that NOCS refuses: below the horizon, or the sky position is unknown."""
+
+
+class SyncNotKeptError(PointingError):
+    """The mount took a sync and then went back to where it thought it pointed."""
+
+
+class _Positioned(Protocol):
+    @property
+    def name(self) -> str: ...
+    @property
+    def coordinates(self) -> Coordinates: ...
+
+
+async def check_sync_kept(
+    mount: _Positioned, synced: Coordinates, watch: float = SYNC_WATCH, every: float = 0.25
+) -> None:
+    """Raise SyncNotKeptError if the mount's JNow position leaves ``synced`` within
+    ``watch`` seconds (a tracking mount keeps it)."""
+    for _ in range(max(1, round(watch / every))):
+        if _arcmin(mount.coordinates, synced) > SYNC_KEPT:
+            break
+        await anyio.sleep(every)
+    off = _arcmin(mount.coordinates, synced)
+    if off > SYNC_KEPT:
+        where = f"{off:.1f}'" if off < 60 else f"{off / 60:.1f}°"
+        raise SyncNotKeptError(
+            f"{mount.name} did not keep the sync: it went back {where} from it "
+            "(some mounts ignore syncs near their home position; try away from the pole)"
+        )
+
+
+def _arcmin(a: Coordinates, b: Coordinates) -> float:
+    d1, d2 = math.radians(a.dec), math.radians(b.dec)
+    dra = math.radians((a.ra - b.ra) * 15)
+    h = math.sin((d2 - d1) / 2) ** 2 + math.cos(d1) * math.cos(d2) * math.sin(dra / 2) ** 2
+    return math.degrees(2 * math.asin(min(1.0, math.sqrt(h)))) * 60
 
 
 class MountService:
@@ -208,7 +252,8 @@ class MountService:
 
         ``when`` is the time the position is for (a solved frame's mid-exposure),
         else now. Refused while the mount is parked, slewing or not tracking (the
-        sky would have moved since), or locked by a job other than ``job``.
+        sky would have moved since), or locked by a job other than ``job``. Raises
+        SyncNotKeptError when the mount goes back from the sync within a few seconds.
         """
         if not 0 <= ra < 24 or not -90 <= dec <= 90:
             raise ValueError(f"coordinates out of range: RA {ra} h, Dec {dec}°")
@@ -226,6 +271,7 @@ class MountService:
         jnow = j2000_to_jnow(ra, dec, when or self._clock.now())
         log.info("syncing %s to RA %s, Dec %s (J2000)", mount.name, _hms(ra), _dms(dec))
         await mount.sync(jnow.ra, jnow.dec)
+        await check_sync_kept(mount, jnow)
         return jnow
 
     async def set_tracking(

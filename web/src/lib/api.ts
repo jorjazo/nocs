@@ -3,12 +3,15 @@
 
 import type {
   AccessPointRequest,
+  Almanac,
   AuthStatus,
   AutofocusRequest,
   AutofocusRun,
   CameraRoleName,
   CameraSettingsRequest,
   CatalogMatch,
+  CatalogObject,
+  CatalogSource,
   CenterRequest,
   ClockReport,
   ClockRequest,
@@ -42,11 +45,13 @@ import type {
   OutputRequest,
   PairedDevice,
   PairRequest,
+  PlannedTarget,
   Profile,
   SerialPortInfo,
   ShutdownRequest,
   Site,
   SkyChart,
+  SkyVisibility,
   SolveRequest,
   TargetRequest,
   TrackingRequest,
@@ -481,4 +486,34 @@ export function searchTargets(query: string, limit = 20): Promise<CatalogMatch[]
 export function getSkyChart(ra: number, dec: number, radius: number, magnitude: number, limit: number): Promise<SkyChart> {
   const params = { ra: String(ra), dec: String(dec), radius: String(radius), magnitude: String(magnitude), limit: String(limit) };
   return request("GET", `/api/targets/chart?${new URLSearchParams(params)}`);
+}
+
+export function getTarget(designation: string): Promise<CatalogObject> {
+  return request("GET", `/api/targets/objects/${encodeURIComponent(designation)}`);
+}
+
+export function getTargetSources(): Promise<CatalogSource[]> {
+  return request("GET", "/api/targets/sources");
+}
+
+// -- Tonight's sky and target (stages 3.5, 3.6) ------------------------------------------
+
+// The night the server's clock is in, at the active profile's site.
+export function getTonight(): Promise<Almanac> {
+  return request("GET", "/api/sky/tonight");
+}
+
+// Tonight's altitude curves of targets: catalog ids or "RA,Dec" (J2000 hours, degrees).
+export function getVisibility(targets: string[], minAltitude?: number): Promise<SkyVisibility> {
+  const params = new URLSearchParams(targets.map((target) => ["target", target]));
+  if (minAltitude !== undefined) params.set("min_altitude", String(minAltitude));
+  return request("GET", `/api/sky/visibility?${params}`);
+}
+
+export function choosePlanTarget(target: PlannedTarget): Promise<void> {
+  return request("PUT", "/api/plan/target", target);
+}
+
+export function forgetPlanTarget(): Promise<void> {
+  return request("DELETE", "/api/plan/target");
 }
