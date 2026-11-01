@@ -111,8 +111,16 @@ nocsd ended the night as designed (`storage` failure, then park and warm).
   put the loop in `logging`'s `flush` of uvicorn's access log: `run.sh` wrote nocsd's
   output to a file on the microSD, and with ext4's `data=ordered` an append waits while
   the card writes back a 52 MB frame. Under systemd the output goes to journald through
-  a socket, which absorbs that; the soak now pipes it the same way. The second night
-  checks the stalls are gone.
+  a socket, which absorbs that; the soak now pipes it the same way.
+
+### Lab Pi 5, second night (1.4 h, stopped to fix what it found)
+
+With the log piped, stalls remained: 6 windows over 300 ms in 1.4 h, up to 4.1 s
+([results/pi5-second](../../dev/tools/soak/results/pi5-second/summary.md)). A second
+profile (20 min) put 6 s of the loop in `unlink`, called by the imaging worker's client
+to delete the preview a new one pushes out: ext4 holds an unlink for its journal while the
+card writes back a frame, too. **Fixed**: those deletions run in a thread (test included),
+and the soak appends its own records from a thread, so its waits do not read as nocsd's.
 
 ## What the soak found, and what was fixed
 
@@ -136,8 +144,9 @@ Each of the first three ended or would have ended a night; the fixes are on `mai
 
 Measured, not changed:
 
-4. **A log line can block the event loop** when its sink is slow (above: a file on the
-   microSD while a frame is written back, up to 1.9 s). journald's socket absorbs it on
+4. **File operations on the event loop wait for the microSD** while it writes back a
+   frame (ext4 `data=ordered`): deleting old previews did (up to 4 s, now in a thread),
+   and so does a log line written to a file (up to 1.9 s). journald's socket absorbs it on
    the appliance, but a `QueueHandler` (records written by a thread) would make it
    impossible. Also on the loop: decoding the guide camera's BLOBs that NOCS previews
    from PHD2 (base64 and XML, ~1.7 % of the loop's time in 50–100 ms pieces every 2 s;
