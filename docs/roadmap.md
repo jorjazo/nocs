@@ -162,6 +162,7 @@ full night from a phone with no other computer involved.
 - Filter wheels: find out which filter sits in each slot (e.g. from the
   brightness of a flat per slot) instead of asking the user (ADR 0016).
 - Mosaic planning.
-- EAA / live stacking.
+- EAA / live stacking: planned in [beyond/live-stacking.md](beyond/live-stacking.md)
+  (ADR 0037).
 - Observatory: roll-off roof, dome, safety monitor, weather automation.
 - ASCOM Alpaca / INDIGO adapters.
