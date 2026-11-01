@@ -284,6 +284,7 @@ class Runner:
         if self._state is not RunState.RUNNING:
             return
         self._pause_asked = True
+        self._resume = anyio.Event()
         self._set_state(RunState.PAUSING)
         if now and self._step is not None:
             self._step.cancel()
@@ -291,6 +292,7 @@ class Runner:
     def resume(self) -> None:
         if self._state is RunState.PAUSING:
             self._pause_asked = False
+            self._resume.set()  # the pause may be under way already
             self._set_state(RunState.RUNNING)
         elif self._state is RunState.PAUSED:
             self._resume.set()
@@ -300,11 +302,9 @@ class Runner:
         if self._state not in (RunState.RUNNING, RunState.PAUSING, RunState.PAUSED):
             return
         self._stop_asked = run_end
-        paused = self._state is RunState.PAUSED
         self._set_state(RunState.STOPPING)
-        if paused:
-            self._resume.set()
-        elif now and self._step is not None:
+        self._resume.set()
+        if now and self._step is not None:
             self._step.cancel()
 
     # -- running --------------------------------------------------------------------
@@ -502,12 +502,13 @@ class Runner:
 
     async def _pause(self) -> None:
         self._pause_asked = False
-        self._resume = anyio.Event()
-        self._set_state(RunState.PAUSED)
-        self._event(EventKind.PAUSED, "paused", self._current)
         await self._save()
         await self._executor.paused()
-        await self._resume.wait()
+        # Paused once the rig is lent back, unless resumed or stopped meanwhile.
+        if not self._resume.is_set():
+            self._set_state(RunState.PAUSED)
+            self._event(EventKind.PAUSED, "paused", self._current)
+            await self._resume.wait()
         await self._executor.resumed()
         if self._stop_asked is None:
             self._set_state(RunState.RUNNING)
