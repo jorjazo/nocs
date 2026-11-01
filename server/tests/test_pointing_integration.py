@@ -248,7 +248,11 @@ def center(api: TestClient, **body: Any) -> dict[str, Any]:
         for attempt in range(ATTEMPTS):
             rotate(api, attempt * TURN % 360)
             dec = FIELD[1] + (attempt % 2) * NUDGE
-            response = api.post("/api/solver/center", json={"ra": FIELD[0], "dec": dec, **body})
+            # Forced like the go tos: the field is below the site's horizon part of the day.
+            response = api.post(
+                "/api/solver/center",
+                json={"ra": FIELD[0], "dec": dec, "force": True, **body},
+            )
             assert response.status_code == 202, response.text
             job_id: str = response.json()["job"]
 
