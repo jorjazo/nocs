@@ -80,6 +80,7 @@ export type {
   NetworkForgetRequest,
   NetworkJoinRequest,
   NetworkModeRequest,
+  NetworkSetupRequest,
   NetworkState,
   ObserverRequest,
   Optics,

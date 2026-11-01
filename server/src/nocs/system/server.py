@@ -139,22 +139,31 @@ class Helper:
         return {"id": request_id, "result": result}
 
     async def _connection(self, stream: SocketStream) -> None:
-        async with stream:
-            uid = peer_uid(stream)
-            if uid not in (self._config.uid, 0):
-                log.warning("refused a connection from uid %d", uid)
+        """One client; whatever it does, the helper serves the next one."""
+        try:
+            async with stream:
+                await self._converse(stream)
+        except (anyio.BrokenResourceError, anyio.ClosedResourceError, ConnectionError):
+            log.info("a client left before its reply")
+        except Exception:
+            log.exception("connection failed")
+
+    async def _converse(self, stream: SocketStream) -> None:
+        uid = peer_uid(stream)
+        if uid not in (self._config.uid, 0):
+            log.warning("refused a connection from uid %d", uid)
+            return
+        receive = BufferedByteReceiveStream(stream)
+        while True:
+            try:
+                line = await receive.receive_until(b"\n", MAX_LINE)
+            except (anyio.EndOfStream, anyio.IncompleteRead):
                 return
-            receive = BufferedByteReceiveStream(stream)
-            while True:
-                try:
-                    line = await receive.receive_until(b"\n", MAX_LINE)
-                except (anyio.EndOfStream, anyio.IncompleteRead):
-                    return
-                except anyio.DelimiterNotFound:
-                    error = {"code": "invalid", "message": f"a message is at most {MAX_LINE} bytes"}
-                    await stream.send(encode({"id": None, "error": error}))
-                    return
-                await stream.send(encode(await self.reply(line)))
+            except anyio.DelimiterNotFound:
+                error = {"code": "invalid", "message": f"a message is at most {MAX_LINE} bytes"}
+                await stream.send(encode({"id": None, "error": error}))
+                return
+            await stream.send(encode(await self.reply(line)))
 
 
 def peer_uid(stream: SocketStream) -> int:

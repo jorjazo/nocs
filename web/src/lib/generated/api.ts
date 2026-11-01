@@ -2915,6 +2915,25 @@ export interface NetworkModeRequest {
   pin: "auto" | "ap" | "station";
 }
 /**
+ * The first run on the appliance (ADR 0028): the access point's country and new
+ * password, and optionally a network to join. Accepted at once (202): the access
+ * point restarts with the new password, or the box leaves it to join the network.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "NetworkSetupRequest".
+ */
+export interface NetworkSetupRequest {
+  /**
+   * Two letters, ISO 3166 (e.g. CL).
+   */
+  country: string;
+  join?: NetworkJoinRequest | null;
+  /**
+   * The access point's new password, 8 to 63 characters.
+   */
+  password: string;
+}
+/**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "NightGroup".
  */

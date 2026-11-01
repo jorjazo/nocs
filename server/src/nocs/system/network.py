@@ -94,6 +94,8 @@ class _Timers:
     last_try: float = float("-inf")
     booting: bool = True
     pending_join: tuple[str, str | None] | None = None
+    pending_ap: bool = False
+    """New access point settings, to apply if it is on."""
     wake: anyio.Event = field(default_factory=anyio.Event)
 
 
@@ -227,7 +229,8 @@ class Network:
         return {}
 
     async def access_point(self, args: Message) -> Message:
-        """Name, password and country of the access point; applied at once if it is on."""
+        """Name, password and country of the access point; applied in a moment if it is
+        on (after the reply, which then still reaches a phone on it)."""
         if not args or set(args) - {"ssid", "password", "country"}:
             raise HelperError("invalid", "the arguments are {ssid?, password?, country?}")
         if "ssid" in args:
@@ -237,8 +240,8 @@ class Network:
         if "country" in args:
             self._settings.country = check_country(args["country"])
         self._save()
-        if (await self._device()).mode == "ap":
-            await self._start_ap()
+        self._timers.pending_ap = True
+        self._timers.wake.set()
         return {}
 
     async def set_mode(self, args: Message) -> Message:
@@ -278,6 +281,13 @@ class Network:
         device = await self._device()
         if not device.exists:
             return
+        if timers.pending_ap:
+            timers.pending_ap = False
+            if device.mode == "ap":
+                await anyio.sleep(JOIN_DELAY)
+                log.info("restarting the access point with its new settings")
+                await self._start_ap()
+                return
         pin = self._settings.pin
         if pin == "ap":
             if device.mode != "ap":
@@ -347,6 +357,7 @@ class Network:
                 return
 
     async def _start_ap(self) -> None:
+        self._timers.pending_ap = False  # it starts with the settings as they are now
         await self._set_country()
         await anyio.to_thread.run_sync(self._write_ap)
         await _nmcli("connection", "load", str(self._paths.connections / f"{AP_ID}.nmconnection"))

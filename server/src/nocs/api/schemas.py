@@ -1072,6 +1072,18 @@ class AccessPointRequest(BaseModel):
     country: str | None = Field(default=None, description="Two letters, ISO 3166 (e.g. CL).")
 
 
+class NetworkSetupRequest(BaseModel):
+    """The first run on the appliance (ADR 0028): the access point's country and new
+    password, and optionally a network to join. Accepted at once (202): the access
+    point restarts with the new password, or the box leaves it to join the network."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    country: str = Field(description="Two letters, ISO 3166 (e.g. CL).")
+    password: str = Field(description="The access point's new password, 8 to 63 characters.")
+    join: NetworkJoinRequest | None = None
+
+
 class NetworkModeRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

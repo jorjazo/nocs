@@ -4867,6 +4867,37 @@
       "title": "NetworkModeRequest",
       "type": "object"
     },
+    "NetworkSetupRequest": {
+      "additionalProperties": false,
+      "description": "The first run on the appliance (ADR 0028): the access point's country and new\npassword, and optionally a network to join. Accepted at once (202): the access\npoint restarts with the new password, or the box leaves it to join the network.",
+      "properties": {
+        "country": {
+          "description": "Two letters, ISO 3166 (e.g. CL).",
+          "type": "string"
+        },
+        "join": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NetworkJoinRequest"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "password": {
+          "description": "The access point's new password, 8 to 63 characters.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "country",
+        "password"
+      ],
+      "title": "NetworkSetupRequest",
+      "type": "object"
+    },
     "NetworkState": {
       "additionalProperties": false,
       "description": "The appliance's network, managed by nocs-system (ADR 0028).",

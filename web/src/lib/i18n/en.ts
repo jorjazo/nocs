@@ -175,6 +175,27 @@ export const en = {
     notMounted: "Not mounted",
     unplug: "Ejected: unplug it, or plug it in again to use it",
   },
+  boxSetup: {
+    title: "Set up this box",
+    body: (ap: string) =>
+      `Before anything else, give the access point ${ap} a password of your own: until you do, anyone nearby can join it with the one printed in the quick start.`,
+    country: "Country",
+    countryHint: "Two letters, e.g. CL: the radio uses the channels allowed there.",
+    password: "New access point password",
+    passwordHint: "8 to 63 characters, letters, digits and symbols.",
+    passwordShort: "At least 8 characters.",
+    joinToggle: "Also join a Wi-Fi network",
+    joinToggleHint: "Your home network, for example: the box joins it whenever it is in range.",
+    ssid: "Network name",
+    wifiPassword: "Network password",
+    afterAp: (ap: string, host: string) =>
+      `When you save, ${ap} restarts with the new password: join it again with it, then open http://${host}.local.`,
+    afterJoin: (ssid: string, ap: string, host: string) =>
+      `When you save, the box joins ${ssid}: switch this phone to ${ssid} and open http://${host}.local. If it cannot join, ${ap} comes back within a minute, with the new password.`,
+    submit: "Save",
+    doneTitle: "Saved",
+    continue: "Continue",
+  },
   network: {
     title: "Network",
     ap: (ssid: string) => `Access point ${ssid}`,

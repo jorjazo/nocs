@@ -34,6 +34,7 @@ import type {
   NetworkForgetRequest,
   NetworkJoinRequest,
   NetworkModeRequest,
+  NetworkSetupRequest,
   ObserverRequest,
   OutputRequest,
   PairedDevice,
@@ -174,6 +175,12 @@ export function useGpsSite(): Promise<Site> {
 // The box leaves its access point to join in a moment (202): the phone must follow it.
 export function joinNetwork(ssid: string, password: string | null): Promise<void> {
   return request("POST", "/api/system/network/join", { ssid, password } satisfies NetworkJoinRequest);
+}
+
+// The first run on the appliance: the access point's country and own password, and
+// maybe a network to join. Accepted at once (202); the access point then restarts.
+export function setUpNetwork(body: NetworkSetupRequest): Promise<void> {
+  return request("POST", "/api/system/network/setup", body);
 }
 
 export function forgetNetwork(ssid: string): Promise<void> {

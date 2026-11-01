@@ -263,6 +263,8 @@ async def test_the_access_point_changes_at_once(
     await network.set_mode({"pin": "ap"})
     await network.tick()
     await network.access_point({"ssid": "Rig West", "password": "dark-skies-1", "country": "CL"})
+    assert nm.connections[AP_ID]["psk"] == DEFAULT_PASSWORD  # the reply goes out first
+    await network.tick()
     ap = nm.connections[AP_ID]
     assert (ap["ssid"], ap["psk"], nm.country) == ("Rig West", "dark-skies-1", "CL")
     status = await network.status({})
@@ -344,3 +346,9 @@ def test_the_api_publishes_and_joins(nm: FakeNetworkManager, paths: Paths, tmp_p
             response = client.put("/api/system/network/access-point", json={"password": "short"})
             assert response.status_code == 422
             assert "8 to 63" in response.json()["detail"]
+            response = client.post(
+                "/api/system/network/setup", json={"country": "cl", "password": "dark-skies-1"}
+            )
+            assert response.status_code == 202, response.text
+            network = client.get("/api/state").json()["state"]["network"]
+            assert (network["ap_default_password"], network["country"]) == (False, "CL")

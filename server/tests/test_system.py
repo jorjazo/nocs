@@ -441,3 +441,11 @@ async def test_eject_only_what_nocs_mounted(tmp_path: Path, drives: Path, mount_
     with pytest.raises(HelperError, match="did not mount"):
         await eject(drive_context(tmp_path), {"mount_point": point})
     assert drive_calls(drives) == []
+
+
+async def test_a_client_that_leaves_early_does_not_stop_the_helper(helper: Config) -> None:
+    for _ in range(3):
+        stream = await anyio.connect_unix(helper.socket)
+        await stream.send(b'{"id": 1, "op": "hello"}\n')
+        await stream.aclose()  # gone before the reply
+    assert (await call("hello", socket=helper.socket))["version"] == 1

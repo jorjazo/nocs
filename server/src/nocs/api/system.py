@@ -15,6 +15,7 @@ from nocs.api.schemas import (
     NetworkForgetRequest,
     NetworkJoinRequest,
     NetworkModeRequest,
+    NetworkSetupRequest,
     ShutdownRequest,
 )
 from nocs.services.system import OperationUnavailableError, SystemBusyError, SystemService
@@ -55,6 +56,21 @@ def system_router(system: Callable[[], SystemService]) -> APIRouter:
             args["password"] = request.password
         with _system_errors():
             await system().network("network.join", args)
+        return Response(status_code=status.HTTP_202_ACCEPTED)
+
+    @router.post("/network/setup", status_code=status.HTTP_202_ACCEPTED)
+    async def network_setup(request: NetworkSetupRequest) -> Response:  # pyright: ignore[reportUnusedFunction]
+        """The first run: country and password of the access point, then maybe a network."""
+        with _system_errors():
+            await system().network(
+                "network.access_point",
+                {"country": request.country.upper(), "password": request.password},
+            )
+            if request.join is not None:
+                args: dict[str, object] = {"ssid": request.join.ssid}
+                if request.join.password is not None:
+                    args["password"] = request.join.password
+                await system().network("network.join", args)
         return Response(status_code=status.HTTP_202_ACCEPTED)
 
     @router.post("/network/forget", status_code=status.HTTP_204_NO_CONTENT)

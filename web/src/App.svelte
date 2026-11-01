@@ -12,7 +12,9 @@
   import { i18n } from "./lib/i18n";
   import { live } from "./lib/live.svelte";
   import { router } from "./lib/router.svelte";
+  import { boxSetup } from "./lib/setup.svelte";
   import AuthScreen from "./screens/AuthScreen.svelte";
+  import BoxSetup from "./screens/BoxSetup.svelte";
   import ChartPreview from "./screens/dev/ChartPreview.svelte";
   import Dev from "./screens/dev/Dev.svelte";
   import Focus from "./screens/focus/Focus.svelte";
@@ -66,6 +68,11 @@
   });
 
   const offline = $derived(live.synced && live.status !== "open");
+  // On the appliance, the access point's default password goes before anything else
+  // (ADR 0028); the flow stays up after saving until its instructions are read.
+  const setupBox = $derived(
+    auth.owner && (live.app.network?.ap_default_password === true || boxSetup.done !== null),
+  );
   // Live view uses the whole width: the preview is edge to edge.
   const full = $derived(router.route.screen === "live");
 </script>
@@ -82,6 +89,8 @@
   </main>
 {:else if view === "setup" || view === "pair"}
   <AuthScreen mode={view} />
+{:else if setupBox}
+  <BoxSetup />
 {:else if router.route.screen === "focus"}
   <!-- Guided flows take the whole screen, without the tabs (docs/ux.md §1). -->
   <Focus {offline} />

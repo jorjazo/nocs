@@ -63,6 +63,7 @@ for unit in NetworkManager nftables; do
 done
 [[ $(systemctl is-enabled systemd-networkd.service) == disabled ]] || fail "systemd-networkd still runs"
 nft list chain inet nocs input | grep -q 'policy drop' || fail "no firewall"
+[[ -f /etc/avahi/services/nocs.service ]] || fail "the box does not announce itself over mDNS"
 runuser -u nocs -- /opt/nocs/venv/bin/nocs-system call network.status | grep -q '"ap_ssid": "NOCS-' \
     || fail "nocs-system does not manage the network"
 runuser -u nocs -- /opt/nocs/venv/bin/nocs-system call hello | grep -q '"time.set"' \

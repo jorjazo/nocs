@@ -301,3 +301,15 @@ Centre (stage 3.3):
   in Live view since stage 2.7).
 - Spanish copy review: text lengths in Spanish are ~20–30 % longer; layouts must
   be checked with both languages.
+
+Appliance (phase 6):
+
+- On the appliance, the first run continues after pairing with "Set up this box"
+  (full screen, before anything else, while the access point keeps its default
+  password): country, the access point's own password, and optionally a home
+  network. The instructions for following the box (join the access point again,
+  or switch to the home network, and open `http://<name>.local`) stay on screen
+  after saving, since the phone may lose the box for a moment.
+- Rig gains "This computer" (health, name, restart, shut down, INDI and PHD2
+  restarts, diagnostics) and "Network" (where the box is, known networks, joining
+  one, the access point, the mode); USB drives with Eject sit under Storage.

@@ -219,6 +219,19 @@ cat > "$root/etc/systemd/system/nocsd.service.d/appliance.conf" <<'EOF'
 Environment=NOCS_PORT=80
 AmbientCapabilities=CAP_NET_BIND_SERVICE
 EOF
+# Browsers and apps that browse for web servers find the box over mDNS (ADR 0028).
+mkdir -p "$root/etc/avahi/services"
+cat > "$root/etc/avahi/services/nocs.service" <<'EOF'
+<?xml version="1.0" standalone='no'?>
+<!DOCTYPE service-group SYSTEM "avahi-service.dtd">
+<service-group>
+  <name replace-wildcards="yes">NOCS on %h</name>
+  <service>
+    <type>_http._tcp</type>
+    <port>80</port>
+  </service>
+</service-group>
+EOF
 # SSH only with a key (from Raspberry Pi Imager's presets): never a password.
 cat > "$root/etc/ssh/sshd_config.d/50-nocs.conf" <<'EOF'
 # NOCS (ADR 0028): keys only.

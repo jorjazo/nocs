@@ -163,6 +163,27 @@ export const es: Messages = {
     notMounted: "Sin montar",
     unplug: "Expulsado: desconéctalo, o vuelve a conectarlo para usarlo",
   },
+  boxSetup: {
+    title: "Configura este equipo",
+    body: (ap: string) =>
+      `Antes que nada, dale al punto de acceso ${ap} una contraseña propia: mientras no lo hagas, cualquiera cerca puede entrar con la que trae la guía rápida.`,
+    country: "País",
+    countryHint: "Dos letras, por ejemplo CL: la radio usa los canales permitidos allí.",
+    password: "Contraseña nueva del punto de acceso",
+    passwordHint: "De 8 a 63 caracteres: letras, números y símbolos.",
+    passwordShort: "Al menos 8 caracteres.",
+    joinToggle: "Unirse también a una red Wi-Fi",
+    joinToggleHint: "La de tu casa, por ejemplo: el equipo se une a ella cuando está al alcance.",
+    ssid: "Nombre de la red",
+    wifiPassword: "Contraseña de la red",
+    afterAp: (ap: string, host: string) =>
+      `Al guardar, ${ap} se reinicia con la contraseña nueva: vuelve a conectarte con ella y abre http://${host}.local.`,
+    afterJoin: (ssid: string, ap: string, host: string) =>
+      `Al guardar, el equipo se une a ${ssid}: cambia este teléfono a ${ssid} y abre http://${host}.local. Si no puede unirse, ${ap} vuelve en menos de un minuto, con la contraseña nueva.`,
+    submit: "Guardar",
+    doneTitle: "Guardado",
+    continue: "Continuar",
+  },
   network: {
     title: "Red",
     ap: (ssid: string) => `Punto de acceso ${ssid}`,
