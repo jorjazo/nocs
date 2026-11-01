@@ -35,6 +35,9 @@ GROUPS: dict[str, str] = {
     "update.check": "update",
     "update.install": "update",
     "update.rollback": "update",
+    "share.status": "share",
+    "share.enable": "share",
+    "share.refresh": "share",
 }
 """Every operation nocs-system knows, with the group that enables it."""
 

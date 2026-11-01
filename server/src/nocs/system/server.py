@@ -10,6 +10,8 @@ in ``/etc/nocs/system.conf.d/``::
     user = nocs                 # the only user served, besides root
     [operations]
     enabled = power hostname storage    # groups of operations to perform
+    [share]
+    internal = /var/lib/nocs    # the internal storage destination, shared (ADR 0037)
 
 The socket is ``/run/nocs-system/socket`` (``NOCS_SYSTEM_SOCKET``), mode 0660 with
 the served user's group. A connection from any other user is closed unanswered.
@@ -48,6 +50,7 @@ from nocs.system.protocol import (
     decode,
     encode,
 )
+from nocs.system.share import Share, SharePaths
 from nocs.system.updates import Updates
 
 log = logging.getLogger("nocs.system")
@@ -88,8 +91,17 @@ def load_config(path: Path, socket_path: Path = SOCKET) -> Config:
             owner=user.pw_name,
             network=Network() if "network" in enabled else None,
             updates=Updates() if "update" in enabled else None,
+            share=_share(parser, path, user.pw_name) if "share" in enabled else None,
         ),
     )
+
+
+def _share(parser: configparser.ConfigParser, path: Path, owner: str) -> Share:
+    internal = parser.get("share", "internal", fallback=str(SharePaths().internal))
+    if not internal.startswith("/") or any(c in internal for c in "\n\r[]"):
+        log.warning("%s: [share] internal must be an absolute path, not %r", path, internal)
+        internal = str(SharePaths().internal)
+    return Share(SharePaths(internal=Path(internal)), owner=owner)
 
 
 class Helper:
@@ -116,6 +128,8 @@ class Helper:
                 tg.start_soon(self._config.context.network.run)
             if self._config.context.updates is not None:
                 tg.start_soon(self._config.context.updates.run)
+            if self._config.context.share is not None:
+                tg.start_soon(self._config.context.share.run)
             await listener.serve(self._connection)
 
     async def reply(self, line: bytes) -> Message:

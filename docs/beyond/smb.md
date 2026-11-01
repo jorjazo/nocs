@@ -1,6 +1,6 @@
 # SMB share plan — the box's images on a desktop PC
 
-Status: decided 2026-11-01 (S0 done) · Last updated: 2026-11-01 · Roadmap: [Beyond v0.1](../roadmap.md#beyond-v01-unordered-backlog) · Decision: [ADR 0037](../adr/0037-smb-share.md)
+Status: in progress (S0 decided 2026-11-01, S1 implemented) · Last updated: 2026-11-01 · Roadmap: [Beyond v0.1](../roadmap.md#beyond-v01-unordered-backlog) · Decision: [ADR 0037](../adr/0037-smb-share.md)
 
 Goal: at home, a desktop PC (Windows, macOS, Linux) opens the box's frames as a
 network folder, without downloading zips through the phone or taking the USB drive
@@ -141,7 +141,7 @@ and nothing announces it.
 | # | Stage | Contents | Check | Estimate | Status |
 |---|---|---|---|---|---|
 | S0 | Decisions | This plan; ADR 0037 | Review with the maintainer | 2 h | Done: decided 2026-11-01 |
-| S1 | nocs-system `share` | The `share` group: `smb.conf` built from the volumes (a pure function), `status`, `enable`, `refresh`; the `nocs` / `nocs` login; `systemctl`, `smbpasswd`, `smbcontrol`, `smbstatus` with argument lists | Unit tests with fake tools on the `PATH` (as `test_system.py`, `test_network.py`): the config for no drives, two drives, a label clash, an unlabelled drive; refusals | 3–4 h | |
+| S1 | nocs-system `share` | The `share` group: `smb.conf` built from the volumes (a pure function), `status`, `enable`, `refresh`; the `nocs` / `nocs` login; `systemctl`, `smbpasswd`, `smbcontrol`, `smbstatus` with argument lists | Unit tests with fake tools on the `PATH` (as `test_system.py`, `test_network.py`): the config for no drives, two drives, a label clash, an unlabelled drive; refusals | 3–4 h | Implemented: `nocs.system.share` (`share.status`, `share.enable`, `share.refresh`); mounting and ejecting a drive refresh the share, ejecting closes its share before unmounting; the group is switched on by the appliance in S2 |
 | S2 | Packaging | `nocs-appliance`: `Depends` on `samba` and `wsdd`; masks Samba's own units in `postinst`; `nocs-share.service`, `nocs-wsdd.service` (priorities, sandboxing); firewall rules by interface; `share` in `appliance.conf`; image build unchanged but bigger | `packaging/deb/test.sh` with the appliance in the systemd container: switch on with `nocs-system call`, `smbclient -N` lists and reads `Internal` as a guest, and as `nocs` / `nocs`; refuses a write, a wrong password for `nocs`, and sees no `config/`; off: nothing on 445. The image builds and its smoke test passes; its size noted | 4–6 h | |
 | S3 | nocsd | `share` state (schemas, TS types), refresh when drives change, the endpoint | API tests with a fake helper; the schema test of the live state | 2–3 h | |
 | S4 | Web UI | Rig: "File sharing" under Network: switch (saying anyone on the network can read the frames), the shares and how to open them (`\\<name>.local\Internal`, `smb://<name>.local`, the `nocs` / `nocs` login for Windows 11), connected computers; en/es; `docs/ux.md`; `docs/user/` (quick start; troubleshooting: Windows 11 and guests) | Browser against a fake helper, phone and wide, Night mode, both languages | 3–4 h | |
