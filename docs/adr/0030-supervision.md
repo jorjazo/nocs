@@ -56,6 +56,14 @@ would not stop a slewing mount. Facts:
   automatically only under a running sequence, as its recovery policy decides
   (phase 5); otherwise the app offers them. The job that was using the device
   fails with the reason.
+
+  **For v0.1** (decided 2026-10-31): step 3 waits until after the release,
+  because which USB port an INDI device sits on cannot be found reliably. Step 4
+  is the `device` policy's escalation in a sequence (ADR 0032): its first retry
+  follows a driver restart, its second a power cycle of the output that feeds the
+  device. The mount is never power cycled automatically (it would lose its
+  position and alignment); outside a sequence, the app offers the power cycle as
+  an action.
 - **nocsd's own watchdog:** its unit is `Type=notify` with `WatchdogSec=30`; a
   task on the event loop sends `WATCHDOG=1` every 10 s through the notify socket
   (standard library only). A loop stuck for 30 s gets nocsd killed and restarted,

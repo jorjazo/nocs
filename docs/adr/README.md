@@ -39,5 +39,6 @@ that supersedes the old one.
 | [0031](0031-sequences.md) | Sequences: model, persistence and who owns the devices | Proposed |
 | [0032](0032-sequence-recovery-and-restarts.md) | Sequences: recovery, safety and restarts | Proposed |
 | [0034](0034-polar-alignment.md) | Polar alignment from three solved frames | Proposed |
+| [0035](0035-apt-repository-and-release-publishing.md) | Apt repository, signing and release publishing | Proposed |
 
 Template: Context → Decision → Consequences.

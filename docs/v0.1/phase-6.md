@@ -1,6 +1,6 @@
 # Phase 6 plan — Appliance
 
-Status: in progress (6.1–6.8 and 6.11 done, 6.9 and 6.10 in part; ADRs proposed) · Last updated: 2026-10-31 · Roadmap: [Phase 6](../roadmap.md#phase-6--appliance)
+Status: in progress (6.1–6.8 and 6.11 done, 6.9 and 6.10 in part; ADRs proposed, open points decided) · Last updated: 2026-10-31 · Roadmap: [Phase 6](../roadmap.md#phase-6--appliance)
 
 Goal: anyone flashes an image onto a Raspberry Pi 5 and runs a full night from a
 phone, with no other computer involved. PC users install the same software from
@@ -19,7 +19,7 @@ no other session is using: the lab Pi stays as it is.
 
 | # | Stage | Contents | Check | Estimate | Status |
 |---|---|---|---|---|---|
-| 6.0 | Decisions | This plan; ADRs 0025–0030 | Review | 4–5 h | Proposed |
+| 6.0 | Decisions | This plan; ADRs 0025–0030, 0035 | Review | 4–5 h | Proposed; hosting, keys, 6.9b and the test Pi decided 2026-10-31 |
 | 6.1 | The `nocs` package | `.deb` with its own Python (uv, python-build-standalone) in `/opt/nocs`, the web app, units for nocsd, indiserver and PHD2 run as the system user `nocs`, `/etc/nocs`, `/var/lib/nocs`; built in CI for amd64 and arm64 ([ADR 0025](../adr/0025-packaging-and-updates.md)) | Installs on a clean Ubuntu 26.04 container; nocsd answers and connects to indiserver | 8–10 h | Implemented: `packaging/deb/`, checked with systemd in a container on amd64 (116 MB package, 478 MB installed); arm64 in CI |
 | 6.2 | Raspberry Pi image | The official Ubuntu image changed in a chroot on an arm64 runner: INDI and PHD2 from their PPAs, `nocs`, ASTAP with D50, NetworkManager; smoke test in `systemd-nspawn` ([ADR 0026](../adr/0026-raspberry-pi-image.md)) | Boots on a Pi 5 from microSD and from a USB SSD; nocsd reachable | 10–14 h | Implemented: `packaging/image/` and the Image workflow; the image builds and passes its smoke test in CI. Booting it on a Pi 5 waits for a Pi that no other work needs |
 | 6.3 | nocs-system | The privileged helper: Unix socket, peer credentials, a closed list of operations, nocsd's client; reboot, power off (and the Pi 5's power button), host name ([ADR 0027](../adr/0027-nocs-system.md)) | Unit tests with fake tools; reboot from the app on a test Pi | 5–7 h | Implemented: `nocs.system` (helper, client, `nocs-system call`), `system` state, `POST /api/system/reboot` and `/poweroff` (refused while a job runs unless forced), `PUT /api/system/hostname`; packaged and checked in the container. Buttons come with the System screen (6.4); reboot, power off and the Pi 5's button are still to check on a test Pi |
@@ -28,10 +28,10 @@ no other session is using: the lab Pi stays as it is.
 | 6.6 | Network | Access point `NOCS-xxxx`, joining a network from the app with a fallback, Ethernet, country, firewall closing indiserver and PHD2 to the network, nocsd on port 80, SSH off by default ([ADR 0028](../adr/0028-networking.md)) | Phones (iOS, Android) on the access point and on home Wi-Fi; the fallback when the network goes | 12–16 h | Implemented: `nocs.system.network` (one actor: the access point `NOCS-xxxx` with DNS for `<host>.local`, joining with test-and-revert, the fallback, pinned modes, country) and its `network.*` operations; `network` state and API; the image on NetworkManager with nftables (only 22, 80, mDNS, DHCP, DNS from outside), nocsd on port 80 and SSH by key only; Network on Rig. Checked against a simulated NetworkManager and in a browser; phones on a real access point wait for a test Pi |
 | 6.7 | First boot | Presets from Raspberry Pi Imager (cloud-init) or a file on the boot partition; first run asks for the access point's password, the country, the name, time and site, storage and home Wi-Fi; `_http._tcp` over mDNS | Fresh image to first frame from a phone | 6–8 h | Implemented: after pairing, the owner sets the access point's country and own password, and may join a home network, before anything else (`POST /api/system/network/setup`; the access point restarts after the reply); Raspberry Pi Imager's presets (Wi-Fi, host name, SSH key) through cloud-init; `_http._tcp` over avahi. Checked in a browser; the whole first boot on a Pi waits for a test Pi |
 | 6.8 | Time and site | chrony sets the system clock from NTP, a USB GPS (gpsd) or the client; the GPS site is offered to the profile ([ADR 0029](../adr/0029-system-time-and-site.md)) | Pi without network or RTC battery; a USB GPS | 6–8 h | Implemented: `time.set` in nocs-system; nocsd reads the clock's source (`chronyc -c sources`, else timedatectl) into `clock.source` and sets the clock from a client's report when nothing keeps it and no job runs; gpsd's fix in `gps`, `POST /api/gps/site` for the active profile and the mount; the image has gpsd (USB autodetect) and chrony reading it, and enables every operation of nocs-system (`/etc/nocs/system.conf.d/appliance.conf`). Checked with fake tools and a fake gpsd; a real GPS waits for a test Pi. To do: remember across nocsd restarts that the clock was set from a client this boot (phase 5.12 makes NTP and GPS count as a known time) |
-| 6.9 | Supervision | Spike (a frozen driver and indiserver); detection of hung indiserver, drivers and PHD2; recovery ladder; nocsd's systemd watchdog; the hardware watchdog ([ADR 0030](../adr/0030-supervision.md)) | Simulators frozen with `SIGSTOP`; a camera unplugged mid-exposure | 8–10 h | Partly implemented: the spike (in ADR 0030); indiserver pinged every 10 s and, hung, restarted through nocs-system (`services.restart`, also from the app) and reconnected; nocsd under systemd's watchdog (`Type=notify`, 30 s); the hardware watchdog on in the image. Left for 6.9b, with the sequencer's recovery policies: restarting one hung driver, USB reset and power cycling through the PPBA |
-| 6.10 | Updates | Signed apt repository with `stable` and `testing`; update from the app only when asked and never during a job; OS updates downloaded, not installed by themselves; rollback to the previous version | Update a test Pi from one build to the next and back | 8–10 h | In part: nocs-system's `update` group (check with apt; install and roll back in a transient `nocs-update` unit, so that restarting nocs-system and nocsd does not kill apt; the previous NOCS reinstalled from apt's cache), `updates` state, the API (installing refused while a job runs, unless forced) and Updates on Rig; unattended-upgrades only downloads and needrestart only lists (6.2). Waits for the hosting decision: the signed apt repository with `stable` and `testing` |
+| 6.9 | Supervision | Spike (a frozen driver and indiserver); detection of hung indiserver, drivers and PHD2; recovery ladder; nocsd's systemd watchdog; the hardware watchdog ([ADR 0030](../adr/0030-supervision.md)) | Simulators frozen with `SIGSTOP`; a camera unplugged mid-exposure | 8–10 h | Partly implemented: the spike (in ADR 0030); indiserver pinged every 10 s and, hung, restarted through nocs-system (`services.restart`, also from the app) and reconnected; nocsd under systemd's watchdog (`Type=notify`, 30 s); the hardware watchdog on in the image. Left for 6.9b, with the sequencer's recovery policies (ADR 0032): a device that stops answering, restarting its driver, and power cycling the output that feeds it as the `device` policy's escalation (never the mount; offered in the app outside a sequence). USB reset comes after v0.1 |
+| 6.10 | Updates | Signed apt repository with `stable` and `testing`; update from the app only when asked and never during a job; OS updates downloaded, not installed by themselves; rollback to the previous version | Update a test Pi from one build to the next and back | 8–10 h | In part: nocs-system's `update` group (check with apt; install and roll back in a transient `nocs-update` unit, so that restarting nocs-system and nocsd does not kill apt; the previous NOCS reinstalled from apt's cache), `updates` state, the API (installing refused while a job runs, unless forced) and Updates on Rig; unattended-upgrades only downloads and needrestart only lists (6.2). Left: `nocs-appliance` as its own package, so a flashed Pi gets fixes to its network and system settings by updating; the signed apt repository on Cloudflare R2 with `stable` and `testing` ([ADR 0035](../adr/0035-apt-repository-and-release-publishing.md)) |
 | 6.11 | User documentation | Quick start, supported hardware (tested, and anything INDI supports), troubleshooting, PC install | Someone else follows the quick start | 6–8 h | Written: `docs/user/` (quick start, supported hardware, troubleshooting, PC install). Screens and names to check against the release; someone else following it waits for the release candidate |
-| 6.12 | Release | Release candidate, field test with a freshly flashed Pi, v0.1 | Exit criterion | 4–6 h + a night | |
+| 6.12 | Release | Licenses of what the image redistributes; ADRs 0025–0030 and 0035 accepted; `v0.1.0-rc.1` (package `0.1.0~rc1`) published to `stable`; the hardware checks left from 6.2–6.8 on the lab Pi booted from a spare SSD; a night from a freshly flashed Pi with only a phone ([checklist](release.md)); v0.1 | Exit criterion | 4–6 h + a night | |
 
 Total **87–115 h**, above the roadmap's 50–70 h. Not in v0.1 unless decided
 otherwise: HTTPS on the LAN (a local certificate authority, 8–10 h), which would
@@ -60,16 +60,25 @@ Order: 6.0 → 6.1 → 6.3 → 6.4 → 6.2 → 6.5 → 6.8 → 6.6 → 6.7 → 6
 - Nothing restarts behind a session: no unattended installs, no automatic service
   restarts after library upgrades, no network switch while a phone is on the
   access point.
+- Decided 2026-10-31 by the maintainer:
+  - **Hosting:** Cloudflare R2 behind a domain of the maintainer's, for the apt
+    repository and the image; GitHub Releases carries notes, checksums and the
+    link (ADR 0035).
+  - **Signing key:** only in CI, rotated by shipping a new keyring in the package.
+  - **Suites:** `testing` from every push to `main` (last 5 builds), `stable` from
+    tags (last 3); no channel switch in the app in v0.1.
+  - **6.9b:** driver restart and power cycling through the power box in v0.1, USB
+    reset after it (ADR 0030).
+  - **Test Pi:** a spare SSD or microSD for the lab Pi, booted in agreed windows,
+    for the hardware checks and the release's field test; the lab's own card stays
+    as it is.
+  - Out of v0.1: HTTPS on the LAN, a channel switch in the app, listing NOCS in
+    Raspberry Pi Imager.
 
 ## Open questions
 
-- A Pi 5 for the stages that change a Pi's network and services (a second Pi, a
-  spare microSD or SSD for the lab Pi in an agreed window, or Ethernet to the lab
-  Pi so its Wi-Fi can be tested while SSH stays up).
-- Hosting for the image (over 2 GiB compressed, more than GitHub Releases takes per
-  file) and the apt repository.
-- Whether to trim v0.1 (USB GPS, the PC apt repository, automatic recovery beyond
-  restarting drivers) to come closer to the roadmap's estimate.
+- The domain for the repository, and the R2 bucket and its token (the
+  maintainer's accounts).
 
 ## Measured
 

@@ -87,6 +87,10 @@ shape what to do instead:
 - A `device` failure waits for the role to be ready again before retrying, which
   covers ADR 0030's driver and indiserver restarts. Resetting a USB port or
   cycling a power output from a policy waits until nocs-system offers them.
+  (2026-10-31, phase 6.9b: the `device` policy restarts the device's driver before
+  its first retry and power cycles the output that feeds it, through the power
+  box's driver, before its second; never the mount's. USB reset comes after v0.1;
+  ADR 0030.)
 
 ## Consequences
 
