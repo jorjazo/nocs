@@ -44,7 +44,7 @@ from typing import Any, Protocol, cast
 import anyio
 
 from nocs.clock import Clock
-from nocs.devices import Camera, DeviceError, FilterWheel, Frame, FrameType, Mount
+from nocs.devices import Camera, Coordinates, DeviceError, FilterWheel, Frame, FrameType, Mount
 from nocs.devices.camera import Region
 from nocs.equipment import EquipmentService, Role, Site
 from nocs.equipment.service import IndiConnection
@@ -137,6 +137,20 @@ class Shot:
     taken: datetime
     exposure: float
     bayer: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class KeptFrame:
+    """The main camera's frame behind its preview, kept to solve it (Live view's
+    "Solve this frame") until a newer frame replaces it."""
+
+    shot: Shot
+    owned: bool
+    """A preview's file, which NOCS deletes when it is replaced; else a saved frame."""
+    pointing: Coordinates | None
+    """Where the mount said it pointed (J2000) when the frame arrived."""
+    stars: int
+    hfr: float | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -300,6 +314,8 @@ class CaptureService:
         self._used_by: dict[Role, str] = {}
         """Cameras another client drives (PHD2), whose frames NOCS only previews."""
         self._following: dict[Role, asyncio.Task[None]] = {}
+        self._kept: dict[Role, KeptFrame] = {}
+        self._pointing: Callable[[], Coordinates | None] = lambda: None
 
         # Frames left by a previous run (stopped mid-exposure) are of no use now.
         for leftover in self._incoming_dir.glob("*"):
@@ -372,6 +388,15 @@ class CaptureService:
     def use_guider(self, guider: Guider) -> None:
         """Where series dither, and where saved frames get their guiding figures."""
         self._guider = guider
+
+    def use_pointing(self, position: Callable[[], Coordinates | None]) -> None:
+        """Where the mount points (J2000), recorded with the frame kept for solving."""
+        self._pointing = position
+
+    def kept(self, role: Role = Role.MAIN_CAMERA) -> KeptFrame | None:
+        """The frame behind ``role``'s preview, if it is still on disk."""
+        kept = self._kept.get(role)
+        return kept if kept is not None and kept.shot.path.exists() else None
 
     def expose(
         self,
@@ -773,6 +798,7 @@ class CaptureService:
 
     async def _preview(self, role: Role, shot: Shot, *, discard: bool) -> FrameAnalysis | None:
         """Analyse a frame in the worker and publish its preview; never raises."""
+        analysis: FrameAnalysis | None = None
         try:
             analysis = await self._worker.analyze(role.value, str(shot.path), shot.bayer)
         except asyncio.CancelledError:
@@ -781,10 +807,14 @@ class CaptureService:
             log.warning("no preview for %s: %s", shot.path.name, e)
             analysis = None
         finally:
-            if discard:
+            if discard and (role not in SAVING_ROLES or analysis is None):
                 await anyio.to_thread.run_sync(lambda: shot.path.unlink(missing_ok=True))
         if analysis is None:
             return None  # failed, or a newer frame replaced it
+        if role in SAVING_ROLES:
+            await self._keep(
+                role, KeptFrame(shot, discard, self._pointing(), analysis.stars, analysis.hfr)
+            )
         self._previews[role] = {
             "url": f"/api/previews/{FsPath(analysis.preview).name}",
             "width": analysis.width,
@@ -804,6 +834,13 @@ class CaptureService:
         }
         self._publish(role)
         return analysis
+
+    async def _keep(self, role: Role, frame: KeptFrame) -> None:
+        """Keep the frame behind the new preview; delete the one it replaces."""
+        previous = self._kept.get(role)
+        self._kept[role] = frame
+        if previous is not None and previous.owned and previous.shot.path != frame.shot.path:
+            await anyio.to_thread.run_sync(lambda: previous.shot.path.unlink(missing_ok=True))
 
     def _claim(self, path: FsPath, role: Role) -> FsPath:
         """Move a frame the driver saved out of the upload directory (blocking).
@@ -931,6 +968,7 @@ class CaptureService:
         summary["exposure"] = self._exposures.get(role, EXPOSURE_DEFAULT)
         summary["last_frame"] = self._last_frames.get(role)
         summary["preview"] = self._previews.get(role)
+        summary["solvable"] = self.kept(role) is not None
         summary["used_by"] = self._used_by.get(role)
         previous = self._published.get(role)
         path = (*ROOT, role.value)

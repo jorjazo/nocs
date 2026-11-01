@@ -525,6 +525,7 @@ export const en = {
     title: "Plate solve",
     solve: "Solve",
     solveSync: "Solve and sync",
+    solveShown: "Solve this frame",
     sync: "Sync the mount",
     synced: "Mount synced",
     hint: "Takes a frame with the camera's exposure, finds where it points, and can tell the mount.",

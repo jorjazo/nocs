@@ -11,7 +11,7 @@ import pytest
 from nocs.api.schemas import CenteringState, JobInfo
 from nocs.devices import Coordinates, FrameType
 from nocs.equipment import Role
-from nocs.imaging import Shot, StarMetrics
+from nocs.imaging import KeptFrame, Shot, StarMetrics
 from nocs.jobs import JobContext, JobManager, ResourceBusyError
 from nocs.mount.service import PointingError
 from nocs.pointing import CenteringService, CenterOptions, PointingService
@@ -58,6 +58,9 @@ class FakeCapture:
         path = self.directory / f"shot{self.taken}.fits"
         path.touch()
         return Shot(path, 0, FrameType.LIGHT, TAKEN, seconds, None)
+
+    def kept(self, role: Role = Role.MAIN_CAMERA) -> KeptFrame | None:
+        return None
 
     async def measure(self, shot: Shot, *, discard: bool = True) -> StarMetrics:
         return StarMetrics(80, 2.0, 0.1)

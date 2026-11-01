@@ -1,6 +1,7 @@
 <script lang="ts">
   // Plate solving from Live view (phase 3.2): solve a frame of the main camera,
-  // or solve and sync the mount in one go, then the latest solution: where the
+  // or solve and sync the mount in one go, or solve the frame on screen without
+  // taking another (even while a loop runs), then the latest solution: where the
   // frame points, its angle and scale, and how far that is from where the mount
   // thought it pointed. After a plain solve the mount can be synced to it.
   import Banner from "../../components/Banner.svelte";
@@ -19,6 +20,7 @@
     field,
     job,
     disabled,
+    shown = false,
     mountBusy,
     run,
   }: {
@@ -29,6 +31,8 @@
     job: CameraJob | null;
     // Not the owner, or the camera is busy.
     disabled: boolean;
+    // The frame behind the preview can be solved as it is.
+    shown?: boolean;
     // Another job (a go to, the pad) holds the mount, which must keep still for a frame.
     mountBusy: boolean;
     run: (action: () => Promise<unknown>) => Promise<void>;
@@ -92,6 +96,11 @@
         onclick={() => void run(() => solve({ sync: true }))}>
         {t.solve.solveSync}
       </Button>
+      {#if shown}
+        <Button disabled={solveReason !== null} onclick={() => void run(() => solve({ frame: "last" }))}>
+          {t.solve.solveShown}
+        </Button>
+      {/if}
     </div>
   </div>
   {#if solveReason}

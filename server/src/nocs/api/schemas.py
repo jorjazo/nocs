@@ -215,6 +215,9 @@ class CameraState(StateModel):
     )
     last_frame: FrameInfo | None
     preview: Preview | None = Field(description="Latest preview, from any exposure or loop.")
+    solvable: bool = Field(
+        default=False, description="The preview's frame is kept to solve it (main camera)."
+    )
     used_by: Literal["phd2"] | None = Field(
         description="Another client drives the camera (PHD2, ADR 0023): NOCS shows its frames"
         " and takes none of its own."
@@ -1324,6 +1327,11 @@ class SolveRequest(BaseModel):
     )
     binning: int | None = Field(default=None, ge=1, description="For this frame only.")
     sync: bool = Field(default=False, description="Sync the mount to the solution.")
+    frame: Literal["new", "last"] = Field(
+        default="new",
+        description='"last": solve the frame behind the preview instead of taking one '
+        "(without exposure, binning nor sync).",
+    )
 
 
 class CenterRequest(BaseModel):

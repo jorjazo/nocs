@@ -296,6 +296,11 @@ Plate solve (stage 3.2):
   has moved since the frame. A synced solution shows a chip instead.
 - A failed solve is explained in the panel by its reason (not enough stars, no
   solution, no database…), not in the dock's generic banner.
+- "Solve this frame" (after the first field test) solves the frame behind the
+  preview as it is, without another exposure, also while a loop runs: NOCS keeps
+  that frame until a newer one replaces it. The mount's position is the one when
+  the frame arrived, and "Sync the mount" still refuses once the mount has moved.
+  Solve and sync keeps taking a fresh frame.
 
 Centre (stage 3.3):
 

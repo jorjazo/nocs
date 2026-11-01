@@ -512,6 +512,7 @@ export const es: Messages = {
     title: "Resolución de placa",
     solve: "Resolver",
     solveSync: "Resolver y sincronizar",
+    solveShown: "Resolver este cuadro",
     sync: "Sincronizar la montura",
     synced: "Montura sincronizada",
     hint: "Toma una imagen con la exposición de la cámara, averigua adónde apunta y puede decírselo a la montura.",

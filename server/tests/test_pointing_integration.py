@@ -298,3 +298,34 @@ def test_center_corrects_the_pointing_error(api: TestClient, method: str) -> Non
     target = result["target"]
     final = solved[-1]["solution"]
     assert separation(final["ra"], final["dec"], target["ra"], target["dec"]) * 60 <= 1.0
+
+
+@pytest.mark.indi
+def test_solve_the_frame_on_screen(api: TestClient) -> None:
+    """Live view's "Solve this frame": the frame behind the preview, without exposing."""
+    api.post(
+        "/api/cameras/main_camera/settings",
+        json={"region": "full", "binning": 1, "frame_type": "light", "exposure": EXPOSURE},
+    )
+    goto(api, *FIELD)
+    job: dict[str, Any] = {}
+    for attempt in range(ATTEMPTS):
+        rotate(api, attempt * TURN % 360)
+        try:
+            body = {"exposure": EXPOSURE, "save": False}
+            shown = run(api, api.post("/api/cameras/main_camera/expose", json=body))
+        finally:
+            rotate(api, 0)
+        assert shown["state"] == "succeeded", shown
+        assert state(api)["cameras"]["main_camera"]["solvable"] is True
+        job = run(api, api.post("/api/solver/solve", json={"frame": "last"}))
+        assert job["resources"] == []
+        if job["state"] == "succeeded":
+            break
+    else:
+        pytest.skip(f"none of {ATTEMPTS} frames of the CCD simulator solved: {job['error']}")
+    solved = state(api)["solver"]["last"]
+    mount = state(api)["mount"]
+    assert solved["mount"]["ra"] == pytest.approx(mount["ra_j2000"], abs=1 / 60)
+    bad = api.post("/api/solver/solve", json={"frame": "last", "sync": True})
+    assert bad.status_code == 422, bad.text

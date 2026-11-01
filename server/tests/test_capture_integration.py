@@ -379,13 +379,18 @@ def test_loop_makes_previews_and_keeps_nothing(
     assert api.post(f"/api/jobs/{job_id}/cancel").status_code == 202
     wait(api, finished(job_id))
     assert job(api, job_id)["state"] == "cancelled"
-    # Loop frames are analysed and then deleted, never kept. A driver may still save
-    # the frame that was downloading when the loop stopped; the next exposure of
-    # that camera clears it.
+    # Loop frames are analysed and then deleted, never saved: only the frame behind
+    # the preview stays, to solve it. A driver may still save the frame that was
+    # downloading when the loop stopped; the next exposure of that camera clears it.
     time.sleep(1)
     assert sorted((data_dir / "NOCS").rglob("*.fits")) == saved
     last = api.post("/api/cameras/main_camera/expose", json={"exposure": 0.1, "save": False})
     wait(api, finished(last.json()["job"]))
-    for directory in (data_dir / "incoming", transfer):
-        if directory is not None:
-            assert not list(directory.glob("main_camera_*")), directory
+    wait(api, lambda s: s["cameras"]["main_camera"]["solvable"])
+    left = [
+        path
+        for directory in (data_dir / "incoming", transfer)
+        if directory is not None
+        for path in directory.glob("main_camera_*")
+    ]
+    assert len(left) == 1, left

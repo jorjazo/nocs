@@ -45,6 +45,11 @@ shared with polar alignment (phase 4) and re-centring and the meridian flip
   horizon profile. ERFA's refraction is not used: it is ~15′ short at the horizon.
   Visibility counts the darkest window the night has (astronomical, else nautical,
   else civil) and apparent altitudes against max(minimum, horizon profile).
+- "Solve this frame" (first field test: the maintainer expected Solve to solve the
+  preview): the capture keeps the main camera's frame behind its preview (a
+  preview's file until a newer frame replaces it; a saved frame stays where it was
+  saved) with the mount's J2000 position when it arrived; `POST /api/solver/solve`
+  with `"frame": "last"` solves a hard link to it in a job that locks nothing.
 - Tonight's target lives on the server (`plan.target`), not in the browser: every
   client shows the same one, and the sequence builder (5.13) starts from it. Going
   to a target from Plan also makes it tonight's target; Go and Go and centre go

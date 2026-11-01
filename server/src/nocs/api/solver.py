@@ -24,6 +24,14 @@ def solver_router(
 
     @router.post("/solve", status_code=status.HTTP_202_ACCEPTED)
     async def solve(request: SolveRequest) -> JobStarted:  # pyright: ignore[reportUnusedFunction]
+        if request.frame == "last":
+            if request.sync or request.exposure is not None or request.binning is not None:
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    "the last frame is solved as it is: no exposure, binning nor sync",
+                )
+            with _errors():
+                return JobStarted(job=pointing().start_kept())
         options = SolveOptions(
             exposure=request.exposure, binning=request.binning, sync=request.sync
         )

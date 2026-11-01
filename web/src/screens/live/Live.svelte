@@ -387,6 +387,7 @@
           field={camera.field}
           job={solveJob}
           disabled={!owner || busy || !!running}
+          shown={owner && camera.solvable && solveJob?.info.state !== "running"}
           mountBusy={mountJob !== null}
           run={act} />
       {/if}

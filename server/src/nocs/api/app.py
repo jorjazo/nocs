@@ -73,7 +73,7 @@ from nocs.api.targets import targets_router
 from nocs.auth import AuthStore
 from nocs.clock import Clock
 from nocs.config import Settings
-from nocs.devices import DeviceError, Location
+from nocs.devices import Coordinates, DeviceError, Location
 from nocs.devices.camera import Region
 from nocs.equipment import (
     Connection,
@@ -386,6 +386,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
         )
         services.plan = PlanService(store, settings.config_dir)
         services.capture.use_guider(services.guiding)
+        services.capture.use_pointing(lambda: _pointing(services.mount))
         services.sequences = SequenceService(
             store,
             services.jobs,
@@ -1017,3 +1018,13 @@ def _catalog_target(name: str) -> SkyTarget | None:
     catalog: TargetCatalog = loaded_catalog() or bundled_catalog()
     found = catalog.get(name)
     return SkyTarget(found.ra, found.dec) if found else None
+
+
+def _pointing(mount: MountService | None) -> Coordinates | None:
+    """Where the mount points (J2000), if there is a mount that says."""
+    if mount is None:
+        return None
+    try:
+        return mount.position()
+    except (MountNotReadyError, DeviceError, KeyError):
+        return None

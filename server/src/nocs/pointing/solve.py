@@ -15,12 +15,16 @@ their own; ``start`` runs it in a ``solve`` job of its own for the API. A solve:
 The frame is deleted afterwards. The solution, with the mount's position, the
 offset between the two and whether the mount was synced, goes to ``solver.last``;
 ``sync`` syncs the mount to it later, if the mount has not moved since.
+
+``start_kept`` solves the frame behind the main camera's preview instead (Live
+view's "Solve this frame"), with the mount's position recorded when it arrived.
 """
 
 from __future__ import annotations
 
 import logging
 import math
+import os
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path as FsPath
@@ -30,7 +34,7 @@ import anyio
 
 from nocs.devices import Coordinates, DeviceError, FrameType
 from nocs.equipment import Role
-from nocs.imaging import Shot, StarMetrics
+from nocs.imaging import KeptFrame, Shot, StarMetrics
 from nocs.jobs import JobContext, JobManager
 from nocs.mount.service import MountNotReadyError, PointingError
 from nocs.solving import Hint, SolveResult, separation
@@ -66,6 +70,7 @@ class Frames(Protocol):
         label: str = "",
     ) -> Shot: ...
     async def measure(self, shot: Shot, *, discard: bool = True) -> StarMetrics: ...
+    def kept(self, role: Role = Role.MAIN_CAMERA) -> KeptFrame | None: ...
 
 
 class Solver(Protocol):
@@ -181,6 +186,55 @@ class PointingService:
             return self._describe(solved)
 
         return self._jobs.start("solve", self.resources(role), job)
+
+    def start_kept(self, role: Role = Role.MAIN_CAMERA) -> str:
+        """Solve the frame behind ``role``'s preview in a job of its own; returns its id.
+
+        It locks nothing: the frame is on disk already, and the solution is of the
+        sky as it was then. A later ``sync`` checks that the mount has not moved since.
+        """
+        if self._capture.kept(role) is None:
+            raise PointingError("no frame to solve: take one first")
+        self._solver.check(self._fov(role))
+
+        async def job(context: JobContext) -> Json:
+            return self._describe(await self.solve_kept(context, role))
+
+        return self._jobs.start("solve", [], job)
+
+    async def solve_kept(self, context: JobContext, role: Role = Role.MAIN_CAMERA) -> FrameSolve:
+        """Solve the frame behind ``role``'s preview; raises SolveError or PointingError."""
+        kept = self._capture.kept(role)
+        if kept is None:
+            raise PointingError("no frame to solve: take one first")
+        shot = kept.shot
+        image = shot.path
+        if kept.owned:
+            # A preview's file goes when a newer frame arrives: solve a link to it.
+            image = shot.path.with_name(f"{shot.path.stem}.solving{shot.path.suffix}")
+            try:
+                await anyio.to_thread.run_sync(os.link, shot.path, image)
+            except FileNotFoundError:
+                raise PointingError("a newer frame replaced it: solve that one") from None
+        try:
+            context.progress(None, "solving")
+            mount = kept.pointing
+            hint = Hint(mount.ra, mount.dec) if mount is not None else None
+            result = await self._solver.solve(image, fov=self._fov(role), hint=hint, hfr=kept.hfr)
+        finally:
+            if kept.owned:
+                await anyio.to_thread.run_sync(lambda: image.unlink(missing_ok=True))
+        solution = result.solution
+        solved = FrameSolve(
+            result,
+            taken=shot.taken - timedelta(seconds=shot.exposure / 2),
+            mount=mount,
+            offset=offset(mount.ra, mount.dec, solution.ra, solution.dec) if mount else None,
+            stars=kept.stars,
+            hfr=kept.hfr,
+        )
+        self._last = solved
+        return solved
 
     def check(self, options: SolveOptions, role: Role = Role.MAIN_CAMERA) -> None:
         """Raise now what a solve with ``options`` would fail on in its job: no

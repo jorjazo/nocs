@@ -1438,6 +1438,11 @@
         "sensor": {
           "$ref": "#/$defs/SensorInfo"
         },
+        "solvable": {
+          "default": false,
+          "description": "The preview's frame is kept to solve it (main camera).",
+          "type": "boolean"
+        },
         "target": {
           "anyOf": [
             {
@@ -7741,6 +7746,15 @@
           ],
           "default": null,
           "description": "Seconds; None: the camera's exposure."
+        },
+        "frame": {
+          "default": "new",
+          "description": "\"last\": solve the frame behind the preview instead of taking one (without exposure, binning nor sync).",
+          "enum": [
+            "new",
+            "last"
+          ],
+          "type": "string"
         },
         "sync": {
           "default": false,

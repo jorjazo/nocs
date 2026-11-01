@@ -536,6 +536,10 @@ export interface CameraState {
   remaining: number | null;
   sensor: SensorInfo;
   /**
+   * The preview's frame is kept to solve it (main camera).
+   */
+  solvable?: boolean;
+  /**
    * Cooling target set through NOCS, °C.
    */
   target: number | null;
@@ -3869,6 +3873,10 @@ export interface SolveRequest {
    * Seconds; None: the camera's exposure.
    */
   exposure?: number | null;
+  /**
+   * "last": solve the frame behind the preview instead of taking one (without exposure, binning nor sync).
+   */
+  frame?: "new" | "last";
   /**
    * Sync the mount to the solution.
    */

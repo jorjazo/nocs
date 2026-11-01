@@ -11,7 +11,7 @@ from fakeastap import calls, install_fake_astap, write_frame
 from nocs.api.schemas import JobInfo, SolverState
 from nocs.devices import Coordinates, FrameType
 from nocs.equipment import Role
-from nocs.imaging import Shot, StarMetrics
+from nocs.imaging import KeptFrame, Shot, StarMetrics
 from nocs.jobs import JobContext, JobManager
 from nocs.mount.service import MountNotReadyError, PointingError
 from nocs.pointing import PointingService, SolveOptions, offset
@@ -55,6 +55,8 @@ class FakeCapture:
         self.shots: list[Shot] = []
         self.taken_with: list[tuple[float, int]] = []
         self.stars = StarMetrics(120, 3.2, 0.1)
+        self.preview: KeptFrame | None = None
+        """The frame behind the preview, as CaptureService keeps it."""
 
     def camera(self, role: Role) -> FakeCameraDevice:
         return self.device
@@ -75,6 +77,9 @@ class FakeCapture:
         shot = Shot(path, path.stat().st_size, FrameType.LIGHT, TAKEN, seconds, None)
         self.shots.append(shot)
         return shot
+
+    def kept(self, role: Role = Role.MAIN_CAMERA) -> KeptFrame | None:
+        return self.preview
 
     async def measure(self, shot: Shot, *, discard: bool = True) -> StarMetrics:
         assert not discard  # the solver still needs the frame
@@ -219,6 +224,50 @@ async def test_no_sync_once_the_mount_moved(rig: Rig) -> None:
     with pytest.raises(PointingError, match=r"moved 30\.0 arcminutes"):
         await rig.service.sync()
     assert rig.mount.syncs == []
+
+
+def keep_preview(rig: Rig, pointing: Coordinates | None = MOUNT) -> Path:
+    path = write_frame(rig.directory / "preview.fits")
+    shot = Shot(path, path.stat().st_size, FrameType.LIGHT, TAKEN, 4.0, None)
+    rig.capture.preview = KeptFrame(shot, owned=True, pointing=pointing, stars=80, hfr=1.6)
+    return path
+
+
+async def test_solve_the_frame_behind_the_preview(rig: Rig) -> None:
+    with pytest.raises(PointingError, match="no frame to solve"):
+        rig.service.start_kept()
+    path = keep_preview(rig)
+    job_id = rig.service.start_kept()
+    await rig.jobs.wait(job_id)
+    job = rig.store.get(("jobs", job_id))
+    assert isinstance(job, dict)
+    assert job["state"] == "succeeded", job["error"]
+    # Nothing to lock: no exposure, nothing moves.
+    assert job["resources"] == []
+    assert rig.capture.taken_with == []
+    [command] = calls(rig.directory)
+    # A link to the preview's frame, which a newer frame may delete meanwhile.
+    assert command[command.index("-f") + 1] == str(path.with_name("preview.solving.fits"))
+    assert command[command.index("-ra") + 1] == f"{MOUNT.ra:.6f}"
+    assert command[command.index("-z") + 1] == "1"  # from the preview's HFR
+    assert path.exists()
+    assert not path.with_name("preview.solving.fits").exists()
+
+    last = rig.solver_state()["last"]
+    assert last["mount"] == {"ra": MOUNT.ra, "dec": MOUNT.dec}
+    assert last["taken"] == (TAKEN - timedelta(seconds=2)).isoformat(timespec="seconds")
+    # A sync to it later, while the mount is where it was.
+    assert (await rig.service.sync())["synced"] is True
+
+
+async def test_the_frame_behind_the_preview_went_away(rig: Rig) -> None:
+    keep_preview(rig).unlink()
+    job_id = rig.service.start_kept()
+    await rig.jobs.wait(job_id)
+    job = rig.store.get(("jobs", job_id))
+    assert isinstance(job, dict)
+    assert job["state"] == "failed"
+    assert "newer frame" in str(job["error"])
 
 
 async def test_a_refused_sync_fails_the_job_but_keeps_the_solution(rig: Rig) -> None:

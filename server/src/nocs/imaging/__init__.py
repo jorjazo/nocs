@@ -6,6 +6,7 @@ from nocs.imaging.capture import (
     CameraNotReadyError,
     CameraSettings,
     CaptureService,
+    KeptFrame,
     Shot,
     image_connector,
 )
@@ -17,6 +18,7 @@ __all__ = [
     "CameraNotReadyError",
     "CameraSettings",
     "CaptureService",
+    "KeptFrame",
     "Shot",
     "StarMetrics",
     "image_connector",
