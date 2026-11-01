@@ -25,6 +25,7 @@
   import TargetDetail from "./screens/plan/TargetDetail.svelte";
   import ProfileEditor from "./screens/ProfileEditor.svelte";
   import Rig from "./screens/Rig.svelte";
+  import Report from "./screens/session/Report.svelte";
   import Session from "./screens/session/Session.svelte";
   import Tonight from "./screens/tonight/Tonight.svelte";
 
@@ -137,6 +138,8 @@
       <Tonight />
     {:else if router.route.screen === "plan"}
       <Plan />
+    {:else if router.route.screen === "report"}
+      {#key router.route.id}<Report id={router.route.id} />{/key}
     {:else if router.route.screen === "sequence"}
       <SequenceScreen />
     {:else if router.route.screen === "target"}

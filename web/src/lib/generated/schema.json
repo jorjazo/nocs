@@ -6812,6 +6812,226 @@
       "title": "Region",
       "type": "object"
     },
+    "ReportFilter": {
+      "properties": {
+        "clouds": {
+          "description": "Frames taken under clouds.",
+          "type": "integer"
+        },
+        "filter": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "frames": {
+          "description": "Light frames, those under clouds left out.",
+          "type": "integer"
+        },
+        "guide_rms": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Median total guiding RMS, arcseconds."
+        },
+        "hfr": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Median HFR of its frames, pixels."
+        },
+        "integration": {
+          "description": "Seconds of those frames.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "filter",
+        "frames",
+        "integration",
+        "clouds",
+        "hfr",
+        "guide_rms"
+      ],
+      "title": "ReportFilter",
+      "type": "object"
+    },
+    "ReportFocus": {
+      "properties": {
+        "filter": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "hfr": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "position": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "What triggered it; None: a step of the sequence."
+        },
+        "temperature": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The focuser's, \u00b0C."
+        },
+        "time": {
+          "description": "UTC, ISO 8601, when the run ended.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "time",
+        "reason",
+        "filter",
+        "position",
+        "hfr",
+        "temperature"
+      ],
+      "title": "ReportFocus",
+      "type": "object"
+    },
+    "ReportFrame": {
+      "properties": {
+        "clouds": {
+          "description": "Too few stars: kept, and taken again (ADR 0032).",
+          "type": "boolean"
+        },
+        "exposure": {
+          "type": "number"
+        },
+        "filter": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "frame_type": {
+          "$ref": "#/$defs/FrameTypeName"
+        },
+        "guide_rms": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Total guiding RMS during the frame, arcseconds."
+        },
+        "hfr": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "id": {
+          "type": "integer"
+        },
+        "stars": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "started": {
+          "description": "UTC, ISO 8601, exposure start.",
+          "type": "string"
+        },
+        "temperature": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The sensor's, \u00b0C."
+        },
+        "url": {
+          "description": "Download URL.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "started",
+        "frame_type",
+        "filter",
+        "exposure",
+        "stars",
+        "hfr",
+        "guide_rms",
+        "temperature",
+        "clouds",
+        "url"
+      ],
+      "title": "ReportFrame",
+      "type": "object"
+    },
     "Role": {
       "enum": [
         "main_camera",
@@ -7317,6 +7537,160 @@
         "device"
       ],
       "title": "SerialPortInfo",
+      "type": "object"
+    },
+    "SessionReport": {
+      "properties": {
+        "duration": {
+          "description": "Seconds from its start to its end, or to now.",
+          "type": "number"
+        },
+        "events": {
+          "description": "Every event, oldest first.",
+          "items": {
+            "$ref": "#/$defs/SequenceEvent"
+          },
+          "type": "array"
+        },
+        "failures": {
+          "description": "Steps that failed, retried or not.",
+          "type": "integer"
+        },
+        "filters": {
+          "items": {
+            "$ref": "#/$defs/ReportFilter"
+          },
+          "type": "array"
+        },
+        "focus": {
+          "items": {
+            "$ref": "#/$defs/ReportFocus"
+          },
+          "type": "array"
+        },
+        "frames": {
+          "description": "Oldest first.",
+          "items": {
+            "$ref": "#/$defs/ReportFrame"
+          },
+          "type": "array"
+        },
+        "integration": {
+          "description": "Seconds of light frames, those under clouds left out.",
+          "type": "number"
+        },
+        "recoveries": {
+          "description": "Devices brought back (driver restarts, power cycles).",
+          "type": "integer"
+        },
+        "session": {
+          "$ref": "#/$defs/SessionSummary"
+        },
+        "temperatures": {
+          "items": {
+            "$ref": "#/$defs/TemperatureRecord"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "session",
+        "duration",
+        "integration",
+        "filters",
+        "frames",
+        "focus",
+        "temperatures",
+        "failures",
+        "recoveries",
+        "events"
+      ],
+      "title": "SessionReport",
+      "type": "object"
+    },
+    "SessionSummary": {
+      "description": "A sequence's run, as the catalog keeps it (phase 5.15).",
+      "properties": {
+        "ended": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "None while it runs, or if nocsd stopped meanwhile."
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "id": {
+          "type": "integer"
+        },
+        "name": {
+          "type": "string"
+        },
+        "outcome": {
+          "anyOf": [
+            {
+              "enum": [
+                "completed",
+                "stopped",
+                "failed"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "profile": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "restarts": {
+          "type": "integer"
+        },
+        "run": {
+          "type": "string"
+        },
+        "sequence": {
+          "description": "The sequence's id.",
+          "type": "string"
+        },
+        "started": {
+          "description": "UTC, ISO 8601.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "run",
+        "sequence",
+        "name",
+        "profile",
+        "started",
+        "ended",
+        "outcome",
+        "error",
+        "restarts"
+      ],
+      "title": "SessionSummary",
       "type": "object"
     },
     "SetPropertyRequest": {

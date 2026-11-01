@@ -126,6 +126,8 @@ export type {
   SequenceState,
   SequenceStopRequest,
   SerialPortInfo,
+  SessionReport,
+  SessionSummary,
   SetPropertyRequest,
   ShutdownRequest,
   Site,

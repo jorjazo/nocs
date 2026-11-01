@@ -11,6 +11,7 @@
   import { router } from "../../lib/router.svelte";
   import Monitor from "./Monitor.svelte";
   import NightFrames from "./NightFrames.svelte";
+  import PastSessions from "./PastSessions.svelte";
 
   const t = $derived(i18n.t);
   const run = $derived(live.app.sequence?.run ?? null);
@@ -36,6 +37,7 @@
 {/if}
 
 {#if auth.owner}
+  <div class="past"><PastSessions /></div>
   <div class="frames"><NightFrames /></div>
 {:else if !run}
   <EmptyState icon="session" title={t.nights.ownerOnly} body={t.nights.ownerOnlyBody} />
@@ -45,6 +47,7 @@
   .again {
     margin-top: var(--space-2);
   }
+  .past,
   .frames {
     margin-top: var(--space-6);
   }

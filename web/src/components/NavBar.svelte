@@ -12,6 +12,7 @@
     const screen = router.route.screen;
     if (screen === "dev" || screen === "profile") return "rig";
     if (screen === "target" || screen === "sequence") return "plan";
+    if (screen === "report") return "session";
     if (screen === "focus" || screen === "guiding" || screen === "polar") return "tonight";
     return screen;
   });

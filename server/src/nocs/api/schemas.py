@@ -1465,6 +1465,66 @@ class FrameRecord(WireModel):
     guiding: FrameGuiding | None = Field(description="None: not guided, or saved before 4.5.")
 
 
+class SessionSummary(WireModel):
+    """A sequence's run, as the catalog keeps it (phase 5.15)."""
+
+    id: int
+    run: str
+    sequence: str = Field(description="The sequence's id.")
+    name: str
+    profile: str | None
+    started: str = Field(description="UTC, ISO 8601.")
+    ended: str | None = Field(description="None while it runs, or if nocsd stopped meanwhile.")
+    outcome: Literal["completed", "stopped", "failed"] | None
+    error: str | None
+    restarts: int
+
+
+class ReportFrame(WireModel):
+    id: int
+    started: str = Field(description="UTC, ISO 8601, exposure start.")
+    frame_type: FrameTypeName
+    filter: str | None
+    exposure: float
+    stars: int | None
+    hfr: float | None
+    guide_rms: float | None = Field(description="Total guiding RMS during the frame, arcseconds.")
+    temperature: float | None = Field(description="The sensor's, °C.")
+    clouds: bool = Field(description="Too few stars: kept, and taken again (ADR 0032).")
+    url: str = Field(description="Download URL.")
+
+
+class ReportFilter(WireModel):
+    filter: str | None
+    frames: int = Field(description="Light frames, those under clouds left out.")
+    integration: float = Field(description="Seconds of those frames.")
+    clouds: int = Field(description="Frames taken under clouds.")
+    hfr: float | None = Field(description="Median HFR of its frames, pixels.")
+    guide_rms: float | None = Field(description="Median total guiding RMS, arcseconds.")
+
+
+class ReportFocus(WireModel):
+    time: str = Field(description="UTC, ISO 8601, when the run ended.")
+    reason: str | None = Field(description="What triggered it; None: a step of the sequence.")
+    filter: str | None
+    position: float | None
+    hfr: float | None
+    temperature: float | None = Field(description="The focuser's, °C.")
+
+
+class SessionReport(WireModel):
+    session: SessionSummary
+    duration: float = Field(description="Seconds from its start to its end, or to now.")
+    integration: float = Field(description="Seconds of light frames, those under clouds left out.")
+    filters: list[ReportFilter]
+    frames: list[ReportFrame] = Field(description="Oldest first.")
+    focus: list[ReportFocus]
+    temperatures: list[TemperatureRecord]
+    failures: int = Field(description="Steps that failed, retried or not.")
+    recoveries: int = Field(description="Devices brought back (driver restarts, power cycles).")
+    events: list[SequenceEvent] = Field(description="Every event, oldest first.")
+
+
 class JobStarted(WireModel):
     job: str
 

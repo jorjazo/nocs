@@ -519,6 +519,9 @@ class StorageService:
         volumes = Volumes(self._paths)
         return [Located(row, _locate(volumes, row)) for row in rows]
 
+    def frames_by_id(self, frame_ids: list[int]) -> list[FrameRow]:
+        return self._require_catalog().frames_by_id(frame_ids)
+
     def frame(self, frame_id: int) -> Located | None:
         row = self._require_catalog().frame(frame_id)
         return Located(row, _locate(Volumes(self._paths), row)) if row is not None else None

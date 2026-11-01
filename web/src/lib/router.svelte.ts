@@ -6,7 +6,8 @@ export const TABS: readonly Tab[] = ["tonight", "live", "plan", "session", "rig"
 
 // The profile editor hangs off Rig: #/rig/profile/<id>, or #/rig/profile/new; a
 // target's page off Plan: #/plan/<catalog id>, and the sequence builder:
-// #/plan/sequence (no catalog id is "sequence").
+// #/plan/sequence (no catalog id is "sequence"); a session's report off Session:
+// #/session/<id>.
 // Autofocus (#/focus), guiding (#/guiding) and polar alignment (#/polar) are
 // full-screen flows over whichever tab opened them.
 export type Route =
@@ -15,6 +16,7 @@ export type Route =
   | { screen: "focus" }
   | { screen: "guiding" }
   | { screen: "sequence" }
+  | { screen: "report"; id: number }
   | { screen: "polar" }
   | { screen: "profile"; id: string | null }
   | { screen: "target"; id: string };
@@ -28,6 +30,7 @@ function parse(hash: string): Route {
   if (first === "guiding") return { screen: "guiding" };
   if (first === "polar") return { screen: "polar" };
   if (first === "plan" && second === "sequence") return { screen: "sequence" };
+  if (first === "session" && second && /^\d+$/.test(second)) return { screen: "report", id: Number(second) };
   if (first === "plan" && second) return { screen: "target", id: decodeURIComponent(second) };
   if (first === "rig" && second === "profile" && third) {
     return { screen: "profile", id: third === "new" ? null : decodeURIComponent(third) };
@@ -40,6 +43,7 @@ export function href(route: Route): string {
   if (route.screen === "profile") return `#/rig/profile/${route.id === null ? "new" : encodeURIComponent(route.id)}`;
   if (route.screen === "target") return `#/plan/${encodeURIComponent(route.id)}`;
   if (route.screen === "sequence") return "#/plan/sequence";
+  if (route.screen === "report") return `#/session/${route.id}`;
   return `#/${route.screen}`;
 }
 

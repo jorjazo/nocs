@@ -595,6 +595,19 @@ class Catalog:
             ).fetchone()
         return _frame(row) if row is not None else None
 
+    def frames_by_id(self, frame_ids: list[int]) -> list[FrameRow]:
+        """These frames, oldest first; ids not in the catalog are left out."""
+        found: list[FrameRow] = []
+        with self._lock:
+            for start in range(0, len(frame_ids), 500):
+                chunk = frame_ids[start : start + 500]
+                marks = ",".join("?" * len(chunk))
+                rows = self._db.execute(
+                    f"SELECT {_FRAME_COLUMNS} {_FRAME_JOINS} WHERE f.id IN ({marks})", chunk
+                ).fetchall()
+                found.extend(_frame(row) for row in rows)
+        return sorted(found, key=lambda frame: frame.id)
+
     def frames(self, query: FrameFilter) -> list[FrameRow]:
         """Newest first."""
         conditions: list[str] = []

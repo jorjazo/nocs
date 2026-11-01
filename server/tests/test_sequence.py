@@ -617,6 +617,8 @@ async def test_frames_under_clouds_are_taken_again_after_a_wait() -> None:
     assert failures(events) == [("targets.0.1", "clouds", "retry")] * 2
     counted = [e.data["id"] for e in events if e.kind is EventKind.FRAME]
     assert counted == [1, 2, 5, 6]
+    # The frames under the cloud were kept: the report marks them.
+    assert [e.data["frame"] for e in events if e.kind is EventKind.FAILED] == [3, 4]
 
 
 async def test_clouds_until_the_condition_ends_the_target() -> None:

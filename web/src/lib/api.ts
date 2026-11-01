@@ -54,6 +54,8 @@ import type {
   SequencePauseRequest,
   SequenceStopRequest,
   SerialPortInfo,
+  SessionReport,
+  SessionSummary,
   ShutdownRequest,
   Site,
   SkyChart,
@@ -586,4 +588,17 @@ export function resumeSequence(): Promise<void> {
 
 export function stopSequence(body: SequenceStopRequest = {}): Promise<void> {
   return request("POST", "/api/sequence/stop", body);
+}
+
+// Runs of sequences, newest first, and their reports (phase 5.15).
+export function listSessions(limit = 20): Promise<SessionSummary[]> {
+  return request("GET", `/api/sessions?limit=${limit}`);
+}
+
+export function sessionReport(id: number): Promise<SessionReport> {
+  return request("GET", `/api/sessions/${id}/report`);
+}
+
+export function sessionCsvUrl(id: number): string {
+  return `/api/sessions/${id}/frames.csv`;
 }

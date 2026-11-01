@@ -3578,6 +3578,86 @@ export interface Profile {
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "ReportFilter".
+ */
+export interface ReportFilter {
+  /**
+   * Frames taken under clouds.
+   */
+  clouds: number;
+  filter: string | null;
+  /**
+   * Light frames, those under clouds left out.
+   */
+  frames: number;
+  /**
+   * Median total guiding RMS, arcseconds.
+   */
+  guide_rms: number | null;
+  /**
+   * Median HFR of its frames, pixels.
+   */
+  hfr: number | null;
+  /**
+   * Seconds of those frames.
+   */
+  integration: number;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "ReportFocus".
+ */
+export interface ReportFocus {
+  filter: string | null;
+  hfr: number | null;
+  position: number | null;
+  /**
+   * What triggered it; None: a step of the sequence.
+   */
+  reason: string | null;
+  /**
+   * The focuser's, °C.
+   */
+  temperature: number | null;
+  /**
+   * UTC, ISO 8601, when the run ended.
+   */
+  time: string;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "ReportFrame".
+ */
+export interface ReportFrame {
+  /**
+   * Too few stars: kept, and taken again (ADR 0032).
+   */
+  clouds: boolean;
+  exposure: number;
+  filter: string | null;
+  frame_type: FrameTypeName;
+  /**
+   * Total guiding RMS during the frame, arcseconds.
+   */
+  guide_rms: number | null;
+  hfr: number | null;
+  id: number;
+  stars: number | null;
+  /**
+   * UTC, ISO 8601, exposure start.
+   */
+  started: string;
+  /**
+   * The sensor's, °C.
+   */
+  temperature: number | null;
+  /**
+   * Download URL.
+   */
+  url: string;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "Sequence".
  */
 export interface Sequence {
@@ -3725,6 +3805,93 @@ export interface SerialPortInfo {
    * Stable /dev/serial/by-id/ name.
    */
   path: string;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "SessionReport".
+ */
+export interface SessionReport {
+  /**
+   * Seconds from its start to its end, or to now.
+   */
+  duration: number;
+  /**
+   * Every event, oldest first.
+   */
+  events: SequenceEvent[];
+  /**
+   * Steps that failed, retried or not.
+   */
+  failures: number;
+  filters: ReportFilter[];
+  focus: ReportFocus[];
+  /**
+   * Oldest first.
+   */
+  frames: ReportFrame[];
+  /**
+   * Seconds of light frames, those under clouds left out.
+   */
+  integration: number;
+  /**
+   * Devices brought back (driver restarts, power cycles).
+   */
+  recoveries: number;
+  session: SessionSummary;
+  temperatures: TemperatureRecord[];
+}
+/**
+ * A sequence's run, as the catalog keeps it (phase 5.15).
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "SessionSummary".
+ */
+export interface SessionSummary {
+  /**
+   * None while it runs, or if nocsd stopped meanwhile.
+   */
+  ended: string | null;
+  error: string | null;
+  id: number;
+  name: string;
+  outcome: ("completed" | "stopped" | "failed") | null;
+  profile: string | null;
+  restarts: number;
+  run: string;
+  /**
+   * The sequence's id.
+   */
+  sequence: string;
+  /**
+   * UTC, ISO 8601.
+   */
+  started: string;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "TemperatureRecord".
+ */
+export interface TemperatureRecord {
+  /**
+   * The weather role's, °C.
+   */
+  ambient: number | null;
+  /**
+   * °C.
+   */
+  dew_point: number | null;
+  /**
+   * The focuser's probe, °C.
+   */
+  focuser: number | null;
+  /**
+   * %.
+   */
+  humidity: number | null;
+  /**
+   * UTC, ISO 8601.
+   */
+  time: string;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -3911,32 +4078,6 @@ export interface TargetRequest {
    * None to clear it.
    */
   target: string | null;
-}
-/**
- * This interface was referenced by `NOCSAPI`'s JSON-Schema
- * via the `definition` "TemperatureRecord".
- */
-export interface TemperatureRecord {
-  /**
-   * The weather role's, °C.
-   */
-  ambient: number | null;
-  /**
-   * °C.
-   */
-  dew_point: number | null;
-  /**
-   * The focuser's probe, °C.
-   */
-  focuser: number | null;
-  /**
-   * %.
-   */
-  humidity: number | null;
-  /**
-   * UTC, ISO 8601.
-   */
-  time: string;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema

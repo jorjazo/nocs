@@ -66,6 +66,7 @@ from nocs.api.schemas import (
     TemplateRequest,
 )
 from nocs.api.sequences import sequences_router
+from nocs.api.sessions import sessions_router
 from nocs.api.sky import sky_router
 from nocs.api.solver import align_router, solver_router
 from nocs.api.system import system_router
@@ -455,6 +456,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
     app.include_router(align_router(polar))
     app.include_router(accessories_router(focuser, filter_wheel, autofocus))
     app.include_router(sequences_router(sequences))
+    app.include_router(sessions_router(storage, lambda: clock().now()))
     app.include_router(sky_router(saved_site, clock, _catalog_target))
     app.include_router(targets_router())
     app.include_router(plan_router(plan))

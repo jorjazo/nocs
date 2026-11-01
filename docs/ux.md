@@ -409,6 +409,18 @@ Session monitor (stage 5.14):
   later); while it is paused they say so, with Resume. A paused sequence's job
   lends its devices (`suspended` in the jobs' state), so their controls work.
 
+Session report (stage 5.15):
+
+- The Session tab lists the past sessions under the monitor, newest first, each
+  with its date and how it ended; one opens its report (`#/session/<id>`).
+- The report: the name, date and profile; the window (start → end, length) and how
+  it ended, with the error; totals (integration, frames, frames under clouds,
+  failures and how many were recovered); a table per filter (frames, with those
+  under clouds in brackets, integration, median HFR and guiding RMS); the HFR of
+  each frame over the night with autofocus runs as dashed lines; the focuser's and
+  the ambient temperature (solid and dashed); the autofocus runs with their
+  position, HFR, filter and what triggered them; every event; Frames as CSV.
+
 ## 8. Open UX questions
 
 - How to expose the full sequence tree editor (advanced) without cluttering the

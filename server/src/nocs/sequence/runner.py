@@ -80,10 +80,14 @@ class StepError(Exception):
     """A step failed with a kind of failure the recovery policies know (ADR 0032);
     ``role`` names the device behind a ``device`` failure, when it is known."""
 
-    def __init__(self, kind: FailureKind, message: str, *, role: str | None = None) -> None:
+    def __init__(
+        self, kind: FailureKind, message: str, *, role: str | None = None, frame: int | None = None
+    ) -> None:
         super().__init__(message)
         self.kind: FailureKind = kind
         self.role = role
+        self.frame = frame
+        """The catalog id of a frame kept although it failed (under clouds)."""
 
 
 class Executor(Protocol):
@@ -549,7 +553,8 @@ class Runner:
         good = self._stars.setdefault((path, index), [])
         least = max(CLOUD_STARS, statistics.median(good) / 4) if good else CLOUD_STARS
         if result.stars < least:
-            raise StepError("clouds", f"{result.stars} stars, fewer than {least:g}")
+            message = f"{result.stars} stars, fewer than {least:g}"
+            raise StepError("clouds", message, frame=result.frame)
         good.append(result.stars)
         del good[:-GOOD_FRAMES]
         return result
@@ -571,12 +576,14 @@ class Runner:
                 kind: FailureKind = e.kind if isinstance(e, StepError) else "other"
                 policy = self._sequence.policy(kind)
                 again = policy.retries is None or tries < policy.retries
-                self._event(
-                    EventKind.FAILED,
-                    str(e) or type(e).__name__,
-                    path,
-                    {"kind": kind, "attempt": tries + 1, "then": "retry" if again else policy.then},
-                )
+                data: dict[str, Json] = {
+                    "kind": kind,
+                    "attempt": tries + 1,
+                    "then": "retry" if again else policy.then,
+                }
+                if isinstance(e, StepError) and e.frame is not None:
+                    data["frame"] = e.frame  # kept, and marked in the report (ADR 0032)
+                self._event(EventKind.FAILED, str(e) or type(e).__name__, path, data)
                 if again:
                     tries += 1
                     if isinstance(e, StepError) and e.kind == "device":
