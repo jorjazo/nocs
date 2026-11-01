@@ -2012,13 +2012,21 @@
     "Condition": {
       "discriminator": {
         "mapping": {
-          "until_time": "#/$defs/UntilTime"
+          "until_dawn": "#/$defs/UntilDawn",
+          "until_time": "#/$defs/UntilTime",
+          "while_above": "#/$defs/WhileAbove"
         },
         "propertyName": "kind"
       },
       "oneOf": [
         {
           "$ref": "#/$defs/UntilTime"
+        },
+        {
+          "$ref": "#/$defs/UntilDawn"
+        },
+        {
+          "$ref": "#/$defs/WhileAbove"
         }
       ]
     },
@@ -2181,6 +2189,14 @@
       ],
       "title": "CoolingRequest",
       "type": "object"
+    },
+    "Darkness": {
+      "enum": [
+        "civil",
+        "nautical",
+        "astronomical"
+      ],
+      "type": "string"
     },
     "DarknessName": {
       "enum": [
@@ -5174,6 +5190,9 @@
           "$ref": "#/$defs/Outputs"
         },
         {
+          "$ref": "#/$defs/Wait"
+        },
+        {
           "$ref": "#/$defs/ExposurePlan"
         },
         {
@@ -7793,6 +7812,23 @@
       "title": "Unpark",
       "type": "object"
     },
+    "UntilDawn": {
+      "additionalProperties": false,
+      "description": "Until the night ends: the end of this twilight (needs the site).",
+      "properties": {
+        "darkness": {
+          "$ref": "#/$defs/Darkness",
+          "default": "astronomical"
+        },
+        "kind": {
+          "const": "until_dawn",
+          "default": "until_dawn",
+          "type": "string"
+        }
+      },
+      "title": "UntilDawn",
+      "type": "object"
+    },
     "UntilTime": {
       "additionalProperties": false,
       "properties": {
@@ -7950,6 +7986,57 @@
       "title": "ValueRange",
       "type": "object"
     },
+    "Wait": {
+      "additionalProperties": false,
+      "description": "Wait for a time, for the night to get dark, or for the target to rise.\n\nThe runner itself waits, letting stops, pauses and conditions take effect.",
+      "properties": {
+        "altitude": {
+          "anyOf": [
+            {
+              "maximum": 90,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Until the target is this high (degrees) and above the horizon profile."
+        },
+        "dusk": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Darkness"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Until the Sun is below this twilight's end."
+        },
+        "kind": {
+          "const": "wait",
+          "default": "wait",
+          "type": "string"
+        },
+        "time": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "Wait",
+      "type": "object"
+    },
     "Warm": {
       "additionalProperties": false,
       "properties": {
@@ -8030,6 +8117,26 @@
         "east"
       ],
       "type": "string"
+    },
+    "WhileAbove": {
+      "additionalProperties": false,
+      "description": "While the container's target is this high and above the horizon profile.",
+      "properties": {
+        "altitude": {
+          "default": 30,
+          "description": "Degrees, apparent.",
+          "maximum": 90,
+          "minimum": 0,
+          "type": "number"
+        },
+        "kind": {
+          "const": "while_above",
+          "default": "while_above",
+          "type": "string"
+        }
+      },
+      "title": "WhileAbove",
+      "type": "object"
     }
   },
   "title": "NOCS API"

@@ -28,9 +28,10 @@ from anyio.streams.memory import MemoryObjectReceiveStream, MemoryObjectSendStre
 from nocs.clock import Clock
 from nocs.equipment import Role
 from nocs.jobs import JobContext, JobManager
-from nocs.sequence.model import Sequence
+from nocs.sequence.model import Sequence, needs_site
 from nocs.sequence.rig import Parts, RigExecutor, take_back
 from nocs.sequence.runner import Checkpoint, CheckpointFile, Event, Outcome, Runner
+from nocs.sequence.sky import Place
 from nocs.sequence.store import SequenceError, SequenceStore
 from nocs.state import Json, Path, StateStore
 from nocs.storage import Session, SessionEvent
@@ -79,6 +80,7 @@ class SequenceService:
         *,
         recorder: Recorder | None = None,
         profile: Callable[[], str | None] = lambda: None,
+        place: Callable[[], Place | None] = lambda: None,
     ) -> None:
         self._store = store
         self._jobs = jobs
@@ -88,6 +90,7 @@ class SequenceService:
         self._parts = parts
         self._recorder = recorder
         self._profile = profile
+        self._place = place
         self._runner: Runner | None = None
         self._job: str | None = None
         self._running: str | None = None
@@ -119,6 +122,8 @@ class SequenceService:
         sequence = self._definitions.get(sequence_id)
         if sequence is None:
             raise KeyError(sequence_id)
+        if needs_site(sequence) and self._place() is None:
+            raise ValueError("this sequence asks about the sky: set the site in the profile")
         self._parts().capture.camera(Role.MAIN_CAMERA)  # refused now, not in the job
         return self._start(sequence_id, sequence, None)
 
@@ -209,6 +214,7 @@ class SequenceService:
             save=self._checkpoint.save,
             on_event=self._on_event,
             on_change=self._publish,
+            place=self._place,
         )
         runner.checkpoint.sequence = sequence_id
         self._runner = runner

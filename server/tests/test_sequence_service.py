@@ -24,7 +24,18 @@ from nocs.focus.autofocus import AutofocusOptions
 from nocs.imaging.capture import CameraSettings, Captured
 from nocs.jobs import JobContext, JobManager, ResourceBusyError
 from nocs.sequence import CheckpointFile, Container, ExposurePlan, PlanRow, Sequence, SequenceStore
-from nocs.sequence.model import Autofocus, Cool, Guide, Outputs, Park, Slew, Target, Unpark, Warm
+from nocs.sequence.model import (
+    Autofocus,
+    Cool,
+    Guide,
+    Outputs,
+    Park,
+    Slew,
+    Target,
+    Unpark,
+    UntilDawn,
+    Warm,
+)
 from nocs.sequence.rig import Parts
 from nocs.sequence.service import SequenceBusyError, SequenceService
 from nocs.state import Json, StateStore
@@ -499,3 +510,12 @@ async def test_a_run_of_a_deleted_sequence_is_forgotten(tmp_path: Path) -> None:
     service = service_on(tmp_path, store, jobs, Rig(jobs, store), Recorder())
     assert await service.recover(lambda: None, lambda: True) is None
     assert checkpoint.load() is None
+
+
+async def test_a_sequence_that_asks_about_the_sky_needs_the_site(setup: Any) -> None:
+    service, *_ = setup
+    dark = lrgb()
+    dark.targets.conditions.append(UntilDawn())
+    service.put("dark", dark)
+    with pytest.raises(ValueError, match="set the site"):
+        service.start("dark")

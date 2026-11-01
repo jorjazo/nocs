@@ -29,6 +29,7 @@ import anyio
 from pydantic import AwareDatetime, Field, ValidationError
 
 from nocs.equipment.profiles import write_atomic
+from nocs.sequence import sky
 from nocs.sequence.model import (
     Action,
     Autofocus,
@@ -44,6 +45,10 @@ from nocs.sequence.model import (
     SequenceModel,
     Target,
     Trigger,
+    UntilDawn,
+    UntilTime,
+    Wait,
+    WhileAbove,
     key,
     plans,
 )
@@ -55,6 +60,8 @@ CLOUD_STARS = 3
 """A light frame with fewer stars than this (or a quarter of its row's recent ones) is
 taken under clouds."""
 GOOD_FRAMES = 5
+WAIT_POLL = 30.0
+"""Seconds between looks at the sky (or the clock) while a ``Wait`` waits."""
 WAIT_STEP = 5.0
 """Seconds between safe points while a policy waits."""
 
@@ -265,10 +272,12 @@ class Runner:
         on_event: Callable[[Event], None] | None = None,
         on_change: Callable[[], None] | None = None,
         sleep: Callable[[float], Awaitable[None]] = anyio.sleep,
+        place: Callable[[], sky.Place | None] = lambda: None,
     ) -> None:
         """Run ``sequence`` afresh, or from ``checkpoint`` after a restart."""
         self._sequence = sequence
         self._sleep = sleep
+        self._place = place
         self._reported: BaseException | None = None
         """The failure that ended the session, already in the events."""
         self._stars: dict[tuple[PathKey, int], list[int]] = {}
@@ -391,6 +400,8 @@ class Runner:
                     await self._container(child, path, end.target)
                 elif isinstance(child, ExposurePlan):
                     await self._plan(child, path, end.target)
+                elif isinstance(child, Wait):
+                    await self._wait_for(child, path, end.target)
                 else:
                     await self._action(child, path, end.target)
             except Exception as e:
@@ -417,6 +428,8 @@ class Runner:
                         await self._container(child, child_path, scope.target)
                     elif isinstance(child, ExposurePlan):
                         await self._plan(child, child_path, scope.target)
+                    elif isinstance(child, Wait):
+                        await self._wait_for(child, child_path, scope.target)
                     else:
                         await self._action(child, child_path, scope.target)
                 iteration += 1
@@ -620,8 +633,51 @@ class Runner:
         now = self._now()
         for scope in self._scopes:
             for condition in scope.container.conditions:
-                if not condition.holds(now):
+                if not self._holds(condition, scope.target, now):
                     raise _ConditionEnded(scope.path, condition)
+
+    def _holds(self, condition: Condition, target: Target | None, now: datetime) -> bool:
+        match condition:
+            case UntilTime():
+                return condition.holds(now)
+            case UntilDawn():
+                return now < sky.dawn(self._where(), now, condition.darkness)
+            case WhileAbove():
+                return self._above(target, condition.altitude, now)
+
+    def _above(self, target: Target | None, minimum: float, now: datetime) -> bool:
+        if target is None or target.ra is None or target.dec is None:
+            raise ValueError("an altitude needs a target with coordinates")
+        altitude, horizon = sky.altitude(self._where(), target.ra, target.dec, now)
+        return altitude >= max(minimum, horizon)
+
+    def _where(self) -> sky.Place:
+        place = self._place()
+        if place is None:
+            raise ValueError("the site is unknown: set it in the profile")
+        return place
+
+    async def _wait_for(self, wait: Wait, path: tuple[str, ...], target: Target | None) -> None:
+        """Wait until the time, the dusk or the altitude, through safe points."""
+
+        def ready() -> bool:
+            now = self._now()
+            if wait.time is not None:
+                return now >= wait.time
+            if wait.dusk is not None:
+                return sky.dark(self._where(), now, wait.dusk)
+            assert wait.altitude is not None
+            return self._above(target, wait.altitude, now)
+
+        here = key(path)
+        self._current = here
+        started = self._now()
+        while not ready():
+            self._on_change()
+            await self._wait(WAIT_POLL)
+        waited = (self._now() - started).total_seconds()
+        self._event(EventKind.ACTION, "wait", here, {"waited": round(waited)})
+        await self._save()
 
     async def _pause(self) -> None:
         self._pause_asked = False

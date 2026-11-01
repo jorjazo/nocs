@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -12,6 +13,7 @@ import anyio.lowlevel
 import pytest
 from pydantic import ValidationError
 
+from nocs.devices import Location
 from nocs.sequence import (
     Checkpoint,
     CheckpointFile,
@@ -29,6 +31,7 @@ from nocs.sequence import (
     SequenceStore,
     StepError,
     Target,
+    sky,
 )
 from nocs.sequence.model import (
     Action,
@@ -40,10 +43,15 @@ from nocs.sequence.model import (
     SelectFilter,
     Slew,
     Unpark,
+    UntilDawn,
     UntilTime,
+    Wait,
     Warm,
+    WhileAbove,
+    needs_site,
 )
 from nocs.sequence.runner import PlanProgress, count_frame, next_row
+from nocs.sequence.sky import Place
 
 START = datetime(2026, 11, 1, 0, 0, tzinfo=UTC)
 M42 = Target(name="M 42", ra=5.588, dec=-5.39)
@@ -679,3 +687,81 @@ async def test_a_stop_takes_effect_while_waiting_for_the_sky() -> None:
     assert await runner.run() is Outcome.STOPPED
     assert rig.slept == 60
     assert rig.calls[-2:] == ["park", "warm"]
+
+
+# -- the night's sky (phase 5.9) ----------------------------------------------------
+
+DIAGUITAS = Place(Location(-30.0277, -70.6733, 700))
+NGC_253 = Target(name="NGC 253", ra=0.7927, dec=-25.288)
+
+
+def at_site(sequence: Sequence, rig: Rig, events: list[Event] | None = None) -> Runner:
+    return Runner(
+        sequence,
+        rig,
+        now=rig.now,
+        sleep=rig.sleep,
+        place=lambda: DIAGUITAS,
+        on_event=(events.append if events is not None else None),
+    )
+
+
+async def test_until_dawn_ends_the_night() -> None:
+    rig = Rig()
+    rig.time = datetime(2026, 11, 1, 6, 0, tzinfo=UTC)  # 03:00 at the site
+    dawn = sky.dawn(DIAGUITAS, rig.time, "astronomical")
+    plan = ExposurePlan(rows=[row("L", 100, exposure=300)])
+    tonight = Container(target=NGC_253, conditions=[UntilDawn()], children=[plan])
+    events: list[Event] = []
+    assert await at_site(night(tonight), rig, events).run() is Outcome.COMPLETED
+    taken = len(frames(rig))
+    assert taken == math.ceil(
+        (dawn - datetime(2026, 11, 1, 6, 0, tzinfo=UTC)).total_seconds() / 300
+    )
+    assert rig.time >= dawn
+    assert any(e.kind is EventKind.CONDITION for e in events)
+
+
+async def test_waiting_for_dusk() -> None:
+    rig = Rig()
+    rig.time = datetime(2026, 10, 31, 20, 0, tzinfo=UTC)  # 17:00, the Sun is up
+    events: list[Event] = []
+    sequence = night(
+        Container(
+            target=NGC_253, children=[Wait(dusk="astronomical"), ExposurePlan(rows=[row("L", 1)])]
+        )
+    )
+    await at_site(sequence, rig, events).run()
+    [waited] = [e for e in events if e.message == "wait"]
+    first = rig.time - timedelta(seconds=60)  # when the frame started
+    assert sky.dark(DIAGUITAS, first, "astronomical")
+    assert not sky.dark(DIAGUITAS, first - timedelta(seconds=31), "astronomical")
+    assert isinstance(waited.data["waited"], int)
+    assert waited.data["waited"] > 3 * 3600
+
+
+async def test_a_target_is_imaged_while_it_is_high_enough() -> None:
+    rig = Rig()
+    # NGC 253 sets through the night of 2026-11-01 at the site; wait until it rises
+    # above 60° first, then image it while above 40°.
+    rig.time = datetime(2026, 11, 1, 0, 0, tzinfo=UTC)
+    plan = ExposurePlan(rows=[row("L", 1000, exposure=300)])
+    tonight = Container(
+        target=NGC_253,
+        conditions=[WhileAbove(altitude=40)],
+        children=[Wait(altitude=60), plan],
+    )
+    await at_site(night(tonight), rig).run()
+    assert frames(rig)
+    altitude, _ = sky.altitude(DIAGUITAS, NGC_253.ra or 0, NGC_253.dec or 0, rig.time)
+    assert 38 < altitude < 40.5  # it set below 40° during the last frame
+
+
+async def test_the_sky_needs_the_site() -> None:
+    rig = Rig()
+    sequence = night(Container(target=NGC_253, conditions=[UntilDawn()], children=[Slew()]))
+    assert needs_site(sequence)
+    assert not needs_site(night(target(row("L", 1))))
+    runner = Runner(sequence, rig, now=rig.now)
+    assert await runner.run() is Outcome.FAILED
+    assert "site is unknown" in str(runner.status()["error"])

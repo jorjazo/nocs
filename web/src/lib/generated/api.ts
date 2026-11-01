@@ -103,13 +103,13 @@ export type TargetType =
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "Condition".
  */
-export type Condition = UntilTime;
+export type Condition = UntilTime | UntilDawn | WhileAbove;
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "Node".
  */
 export type Node =
-  Cool | Warm | Unpark | Park | Slew | SelectFilter | Autofocus | Guide | Outputs | ExposurePlan | Container;
+  Cool | Warm | Unpark | Park | Slew | SelectFilter | Autofocus | Guide | Outputs | Wait | ExposurePlan | Container;
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "Name".
@@ -120,6 +120,11 @@ export type Name = string;
  * via the `definition` "OutputId".
  */
 export type OutputId = string;
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "Darkness".
+ */
+export type Darkness = "civil" | "nautical" | "astronomical";
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "Trigger".
@@ -2342,6 +2347,29 @@ export interface UntilTime {
   time: string;
 }
 /**
+ * Until the night ends: the end of this twilight (needs the site).
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "UntilDawn".
+ */
+export interface UntilDawn {
+  darkness?: "civil" | "nautical" | "astronomical";
+  kind?: "until_dawn";
+}
+/**
+ * While the container's target is this high and above the horizon profile.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "WhileAbove".
+ */
+export interface WhileAbove {
+  /**
+   * Degrees, apparent.
+   */
+  altitude?: number;
+  kind?: "while_above";
+}
+/**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "ConnectRequest".
  */
@@ -2447,6 +2475,26 @@ export interface Outputs {
    * @minItems 1
    */
   outputs: [OutputId, ...OutputId[]];
+}
+/**
+ * Wait for a time, for the night to get dark, or for the target to rise.
+ *
+ * The runner itself waits, letting stops, pauses and conditions take effect.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "Wait".
+ */
+export interface Wait {
+  /**
+   * Until the target is this high (degrees) and above the horizon profile.
+   */
+  altitude?: number | null;
+  /**
+   * Until the Sun is below this twilight's end.
+   */
+  dusk?: Darkness | null;
+  kind?: "wait";
+  time?: string | null;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema

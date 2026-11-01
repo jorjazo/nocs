@@ -121,6 +121,8 @@ type Action = Annotated[
 # -- exposure plans -----------------------------------------------------------------
 
 type FrameKind = Literal["light", "dark", "flat", "bias"]
+type Darkness = Literal["civil", "nautical", "astronomical"]
+"""Which twilight ends the night (as in ``nocs.sky``)."""
 
 
 class PlanRow(SequenceModel):
@@ -144,8 +146,43 @@ class ExposurePlan(SequenceModel):
     frame_type: FrameKind = "light"
 
 
+class Wait(SequenceModel):
+    """Wait for a time, for the night to get dark, or for the target to rise.
+
+    The runner itself waits, letting stops, pauses and conditions take effect.
+    """
+
+    kind: Literal["wait"] = "wait"
+    time: AwareDatetime | None = None
+    dusk: Darkness | None = Field(
+        default=None, description="Until the Sun is below this twilight's end."
+    )
+    altitude: float | None = Field(
+        default=None,
+        ge=0,
+        le=90,
+        description="Until the target is this high (degrees) and above the horizon profile.",
+    )
+
+    @model_validator(mode="after")
+    def _one_reason(self) -> Self:
+        if sum(x is not None for x in (self.time, self.dusk, self.altitude)) != 1:
+            raise ValueError("a wait needs one of time, dusk or altitude")
+        return self
+
+
 type Instruction = Annotated[
-    Cool | Warm | Unpark | Park | Slew | SelectFilter | Autofocus | Guide | Outputs | ExposurePlan,
+    Cool
+    | Warm
+    | Unpark
+    | Park
+    | Slew
+    | SelectFilter
+    | Autofocus
+    | Guide
+    | Outputs
+    | Wait
+    | ExposurePlan,
     Field(discriminator="kind"),
 ]
 
@@ -160,7 +197,21 @@ class UntilTime(SequenceModel):
         return now < self.time
 
 
-type Condition = Annotated[UntilTime, Field(discriminator="kind")]
+class UntilDawn(SequenceModel):
+    """Until the night ends: the end of this twilight (needs the site)."""
+
+    kind: Literal["until_dawn"] = "until_dawn"
+    darkness: Darkness = "astronomical"
+
+
+class WhileAbove(SequenceModel):
+    """While the container's target is this high and above the horizon profile."""
+
+    kind: Literal["while_above"] = "while_above"
+    altitude: float = Field(default=30, ge=0, le=90, description="Degrees, apparent.")
+
+
+type Condition = Annotated[UntilTime | UntilDawn | WhileAbove, Field(discriminator="kind")]
 
 # -- triggers -----------------------------------------------------------------------
 
@@ -285,6 +336,7 @@ type Node = Annotated[
     | Autofocus
     | Guide
     | Outputs
+    | Wait
     | ExposurePlan
     | Container,
     Field(discriminator="kind"),
@@ -321,6 +373,22 @@ DEFAULT_POLICIES: dict[FailureKind, Policy] = {
     "storage": Policy(),
     "other": Policy(),
 }
+
+
+def needs_site(sequence: Sequence) -> bool:
+    """Whether the sequence asks about the sky: the site must be known to run it."""
+
+    def asks(container: Container) -> bool:
+        if any(not isinstance(c, UntilTime) for c in container.conditions):
+            return True
+        for child in container.children:
+            if isinstance(child, Container) and asks(child):
+                return True
+            if isinstance(child, Wait) and child.time is None:
+                return True
+        return False
+
+    return any(asks(part) for part in (sequence.start, sequence.targets, sequence.end))
 
 
 class Sequence(SequenceModel):

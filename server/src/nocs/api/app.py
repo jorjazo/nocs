@@ -71,7 +71,7 @@ from nocs.api.targets import targets_router
 from nocs.auth import AuthStore
 from nocs.clock import Clock
 from nocs.config import Settings
-from nocs.devices import DeviceError
+from nocs.devices import DeviceError, Location
 from nocs.devices.camera import Region
 from nocs.equipment import (
     Connection,
@@ -109,6 +109,7 @@ from nocs.sequence import CheckpointFile, SequenceStore
 from nocs.sequence.rig import Parts
 from nocs.sequence.service import RESOURCES as SEQUENCE_RESOURCES
 from nocs.sequence.service import SequenceService
+from nocs.sequence.sky import Place
 from nocs.services import watchdog
 from nocs.services.gps import GpsService, NoFixError
 from nocs.services.indi_bridge import IndiBridge, NotConnectedError
@@ -225,6 +226,14 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
             guiding=guiding(),
             power=power(),
         )
+
+    def sequence_place() -> Place | None:
+        """Where the rig is, for a sequence's sky: the profile's site and horizon."""
+        profile = equipment().active_profile
+        site = profile.site if profile is not None else None
+        if site is None:
+            return None
+        return Place(Location(site.latitude, site.longitude, site.elevation), site.horizon)
 
     def connect_rig() -> None:
         """After a restart, for a sequence to resume: the profile that was active."""
@@ -347,6 +356,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
             sequence_parts,
             recorder=services.storage,
             profile=lambda: equipment().active,
+            place=sequence_place,
         )
         task = asyncio.create_task(bridge.run(), name="indi-bridge")
         guiding_task = asyncio.create_task(services.guiding.run(), name="phd2")
