@@ -49,6 +49,10 @@ shared with polar alignment (phase 4) and re-centring and the meridian flip
   client shows the same one, and the sequence builder (5.13) starts from it. Going
   to a target from Plan also makes it tonight's target; Go and Go and centre go
   where the frame points, which the chart can move off the object.
+- Choosing tonight's target also sets the storage target to its catalog label
+  (`M 42`), which names the lights' folder and OBJECT header: found in the QA pass
+  of 2026-11-01, where lights after Go and centre would have gone to
+  `Light/Untitled`. The client makes both calls; Live view can still rename it.
 - NOCS's own English names (`names.tsv`) go before OpenNGC's, in their order:
   OpenNGC listed "Sculptor Filament" first for NGC 253.
 - A sync is watched for 2.5 s: if the mount reports a position more than 1′ from

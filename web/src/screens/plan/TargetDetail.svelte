@@ -12,7 +12,7 @@
   import EmptyState from "../../components/EmptyState.svelte";
   import Icon from "../../components/Icon.svelte";
   import SkyChart from "../../components/SkyChart.svelte";
-  import { ApiError, centerOn, choosePlanTarget, getTarget, getVisibility, gotoMount } from "../../lib/api";
+  import { ApiError, centerOn, choosePlanTarget, getTarget, getVisibility, gotoMount, setTarget } from "../../lib/api";
   import { auth } from "../../lib/auth.svelte";
   import { holder } from "../../lib/camera.svelte";
   import { errorText } from "../../lib/errors";
@@ -131,7 +131,7 @@
     if (!owner) return t.plan.ownerOnly;
     if (!mount) return t.plan.noMount;
     if (mount.parked) return t.plan.parked;
-    if (mountJob) return t.plan.mountBusy;
+    if (mountJob) return mountJob.info.kind === "goto" || mountJob.info.kind === "center" ? t.plan.mountGoing : t.plan.mountBusy;
     return null;
   });
   const centerReason = $derived.by((): string | null => {
@@ -142,12 +142,19 @@
     return null;
   });
 
+  // Tonight's target also names the folder of the lights (Light/M_42/) and their
+  // OBJECT header, by its catalog label: otherwise they land in Light/Untitled.
+  async function makeTonights(target: PlannedTarget, label: string): Promise<void> {
+    await choosePlanTarget(target);
+    await setTarget(label);
+  }
+
   async function choose(): Promise<void> {
     if (!object) return;
     busy = "choose";
     error = "";
     try {
-      await choosePlanTarget(plannedTarget(object));
+      await makeTonights(plannedTarget(object), object.label);
     } catch (e) {
       error = errorText(e, t);
     } finally {
@@ -165,7 +172,7 @@
       if (kind === "center") await centerOn({ ra: target.ra, dec: target.dec, force });
       else await gotoMount({ frame: "j2000", ra: target.ra, dec: target.dec, force });
       // Going there makes it tonight's target, for Tonight's checklist and later the sequence.
-      await choosePlanTarget(target);
+      await makeTonights(target, object.label);
     } catch (e) {
       if (e instanceof ApiError && e.status === 409 && e.message.includes("below the horizon")) refused = kind;
       else error = errorText(e, t);
@@ -238,7 +245,7 @@
           </div>
         </div>
       {:else if tonight.missingSite}
-        <p class="muted">{t.tonight.noSite}</p>
+        <p class="muted">{live.app.equipment?.active ? t.tonight.noSite : t.tonight.noProfile}</p>
       {:else}
         <p class="muted" role="status">{t.tonight.loading}</p>
       {/if}

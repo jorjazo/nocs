@@ -192,7 +192,7 @@
         </p>
       {/if}
     {:else if tonight.missingSite}
-      <p class="muted">{t.tonight.noSite}</p>
+      <p class="muted">{profile ? t.tonight.noSite : t.tonight.noProfile}</p>
       {#if auth.owner}
         <div><Button onclick={() => router.go({ screen: "rig" })}>{t.tonight.openRig}</Button></div>
       {/if}
