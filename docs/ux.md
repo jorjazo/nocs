@@ -149,6 +149,10 @@ Live view (stage 2.7):
   locked while the camera runs a job. INDI keeps no exposure time, so the server
   keeps the last one set or used. Only the save choice and the camera shown are
   kept per device in the browser.
+- Lights of the main camera show the target above the settings: its name and
+  the folder its frames go to (`Light/<target>/`, cleaned as on the drive). Tapping
+  it opens a sheet with the name, the targets of recent nights while it is empty
+  and catalog objects as it is typed; Clear goes back to `Untitled`.
 - The guide camera (stage 2.11) shares the screen through the camera switch. Its
   frames are only previews: no Save, no filter, no frame type (PHD2 keeps its own
   darks). A camera that reports its temperature read-only, like the ASI220MM,

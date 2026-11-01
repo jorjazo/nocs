@@ -22,6 +22,8 @@ import type {
   ExposeRequest,
   FilterNamesRequest,
   FilterSelectRequest,
+  FrameRecord,
+  FrameTypeName,
   FocuserBacklashRequest,
   FocuserMoveRequest,
   GuideRequest,
@@ -35,6 +37,7 @@ import type {
   NetworkJoinRequest,
   NetworkModeRequest,
   NetworkSetupRequest,
+  NightInfo,
   ObserverRequest,
   OutputRequest,
   PairedDevice,
@@ -45,6 +48,7 @@ import type {
   Site,
   SkyChart,
   SolveRequest,
+  TargetRequest,
   TrackingRequest,
 } from "./types";
 
@@ -434,6 +438,37 @@ export function syncToSolution(): Promise<void> {
 export async function centerOn(body: CenterRequest): Promise<string> {
   const started = await request<JobStarted>("POST", "/api/solver/center", body);
   return started.job;
+}
+
+// -- Frames and nights (ADR 0013) -----------------------------------------------------
+
+// The target name for lights, which names their folder; null clears it.
+export function setTarget(target: string | null): Promise<void> {
+  return request("PUT", "/api/storage/target", { target } satisfies TargetRequest);
+}
+
+// Nights with saved frames, newest first.
+export function getNights(): Promise<NightInfo[]> {
+  return request("GET", "/api/nights");
+}
+
+export type FrameQuery = {
+  night?: number;
+  target?: string;
+  type?: FrameTypeName;
+  filter?: string;
+  // Paging: frames older than this id.
+  before?: number;
+  limit?: number;
+};
+
+// Catalogued frames, newest first.
+export function getFrames(query: FrameQuery): Promise<FrameRecord[]> {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(query)) {
+    if (value !== undefined) params.set(key, String(value));
+  }
+  return request("GET", `/api/frames?${params}`);
 }
 
 // -- Targets (ADR 0019, 0020) ---------------------------------------------------------

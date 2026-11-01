@@ -41,6 +41,8 @@
   import { guidingActive } from "../../lib/guiding.svelte";
   import CenteringCard from "./CenteringCard.svelte";
   import SolvePanel from "./SolvePanel.svelte";
+  import { folderName } from "../../lib/storage";
+  import TargetSheet from "./TargetSheet.svelte";
   import Viewer from "./Viewer.svelte";
 
   const t = $derived(i18n.t);
@@ -183,6 +185,10 @@
   // -- Layout ----------------------------------------------------------------------------
 
   let editing = $state<Setting | null>(null);
+  let naming = $state(false);
+  // Lights of the main camera go to a folder named after the target (ADR 0013).
+  const target = $derived(live.app.storage?.target ?? null);
+  const targetFolder = $derived(folderName(target ?? "") || "Untitled");
   let device = $state<"focuser" | "filter_wheel" | "mount" | null>(null);
 
   // The mount, to frame by hand while a loop runs: its pad folds away.
@@ -405,6 +411,14 @@
         </div>
       {/if}
 
+      {#if main && camera.frame_type === "light"}
+        <button type="button" class="readout-button target" disabled={!owner} onclick={() => (naming = true)}>
+          <span class="label muted">{t.live.target}</span>
+          <span class="value" class:muted={!target}>{target ?? t.live.untitled}</span>
+          <span class="caption muted">{t.live.targetFolder(`Light/${targetFolder}/`)}</span>
+        </button>
+      {/if}
+
       <div class="tiles">
         <Tile
           label={t.live.exposure}
@@ -524,6 +538,9 @@
     </section>
   </div>
 
+  {#if naming}
+    <TargetSheet current={target} onclose={() => (naming = false)} />
+  {/if}
   {#if editing}
     <SettingSheet setting={editing} {role} {camera} onclose={() => (editing = null)} />
   {/if}
