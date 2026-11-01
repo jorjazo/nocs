@@ -134,7 +134,8 @@ smbclient -N //127.0.0.1/Internal -c 'get 2026-11-01/a.fits /tmp/a.fits' >/dev/n
     && [[ $(cat /tmp/a.fits) == frame ]] || fail "a guest cannot read a frame"
 smbclient -U nocs%nocs //127.0.0.1/Internal -c ls 2>/dev/null | grep -q 2026-11-01 || fail "nocs / nocs cannot log in"
 smbclient -U nocs%wrong //127.0.0.1/Internal -c ls >/dev/null 2>&1 && fail "a wrong password for nocs was let in"
-smbclient -N //127.0.0.1/Internal -c 'put /tmp/a.fits b.fits' 2>&1 | grep -q ACCESS_DENIED || fail "the share is writable"
+put=$(smbclient -N //127.0.0.1/Internal -c 'put /tmp/a.fits b.fits' 2>&1 || true)
+[[ ! -e /var/lib/nocs/NOCS/b.fits && $put == *NT_STATUS_* ]] || fail "the share is writable: $put"
 smbclient -N //127.0.0.1/Internal -c 'ls ../config/*' 2>&1 | grep -q auth.json && fail "the data directory is shared"
 share status | grep -q '"name": "Internal"' || fail "share.status does not list Internal"
 share enable '{"on": false}' >/dev/null || fail "the share does not switch off"
