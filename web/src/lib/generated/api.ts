@@ -366,6 +366,10 @@ export interface AppState {
   network?: NetworkState | null;
   plan?: PlanState | null;
   /**
+   * None: never run.
+   */
+  polar_alignment?: PolarAlignmentState | null;
+  /**
    * None: no power box is ready.
    */
   power?: PowerState | null;
@@ -1511,6 +1515,172 @@ export interface PlannedTarget {
    * Wanted angle of the frame's top, degrees east of north; None: any.
    */
   rotation?: number | null;
+}
+/**
+ * The running polar alignment, or the most recent one (ADR 0034).
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "PolarAlignmentState".
+ */
+export interface PolarAlignmentState {
+  /**
+   * The error is within the tolerance.
+   */
+  aligned: boolean;
+  /**
+   * None until the three points are solved.
+   */
+  axis: PolarAxisError | null;
+  /**
+   * Why it failed.
+   */
+  error: string | null;
+  finished: string | null;
+  job: string;
+  options: PolarOptionsState;
+  /**
+   * While running; adjusting: the user turns the knobs.
+   */
+  phase: ("solving" | "turning" | "settling" | "adjusting" | "returning") | null;
+  points: PolarPoint[];
+  /**
+   * Degrees the RA axis turned between the points.
+   */
+  rotation: number[];
+  start: JnowPosition1;
+  started: string;
+  state: "running" | "succeeded" | "failed" | "cancelled";
+  /**
+   * Frames while adjusting, the latest 60.
+   */
+  updates: PolarUpdate[];
+  warning: string | null;
+}
+/**
+ * Arcminutes from the mount's RA axis to the celestial pole of the date (ADR 0034).
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "PolarAxisError".
+ */
+export interface PolarAxisError {
+  /**
+   * Positive: the axis points above the pole.
+   */
+  altitude: number;
+  /**
+   * On the sky; positive: the axis points east of the pole.
+   */
+  azimuth: number;
+  total: number;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "PolarOptionsState".
+ */
+export interface PolarOptionsState {
+  /**
+   * Go back to the start when finishing.
+   */
+  back: boolean;
+  binning: number | null;
+  /**
+   * Seconds; None: the camera's exposure.
+   */
+  exposure: number | null;
+  /**
+   * Where the RA axis turns to.
+   */
+  side: "east" | "west";
+  /**
+   * Degrees of each turn of the RA axis.
+   */
+  step: number;
+  /**
+   * Arcminutes.
+   */
+  tolerance: number;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "PolarPoint".
+ */
+export interface PolarPoint {
+  aim: JnowPosition;
+  /**
+   * Of the solution, of the date, degrees.
+   */
+  dec: number | null;
+  /**
+   * Frames taken again in place.
+   */
+  failures: CenteringFailure[];
+  /**
+   * Of the solution, hours, west positive.
+   */
+  hour_angle: number | null;
+  /**
+   * Centre of the frame; None: not solved yet.
+   */
+  solution: SkyPosition1 | null;
+  /**
+   * Mid-exposure.
+   */
+  taken: string | null;
+}
+/**
+ * Where the mount was sent (the first: where it was).
+ */
+export interface JnowPosition {
+  /**
+   * JNow, degrees.
+   */
+  dec: number;
+  /**
+   * JNow, hours.
+   */
+  ra: number;
+}
+/**
+ * Where the mount pointed at the start.
+ */
+export interface JnowPosition1 {
+  /**
+   * JNow, degrees.
+   */
+  dec: number;
+  /**
+   * JNow, hours.
+   */
+  ra: number;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "PolarUpdate".
+ */
+export interface PolarUpdate {
+  axis: PolarAxisError | null;
+  failure: CenteringFailure | null;
+  /**
+   * None: the frame was not solved.
+   */
+  knobs: PolarKnobs | null;
+  taken: string;
+}
+/**
+ * How far the knobs moved the axis between two frames, arcminutes.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "PolarKnobs".
+ */
+export interface PolarKnobs {
+  /**
+   * Up positive.
+   */
+  altitude: number;
+  /**
+   * East positive, on the sky.
+   */
+  azimuth: number;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -3021,6 +3191,20 @@ export interface HostnameRequest {
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "JnowPosition".
+ */
+export interface JnowPosition2 {
+  /**
+   * JNow, degrees.
+   */
+  dec: number;
+  /**
+   * JNow, hours.
+   */
+  ra: number;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "JobStarted".
  */
 export interface JobStarted {
@@ -3295,6 +3479,44 @@ export interface PatchOp {
   value: {
     [k: string]: unknown;
   };
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "PolarAlignRequest".
+ */
+export interface PolarAlignRequest {
+  /**
+   * Go back to the start when finishing.
+   */
+  back?: boolean;
+  /**
+   * For the frames only.
+   */
+  binning?: number | null;
+  /**
+   * Seconds; None: the camera's exposure.
+   */
+  exposure?: number | null;
+  /**
+   * Degrees.
+   */
+  min_altitude?: number;
+  /**
+   * Seconds after each turn.
+   */
+  settle?: number;
+  /**
+   * auto: away from the meridian.
+   */
+  side?: "auto" | "east" | "west";
+  /**
+   * Degrees of each RA turn.
+   */
+  step?: number;
+  /**
+   * Arcminutes.
+   */
+  tolerance?: number;
 }
 /**
  * What to do when a step fails with one kind of failure.

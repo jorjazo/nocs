@@ -388,6 +388,18 @@
           ],
           "default": null
         },
+        "polar_alignment": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PolarAlignmentState"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "None: never run."
+        },
         "power": {
           "anyOf": [
             {
@@ -4374,6 +4386,25 @@
       "title": "IndiValueElement",
       "type": "object"
     },
+    "JnowPosition": {
+      "additionalProperties": false,
+      "properties": {
+        "dec": {
+          "description": "JNow, degrees.",
+          "type": "number"
+        },
+        "ra": {
+          "description": "JNow, hours.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "ra",
+        "dec"
+      ],
+      "title": "JnowPosition",
+      "type": "object"
+    },
     "JobInfo": {
       "additionalProperties": false,
       "properties": {
@@ -5924,6 +5955,430 @@
         "dec"
       ],
       "title": "PointingOffset",
+      "type": "object"
+    },
+    "PolarAlignRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "back": {
+          "default": true,
+          "description": "Go back to the start when finishing.",
+          "type": "boolean"
+        },
+        "binning": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "For the frames only."
+        },
+        "exposure": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "maximum": 600,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Seconds; None: the camera's exposure."
+        },
+        "min_altitude": {
+          "default": 20.0,
+          "description": "Degrees.",
+          "maximum": 80,
+          "minimum": 0,
+          "type": "number"
+        },
+        "settle": {
+          "default": 2.0,
+          "description": "Seconds after each turn.",
+          "maximum": 60,
+          "minimum": 0,
+          "type": "number"
+        },
+        "side": {
+          "default": "auto",
+          "description": "auto: away from the meridian.",
+          "enum": [
+            "auto",
+            "east",
+            "west"
+          ],
+          "type": "string"
+        },
+        "step": {
+          "default": 30.0,
+          "description": "Degrees of each RA turn.",
+          "maximum": 60,
+          "minimum": 10,
+          "type": "number"
+        },
+        "tolerance": {
+          "default": 1.0,
+          "description": "Arcminutes.",
+          "exclusiveMinimum": 0,
+          "maximum": 60,
+          "type": "number"
+        }
+      },
+      "title": "PolarAlignRequest",
+      "type": "object"
+    },
+    "PolarAlignmentState": {
+      "additionalProperties": false,
+      "description": "The running polar alignment, or the most recent one (ADR 0034).",
+      "properties": {
+        "aligned": {
+          "description": "The error is within the tolerance.",
+          "type": "boolean"
+        },
+        "axis": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PolarAxisError"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "None until the three points are solved."
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Why it failed."
+        },
+        "finished": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "job": {
+          "type": "string"
+        },
+        "options": {
+          "$ref": "#/$defs/PolarOptionsState"
+        },
+        "phase": {
+          "anyOf": [
+            {
+              "enum": [
+                "solving",
+                "turning",
+                "settling",
+                "adjusting",
+                "returning"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "While running; adjusting: the user turns the knobs."
+        },
+        "points": {
+          "items": {
+            "$ref": "#/$defs/PolarPoint"
+          },
+          "type": "array"
+        },
+        "rotation": {
+          "description": "Degrees the RA axis turned between the points.",
+          "items": {
+            "type": "number"
+          },
+          "type": "array"
+        },
+        "start": {
+          "$ref": "#/$defs/JnowPosition",
+          "description": "Where the mount pointed at the start."
+        },
+        "started": {
+          "type": "string"
+        },
+        "state": {
+          "enum": [
+            "running",
+            "succeeded",
+            "failed",
+            "cancelled"
+          ],
+          "type": "string"
+        },
+        "updates": {
+          "description": "Frames while adjusting, the latest 60.",
+          "items": {
+            "$ref": "#/$defs/PolarUpdate"
+          },
+          "type": "array"
+        },
+        "warning": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "job",
+        "state",
+        "phase",
+        "options",
+        "start",
+        "points",
+        "rotation",
+        "axis",
+        "aligned",
+        "updates",
+        "warning",
+        "error",
+        "started",
+        "finished"
+      ],
+      "title": "PolarAlignmentState",
+      "type": "object"
+    },
+    "PolarAxisError": {
+      "additionalProperties": false,
+      "description": "Arcminutes from the mount's RA axis to the celestial pole of the date (ADR 0034).",
+      "properties": {
+        "altitude": {
+          "description": "Positive: the axis points above the pole.",
+          "type": "number"
+        },
+        "azimuth": {
+          "description": "On the sky; positive: the axis points east of the pole.",
+          "type": "number"
+        },
+        "total": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "altitude",
+        "azimuth",
+        "total"
+      ],
+      "title": "PolarAxisError",
+      "type": "object"
+    },
+    "PolarKnobs": {
+      "additionalProperties": false,
+      "description": "How far the knobs moved the axis between two frames, arcminutes.",
+      "properties": {
+        "altitude": {
+          "description": "Up positive.",
+          "type": "number"
+        },
+        "azimuth": {
+          "description": "East positive, on the sky.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "altitude",
+        "azimuth"
+      ],
+      "title": "PolarKnobs",
+      "type": "object"
+    },
+    "PolarOptionsState": {
+      "additionalProperties": false,
+      "properties": {
+        "back": {
+          "description": "Go back to the start when finishing.",
+          "type": "boolean"
+        },
+        "binning": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "exposure": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Seconds; None: the camera's exposure."
+        },
+        "side": {
+          "description": "Where the RA axis turns to.",
+          "enum": [
+            "east",
+            "west"
+          ],
+          "type": "string"
+        },
+        "step": {
+          "description": "Degrees of each turn of the RA axis.",
+          "type": "number"
+        },
+        "tolerance": {
+          "description": "Arcminutes.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "exposure",
+        "binning",
+        "step",
+        "side",
+        "tolerance",
+        "back"
+      ],
+      "title": "PolarOptionsState",
+      "type": "object"
+    },
+    "PolarPoint": {
+      "additionalProperties": false,
+      "properties": {
+        "aim": {
+          "$ref": "#/$defs/JnowPosition",
+          "description": "Where the mount was sent (the first: where it was)."
+        },
+        "dec": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Of the solution, of the date, degrees."
+        },
+        "failures": {
+          "description": "Frames taken again in place.",
+          "items": {
+            "$ref": "#/$defs/CenteringFailure"
+          },
+          "type": "array"
+        },
+        "hour_angle": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Of the solution, hours, west positive."
+        },
+        "solution": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SkyPosition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Centre of the frame; None: not solved yet."
+        },
+        "taken": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Mid-exposure."
+        }
+      },
+      "required": [
+        "aim",
+        "solution",
+        "hour_angle",
+        "dec",
+        "taken",
+        "failures"
+      ],
+      "title": "PolarPoint",
+      "type": "object"
+    },
+    "PolarUpdate": {
+      "additionalProperties": false,
+      "properties": {
+        "axis": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PolarAxisError"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "failure": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CenteringFailure"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "knobs": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PolarKnobs"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "None: the frame was not solved."
+        },
+        "taken": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "taken",
+        "axis",
+        "knobs",
+        "failure"
+      ],
+      "title": "PolarUpdate",
       "type": "object"
     },
     "Policy": {

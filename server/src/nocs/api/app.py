@@ -29,6 +29,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 
 from nocs import __version__
+from nocs.align.service import PolarAlignmentService
 from nocs.api.accessories import accessories_router
 from nocs.api.auth import REVOKED, AuthMiddleware, Sockets, auth_router, identity
 from nocs.api.guiding import guiding_router
@@ -66,7 +67,7 @@ from nocs.api.schemas import (
 )
 from nocs.api.sequences import sequences_router
 from nocs.api.sky import sky_router
-from nocs.api.solver import solver_router
+from nocs.api.solver import align_router, solver_router
 from nocs.api.system import system_router
 from nocs.api.targets import targets_router
 from nocs.auth import AuthStore
@@ -78,6 +79,7 @@ from nocs.equipment import (
     Connection,
     EquipmentBusyError,
     EquipmentService,
+    HorizonPoint,
     Profile,
     ProfileError,
     ProfileStore,
@@ -217,6 +219,10 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
         assert services.centering is not None
         return services.centering
 
+    def polar() -> PolarAlignmentService:
+        assert services.polar is not None
+        return services.polar
+
     def plan() -> PlanService:
         assert services.plan is not None
         return services.plan
@@ -354,6 +360,14 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
         services.centering = CenteringService(
             store, services.jobs, services.pointing, services.mount
         )
+        services.polar = PolarAlignmentService(
+            store,
+            services.jobs,
+            services.pointing,
+            services.mount,
+            services.clock,
+            horizon=lambda: _horizon(services.equipment),
+        )
         services.plan = PlanService(store, settings.config_dir)
         services.capture.use_guider(services.guiding)
         services.sequences = SequenceService(
@@ -416,6 +430,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
     app.include_router(guiding_router(guiding))
     app.include_router(system_router(system))
     app.include_router(solver_router(pointing, centering))
+    app.include_router(align_router(polar))
     app.include_router(accessories_router(focuser, filter_wheel, autofocus))
     app.include_router(sequences_router(sequences))
     app.include_router(sky_router(saved_site, clock, _catalog_target))
@@ -757,6 +772,7 @@ class _Services:
     solver: SolverService | None = None
     pointing: PointingService | None = None
     centering: CenteringService | None = None
+    polar: PolarAlignmentService | None = None
     plan: PlanService | None = None
     autofocus: AutofocusService | None = None
     guiding: GuidingService | None = None
@@ -764,6 +780,12 @@ class _Services:
     system: SystemService | None = None
     sequences: SequenceService | None = None
     gps: GpsService | None = None
+
+
+def _horizon(equipment: EquipmentService | None) -> list[HorizonPoint] | None:
+    """The active profile's horizon profile."""
+    profile = equipment.active_profile if equipment is not None else None
+    return profile.site.horizon if profile is not None and profile.site is not None else None
 
 
 def _iso(time: datetime) -> str:

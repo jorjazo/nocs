@@ -192,7 +192,6 @@ def test_a_knob_turn_shows_in_the_next_frame(site: Location, up: float, east: fl
     turned = knobs(reference, after, fitted, lat, seconds)
     assert turned.altitude == pytest.approx(up, abs=1e-3)
     assert turned.azimuth == pytest.approx(east, abs=1e-3)
-    assert turned.residual < 1e-3
     now = polar_error(turn(fitted, fitted, lat, altitude=up, azimuth=east), lat)
     truth = polar_error(turn(true_axis, true_axis, lat, altitude=up, azimuth=east), lat)
     assert (now.altitude, now.azimuth) == pytest.approx((truth.altitude, truth.azimuth), abs=1e-3)

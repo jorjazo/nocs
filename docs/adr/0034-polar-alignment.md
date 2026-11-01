@@ -60,8 +60,9 @@ to work from plate solves alone, in both hemispheres (roadmap, phase 4). Facts:
   is compared with the previous one, after the tracking between them about the
   current axis, to tell how far each knob was turned; the axis moves by as much.
   Chaining frames makes the solves' noise add up slowly but cancels slow tracking
-  errors (periodic error) between the first frame and the last. What the knobs
-  cannot explain is reported as a residual (the mount moved, a bad solve).
+  errors (periodic error) between the first frame and the last.
+- **Ending.** Finishing goes back to the start (unless asked not to); cancelling
+  stops where it is, since a cancel may be for safety (a cable caught).
 - **Tolerance** 1′ by default for "aligned".
 - The math lives in `nocs.align.polar`, pure functions of directions, so tests run
   without a mount; the job (`polar_align`) and its state come in stage 4.9.
@@ -80,5 +81,10 @@ to work from plate solves alone, in both hemispheres (roadmap, phase 4). Facts:
 - The lab has to confirm on the AM7 that a go to at its own Dec turns only the RA
   axis, with syncs in its model; if the Dec axis moves, the turn becomes a timed
   `MOTION_WE` at a known rate, and the measured rotation is used as it is.
-- Tests use the simulator's `MOUNT_MODEL` as a misaligned mount and change
-  `MM_ME`/`MM_MA` mid-run as the user turning the knobs; they must clear it after.
+- Tests use the simulator's `MOUNT_MODEL` as a misaligned mount and change `MM_ME`
+  mid-run as the user turning the altitude knob; they must clear it after. Its
+  `MM_MA` moves the pole east without the turn about the polar axis that a real
+  azimuth knob (a turn about the vertical) also brings, so it stands for the azimuth
+  error but not for turning that knob: the knob is tested against the fakes.
+- One frame's move gives two numbers for two knobs: nothing is left over to tell a
+  bad frame from a knob turn. The frame's rotation (from the solve) would be a third.

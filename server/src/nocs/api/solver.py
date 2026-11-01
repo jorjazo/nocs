@@ -7,7 +7,8 @@ from collections.abc import Callable, Generator
 
 from fastapi import APIRouter, HTTPException, Response, status
 
-from nocs.api.schemas import CenterRequest, JobStarted, SolveRequest
+from nocs.align.service import PolarAlignmentService, PolarOptions
+from nocs.api.schemas import CenterRequest, JobStarted, PolarAlignRequest, SolveRequest
 from nocs.devices import DeviceError
 from nocs.imaging import CameraNotReadyError
 from nocs.jobs import ResourceBusyError
@@ -50,6 +51,35 @@ def solver_router(
         )
         with _errors():
             return JobStarted(job=centering().start(request.ra, request.dec, options))
+
+    return router
+
+
+def align_router(polar: Callable[[], PolarAlignmentService]) -> APIRouter:
+    router = APIRouter(prefix="/api/align")
+
+    @router.post("/polar", status_code=status.HTTP_202_ACCEPTED)
+    async def polar_align(request: PolarAlignRequest) -> JobStarted:  # pyright: ignore[reportUnusedFunction]
+        """Polar align from where the mount points (ADR 0034)."""
+        options = PolarOptions(
+            exposure=request.exposure,
+            binning=request.binning,
+            step=request.step,
+            side=request.side,
+            settle=request.settle,
+            tolerance=request.tolerance,
+            min_altitude=request.min_altitude,
+            back=request.back,
+        )
+        with _errors():
+            return JobStarted(job=polar().start(options))
+
+    @router.post("/polar/finish", status_code=status.HTTP_204_NO_CONTENT)
+    async def finish() -> Response:  # pyright: ignore[reportUnusedFunction]
+        """End the knobs' phase: back to the start and done."""
+        with _errors():
+            polar().finish()
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     return router
 

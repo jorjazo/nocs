@@ -69,8 +69,6 @@ class Knobs:
     """Up positive."""
     azimuth: float
     """East positive, on the sky."""
-    residual: float
-    """Of the frame's move, the part that turning the knobs does not explain."""
 
 
 def vector(hour_angle: float, dec: float) -> Vector:
@@ -99,6 +97,15 @@ def pole(latitude: float) -> Vector:
 def zenith(latitude: float) -> Vector:
     phi = math.radians(latitude)
     return np.array([math.cos(phi), 0.0, math.sin(phi)])
+
+
+def altaz(v: Vector, latitude: float) -> tuple[float, float]:
+    """A direction's altitude and azimuth (from north through east), degrees."""
+    phi = math.radians(latitude)
+    north = np.array([-math.sin(phi), 0.0, math.cos(phi)])
+    u = _unit(v)
+    alt = math.degrees(math.asin(_clip(float(u @ zenith(latitude)))))
+    return alt, math.degrees(math.atan2(float(u[1]), float(u @ north))) % 360
 
 
 def fit_axis(points: Sequence[Vector], latitude: float) -> Vector:
@@ -162,8 +169,7 @@ def knobs(before: Vector, after: Vector, axis: Vector, latitude: float, seconds:
         azimuth += float(step[1])
         if math.hypot(float(step[0]), float(step[1])) < 1e-4:
             break
-    landed = turn(tracked, axis, latitude, altitude=altitude, azimuth=azimuth)
-    return Knobs(altitude, azimuth, _angle(landed, target) * 60)
+    return Knobs(altitude, azimuth)
 
 
 def sensitivity(v: Vector, axis: Vector, latitude: float) -> float:
@@ -194,12 +200,6 @@ def _rotate(v: Vector, about: Vector, angle: float) -> Vector:
     """Rodrigues: ``v`` turned by ``angle`` radians about the unit vector ``about``."""
     c, s = math.cos(angle), math.sin(angle)
     return v * c + np.cross(about, v) * s + about * float(about @ v) * (1 - c)
-
-
-def _angle(a: Vector, b: Vector) -> float:
-    """Degrees between two directions."""
-    a, b = _unit(a), _unit(b)
-    return math.degrees(math.atan2(float(np.linalg.norm(np.cross(a, b))), float(a @ b)))
 
 
 def _unit(v: Vector) -> Vector:

@@ -519,6 +519,72 @@ class CenteringAttempt(StateModel):
     failure: CenteringFailure | None = Field(description="Why the frame was not solved.")
 
 
+class JnowPosition(StateModel):
+    ra: float = Field(description="JNow, hours.")
+    dec: float = Field(description="JNow, degrees.")
+
+
+class PolarAxisError(StateModel):
+    """Arcminutes from the mount's RA axis to the celestial pole of the date (ADR 0034)."""
+
+    altitude: float = Field(description="Positive: the axis points above the pole.")
+    azimuth: float = Field(description="On the sky; positive: the axis points east of the pole.")
+    total: float
+
+
+class PolarPoint(StateModel):
+    aim: JnowPosition = Field(description="Where the mount was sent (the first: where it was).")
+    solution: SkyPosition | None = Field(description="Centre of the frame; None: not solved yet.")
+    hour_angle: float | None = Field(description="Of the solution, hours, west positive.")
+    dec: float | None = Field(description="Of the solution, of the date, degrees.")
+    taken: str | None = Field(description="Mid-exposure.")
+    failures: list[CenteringFailure] = Field(description="Frames taken again in place.")
+
+
+class PolarKnobs(StateModel):
+    """How far the knobs moved the axis between two frames, arcminutes."""
+
+    altitude: float = Field(description="Up positive.")
+    azimuth: float = Field(description="East positive, on the sky.")
+
+
+class PolarUpdate(StateModel):
+    taken: str
+    axis: PolarAxisError | None
+    knobs: PolarKnobs | None = Field(description="None: the frame was not solved.")
+    failure: CenteringFailure | None
+
+
+class PolarOptionsState(StateModel):
+    exposure: float | None = Field(description="Seconds; None: the camera's exposure.")
+    binning: int | None
+    step: float = Field(description="Degrees of each turn of the RA axis.")
+    side: Literal["east", "west"] = Field(description="Where the RA axis turns to.")
+    tolerance: float = Field(description="Arcminutes.")
+    back: bool = Field(description="Go back to the start when finishing.")
+
+
+class PolarAlignmentState(StateModel):
+    """The running polar alignment, or the most recent one (ADR 0034)."""
+
+    job: str
+    state: Literal["running", "succeeded", "failed", "cancelled"]
+    phase: Literal["solving", "turning", "settling", "adjusting", "returning"] | None = Field(
+        description="While running; adjusting: the user turns the knobs."
+    )
+    options: PolarOptionsState
+    start: JnowPosition = Field(description="Where the mount pointed at the start.")
+    points: list[PolarPoint]
+    rotation: list[float] = Field(description="Degrees the RA axis turned between the points.")
+    axis: PolarAxisError | None = Field(description="None until the three points are solved.")
+    aligned: bool = Field(description="The error is within the tolerance.")
+    updates: list[PolarUpdate] = Field(description="Frames while adjusting, the latest 60.")
+    warning: str | None
+    error: str | None = Field(description="Why it failed.")
+    started: str
+    finished: str | None
+
+
 class PlanState(StateModel):
     """What the Plan screen chose for tonight (stage 3.6)."""
 
@@ -855,6 +921,9 @@ class AppState(StateModel):
     solver: SolverState | None = None
     autofocus: AutofocusState | None = Field(default=None, description="None: never run.")
     centering: CenteringState | None = Field(default=None, description="None: never run.")
+    polar_alignment: PolarAlignmentState | None = Field(
+        default=None, description="None: never run."
+    )
     plan: PlanState | None = None
     guiding: GuidingState | None = None
     system: SystemState | None = None
@@ -1270,6 +1339,23 @@ class CenterRequest(BaseModel):
     )
     binning: int | None = Field(default=None, ge=1, description="For the frames only.")
     force: bool = Field(default=False, description="Go below the horizon.")
+
+
+class PolarAlignRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    exposure: float | None = Field(
+        default=None, gt=0, le=600, description="Seconds; None: the camera's exposure."
+    )
+    binning: int | None = Field(default=None, ge=1, description="For the frames only.")
+    step: float = Field(default=30.0, ge=10, le=60, description="Degrees of each RA turn.")
+    side: Literal["auto", "east", "west"] = Field(
+        default="auto", description="auto: away from the meridian."
+    )
+    settle: float = Field(default=2.0, ge=0, le=60, description="Seconds after each turn.")
+    tolerance: float = Field(default=1.0, gt=0, le=60, description="Arcminutes.")
+    min_altitude: float = Field(default=20.0, ge=0, le=80, description="Degrees.")
+    back: bool = Field(default=True, description="Go back to the start when finishing.")
 
 
 class FilterSelectRequest(BaseModel):

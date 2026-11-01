@@ -191,14 +191,21 @@ class MountService:
         self._check_goto(ra, dec, "j2000", force)
 
     async def slew(
-        self, context: JobContext, ra: float, dec: float, *, force: bool = False
+        self,
+        context: JobContext,
+        ra: float,
+        dec: float,
+        *,
+        force: bool = False,
+        frame: Frame = "j2000",
     ) -> Coordinates:
-        """Go to J2000 ``ra``, ``dec`` inside ``context``'s job, which must hold the
-        mount, and track there; returns the JNow position sent. Refused as ``goto``."""
+        """Go to ``ra``, ``dec`` (J2000 unless ``frame``) inside ``context``'s job, which
+        must hold the mount, and track there; returns the JNow position sent. Refused
+        as ``goto``."""
         if self._jobs.holder(RESOURCE) != context.id:
             raise RuntimeError(f"job {context.id} does not hold the mount")
-        mount = self._check_goto(ra, dec, "j2000", force)
-        return await self._goto(context, mount, ra, dec, "j2000")
+        mount = self._check_goto(ra, dec, frame, force)
+        return await self._goto(context, mount, ra, dec, frame)
 
     async def settle(self, seconds: float, timeout: float = SETTLE_TIMEOUT) -> None:
         """Wait until the mount has stopped slewing, then ``seconds`` more for it to
@@ -244,6 +251,14 @@ class MountService:
         """Where the mount says it points, J2000 (converted from JNow now)."""
         position = self.mount().coordinates
         return jnow_to_j2000(position.ra, position.dec, self._clock.now())
+
+    def position_jnow(self) -> Coordinates:
+        """Where the mount says it points, JNow, as it says it."""
+        return self.mount().coordinates
+
+    def site(self) -> Location | None:
+        """Where the rig is: the profile's site, or else the mount's."""
+        return self._site()
 
     async def sync(
         self,
