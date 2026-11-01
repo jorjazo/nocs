@@ -1,14 +1,17 @@
-# Phase 4 plan — Guide & align (guiding)
+# Phase 4 plan — Guide & align
 
-Status: in progress · Last updated: 2026-10-31 · Roadmap: [Phase 4](../roadmap.md#phase-4--guide--align)
+Status: in progress · Last updated: 2026-11-01 · Roadmap: [Phase 4](../roadmap.md#phase-4--guide--align)
 
-Goal: guided long exposures with dithering, run and watched from a phone, with PHD2
-doing the guiding (ADR 0006). Polar alignment, the other half of the phase, needs
-the plate solver of phase 3 and gets its own stages once that lands.
+Goal: polar alignment and guided long exposures with dithering, run and watched from
+a phone, with PHD2 doing the guiding (ADR 0006) and NOCS's own three-point polar
+alignment on top of the phase 3 solver.
 
 **Exit (field test, guiding half):** calibrate and guide from the phone, then take
 guided 300 s sub-frames with dithering between them and a total RMS under 1″ with
 round stars ([checklist](field-test-guiding.md)).
+
+**Exit (field test, polar alignment half):** polar align from the phone to within
+the tolerance (1′ by default) at the lab's southern site, then the guiding checklist.
 
 Each stage is testable against the INDI simulators and the headless PHD2 of
 `dev/compose.yaml`. Guiding needs stars, so the lab can check connecting, looping and
@@ -31,6 +34,10 @@ after rotating it) and sits behind the filters.
 | 4.5 | Dithering between frames | Dither in main camera pixels, converted with both trains' scales, waiting for PHD2 to settle; `dither` and `start` run inside a caller's job (the sequencer's), and `POST /api/guiding/dither` as a job of its own; a series of N frames (`count`) with a dither every K (`dither`); guiding RMS, steps and lost frames per saved frame in the catalog (schema version 3) and the frame list ([ADR 0024](../adr/0024-dithering-between-frames.md)) | — | Done |
 | 4.6 | Guiding UI | Guiding screen `#/guiding` (state, graph, RMS, SNR/HFD, calibration; connect, loop, start, recalibrate, dither, stop, disconnect), Live view link with the RMS, guide camera shown as PHD2's, series with dithering; mount sheet and pad wait while guiding with "Stop guiding"; profile editor choice of guiding train; en/es ([ux.md](../ux.md)) | From the phone | Done on the simulators in the browser (calibrate, guide, dither, a 3-frame series with 2 dithers, stop from the mount sheet); the phone waits for the field test |
 | 4.7 | Lab and field test | Lab: connect, loop, pulses; field test ([checklist](field-test-guiding.md)) | Exit criterion | Checklist ready; the lab and field tests are pending |
+| 4.8 | Polar alignment: spike and math | `nocs.align.polar`, pure functions: the RA axis from three solved frames (the normal of the plane through their directions, in the site's equatorial frame of the date); its error against the celestial pole of the date in altitude and azimuth, north or south; how turning the altitude or azimuth knob moves the axis and the frame, so a later frame tells how far each knob was turned, with the tracking in between; how well a frame reads the knobs. Spike: the telescope simulator's `MOUNT_MODEL` (`MM_ME`, `MM_MA`) as a misaligned mount; a go to at the mount's own Dec as the RA turn ([ADR 0034](../adr/0034-polar-alignment.md)) | Unit tests (both hemispheres, errors from 1′ to 5°, noisy solves, the simulator's model); lab AM7 at home: RA moves keep the pier side and the Dec axis | Implemented; the AM7 check waits for the lab |
+| 4.9 | Polar alignment job | `polar_align` job holding the main camera and the mount (refused while guiding, like any slew), never syncing: solve; turn the RA axis twice by 30° away from the meridian (refused within 10° of the pole, if a point would fall under the horizon profile or the mount's lower limit, or if the last point reads the knobs poorly); solve each; fit the axis. Then expose and solve again and again at the last position while the user turns the knobs, each frame compared with the previous one updating the error. `polar_alignment` state (the points, the error in altitude and azimuth and its total, its trend, the phase); cancel or finish goes back to the start | Simulators with an injected error and "knobs" turned while it runs | Proposed |
+| 4.10 | Polar alignment UI | Full-screen flow `#/polar` like autofocus's: settings (exposure, binning, rotation, east or west), the three points as they are measured, then a target with the error and per-knob instructions in plain words ("Raise the polar axis 12′", "Turn the axis 4′ west") and "Aligned" under the tolerance (1′ by default); reached from Tonight's checklist, the mount sheet and Live view; a suggested start on the meridian halfway between the zenith and the pole; en/es ([ux.md](../ux.md)) | From the phone | Proposed |
+| 4.11 | Polar alignment lab and field test | Lab: the RA moves on the AM7 at home; field: polar align, then the guiding checklist (both halves of the exit) | Exit criterion | Proposed |
 
 ## Decisions taken for this phase
 
@@ -42,6 +49,24 @@ after rotating it) and sits behind the filters.
   request also stops guiding (a second tap in the app).
 - Dithering happens between the frames of a series in Live view; the phase 5
   sequencer reuses the same pieces.
+
+For polar alignment ([ADR 0034](../adr/0034-polar-alignment.md)); taken as recommended, the
+maintainer having asked the sessions on 2026-11-01 to go ahead and review later:
+
+- The three points come from turning the RA axis 30° and then 30° more **away from
+  the meridian**, so the mount never needs a meridian flip in the middle of the
+  measurement. Shorter turns cost precision: 10° steps would make a solve's error
+  ~80 times larger in the axis, 30° ~9 times. The side comes from the hour angle, not from `TELESCOPE_PIER_SIDE`,
+  which the AM5/AM7 do not always report.
+- The target is the **true celestial pole of the date, without refraction**. At the
+  lab's site (latitude −30°) refraction at the pole's altitude is about 1.7′, more
+  than the 1′ tolerance; it is left as an option for later.
+- Knob instructions are **relative to the mount's axis** ("raise the polar axis",
+  "turn the axis east/west"), so the same words work in both hemispheres.
+- The job **never syncs**: the AM5 adds every sync to its own alignment model and
+  undoes one near home and the pole (phase 3), and the three points need only the
+  solutions. Frames are solved with the measured HFR choosing ASTAP's downsampling
+  (at least 2 for a raw colour frame, as on `main`).
 
 ## Measured
 
@@ -70,3 +95,12 @@ after rotating it) and sits behind the filters.
 - Stage 4.5 on the simulators: a guided series of 3 × 4 s frames with a 5 px
   dither between them (settling within 1.5 px for 3 s) took ~40 s; every frame
   got its guiding RMS.
+- Stage 4.8, the telescope simulator's `MOUNT_MODEL` at Diaguitas (three go tos at
+  Dec −30°, hour angles 0, 2 and 4 h): `MM_ME` +60′ fitted as the axis 60.0′ above
+  the south pole, `MM_MA` +60′ as 60.0′ east of it (0.3′ off in altitude, second
+  order); `MM_MA` is an angle on the sky. The go tos left the Dec axis
+  (`MOUNT_AXES`) where it was; the simulator changes pier side at the meridian.
+- Stage 4.8, simulated: with three frames 30° apart, 1″ of error in each solve puts
+  the axis ~9″ (rms) off; 10° apart ~80″, 45° ~4″; five frames instead of three
+  ~10% better. The knobs' amounts and the error they correct differ by 2.5% at 5°
+  (second order): the user converges in a few turns.

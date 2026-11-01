@@ -54,6 +54,13 @@ def jnow_to_horizontal(ra: float, dec: float, site: Location, when: datetime) ->
     return Horizontal(90 - math.degrees(float(zob)), math.degrees(float(aob)) % 360)
 
 
+def sidereal_time(longitude: float, when: datetime) -> float:
+    """Local apparent sidereal time in hours: a JNow RA's hour angle is this minus it."""
+    utc1, utc2, tt1, tt2 = _dates(when)
+    gst = float(_erfa.gst06a(utc1, utc2, tt1, tt2))
+    return (math.degrees(gst) + longitude) / 15 % 24
+
+
 def _dates(when: datetime) -> tuple[float, float, float, float]:
     """``when`` as ERFA's two-part UTC and TT dates."""
     t = when.astimezone(UTC)

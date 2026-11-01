@@ -29,6 +29,7 @@ server/   Python package `nocs` (nocsd): indi/ (protocol + async client, driver
           guiding/ (PHD2: service, settings it imports, JSON-RPC client,
           guide steps and RMS),
           solving/ (ASTAP, fields of view), pointing/ (solve and sync, centre),
+          align/ (polar alignment: axis from three solves, knobs; ADR 0034),
           sky/ (a night's almanac at the site, targets' visibility),
           targets/ (bundled OpenNGC catalog and its search, ADR 0019; Tycho-2
           stars for the framing chart, ADR 0020; tonight's target, `plan`),

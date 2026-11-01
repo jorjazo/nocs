@@ -38,5 +38,6 @@ that supersedes the old one.
 | [0030](0030-supervision.md) | Supervision of indiserver, drivers, PHD2 and nocsd | Proposed |
 | [0031](0031-sequences.md) | Sequences: model, persistence and who owns the devices | Proposed |
 | [0032](0032-sequence-recovery-and-restarts.md) | Sequences: recovery, safety and restarts | Proposed |
+| [0034](0034-polar-alignment.md) | Polar alignment from three solved frames | Proposed |
 
 Template: Context → Decision → Consequences.
