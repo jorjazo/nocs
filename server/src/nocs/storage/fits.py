@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import unicodedata
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -35,6 +36,17 @@ class Card:
     keyword: str
     value: CardValue
     comment: str
+
+
+def ascii_text(text: str) -> str:
+    """Text as FITS allows it, printable ASCII: accents dropped, other characters
+    as spaces (``M 42 · Gran Nebulosa de Orión`` → ``M 42 Gran Nebulosa de Orion``).
+    """
+    decomposed = unicodedata.normalize("NFKD", text)
+    kept = "".join(
+        c if " " <= c <= "~" else "" if unicodedata.combining(c) else " " for c in decomposed
+    )
+    return " ".join(kept.split())
 
 
 class Header:
@@ -90,7 +102,8 @@ class Header:
         """Add cards the header lacks; replace those in ``overwrite``."""
         for card in cards:
             if card.keyword in overwrite or card.keyword not in self._header:
-                self._header[card.keyword] = (card.value, card.comment)
+                value = ascii_text(card.value) if isinstance(card.value, str) else card.value
+                self._header[card.keyword] = (value, ascii_text(card.comment))
 
     def encode(self) -> bytes:
         text: str = self._header.tostring(padding=True)

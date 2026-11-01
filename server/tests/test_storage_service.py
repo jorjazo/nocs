@@ -25,6 +25,7 @@ from nocs.equipment import Optics, Site
 from nocs.state import StateStore
 from nocs.storage import FrameFacts, FrameFilter, FrameUnavailableError, StorageError
 from nocs.storage import service as storage_service
+from nocs.storage.fits import ascii_text
 from nocs.storage.service import (
     DriveBusyError,
     EjectUnavailableError,
@@ -461,3 +462,19 @@ async def test_eject_waits_for_frames_and_jobs(rig: Rig) -> None:
     with pytest.raises(StorageError, match="no drive"):
         await service.eject("internal", force=True)
     await service.close()
+
+
+def test_header_text_is_printable_ascii() -> None:
+    # FITS refuses anything else: a target or site with accents failed the save.
+    assert ascii_text("M 42 · Gran Nebulosa de Orión") == "M 42 Gran Nebulosa de Orion"
+    assert ascii_text("Viña del Mar") == "Vina del Mar"
+    assert ascii_text("η Carinae") == "Carinae"
+    assert ascii_text("NGC 253") == "NGC 253"
+
+
+async def test_a_target_with_accents_is_saved(rig: Rig, service: StorageService) -> None:
+    await service.set_target("M 42 · Gran Nebulosa de Orión")
+    saved = service.save(rig.frame())
+    assert "/Light/M_42_Gran_Nebulosa_de_Orión/" in str(saved.relative)  # the folder keeps them
+    with _fits.open(saved.path) as hdus:
+        assert hdus[0].header["OBJECT"] == "M 42 Gran Nebulosa de Orion"
