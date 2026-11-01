@@ -136,7 +136,7 @@ a 120 s series dithering every 3 frames; autofocus through a cloud or with the c
       round stars); registration shows the dithers as shifts of a few pixels.
 - [ ] Each frame's guiding RMS, steps and lost frames (Session tab, `GET /api/frames`)
       against PHD2's guide log on the Pi (`~/PHD2/PHD2_GuideLog_*.txt`).
-- [ ] The sequence's events against what happened; the autofocus runs' positions
+- [ ] The session report (5.15) and its events against what happened; the autofocus runs' positions
       and R².
 - [ ] Notes, with every finding as an issue or a next stage; mark the exits that
       passed in each phase's plan with a line on the result.
