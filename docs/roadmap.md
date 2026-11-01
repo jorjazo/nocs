@@ -155,7 +155,8 @@ full night from a phone with no other computer involved.
 
 - Robustness: crash recovery of a running sequence, long-run soak tests.
 - SMB share for desktop access to images.
-- Remote access outside the LAN.
+- Remote access outside the LAN: planned in
+  [beyond/remote-access.md](beyond/remote-access.md) (ADR 0037, proposed).
 - Canon DSLR (gphoto) polish.
 - Flats wizard and calibration frame library (darks, bias, flats): planned in
   [beyond/calibration.md](beyond/calibration.md) (ADR 0036).
