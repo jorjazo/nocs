@@ -44,6 +44,7 @@ SAMPLE = 5.0
 NETWORK = 10.0
 """Seconds between readings of the Wi-Fi's state, where nocs-system manages it."""
 NETWORK_ROOT = ("network",)
+UPDATES_ROOT = ("updates",)
 
 
 class SystemBusyError(Exception):
@@ -77,8 +78,10 @@ class SystemService:
         self._under_voltage_seen: str | None = None
         self._published: dict[str, Json] | None = None
         self._network: Json = None
+        self._updates: Json = None
         self._publish()
         store.set(NETWORK_ROOT, None)
+        store.set(UPDATES_ROOT, None)
 
     async def run(self) -> None:
         """Keep the health and the list of operations current until cancelled."""
@@ -90,6 +93,7 @@ class SystemService:
             await self.sample()
             if anyio.current_time() >= next_network:
                 await self.read_network()
+                await self.read_updates()
                 next_network = anyio.current_time() + NETWORK
             await anyio.sleep(SAMPLE)
 
@@ -169,6 +173,31 @@ class SystemService:
             raise ValueError(f"not a network operation: {op}")
         await self._call(op, args)
         await self.read_network()
+
+    async def read_updates(self) -> None:
+        """Publish what nocs-system says of updates (ADR 0025); ``None`` where it installs
+        none (a PC, whose owner updates it as usual)."""
+        state: Json = None
+        if self.offers("update.status"):
+            try:
+                state = _updates_state(await client.call("update.status", socket=self._socket))
+            except (HelperUnavailableError, HelperError) as e:
+                log.info("cannot read the state of updates: %s", e)
+                return
+        if state != self._updates:
+            self._updates = state
+            self._store.set(UPDATES_ROOT, state)
+
+    async def update(self, task: str, *, force: bool = False) -> None:
+        """Check for updates, install them or go back to the previous NOCS. Installing
+        restarts nocsd and maybe indiserver and PHD2: refused while a job runs, unless
+        forced."""
+        if task not in ("check", "install", "rollback"):
+            raise ValueError(f"not an update task: {task}")
+        if task != "check" and not force and (kinds := self._jobs.active()):
+            raise SystemBusyError(kinds)
+        await self._call(f"update.{task}", {})
+        await self.read_updates()
 
     async def restart_service(self, service: str, *, force: bool = False) -> None:
         """Restart indiserver or PHD2. Restarting indiserver drops every device, so it is
@@ -257,3 +286,30 @@ def _network_state(status: Message) -> Json:
         "last_join": last_join,
     }
     return state
+
+
+def _updates_state(status: Message) -> Json:
+    """nocs-system's update status as the state shows it."""
+    checked = status.get("checked")
+    upgradable = status.get("upgradable")
+    log_lines = status.get("log")
+    packages: list[Json] = []
+    if isinstance(upgradable, list):
+        for item in cast(list[object], upgradable):
+            if isinstance(item, dict):
+                entry = cast(dict[str, object], item)
+                packages.append({k: str(entry.get(k, "")) for k in ("name", "from", "to")})
+    return {
+        "state": cast(Json, status.get("state")),
+        "task": cast(Json, status.get("task")),
+        "packages": packages,
+        "checked": datetime.fromtimestamp(checked, UTC).isoformat(timespec="seconds")
+        if isinstance(checked, int | float)
+        else None,
+        "installed": cast(Json, status.get("installed")),
+        "previous": cast(Json, status.get("previous")),
+        "error": cast(Json, status.get("error")),
+        "log": [str(line) for line in cast(list[object], log_lines)]
+        if isinstance(log_lines, list)
+        else [],
+    }

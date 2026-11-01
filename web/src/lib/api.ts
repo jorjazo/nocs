@@ -196,6 +196,12 @@ export function setNetworkMode(pin: NetworkModeRequest["pin"]): Promise<void> {
   return request("PUT", "/api/system/network/mode", { pin } satisfies NetworkModeRequest);
 }
 
+// Updates from apt (ADR 0025): accepted at once (202). Installing restarts nocsd at
+// the end; it and going back are refused (409) while a job runs, unless forced.
+export function runUpdate(task: "check" | "install" | "rollback", force = false): Promise<void> {
+  return request("POST", `/api/system/updates/${task}`, { force } satisfies ShutdownRequest);
+}
+
 // A zip for bug reports: versions, the state and the last day of logs.
 export const DIAGNOSTICS_URL = "/api/system/diagnostics";
 

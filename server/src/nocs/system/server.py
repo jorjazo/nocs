@@ -48,6 +48,7 @@ from nocs.system.protocol import (
     decode,
     encode,
 )
+from nocs.system.updates import Updates
 
 log = logging.getLogger("nocs.system")
 
@@ -83,7 +84,11 @@ def load_config(path: Path, socket_path: Path = SOCKET) -> Config:
         gid=user.pw_gid,
         enabled=enabled,
         socket=socket_path,
-        context=Context(owner=user.pw_name, network=Network() if "network" in enabled else None),
+        context=Context(
+            owner=user.pw_name,
+            network=Network() if "network" in enabled else None,
+            updates=Updates() if "update" in enabled else None,
+        ),
     )
 
 
@@ -109,6 +114,8 @@ class Helper:
         async with anyio.create_task_group() as tg:
             if self._config.context.network is not None:
                 tg.start_soon(self._config.context.network.run)
+            if self._config.context.updates is not None:
+                tg.start_soon(self._config.context.updates.run)
             await listener.serve(self._connection)
 
     async def reply(self, line: bytes) -> Message:

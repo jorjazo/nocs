@@ -433,6 +433,18 @@
           ],
           "default": null
         },
+        "updates": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UpdatesState"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "None where NOCS does not install updates (a PC)."
+        },
         "weather": {
           "anyOf": [
             {
@@ -7717,6 +7729,127 @@
         "time"
       ],
       "title": "UntilTime",
+      "type": "object"
+    },
+    "UpdatesState": {
+      "additionalProperties": false,
+      "description": "Updates of the appliance from apt, installed only when the owner asks (ADR 0025).",
+      "properties": {
+        "checked": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "When NOCS last looked, UTC."
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "installed": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The version of NOCS installed."
+        },
+        "log": {
+          "description": "The last lines apt or dpkg wrote, while installing.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "packages": {
+          "description": "What an update would upgrade.",
+          "items": {
+            "$ref": "#/$defs/UpgradablePackage"
+          },
+          "type": "array"
+        },
+        "previous": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The version to go back to, if any."
+        },
+        "state": {
+          "enum": [
+            "idle",
+            "checking",
+            "installing",
+            "succeeded",
+            "failed"
+          ],
+          "type": "string"
+        },
+        "task": {
+          "anyOf": [
+            {
+              "enum": [
+                "install",
+                "rollback"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "What ran last."
+        }
+      },
+      "required": [
+        "state",
+        "task",
+        "packages",
+        "checked",
+        "installed",
+        "previous",
+        "error",
+        "log"
+      ],
+      "title": "UpdatesState",
+      "type": "object"
+    },
+    "UpgradablePackage": {
+      "additionalProperties": false,
+      "properties": {
+        "from": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "to": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "from",
+        "to"
+      ],
+      "title": "UpgradablePackage",
       "type": "object"
     },
     "ValueRange": {

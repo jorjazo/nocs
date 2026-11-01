@@ -14,7 +14,8 @@ RuntimeDirectoryMode=0755
 NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectHome=yes
-RestrictAddressFamilies=AF_UNIX
+# The network for apt and NetworkManager's tools, netlink for iw (Wi-Fi clients).
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
 
 [Install]
 WantedBy=multi-user.target

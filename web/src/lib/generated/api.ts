@@ -363,6 +363,10 @@ export interface AppState {
   storage?: StorageState | null;
   system?: SystemState | null;
   /**
+   * None where NOCS does not install updates (a PC).
+   */
+  updates?: UpdatesState | null;
+  /**
    * None: no weather sensor is ready.
    */
   weather?: WeatherState | null;
@@ -1889,6 +1893,49 @@ export interface SystemHealth {
    * Most serious first: hot from 80 °C, memory from 90 %, disk under 2 GB.
    */
   warnings: HealthWarningName[];
+}
+/**
+ * Updates of the appliance from apt, installed only when the owner asks (ADR 0025).
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "UpdatesState".
+ */
+export interface UpdatesState {
+  /**
+   * When NOCS last looked, UTC.
+   */
+  checked: string | null;
+  error: string | null;
+  /**
+   * The version of NOCS installed.
+   */
+  installed: string | null;
+  /**
+   * The last lines apt or dpkg wrote, while installing.
+   */
+  log: string[];
+  /**
+   * What an update would upgrade.
+   */
+  packages: UpgradablePackage[];
+  /**
+   * The version to go back to, if any.
+   */
+  previous: string | null;
+  state: "idle" | "checking" | "installing" | "succeeded" | "failed";
+  /**
+   * What ran last.
+   */
+  task: ("install" | "rollback") | null;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "UpgradablePackage".
+ */
+export interface UpgradablePackage {
+  from: string;
+  name: string;
+  to: string;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema

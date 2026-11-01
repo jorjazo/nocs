@@ -161,9 +161,10 @@ mkdir -p "$root/etc/nocs/system.conf.d"
 cat > "$root/etc/nocs/system.conf.d/appliance.conf" <<'EOF'
 # NOCS appliance (ADR 0027): restart, shut down, rename, mount and eject USB drives,
 # set the clock from a client when nothing else keeps it, restart indiserver/PHD2,
-# and run the Wi-Fi: access point, station and the fallback (ADR 0028).
+# run the Wi-Fi: access point, station and the fallback (ADR 0028), and install
+# updates when the owner asks (ADR 0025).
 [operations]
-enabled = power hostname storage time services network
+enabled = power hostname storage time services network update
 EOF
 # A hung kernel reboots the Pi (its hardware watchdog, ADR 0030).
 mkdir -p "$root/etc/systemd/system.conf.d"

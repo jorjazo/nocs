@@ -47,6 +47,17 @@ def system_router(system: Callable[[], SystemService]) -> APIRouter:
             await system().restart_service(service, force=request is not None and request.force)
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
+    # -- updates (ADR 0025) -----------------------------------------------------
+
+    @router.post("/updates/{task}", status_code=status.HTTP_202_ACCEPTED)
+    async def update(  # pyright: ignore[reportUnusedFunction]
+        task: Literal["check", "install", "rollback"], request: ShutdownRequest | None = None
+    ) -> Response:
+        """Check, install (nocsd restarts at the end) or go back to the previous NOCS."""
+        with _system_errors():
+            await system().update(task, force=request is not None and request.force)
+        return Response(status_code=status.HTTP_202_ACCEPTED)
+
     # -- network (ADR 0028) -----------------------------------------------------
 
     @router.post("/network/join", status_code=status.HTTP_202_ACCEPTED)

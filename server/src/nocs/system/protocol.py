@@ -31,6 +31,10 @@ GROUPS: dict[str, str] = {
     "network.forget": "network",
     "network.access_point": "network",
     "network.mode": "network",
+    "update.status": "update",
+    "update.check": "update",
+    "update.install": "update",
+    "update.rollback": "update",
 }
 """Every operation nocs-system knows, with the group that enables it."""
 

@@ -115,6 +115,7 @@ export type {
   SystemState,
   TrackingRequest,
   UnmountedDrive,
+  UpdatesState,
   WeatherState,
 } from "./generated/api";
 

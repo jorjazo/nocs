@@ -21,6 +21,7 @@ import anyio.to_thread
 
 from nocs.system.network import Network
 from nocs.system.protocol import HelperError, Message, validate_hostname
+from nocs.system.updates import Updates
 
 log = logging.getLogger("nocs.system")
 
@@ -37,6 +38,8 @@ class Context:
     """The user served, who must be able to write to the drives mounted for it."""
     network: Network | None = None
     """The Wi-Fi's actor, where the network group is on (ADR 0028)."""
+    updates: Updates | None = None
+    """The updates' actor, where the update group is on (ADR 0025)."""
 
 
 type Operation = Callable[[Context, Message], Awaitable[Message]]
@@ -274,6 +277,31 @@ async def network_mode(context: Context, args: Message) -> Message:
     return await _network(context).set_mode(args)
 
 
+# -- updates (ADR 0025) --------------------------------------------------------
+
+
+def _updates(context: Context) -> Updates:
+    if context.updates is None:
+        raise HelperError("disabled", "updates are not NOCS's to install here")
+    return context.updates
+
+
+async def update_status(context: Context, args: Message) -> Message:
+    return await _updates(context).status(args)
+
+
+async def update_check(context: Context, args: Message) -> Message:
+    return await _updates(context).check(args)
+
+
+async def update_install(context: Context, args: Message) -> Message:
+    return await _updates(context).install(args)
+
+
+async def update_rollback(context: Context, args: Message) -> Message:
+    return await _updates(context).rollback(args)
+
+
 OPERATIONS: dict[str, Operation] = {
     "power.reboot": reboot,
     "power.poweroff": power_off,
@@ -287,4 +315,8 @@ OPERATIONS: dict[str, Operation] = {
     "network.forget": network_forget,
     "network.access_point": network_access_point,
     "network.mode": network_mode,
+    "update.status": update_status,
+    "update.check": update_check,
+    "update.install": update_install,
+    "update.rollback": update_rollback,
 }

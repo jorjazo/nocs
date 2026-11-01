@@ -11,6 +11,7 @@
     powerOff,
     reboot,
     restartService,
+    runUpdate,
     setHostname,
     useGpsSite,
   } from "../lib/api";
@@ -67,7 +68,7 @@
 
   // -- Actions --------------------------------------------------------------------
 
-  type Action = "rename" | "restart" | "shutDown" | "gps" | "indiserver" | "phd2";
+  type Action = "rename" | "restart" | "shutDown" | "gps" | "indiserver" | "phd2" | "check" | "install" | "rollback";
   let busy = $state<Action | null>(null);
   let error = $state("");
   // A restart or shut down refused because something runs: offer to force it.
@@ -116,6 +117,12 @@
     if (await act(service, () => restartService(service, force))) {
       done = service === "indiserver" ? "restartedIndi" : "restartedPhd2";
     }
+  }
+
+  const updates = $derived(live.app.updates ?? null);
+
+  async function update(task: "check" | "install" | "rollback", force = false): Promise<void> {
+    await act(task, () => runUpdate(task, force));
   }
 
   async function useGps(): Promise<void> {
@@ -242,6 +249,61 @@
       {/if}
       {#if done}<p class="muted" role="status">{t.system[done]}</p>{/if}
 
+      {#if updates}
+        <div class="updates">
+          <h3 class="label muted">{t.system.updates}</h3>
+          <p>
+            {#if updates.installed}<span class="mono">{t.system.version(updates.installed)}</span> ·{/if}
+            {#if updates.state === "checking"}
+              {t.system.checking}
+            {:else if updates.checked}
+              {updates.packages.length ? t.system.available(updates.packages.length) : t.system.upToDate}
+              <span class="muted">({t.system.checkedAt(formatTime(updates.checked, locale))})</span>
+            {:else}
+              <span class="muted">{t.system.neverChecked}</span>
+            {/if}
+          </p>
+          {#if updates.packages.length && updates.state !== "installing"}
+            <p class="caption muted mono">
+              {updates.packages.map((p) => `${p.name} ${p.to}`).join(" · ")}
+            </p>
+          {/if}
+          {#if updates.state === "installing"}
+            <p role="status">{t.system.installing}</p>
+          {:else if updates.state === "succeeded"}
+            <p class="muted">{t.system.installed}</p>
+          {:else if updates.state === "failed"}
+            <p class="error">{t.system.installFailed} {updates.error ?? ""}</p>
+          {:else if updates.error}
+            <p class="error">{updates.error}</p>
+          {/if}
+          {#if updates.log.length && updates.state !== "idle"}
+            <pre class="log">{updates.log.slice(-8).join("\n")}</pre>
+          {/if}
+          <div class="buttons">
+            <Button
+              busy={busy === "check" || updates.state === "checking"}
+              disabled={updates.state === "installing"}
+              onclick={() => update("check")}>{t.system.check}</Button>
+            {#if updates.packages.length && updates.state !== "installing"}
+              {#if refused === "install"}
+                <ConfirmButton label={t.system.installAnyway} confirmLabel={t.system.confirmInstall} onconfirm={() => update("install", true)} />
+              {:else}
+                <ConfirmButton label={t.system.install} confirmLabel={t.system.confirmInstall} busy={busy === "install"} onconfirm={() => update("install")} />
+              {/if}
+            {/if}
+            {#if updates.previous && updates.previous !== updates.installed && updates.state !== "installing"}
+              {@const previous = updates.previous}
+              <ConfirmButton
+                label={t.system.rollback(previous)}
+                confirmLabel={t.system.confirmRollback}
+                busy={busy === "rollback"}
+                onconfirm={() => update("rollback", refused === "rollback")} />
+            {/if}
+          </div>
+        </div>
+      {/if}
+
       <div class="diagnostics">
         <a href={DIAGNOSTICS_URL} download>{t.system.diagnostics}</a>
         <span class="caption muted">{t.system.diagnosticsHint}</span>
@@ -306,6 +368,22 @@
   }
   .error {
     color: var(--error);
+    overflow-wrap: anywhere;
+  }
+  .updates {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+  .log {
+    margin: 0;
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-button);
+    background: var(--raised);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 16px;
+    white-space: pre-wrap;
     overflow-wrap: anywhere;
   }
   .diagnostics {

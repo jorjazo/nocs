@@ -692,6 +692,25 @@ class NetworkState(StateModel):
     last_join: LastJoin | None
 
 
+class UpgradablePackage(StateModel):
+    name: str
+    from_: str = Field(alias="from")
+    to: str
+
+
+class UpdatesState(StateModel):
+    """Updates of the appliance from apt, installed only when the owner asks (ADR 0025)."""
+
+    state: Literal["idle", "checking", "installing", "succeeded", "failed"]
+    task: Literal["install", "rollback"] | None = Field(description="What ran last.")
+    packages: list[UpgradablePackage] = Field(description="What an update would upgrade.")
+    checked: str | None = Field(description="When NOCS last looked, UTC.")
+    installed: str | None = Field(description="The version of NOCS installed.")
+    previous: str | None = Field(description="The version to go back to, if any.")
+    error: str | None
+    log: list[str] = Field(description="The last lines apt or dpkg wrote, while installing.")
+
+
 class GpsState(StateModel):
     """A USB GPS through gpsd (ADR 0029); positions to 4 decimals, at most every 10 s."""
 
@@ -820,6 +839,9 @@ class AppState(StateModel):
     system: SystemState | None = None
     sequence: SequenceState | None = None
     gps: GpsState | None = None
+    updates: UpdatesState | None = Field(
+        default=None, description="None where NOCS does not install updates (a PC)."
+    )
     network: NetworkState | None = Field(
         default=None, description="None where NOCS does not manage the network (a PC)."
     )
