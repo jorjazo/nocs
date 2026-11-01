@@ -163,7 +163,8 @@ Session: the night's frames (phase 2 field test):
 - Until the sequence monitor (phase 5) arrives above it, the Session tab lists
   the frames saved on a night: the night (a picker when there are several), its
   frame count, total exposure and size, then one row per type, target and filter,
-  then the frames newest first with their time, stars and HFR, 50 at a time.
+  then the frames newest first with their time, stars, HFR and guiding RMS (lost
+  guide frames in the warning color), 50 at a time.
 - The night's zip is the screen's primary action and says its size before it
   starts (a night is several GB); each group and each frame has its own download.
   Downloads are plain links, so the phone's browser keeps and shows them.

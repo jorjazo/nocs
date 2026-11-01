@@ -73,6 +73,7 @@ export const es: Messages = {
     downloadFrame: (size: string) => `Descargar esta imagen, ${size}`,
     frames: "Imágenes, de la más reciente",
     all: "Todas",
+    guided: (rms: string, lost: number) => (lost > 0 ? `RMS ${rms}″ · ${lost} perdidas` : `RMS ${rms}″`),
     more: "Ver más",
     missing: (volume: string) => `Algunas imágenes están en ${volume}, que no está conectado: conéctalo para descargarlas.`,
     empty: "Aún no hay imágenes guardadas",

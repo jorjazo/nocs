@@ -213,6 +213,11 @@
           <div class="metrics mono">
             <span>{frame.stars === null ? "—" : t.live.stars(frame.stars)}</span>
             <span class="muted">{frame.hfr === null ? "HFR —" : `HFR ${formatDecimal(frame.hfr, locale, 2)}`}</span>
+            {#if frame.guiding?.rms_total != null}
+              <span class="muted" class:warning={frame.guiding.lost > 0}>
+                {t.nights.guided(formatDecimal(frame.guiding.rms_total, locale, 2), frame.guiding.lost)}
+              </span>
+            {/if}
           </div>
           {#if frame.available}
             <a class="icon-link" href={frame.url} download aria-label={t.nights.downloadFrame(formatBytes(frame.size, locale))}>
@@ -351,6 +356,9 @@
   .metrics {
     align-items: flex-end;
     font-size: 14px;
+  }
+  .metrics .warning {
+    color: var(--warning);
   }
   .unavailable {
     opacity: 0.55;

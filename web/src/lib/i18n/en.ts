@@ -89,6 +89,7 @@ export const en = {
     downloadFrame: (size: string) => `Download this frame, ${size}`,
     frames: "Frames, newest first",
     all: "All",
+    guided: (rms: string, lost: number) => (lost > 0 ? `RMS ${rms}″ · ${lost} lost` : `RMS ${rms}″`),
     more: "Show more",
     missing: (volume: string) => `Some frames are on ${volume}, which is not connected: plug it in to download them.`,
     empty: "No frames saved yet",
