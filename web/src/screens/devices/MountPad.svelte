@@ -2,8 +2,10 @@
   // The slew pad: the mount moves only while an arrow is held (two at once move
   // diagonally) and stops when it is let go, the page goes to the background or
   // the link drops; the server enforces it too (ADR 0015). Arrow keys work on a
-  // keyboard. Shown in the mount's sheet and, folded, in Live view.
+  // keyboard. Shown in the mount's sheet and, folded, in Live view, where it is
+  // compact: the speed beside the arrows, so the preview above stays in sight.
   import { untrack } from "svelte";
+  import Button from "../../components/Button.svelte";
   import Icon from "../../components/Icon.svelte";
   import SegmentedControl from "../../components/SegmentedControl.svelte";
   import type { IconName } from "../../components/icons";
@@ -15,17 +17,34 @@
     mount,
     disabled = false,
     reason = null,
+    compact = false,
+    onhide,
   }: {
     mount: MountState;
     disabled?: boolean;
     // Why it is disabled, when that is not obvious.
     reason?: string | null;
+    compact?: boolean;
+    // Folds the pad away, offered beside the speed.
+    onhide?: () => void;
   } = $props();
 
   const t = $derived(i18n.t);
   const link = new PadLink();
   let rate = $state<string | null>(untrack(() => mount.slew_rate));
-  const rates = $derived(mount.slew_rates.map((value) => ({ value, label: value })));
+  // Drivers name their rates by index ("10x") and label them with the speed
+  // ("1440x" on the AM5): people pick by the label.
+  const rates = $derived(
+    mount.slew_rates.map((value, index) => ({ value, label: mount.slew_rate_labels[index] ?? value })),
+  );
+  const index = $derived(rates.findIndex((option) => option.value === rate));
+  const rateLabel = $derived(rates[index]?.label ?? rate ?? "");
+  // Ten rates do not fit a segmented control on a phone: step through them.
+  const stepped = $derived(compact || rates.length > 4);
+  function step(by: number): void {
+    const next = rates[index + by];
+    if (next) rate = next.value;
+  }
 
   // The link is open while the pad may be used.
   $effect(() => {
@@ -104,7 +123,7 @@
 
 <svelte:window onkeydown={keydown} onkeyup={keyup} />
 
-<div class="pad">
+<div class="pad" class:compact>
   <div class="cross" role="group" aria-label={t.mount.pad}>
     {#each buttons as { direction, icon } (direction)}
       <button
@@ -132,10 +151,36 @@
         <span class="letter">{t.mount.letters[direction]}</span>
       </button>
     {/each}
-    <span class="center mono" aria-hidden="true">{rate ?? ""}</span>
+    <span class="center mono" aria-hidden="true">{rateLabel}</span>
   </div>
   {#if rates.length > 1 && rate !== null}
-    <SegmentedControl label={t.mount.rate} options={rates} value={rate} {disabled} onchange={(value) => (rate = value)} />
+    {#if stepped}
+      <div class="rate" role="group" aria-label={t.mount.rate}>
+        <span class="label muted">{t.mount.rate}</span>
+        <div class="steps">
+          <button
+            type="button"
+            class="step"
+            aria-label={t.mount.slower}
+            disabled={disabled || index <= 0}
+            onclick={() => step(-1)}>
+            <Icon name="minus" />
+          </button>
+          <span class="value mono" aria-live="polite">{rateLabel}</span>
+          <button
+            type="button"
+            class="step"
+            aria-label={t.mount.faster}
+            disabled={disabled || index >= rates.length - 1}
+            onclick={() => step(1)}>
+            <Icon name="plus" />
+          </button>
+        </div>
+        {#if onhide}<Button variant="text" onclick={onhide}>{t.mount.hidePad}</Button>{/if}
+      </div>
+    {:else}
+      <SegmentedControl label={t.mount.rate} options={rates} value={rate} {disabled} onchange={(value) => (rate = value)} />
+    {/if}
   {/if}
   <p class="caption" class:warning={status?.latched && !reason} class:muted={!status?.latched || reason} role="status">
     {message ?? t.mount.padHint}
@@ -148,6 +193,53 @@
     flex-direction: column;
     align-items: stretch;
     gap: var(--space-3);
+  }
+  /* Arrows on the left, speed on the right, the caption under both. */
+  .compact {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    column-gap: var(--space-4);
+    row-gap: var(--space-2);
+  }
+  .compact .cross {
+    grid-template-columns: repeat(3, 56px);
+    grid-template-rows: repeat(3, 56px);
+  }
+  .compact p {
+    grid-column: 1 / -1;
+  }
+  .rate {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-1);
+  }
+  .steps {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  .rate .value {
+    min-width: 5ch;
+    font-size: 17px;
+    font-weight: 600;
+    text-align: center;
+  }
+  .step {
+    display: grid;
+    place-items: center;
+    width: var(--touch);
+    height: var(--touch);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-button);
+    background: var(--raised);
+    color: var(--text);
+    cursor: pointer;
+  }
+  .step:disabled {
+    cursor: default;
+    opacity: 0.45;
   }
   .cross {
     display: grid;

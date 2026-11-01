@@ -4854,6 +4854,13 @@
           ],
           "description": "Speed of manual motion, a name in slew_rates."
         },
+        "slew_rate_labels": {
+          "description": "What the driver calls each of slew_rates (the AM5's 10x: 1440x).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "slew_rates": {
           "description": "Slowest first, as the driver names them.",
           "items": {
@@ -4922,6 +4929,7 @@
         "moved_by",
         "slew_rate",
         "slew_rates",
+        "slew_rate_labels",
         "time",
         "site",
         "site_check",

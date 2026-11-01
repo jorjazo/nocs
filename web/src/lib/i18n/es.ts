@@ -445,6 +445,8 @@ export const es: Messages = {
     west: "Oeste",
     letters: { north: "N", south: "S", east: "E", west: "O" },
     rate: "Velocidad",
+    slower: "Más lento",
+    faster: "Más rápido",
     padLatched: "NOCS detuvo la montura. Suelta las flechas para mover de nuevo.",
     padOffline: "Conectando el pad…",
     movedBy: (name) => `${name} está moviendo la montura.`,

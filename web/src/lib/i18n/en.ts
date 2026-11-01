@@ -457,6 +457,8 @@ export const en = {
     west: "West",
     letters: { north: "N", south: "S", east: "E", west: "W" },
     rate: "Speed",
+    slower: "Slower",
+    faster: "Faster",
     padLatched: "NOCS stopped the mount. Let go of the arrows to move again.",
     padOffline: "Connecting the pad…",
     movedBy: (name: string) => `${name} is moving the mount.`,

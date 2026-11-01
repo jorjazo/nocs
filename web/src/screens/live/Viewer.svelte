@@ -6,13 +6,15 @@
   // switch between fitting the frame and its pixels at full size. It is drawn
   // on a canvas so Night mode can map it to red only (docs/ux.md §3): never
   // white stars, whatever the image holds. The zoom survives new frames of the
-  // same size, which is what focusing needs.
+  // same size, which is what focusing needs. The reticle marks the frame's
+  // centre, for framing with the slew pad.
   let {
     url,
     width,
     height,
     label,
     empty,
+    reticle = false,
     children,
   }: {
     url: string | null;
@@ -22,6 +24,7 @@
     label: string;
     // Shown while there is no image.
     empty?: Snippet;
+    reticle?: boolean;
     // Overlays (readouts, buttons) on top of the image.
     children?: Snippet;
   } = $props();
@@ -227,6 +230,12 @@
     style:height="{height * fit}px"
     style:transform="translate(-50%, -50%) translate({panX}px, {panY}px) scale({zoom})">{label}</canvas>
   {#if !url && empty}<div class="empty">{@render empty()}</div>{/if}
+  {#if reticle && shown && url}
+    <svg class="reticle" viewBox="-32 -32 64 64" aria-hidden="true" style:translate="{panX}px {panY}px">
+      <circle r="14" />
+      <path d="M0 -30v12M0 18v12M-30 0h12M18 0h12" />
+    </svg>
+  {/if}
   {@render children?.()}
 </div>
 
@@ -249,6 +258,18 @@
   }
   .hidden {
     visibility: hidden;
+  }
+  /* Open in the middle, so the star it frames stays visible. */
+  .reticle {
+    position: absolute;
+    left: calc(50% - 32px);
+    top: calc(50% - 32px);
+    width: 64px;
+    height: 64px;
+    fill: none;
+    stroke: var(--accent);
+    stroke-width: 1.5;
+    pointer-events: none;
   }
   .pixelated {
     image-rendering: pixelated;

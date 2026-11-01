@@ -326,6 +326,9 @@ class MountState(StateModel):
     moved_by: str | None = Field(description="Paired device whose slew pad holds the mount.")
     slew_rate: str | None = Field(description="Speed of manual motion, a name in slew_rates.")
     slew_rates: list[str] = Field(description="Slowest first, as the driver names them.")
+    slew_rate_labels: list[str] = Field(
+        description="What the driver calls each of slew_rates (the AM5's 10x: 1440x)."
+    )
     time: str | None = Field(description="The mount's clock as it last reported it, UTC.")
     site: MountSite | None = Field(description="Where the mount believes it is.")
     site_check: Literal["same", "different", "unknown", "no_profile_site"] = Field(

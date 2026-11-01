@@ -192,6 +192,13 @@ class Mount(Device):
         return list(self.prop("TELESCOPE_SLEW_RATE").elements)
 
     @property
+    def slew_rate_labels(self) -> list[str]:
+        """What the driver calls each of ``slew_rates``: the AM5's ``10x`` is 1440x sidereal."""
+        if not self.has("TELESCOPE_SLEW_RATE"):
+            return []
+        return [element.label for element in self.prop("TELESCOPE_SLEW_RATE").elements.values()]
+
+    @property
     def slew_rate(self) -> str | None:
         if not self.has("TELESCOPE_SLEW_RATE"):
             return None
@@ -330,11 +337,18 @@ class Mount(Device):
     async def abort(self, timeout: float = DEFAULT_TIMEOUT) -> None:
         await self.command("TELESCOPE_ABORT_MOTION", {"ABORT": True}, timeout=timeout)
 
-    async def set_slew_rate(self, rate: str, timeout: float = DEFAULT_TIMEOUT) -> None:
+    async def set_slew_rate(
+        self, rate: str, timeout: float = DEFAULT_TIMEOUT, *, force: bool = False
+    ) -> None:
+        """Choose the speed of manual motion; ``force`` sends it even if the switch shows it.
+
+        Some drivers show a rate they never gave the mount: the ZWO AM5's starts
+        with 1440x On while the mount keeps its own until a rate is requested.
+        """
         rates = self.slew_rates
         if rate not in rates:
             raise ValueError(f"{self.name} has no slew rate {rate}; it has {', '.join(rates)}")
-        if self.slew_rate == rate:
+        if self.slew_rate == rate and not force:
             return
         await self.command(
             "TELESCOPE_SLEW_RATE",

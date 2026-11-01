@@ -133,12 +133,16 @@ class Pad:
         mount = self._host.mount()
         if self._token is None:
             self._token = self._host.reserve(self)
-        if command.rate is not None and command.rate != mount.slew_rate:
+        if command.rate is not None and (
+            command.rate != mount.slew_rate or not self._motion.moving
+        ):
             if self._motion.moving:
                 # Drivers apply a new rate on the next start, not to a motion under way.
                 await mount.move(STOPPED)
                 self._motion = STOPPED
-            await mount.set_slew_rate(command.rate)
+            # At every start, even when the switch shows it already: the AM5's driver
+            # shows a rate it never gave the mount (``Mount.set_slew_rate``).
+            await mount.set_slew_rate(command.rate, force=True)
         self._rate = mount.slew_rate
         await mount.move(command.motion)
         self._motion = command.motion

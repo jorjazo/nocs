@@ -153,6 +153,7 @@ def test_reads(client: FakeClient) -> None:
     assert mount.motion == STOPPED
     assert mount.slew_rates == ["1x", "2x"]
     assert mount.slew_rate == "2x"
+    assert mount.slew_rate_labels == ["1x", "2x"]
     assert mount.track_modes == ["sidereal", "solar", "lunar"]
     assert mount.track_mode == "sidereal"
     assert mount.location == Location(-30.03, pytest.approx(-70.65), 0.0)  # pyright: ignore[reportArgumentType]
@@ -419,6 +420,39 @@ async def test_pad_moves_while_held_and_stops_when_let_go(
         await wait_until(lambda: host.jobs.holder("mount") is None)
         await user.send_in.send(None)
     assert not user.statuses[-1].latched
+
+
+def test_the_am5_names_its_rates_by_index() -> None:
+    client = FakeClient()
+    client.replay("lab-rig-2026-10-30.xml", "ZWO AM5")
+    mount = Mount(client, "ZWO AM5")
+    assert mount.slew_rates[-1] == "10x"
+    assert mount.slew_rate_labels == [
+        "0.25x", "0.5x", "1x", "2x", "4x", "8x", "20x", "60x", "720x", "1440x"
+    ]  # fmt: skip
+
+
+async def test_pad_sends_the_rate_at_every_start(client: FakeClient, driver: MotionDriver) -> None:
+    # The AM5's driver shows 1440x On without having sent it: the switch says
+    # nothing about the mount, so the rate goes out even when it matches.
+    host, user = Host(client), Client()
+    pad = Pad(host, "phone")
+    mount = Mount(client, NAME)
+
+    def rates() -> int:
+        return sum(1 for _, name, _ in client.sent if name == "TELESCOPE_SLEW_RATE")
+
+    async with anyio.create_task_group() as group:
+        group.start_soon(drive, pad, user.receive, user.send, 0.3)
+        for _ in range(2):
+            for _ in range(3):  # a press and its keepalives
+                await user.send_in.send(PadCommand(NORTH, "2x"))
+                await anyio.sleep(0.05)
+            await user.send_in.send(PadCommand(STOPPED))
+            await wait_until(lambda: mount.motion == STOPPED)
+        await user.send_in.send(None)
+    assert mount.slew_rate == "2x"
+    assert rates() == 2
 
 
 async def test_dead_man_stops_on_silence_and_latches(

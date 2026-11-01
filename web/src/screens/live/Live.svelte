@@ -189,6 +189,9 @@
   const mount = $derived(live.app.mount ?? null);
   const mountJob = $derived(holder(live.app.jobs, "mount"));
   let showPad = $state(false);
+  // Framing: the pad sits with the actions and the preview stays in sight above,
+  // with its centre marked, so a star can be watched while it moves.
+  const framing = $derived(showPad && mount !== null);
   const padReason = $derived.by((): string | null => {
     if (!owner) return t.mount.locked;
     if (mount?.parked) return t.mount.padParked;
@@ -242,13 +245,14 @@
     </EmptyState>
   </div>
 {:else}
-  <div class="live" class:expanded>
+  <div class="live" class:expanded class:framing={framing}>
     <section class="stage" aria-label={t.live.preview}>
       <Viewer
         url={preview?.url ?? null}
         width={preview?.width ?? 0}
         height={preview?.height ?? 0}
-        label={t.live.previewLabel(camera.device)}>
+        label={t.live.previewLabel(camera.device)}
+        reticle={framing}>
         {#snippet empty()}
           <div class="nopreview">
             <p class="heading">{t.live.noPreview}</p>
@@ -361,9 +365,6 @@
           </button>
           <Button onclick={() => (showPad = !showPad)}>{showPad ? t.mount.hidePad : t.mount.showPad}</Button>
         </div>
-        {#if showPad}
-          <MountPad {mount} disabled={padReason !== null} reason={padReason} />
-        {/if}
       {/if}
 
       {#if cameras.guide_camera || guiding?.phd2.connected}
@@ -481,6 +482,9 @@
             {/snippet}
           </Banner>
         {/if}
+        {#if framing && mount}
+          <MountPad {mount} compact disabled={padReason !== null} reason={padReason} onhide={() => (showPad = false)} />
+        {/if}
         <div class="actions">
           <button
             type="button"
@@ -539,6 +543,12 @@
   .stage {
     height: min(48dvh, 80vw);
     min-height: 240px;
+  }
+  .framing .stage {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    height: min(40dvh, 80vw);
   }
   .expanded .stage {
     position: fixed;
@@ -767,7 +777,8 @@
       grid-template-columns: minmax(0, 1fr) 400px;
       min-height: 100dvh;
     }
-    .stage {
+    .stage,
+    .framing .stage {
       position: sticky;
       top: 0;
       height: 100dvh;

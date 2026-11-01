@@ -1338,6 +1338,10 @@ export interface MountState {
    */
   slew_rate: string | null;
   /**
+   * What the driver calls each of slew_rates (the AM5's 10x: 1440x).
+   */
+  slew_rate_labels: string[];
+  /**
    * Slowest first, as the driver names them.
    */
   slew_rates: string[];

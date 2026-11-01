@@ -4,7 +4,7 @@ State under ``("mount",)`` while the mount role is ready, ``None`` otherwise::
 
     {device, ra, dec, ra_j2000, dec_j2000, alt, az, slewing, tracking, track_mode,
      track_modes, parked, parking, can_park, can_home, homing, pier_side, moving,
-     moved_by, slew_rate, slew_rates, time, site, site_check, limits}
+     moved_by, slew_rate, slew_rates, slew_rate_labels, time, site, site_check, limits}
 
 Go to, park and home run as jobs that lock the mount; cancelling one aborts the
 motion. Manual motion goes through slew pads (``nocs.mount.pad``).
@@ -565,6 +565,7 @@ class MountService:
             "moved_by": self._mover.client if self._mover is not None else None,
             "slew_rate": mount.slew_rate,
             "slew_rates": list[Json](mount.slew_rates),
+            "slew_rate_labels": list[Json](mount.slew_rate_labels),
             "time": mount_time.isoformat(timespec="seconds") if mount_time else None,
             "site": (
                 {

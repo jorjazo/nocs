@@ -226,7 +226,14 @@ Mount (stage 2.9):
   without a message (ADR 0015). After a stop NOCS made, the pad says so and
   waits for the arrows to be let go. Arrow keys work on a keyboard. East is on
   the left, as on a sky chart. Live view carries the pad folded under the
-  focuser, for framing while a loop runs.
+  focuser, for framing while a loop runs. Opened there, it docks above the
+  shutter, compact, with the speed beside the arrows, while the preview stays
+  pinned at the top with the frame's centre marked: the star is in sight while
+  it moves.
+- Speeds show the driver's labels, not its names (the AM5 calls 1440x `10x`):
+  up to four as a segmented control, more with slower / faster buttons. The
+  speed is sent at every start of a motion, since a driver may show one it
+  never gave the mount.
 - Park and home take a second tap; go to and zenith do not. A go to below the
   horizon is refused with a "Go anyway" that takes a second tap.
 - Every time the state channel opens, the owner's device reports its clock.
