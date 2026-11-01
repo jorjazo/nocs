@@ -2687,6 +2687,18 @@ export interface EjectRequest {
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "EndPlan".
+ */
+export interface EndPlan {
+  /**
+   * Power outputs to switch off.
+   */
+  outputs?: OutputId[];
+  park?: boolean;
+  warm?: boolean;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "EquatorialGoto".
  */
 export interface EquatorialGoto {
@@ -2765,6 +2777,19 @@ export interface FilterSelectRequest {
    * 1-based.
    */
   slot?: number | null;
+}
+/**
+ * When a template's sequence focuses: at the start, and on these reasons.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "FocusPlan".
+ */
+export interface FocusPlan {
+  at_start?: boolean;
+  filter_change?: boolean;
+  hfr_increase?: number | null;
+  minutes?: number | null;
+  temperature_change?: number | null;
 }
 /**
  * How autofocus sweeps with a train's optics (ADR 0021).
@@ -3286,6 +3311,10 @@ export interface Sequence {
   };
   start?: Container;
   targets?: Container;
+  /**
+   * What the sequence was built from: the builder edits that.
+   */
+  template?: Template | null;
   version?: 1;
 }
 /**
@@ -3305,6 +3334,71 @@ export interface Container1 {
    */
   target?: Target | null;
   triggers?: Trigger[];
+}
+/**
+ * This target, these filters, tonight: what the builder edits (phase 5.10).
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "Template".
+ */
+export interface Template {
+  batch?: number;
+  /**
+   * Sensor °C.
+   */
+  cooling?: number | null;
+  cooling_ramp?: number | null;
+  /**
+   * The twilight that starts and ends the night.
+   */
+  darkness?: "civil" | "nautical" | "astronomical";
+  end?: EndPlan;
+  focus?: FocusPlan | null;
+  guide?: boolean;
+  /**
+   * Image the target only above this (and the horizon).
+   */
+  min_altitude?: number | null;
+  name: Name;
+  order?: "batches" | "in_turn";
+  recovery?: {
+    [k: string]: Policy;
+  };
+  /**
+   * @minItems 1
+   */
+  rows: [PlanRow, ...PlanRow[]];
+  /**
+   * Wait until dark first; otherwise start at once.
+   */
+  start_at_dusk?: boolean;
+  target: Target;
+  until_dawn?: boolean;
+}
+/**
+ * What a template's plan costs, and how much of tonight it has (phase 5.10).
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "SequenceEstimate".
+ */
+export interface SequenceEstimate {
+  /**
+   * On disk; None while the camera is unknown.
+   */
+  bytes: number | null;
+  /**
+   * Seconds the frames take, without focusing or slewing.
+   */
+  duration: number;
+  frames: number;
+  /**
+   * Seconds of exposure.
+   */
+  integration: number;
+  /**
+   * Seconds tonight's dark window keeps the target above the minimum altitude and the horizon; None while the site is unknown.
+   */
+  window: number | null;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema

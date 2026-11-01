@@ -3,15 +3,23 @@
 from __future__ import annotations
 
 import contextlib
+import dataclasses
 from collections.abc import Callable, Generator
 
+import anyio
 from fastapi import APIRouter, HTTPException, Response, status
 
-from nocs.api.schemas import JobStarted, SequencePauseRequest, SequenceStopRequest
+from nocs.api.schemas import (
+    JobStarted,
+    SequenceEstimate,
+    SequencePauseRequest,
+    SequenceStopRequest,
+)
 from nocs.devices import DeviceError
 from nocs.imaging import CameraNotReadyError
 from nocs.jobs import ResourceBusyError
 from nocs.sequence import Sequence, SequenceError
+from nocs.sequence.model import Template
 from nocs.sequence.service import SequenceBusyError, SequenceService
 
 
@@ -42,6 +50,19 @@ def sequences_router(sequences: Callable[[], SequenceService]) -> APIRouter:
             if not sequences().delete(sequence_id):
                 raise HTTPException(status.HTTP_404_NOT_FOUND, f"no sequence {sequence_id!r}")
         return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    @router.put("/sequences/{sequence_id}/template", status_code=status.HTTP_204_NO_CONTENT)
+    async def put_template(sequence_id: str, template: Template) -> Response:  # pyright: ignore[reportUnusedFunction]
+        """Build the sequence from a template and keep it (with the template)."""
+        with _errors():
+            sequences().put_template(sequence_id, template)
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    @router.post("/sequences/estimate")
+    async def estimate(template: Template) -> SequenceEstimate:  # pyright: ignore[reportUnusedFunction]
+        with _errors():
+            found = await anyio.to_thread.run_sync(sequences().estimate, template)
+        return SequenceEstimate(**dataclasses.asdict(found))
 
     @router.post("/sequences/{sequence_id}/start", status_code=status.HTTP_202_ACCEPTED)
     async def start(sequence_id: str) -> JobStarted:  # pyright: ignore[reportUnusedFunction]

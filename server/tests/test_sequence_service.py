@@ -19,6 +19,7 @@ from nocs.api.app import create_app
 from nocs.clock import Clock
 from nocs.config import Settings
 from nocs.devices import Coordinates, DeviceError, FrameType
+from nocs.devices.camera import SensorInfo
 from nocs.equipment import Role
 from nocs.focus.autofocus import AutofocusOptions
 from nocs.imaging.capture import CameraSettings, Captured
@@ -46,6 +47,7 @@ M42 = Target(name="M 42", ra=5.588, dec=-5.39)
 
 class Camera:
     can_cool = True
+    sensor = SensorInfo(6248, 4176, 3.76, 3.76, 16)
     gain: float | None = 100
     offset: float | None = 10
     binning = (1, 1)

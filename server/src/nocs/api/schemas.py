@@ -1354,6 +1354,19 @@ class JobStarted(WireModel):
     job: str
 
 
+class SequenceEstimate(WireModel):
+    """What a template's plan costs, and how much of tonight it has (phase 5.10)."""
+
+    frames: int
+    integration: float = Field(description="Seconds of exposure.")
+    duration: float = Field(description="Seconds the frames take, without focusing or slewing.")
+    bytes: int | None = Field(description="On disk; None while the camera is unknown.")
+    window: float | None = Field(
+        description="Seconds tonight's dark window keeps the target above the minimum altitude"
+        " and the horizon; None while the site is unknown."
+    )
+
+
 class Driver(WireModel):
     driver: str = Field(description="Executable, e.g. indi_asi_ccd.")
     name: str

@@ -391,6 +391,59 @@ def needs_site(sequence: Sequence) -> bool:
     return any(asks(part) for part in (sequence.start, sequence.targets, sequence.end))
 
 
+# -- templates (phase 5.10) ---------------------------------------------------------
+
+
+class FocusPlan(SequenceModel):
+    """When a template's sequence focuses: at the start, and on these reasons."""
+
+    at_start: bool = True
+    filter_change: bool = False
+    temperature_change: float | None = Field(default=1.0, gt=0)
+    hfr_increase: float | None = Field(default=None, gt=0)
+    minutes: float | None = Field(default=None, gt=0)
+
+
+class EndPlan(SequenceModel):
+    park: bool = True
+    warm: bool = True
+    outputs: list[OutputId] = Field(
+        default_factory=list[OutputId], description="Power outputs to switch off."
+    )
+
+
+class Template(SequenceModel):
+    """This target, these filters, tonight: what the builder edits (phase 5.10)."""
+
+    name: Name
+    target: Target
+    rows: list[PlanRow] = Field(min_length=1)
+    order: Literal["batches", "in_turn"] = "batches"
+    batch: int = Field(default=5, ge=1, le=1000)
+    start_at_dusk: bool = Field(
+        default=True, description="Wait until dark first; otherwise start at once."
+    )
+    darkness: Darkness = Field(
+        default="astronomical", description="The twilight that starts and ends the night."
+    )
+    until_dawn: bool = True
+    min_altitude: float | None = Field(
+        default=30, ge=0, le=90, description="Image the target only above this (and the horizon)."
+    )
+    cooling: float | None = Field(default=None, ge=-60, le=40, description="Sensor °C.")
+    cooling_ramp: float | None = Field(default=None, ge=0)
+    focus: FocusPlan | None = Field(default_factory=FocusPlan)
+    guide: bool = False
+    end: EndPlan = Field(default_factory=EndPlan)
+    recovery: dict[FailureKind, Policy] = Field(default_factory=dict[FailureKind, Policy])
+
+    @model_validator(mode="after")
+    def _target_with_coordinates(self) -> Self:
+        if self.target.ra is None:
+            raise ValueError("a template's target needs its coordinates")
+        return self
+
+
 class Sequence(SequenceModel):
     version: Literal[1] = VERSION
     name: Name
@@ -400,6 +453,9 @@ class Sequence(SequenceModel):
     recovery: dict[FailureKind, Policy] = Field(
         default_factory=dict[FailureKind, Policy],
         description="Policies that replace the defaults, by kind of failure (ADR 0032).",
+    )
+    template: Template | None = Field(
+        default=None, description="What the sequence was built from: the builder edits that."
     )
 
     def policy(self, kind: FailureKind) -> Policy:

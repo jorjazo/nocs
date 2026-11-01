@@ -17,6 +17,7 @@ from typing import Protocol
 import anyio
 
 from nocs.devices import Coordinates, DeviceError, FrameType
+from nocs.devices.camera import SensorInfo
 from nocs.equipment import Role
 from nocs.filters.service import FilterWheelNotReadyError
 from nocs.focus.autofocus import AutofocusError, AutofocusOptions
@@ -68,6 +69,8 @@ POLL = 5.0
 class CameraDevice(Protocol):
     @property
     def can_cool(self) -> bool: ...
+    @property
+    def sensor(self) -> SensorInfo: ...
     @property
     def temperature(self) -> float | None: ...
     @property

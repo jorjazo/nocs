@@ -2386,6 +2386,28 @@
       "title": "EjectRequest",
       "type": "object"
     },
+    "EndPlan": {
+      "additionalProperties": false,
+      "properties": {
+        "outputs": {
+          "description": "Power outputs to switch off.",
+          "items": {
+            "$ref": "#/$defs/OutputId"
+          },
+          "type": "array"
+        },
+        "park": {
+          "default": true,
+          "type": "boolean"
+        },
+        "warm": {
+          "default": true,
+          "type": "boolean"
+        }
+      },
+      "title": "EndPlan",
+      "type": "object"
+    },
     "EquatorialGoto": {
       "additionalProperties": false,
       "properties": {
@@ -2732,6 +2754,58 @@
         "confirmed"
       ],
       "title": "FilterWheelState",
+      "type": "object"
+    },
+    "FocusPlan": {
+      "additionalProperties": false,
+      "description": "When a template's sequence focuses: at the start, and on these reasons.",
+      "properties": {
+        "at_start": {
+          "default": true,
+          "type": "boolean"
+        },
+        "filter_change": {
+          "default": false,
+          "type": "boolean"
+        },
+        "hfr_increase": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "minutes": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "temperature_change": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": 1.0
+        }
+      },
+      "title": "FocusPlan",
       "type": "object"
     },
     "FocusSweep": {
@@ -6298,6 +6372,18 @@
         "targets": {
           "$ref": "#/$defs/Container"
         },
+        "template": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Template"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "What the sequence was built from: the builder edits that."
+        },
         "version": {
           "const": 1,
           "default": 1,
@@ -6308,6 +6394,53 @@
         "name"
       ],
       "title": "Sequence",
+      "type": "object"
+    },
+    "SequenceEstimate": {
+      "description": "What a template's plan costs, and how much of tonight it has (phase 5.10).",
+      "properties": {
+        "bytes": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "On disk; None while the camera is unknown."
+        },
+        "duration": {
+          "description": "Seconds the frames take, without focusing or slewing.",
+          "type": "number"
+        },
+        "frames": {
+          "type": "integer"
+        },
+        "integration": {
+          "description": "Seconds of exposure.",
+          "type": "number"
+        },
+        "window": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Seconds tonight's dark window keeps the target above the minimum altitude and the horizon; None while the site is unknown."
+        }
+      },
+      "required": [
+        "frames",
+        "integration",
+        "duration",
+        "bytes",
+        "window"
+      ],
+      "title": "SequenceEstimate",
       "type": "object"
     },
     "SequenceEvent": {
@@ -7686,6 +7819,126 @@
         "dew_point"
       ],
       "title": "TemperatureRecord",
+      "type": "object"
+    },
+    "Template": {
+      "additionalProperties": false,
+      "description": "This target, these filters, tonight: what the builder edits (phase 5.10).",
+      "properties": {
+        "batch": {
+          "default": 5,
+          "maximum": 1000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "cooling": {
+          "anyOf": [
+            {
+              "maximum": 40,
+              "minimum": -60,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Sensor \u00b0C."
+        },
+        "cooling_ramp": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "darkness": {
+          "$ref": "#/$defs/Darkness",
+          "default": "astronomical",
+          "description": "The twilight that starts and ends the night."
+        },
+        "end": {
+          "$ref": "#/$defs/EndPlan"
+        },
+        "focus": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FocusPlan"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "guide": {
+          "default": false,
+          "type": "boolean"
+        },
+        "min_altitude": {
+          "anyOf": [
+            {
+              "maximum": 90,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": 30,
+          "description": "Image the target only above this (and the horizon)."
+        },
+        "name": {
+          "$ref": "#/$defs/Name"
+        },
+        "order": {
+          "default": "batches",
+          "enum": [
+            "batches",
+            "in_turn"
+          ],
+          "type": "string"
+        },
+        "recovery": {
+          "additionalProperties": {
+            "$ref": "#/$defs/Policy"
+          },
+          "propertyNames": {
+            "$ref": "#/$defs/FailureKind"
+          },
+          "type": "object"
+        },
+        "rows": {
+          "items": {
+            "$ref": "#/$defs/PlanRow"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "start_at_dusk": {
+          "default": true,
+          "description": "Wait until dark first; otherwise start at once.",
+          "type": "boolean"
+        },
+        "target": {
+          "$ref": "#/$defs/Target"
+        },
+        "until_dawn": {
+          "default": true,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "target",
+        "rows"
+      ],
+      "title": "Template",
       "type": "object"
     },
     "TemplateRequest": {

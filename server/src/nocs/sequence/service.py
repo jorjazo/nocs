@@ -28,11 +28,12 @@ from anyio.streams.memory import MemoryObjectReceiveStream, MemoryObjectSendStre
 from nocs.clock import Clock
 from nocs.equipment import Role
 from nocs.jobs import JobContext, JobManager
-from nocs.sequence.model import Sequence, needs_site
+from nocs.sequence.model import Sequence, Template, needs_site
 from nocs.sequence.rig import Parts, RigExecutor, take_back
 from nocs.sequence.runner import Checkpoint, CheckpointFile, Event, Outcome, Runner
 from nocs.sequence.sky import Place
 from nocs.sequence.store import SequenceError, SequenceStore
+from nocs.sequence.template import Estimate, estimate, expand
 from nocs.state import Json, Path, StateStore
 from nocs.storage import Session, SessionEvent
 
@@ -110,6 +111,21 @@ class SequenceService:
     def put(self, sequence_id: str, sequence: Sequence) -> None:
         self._check_not_running(sequence_id)
         self._definitions.put(sequence_id, sequence)
+
+    def put_template(self, sequence_id: str, template: Template) -> Sequence:
+        """Build a sequence from a template and keep it under ``sequence_id``."""
+        sequence = expand(template)
+        self.put(sequence_id, sequence)
+        return sequence
+
+    def estimate(self, template: Template) -> Estimate:
+        sensor = None
+        try:
+            camera = self._parts().capture.camera(Role.MAIN_CAMERA)
+            sensor = camera.sensor.width, camera.sensor.height
+        except Exception as e:  # no camera, or not ready: no size on disk
+            log.debug("no sensor for the estimate: %s", e)
+        return estimate(template, sensor=sensor, place=self._place(), now=self._clock.now())
 
     def delete(self, sequence_id: str) -> bool:
         self._check_not_running(sequence_id)
