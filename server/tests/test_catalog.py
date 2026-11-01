@@ -13,6 +13,7 @@ from nocs.storage.catalog import (
     CatalogError,
     FocusRun,
     FrameFilter,
+    FrameSolution,
     NewFrame,
     Session,
     SessionEvent,
@@ -279,3 +280,41 @@ def test_sessions_keep_their_events_across_restarts(db: Catalog) -> None:
     )
     assert [e.kind for e in db.session_events(first)] == ["started", "frame"]
     assert db.session(999) is None
+
+
+def test_solutions_near_a_point(db: Catalog) -> None:
+    def add(name: str, hour: int) -> int:
+        started = datetime(2026, 10, 31, hour, 0, tzinfo=UTC)
+        return db.add_frame(replace(FRAME, path=PurePosixPath(name), started=started))
+
+    near_0h, across_0h, far, failed, never = (add(name, h + 1) for h, name in enumerate("abcde"))
+    db.set_metrics(never, 900, 2.0)
+    solution = FrameSolution(
+        0.05, -30.0, 1.2, 316.0, False, 6248, 4176, "2026-11-01T00:00:00+00:00"
+    )
+    db.set_solution(near_0h, solution)
+    db.set_solution(across_0h, replace(solution, ra=23.95, dec=-30.5, mirrored=True))
+    db.set_solution(far, replace(solution, dec=-40.0))
+    db.set_solution(failed, "ERROR=Not enough stars.")
+
+    found = db.solved_near(0.0, -30.0, 2.0)
+    assert [(row.id, s.ra, s.mirrored) for row, s in found] == [
+        (across_0h, 23.95, True),  # newest first
+        (near_0h, 0.05, False),
+    ]
+    assert found[1][1] == solution
+    assert solution.fov == pytest.approx((6248 * 1.2 / 3600, 4176 * 1.2 / 3600))
+    assert db.solution(near_0h) == solution
+    assert db.solution(failed) is None
+    assert [row.id for row, _ in db.solved_near(0.0, -30.0, 15.0, limit=2)] == [far, across_0h]
+
+    # Never tried: neither solved nor failed; most stars first, then newest.
+    assert [row.id for row in db.unsolved_lights("m31")] == [never]
+    assert db.unsolved_lights("M 42") == []
+
+
+def test_a_frame_saved_again_drops_its_solution(db: Catalog) -> None:
+    frame = db.add_frame(FRAME)
+    db.set_solution(frame, FrameSolution(0.7, 41.3, 1.2, 0.0, False, 6248, 4176))
+    db.add_frame(FRAME)  # the same file name: its old row goes, and its solution
+    assert db.solved_near(0.7, 41.3, 1.0) == []

@@ -135,6 +135,8 @@ export type {
   SkyVisibility,
   SolutionState,
   SolveFailure,
+  SolvedFrame,
+  SolvedFrames,
   SolveRequest,
   SolverState,
   StorageDestination,

@@ -1,6 +1,6 @@
 # Phase 3 plan — Solve & frame
 
-Status: in progress · Last updated: 2026-10-31 · Roadmap: [Phase 3](../roadmap.md#phase-3--solve--frame)
+Status: implemented, waiting for its field test · Last updated: 2026-11-01 · Roadmap: [Phase 3](../roadmap.md#phase-3--solve--frame)
 
 Goal: point the rig at a target from the phone and frame it, without knowing the
 sky by heart.
@@ -28,8 +28,8 @@ shared with polar alignment (phase 4) and re-centring and the meridian flip
 | 3.6 | Plan and Tonight UI | Search, target detail with altitude chart, Go / Go and centre; Tonight: night window and Moon | Phone | Implemented: Tonight (night bar, dark window, Moon, tonight's target, get-ready checklist), Plan → Target (search with tonight's time up, `#/plan/<id>` with the altitude chart over the horizon profile, framing chart, Go / Go and centre to where the frame points), `plan.target` (`PUT`/`DELETE /api/plan/target`, kept in `plan.json`), catalog ids in `/api/sky/visibility`; a sync the mount goes back from is logged as a warning; checked in a phone-sized browser without equipment, not yet on a phone |
 | 3.7a | Framing chart (offline) | Tycho-2 subset to V 10 (CC BY-NC 3.0 IGO) by a pinned build script; chart API (stars and objects around a point); canvas chart: gnomonic, north up, stars by magnitude, DSO outlines with position angle, the camera's frame with rotation, crosshair and coordinates, pan / pinch / wheel, Night mode ([ADR 0020](../adr/0020-framing-chart.md)) | Tests: Tycho-2 records, the star file, queries across 0h and the pole, objects reaching into the circle, API; projection (`pnpm test`); NGC 292 and NGC 253 with the simulator camera's field in the browser | Implemented: `dev/catalog/build_stars.py`, `nocs.targets.stars`, `GET /api/targets/chart`, `SkyChart.svelte` at `#/dev/chart` until 3.6 hosts it |
 | 3.7b | Framing chart (online and own frames) | The maintainer's own solved frames of the target as background; optional online survey (CDS hips2fits, fetched by the browser, opt-in); "turn the camera N°" helper from a solve (needs 3.2) | Simulators | Implemented (but own frames): opt-in survey image under the chart, fetched by the browser from CDS hips2fits, else NASA SkyView (DSS2 red); the last solved frame drawn dashed where it landed; "Turn the camera N°" from the last solved angle to the framing's, and "Use the camera's angle"; checked in a phone-sized browser (SkyView: NGC 253 under its outline) |
-| 3.7c | Own frames as framing background | The maintainer's saved, solved frames of a target under the chart: keep the solution with each saved frame, a downscaled JPEG, and a chart layer | Simulators | |
-| 3.8 | Field test | Shares the night with phase 2's ([checklist](field-test.md), step 10) | Exit criterion | |
+| 3.7c | Own frames as framing background | The maintainer's saved, solved frames of a target under the chart: keep the solution with each saved frame, a downscaled JPEG, and a chart layer | Simulators | Implemented: catalog schema 5 (`solutions`, a failed attempt kept too), `nocs.pointing.saved` (a `solve_saved` job that locks nothing; "Solve this frame" on a saved light records it as well), a 1024 px JPEG per solved frame in `<data>/sky/`, `GET /api/frames/solved`, `/api/frames/{id}/sky.jpg`, `POST /api/frames/{id}/solve` (owner only); the target page draws them under the stars ("My frames", on by default) and offers "Solve one" for the target's lights; checked on the simulators in a phone-sized browser, at 0° and with the frame turned 40°, in Night mode |
+| 3.8 | Field test | Shares the night with phases 2 to 5 ([checklist](field-test.md), steps 10 and 13) | Exit criterion | Ready: waiting for a clear night |
 
 ## Decisions taken for this phase
 
@@ -59,6 +59,15 @@ shared with polar alignment (phase 4) and re-centring and the meridian flip
   (`M 42`), which names the lights' folder and OBJECT header: found in the QA pass
   of 2026-11-01, where lights after Go and centre would have gone to
   `Light/Untitled`. The client makes both calls; Live view can still rename it.
+- The user's own frames under the framing chart (3.7c) are saved lights with a
+  plate solution kept in the frame catalog, and a 1024 px JPEG of each in nocsd's
+  data directory, so they show while their drive is unplugged. Lights get solved
+  on request, never on their own: "Solve one" on the target page picks the light of
+  that target (by the catalog label that names its folder) with the most stars, on
+  a drive that is plugged in; a frame that fails is recorded and not offered again.
+  A solve of an old frame leaves `solver.last` alone: it says nothing about where
+  the rig points now. The chart lays each image on the frame's corners where it
+  landed, newest on top, mirrored when the solution says so.
 - NOCS's own English names (`names.tsv`) go before OpenNGC's, in their order:
   OpenNGC listed "Sculptor Filament" first for NGC 253.
 - A sync is watched for 2.5 s: if the mount reports a position more than 1′ from
@@ -134,6 +143,9 @@ frames), Tonight. Fixed on the spot: choosing tonight's target now also names th
 lights' folder (see the decisions); Tonight without a chosen profile asked for "the
 active profile's" site. Left:
 
+- Fixed in 3.7c: without a site (no profile chosen), Tonight asked
+  `/api/sky/tonight` again as soon as each 409 came back, hundreds of times a
+  second; a failure now waits 30 s.
 - `plan.target.name` keeps the common name in the language of whoever chose it
   ("M 42 · Gran Nebulosa de Orión" on an English phone). Showing the catalog's name
   in the viewer's language, from `plan.target.id`, would fix it for every screen.

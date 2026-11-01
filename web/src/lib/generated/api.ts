@@ -4177,6 +4177,70 @@ export interface SolveRequest {
   sync?: boolean;
 }
 /**
+ * A saved light with its plate solution: the framing chart's background (3.7c).
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "SolvedFrame".
+ */
+export interface SolvedFrame {
+  /**
+   * J2000 centre, degrees.
+   */
+  dec: number;
+  exposure: number;
+  filter: string | null;
+  /**
+   * Degrees across x and y.
+   */
+  fov: number[];
+  id: number;
+  /**
+   * URL of its JPEG, north and rotation as the solution says; None if missing.
+   */
+  image: string | null;
+  mirrored: boolean;
+  night: string;
+  /**
+   * J2000 centre, hours.
+   */
+  ra: number;
+  /**
+   * Position angle of the top of the image as shown, degrees east of north.
+   */
+  rotation: number;
+  /**
+   * Arcseconds per pixel.
+   */
+  scale: number;
+  /**
+   * UTC, ISO 8601.
+   */
+  solved: string;
+  /**
+   * UTC, ISO 8601, exposure start.
+   */
+  started: string;
+  target: string | null;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "SolvedFrames".
+ */
+export interface SolvedFrames {
+  /**
+   * The one to solve next (most stars, on a drive that is plugged in).
+   */
+  candidate: number | null;
+  /**
+   * Newest first.
+   */
+  frames: SolvedFrame[];
+  /**
+   * Lights of the target never solved.
+   */
+  unsolved: number;
+}
+/**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "StateSnapshot".
  */

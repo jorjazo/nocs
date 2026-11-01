@@ -4,15 +4,20 @@
 import json
 import time
 from collections.abc import Callable, Iterator
+from dataclasses import replace
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
 from owner import pair_owner
+from test_catalog import FRAME
 
 from nocs.api import create_app
+from nocs.api.schemas import SolvedFrames
 from nocs.config import Settings
 from nocs.state import StateStore
+from nocs.storage.catalog import Catalog, FrameSolution
 
 
 def unreachable_indi() -> Settings:
@@ -140,3 +145,30 @@ def test_connect_simulator_through_api(indi_address: tuple[str, int]) -> None:
                 break
             assert time.monotonic() < deadline + 10, "focuser did not connect"
             time.sleep(0.1)
+
+
+def test_solved_frames_for_the_framing_chart(client: TestClient, tmp_path: Path) -> None:
+    # nocsd's catalog, written to beside it (SQLite in WAL mode).
+    catalog = Catalog(tmp_path / "data" / "catalog.sqlite")
+    solved = catalog.add_frame(FRAME)
+    catalog.add_frame(replace(FRAME, path=PurePosixPath("b.fits")))
+    catalog.set_solution(solved, FrameSolution(0.71, 41.27, 1.2, 10.0, False, 6248, 4176))
+    image = tmp_path / "data" / "sky" / f"{solved}.jpg"
+    image.parent.mkdir(parents=True)
+    image.write_bytes(b"\xff\xd8 a JPEG")
+    catalog.close()
+
+    response = client.get("/api/frames/solved", params={"ra": 0.7, "dec": 41.3, "target": "m31"})
+    assert response.status_code == 200, response.text
+    body = SolvedFrames.model_validate(response.json())
+    [frame] = body.frames
+    assert (frame.id, frame.target, frame.rotation) == (solved, "M31", 10.0)
+    assert frame.fov == pytest.approx([6248 * 1.2 / 3600, 4176 * 1.2 / 3600])
+    assert frame.image == f"/api/frames/{solved}/sky.jpg"
+    # The other light of M31 can be solved; its drive is not mounted here.
+    assert (body.unsolved, body.candidate) == (1, None)
+    assert client.get("/api/frames/solved", params={"ra": 12, "dec": 0}).json()["frames"] == []
+
+    assert client.get(frame.image).content == b"\xff\xd8 a JPEG"
+    assert client.get("/api/frames/999/sky.jpg").status_code == 404
+    assert client.get("/api/frames/solved", params={"ra": 25, "dec": 0}).status_code == 422

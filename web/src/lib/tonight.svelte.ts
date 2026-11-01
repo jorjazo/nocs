@@ -6,6 +6,9 @@ import { ApiError, getTonight } from "./api";
 import type { Almanac } from "./types";
 
 const FRESH_MS = 10 * 60 * 1000;
+// After a failure (no site yet, nocsd unreachable), ask again no sooner than this:
+// callers load from effects, which run again as soon as `loading` changes.
+const RETRY_MS = 30 * 1000;
 
 class Tonight {
   almanac: Almanac | null = $state(null);
@@ -29,6 +32,7 @@ class Tonight {
       this.error = null;
       this.fetched = Date.now();
     } catch (e) {
+      this.fetched = Date.now() - FRESH_MS + RETRY_MS;
       this.almanac = null;
       this.missingSite = e instanceof ApiError && e.status === 409;
       this.error = this.missingSite ? null : e;

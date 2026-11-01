@@ -45,6 +45,7 @@ from nocs.storage.catalog import (
     FocusRun,
     FrameFilter,
     FrameRow,
+    FrameSolution,
     NewFrame,
     NightRow,
     Session,
@@ -521,6 +522,21 @@ class StorageService:
 
     def frames_by_id(self, frame_ids: list[int]) -> list[FrameRow]:
         return self._require_catalog().frames_by_id(frame_ids)
+
+    def set_solution(self, frame_id: int, solution: FrameSolution | str) -> None:
+        self._require_catalog().set_solution(frame_id, solution)
+
+    def solved_near(
+        self, ra: float, dec: float, radius: float, limit: int = 20
+    ) -> list[tuple[Located, FrameSolution]]:
+        found = self._require_catalog().solved_near(ra, dec, radius, limit)
+        volumes = Volumes(self._paths)
+        return [(Located(row, _locate(volumes, row)), solution) for row, solution in found]
+
+    def unsolved_lights(self, target: str) -> list[Located]:
+        rows = self._require_catalog().unsolved_lights(target)
+        volumes = Volumes(self._paths)
+        return [Located(row, _locate(volumes, row)) for row in rows]
 
     def frame(self, frame_id: int) -> Located | None:
         row = self._require_catalog().frame(frame_id)

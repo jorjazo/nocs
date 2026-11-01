@@ -42,6 +42,8 @@ class Prefs {
   locale: Locale = $state(read("nocs.locale", LOCALES) ?? browserLocale());
   // Off until the user turns it on: the rig is often offline, and it asks CDS.
   survey: boolean = $state(read("nocs.survey", ["on"] as const) === "on");
+  // The user's own solved frames under the chart: on unless turned off (they come from nocsd).
+  ownFrames: boolean = $state(read("nocs.ownFrames", ["off"] as const) !== "off");
 
   constructor() {
     this.#apply();
@@ -66,6 +68,11 @@ class Prefs {
   setSurvey(on: boolean): void {
     this.survey = on;
     write("nocs.survey", on ? "on" : "off");
+  }
+
+  setOwnFrames(on: boolean): void {
+    this.ownFrames = on;
+    write("nocs.ownFrames", on ? "on" : "off");
   }
 
   #apply(): void {

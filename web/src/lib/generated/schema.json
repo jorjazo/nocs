@@ -8331,6 +8331,136 @@
       "title": "SolveRequest",
       "type": "object"
     },
+    "SolvedFrame": {
+      "description": "A saved light with its plate solution: the framing chart's background (3.7c).",
+      "properties": {
+        "dec": {
+          "description": "J2000 centre, degrees.",
+          "type": "number"
+        },
+        "exposure": {
+          "type": "number"
+        },
+        "filter": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fov": {
+          "description": "Degrees across x and y.",
+          "items": {
+            "type": "number"
+          },
+          "type": "array"
+        },
+        "id": {
+          "type": "integer"
+        },
+        "image": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "URL of its JPEG, north and rotation as the solution says; None if missing."
+        },
+        "mirrored": {
+          "type": "boolean"
+        },
+        "night": {
+          "type": "string"
+        },
+        "ra": {
+          "description": "J2000 centre, hours.",
+          "type": "number"
+        },
+        "rotation": {
+          "description": "Position angle of the top of the image as shown, degrees east of north.",
+          "type": "number"
+        },
+        "scale": {
+          "description": "Arcseconds per pixel.",
+          "type": "number"
+        },
+        "solved": {
+          "description": "UTC, ISO 8601.",
+          "type": "string"
+        },
+        "started": {
+          "description": "UTC, ISO 8601, exposure start.",
+          "type": "string"
+        },
+        "target": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "night",
+        "target",
+        "filter",
+        "exposure",
+        "started",
+        "ra",
+        "dec",
+        "rotation",
+        "scale",
+        "mirrored",
+        "fov",
+        "image",
+        "solved"
+      ],
+      "title": "SolvedFrame",
+      "type": "object"
+    },
+    "SolvedFrames": {
+      "properties": {
+        "candidate": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The one to solve next (most stars, on a drive that is plugged in)."
+        },
+        "frames": {
+          "description": "Newest first.",
+          "items": {
+            "$ref": "#/$defs/SolvedFrame"
+          },
+          "type": "array"
+        },
+        "unsolved": {
+          "description": "Lights of the target never solved.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "frames",
+        "unsolved",
+        "candidate"
+      ],
+      "title": "SolvedFrames",
+      "type": "object"
+    },
     "SolverState": {
       "additionalProperties": false,
       "properties": {

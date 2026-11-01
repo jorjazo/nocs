@@ -17,7 +17,8 @@ offset between the two and whether the mount was synced, goes to ``solver.last``
 ``sync`` syncs the mount to it later, if the mount has not moved since.
 
 ``start_kept`` solves the frame behind the main camera's preview instead (Live
-view's "Solve this frame"), with the mount's position recorded when it arrived.
+view's "Solve this frame"), with the mount's position recorded when it arrived; a
+saved frame's solution is also kept with it in the catalog (``nocs.pointing.saved``).
 """
 
 from __future__ import annotations
@@ -87,6 +88,12 @@ class Solver(Protocol):
         blind: bool = True,
     ) -> SolveResult: ...
     def annotate(self, result: SolveResult, fields: dict[str, Json]) -> dict[str, Json]: ...
+
+
+class Recorder(Protocol):
+    """Keeps the solutions of saved frames (``SavedFrames``)."""
+
+    async def record(self, frame_id: int, path: FsPath, result: SolveResult) -> None: ...
 
 
 class Mounts(Protocol):
@@ -169,12 +176,14 @@ class PointingService:
         capture: Frames,
         solver: Solver,
         mount: Mounts,
+        recorder: Recorder | None = None,
     ) -> None:
         self._store = store
         self._jobs = jobs
         self._capture = capture
         self._solver = solver
         self._mount = mount
+        self._recorder = recorder
         self._last: FrameSolve | None = None
 
     def start(self, options: SolveOptions, role: Role = Role.MAIN_CAMERA) -> str:
@@ -224,6 +233,9 @@ class PointingService:
         finally:
             if kept.owned:
                 await anyio.to_thread.run_sync(lambda: image.unlink(missing_ok=True))
+        if kept.frame_id is not None and self._recorder is not None:
+            # A saved light: the framing chart can show it under its target.
+            await self._recorder.record(kept.frame_id, shot.path, result)
         solution = result.solution
         solved = FrameSolve(
             result,

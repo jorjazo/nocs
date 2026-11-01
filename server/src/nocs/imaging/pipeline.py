@@ -93,8 +93,11 @@ def warm_up() -> None:
     """Nothing to do: importing this module in the worker loads OpenCV, sep and astropy."""
 
 
-def analyze(fits_path: str, preview_path: str, bayer: str | None = None) -> FrameAnalysis:
-    """Write a stretched JPEG preview of a FITS frame and measure its stars.
+def analyze(
+    fits_path: str, preview_path: str, bayer: str | None = None, width: int = PREVIEW_WIDTH
+) -> FrameAnalysis:
+    """Write a stretched JPEG preview of a FITS frame, at most ``width`` pixels
+    across, and measure its stars.
 
     ``bayer`` is used when the file does not say (``BAYERPAT``); no pattern at
     all means mono.
@@ -113,7 +116,7 @@ def analyze(fits_path: str, preview_path: str, bayer: str | None = None) -> Fram
         if pattern is not None
         else data
     )
-    stretched = stretch(_downscale(image))
+    stretched = stretch(_downscale(image, width))
     if bottom_up:
         stretched = np.ascontiguousarray(stretched[::-1])
     _write_jpeg(Path(preview_path), stretched)
@@ -246,12 +249,12 @@ def measure_histogram(data: Mono16) -> Histogram:
     return Histogram([int(c) for c in counts], first, width, minimum, maximum)
 
 
-def _downscale(image: NDArray[np.uint16]) -> Image:
+def _downscale(image: NDArray[np.uint16], most: int = PREVIEW_WIDTH) -> Image:
     height, width = image.shape[:2]
     pixels = image.astype(np.float32)
-    if width <= PREVIEW_WIDTH:
+    if width <= most:
         return pixels
-    size = (PREVIEW_WIDTH, max(1, round(height * PREVIEW_WIDTH / width)))
+    size = (most, max(1, round(height * most / width)))
     return np.asarray(cv2.resize(pixels, size, interpolation=cv2.INTER_AREA), dtype=np.float32)
 
 

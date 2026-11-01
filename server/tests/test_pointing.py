@@ -15,7 +15,7 @@ from nocs.imaging import KeptFrame, Shot, StarMetrics
 from nocs.jobs import JobContext, JobManager
 from nocs.mount.service import MountNotReadyError, PointingError
 from nocs.pointing import PointingService, SolveOptions, offset
-from nocs.solving import Astap, Failure, SolveError, SolverService, separation
+from nocs.solving import Astap, Failure, SolveError, SolveResult, SolverService, separation
 from nocs.state import StateStore
 
 # The fake ASTAP answers with the solution of a frame of M 8.
@@ -324,3 +324,25 @@ async def test_refused_before_exposing_when_it_cannot_solve(tmp_path: Path) -> N
     assert rig.capture.shots == []
     with pytest.raises(ValueError, match="exposure"):
         rig.service.start(SolveOptions(exposure=0))
+
+
+class FakeRecorder:
+    def __init__(self) -> None:
+        self.recorded: list[tuple[int, Path, float]] = []
+
+    async def record(self, frame_id: int, path: Path, result: SolveResult) -> None:
+        self.recorded.append((frame_id, path, result.solution.ra))
+
+
+async def test_solving_a_saved_frame_keeps_its_solution(rig: Rig) -> None:
+    recorder = FakeRecorder()
+    service = PointingService(rig.store, rig.jobs, rig.capture, rig.solver, rig.mount, recorder)
+    path = write_frame(rig.directory / "saved.fits")
+    shot = Shot(path, path.stat().st_size, FrameType.LIGHT, TAKEN, 4.0, None)
+    rig.capture.preview = KeptFrame(shot, False, MOUNT, 80, 1.6, frame_id=17)
+    await rig.jobs.wait(service.start_kept())
+    assert recorder.recorded == [(17, path, pytest.approx(M8_RA))]
+    # A preview's file is not in the catalog.
+    keep_preview(rig)
+    await rig.jobs.wait(service.start_kept())
+    assert len(recorder.recorded) == 1

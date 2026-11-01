@@ -4,6 +4,7 @@
   // and the actions: make it tonight's target, Go, and Go and centre. Moving
   // the chart frames off the object; Go goes where the frame points, and going
   // makes it tonight's target.
+  import { untrack } from "svelte";
   import AltitudeChart from "../../components/AltitudeChart.svelte";
   import Banner from "../../components/Banner.svelte";
   import Button from "../../components/Button.svelte";
@@ -11,9 +12,19 @@
   import ConfirmButton from "../../components/ConfirmButton.svelte";
   import EmptyState from "../../components/EmptyState.svelte";
   import Icon from "../../components/Icon.svelte";
-  import SkyChart from "../../components/SkyChart.svelte";
+  import SkyChart, { type OwnFrame } from "../../components/SkyChart.svelte";
   import Toggle from "../../components/Toggle.svelte";
-  import { ApiError, centerOn, choosePlanTarget, getTarget, getVisibility, gotoMount, setTarget } from "../../lib/api";
+  import {
+    ApiError,
+    centerOn,
+    choosePlanTarget,
+    getSolvedFrames,
+    getTarget,
+    getVisibility,
+    gotoMount,
+    setTarget,
+    solveSavedFrame,
+  } from "../../lib/api";
   import { auth } from "../../lib/auth.svelte";
   import { holder } from "../../lib/camera.svelte";
   import { errorText } from "../../lib/errors";
@@ -26,7 +37,7 @@
   import { separation, type Sky } from "../../lib/sky/projection";
   import { commonNames, objectSummary } from "../../lib/targets";
   import { tonight } from "../../lib/tonight.svelte";
-  import type { CatalogObject, PlannedTarget, TargetVisibility } from "../../lib/types";
+  import type { CatalogObject, PlannedTarget, SolvedFrames, TargetVisibility } from "../../lib/types";
   import CenteringCard from "../live/CenteringCard.svelte";
 
   let { id }: { id: string } = $props();
@@ -110,6 +121,64 @@
   );
   // How far to turn the camera for the framing's angle, -180..180°.
   const turn = $derived(last ? ((((rotation - last.rotation) % 360) + 540) % 360) - 180 : null);
+
+  // -- The user's own frames (3.7c) ---------------------------------------------------
+
+  // Solved frames around the target, and its lights still to solve (by its catalog
+  // label, which names them: see makeTonights). The owner's only.
+  let mine = $state<SolvedFrames | null>(null);
+  let solveJob = $state<string | null>(null);
+  let solveError = $state("");
+  const mineRadius = $derived(Math.min(30, Math.max(3, span)));
+
+  async function loadMine(o: CatalogObject, radius: number): Promise<void> {
+    try {
+      const found = await getSolvedFrames(o.ra, o.dec, radius, o.label);
+      if (object?.id === o.id) mine = found;
+    } catch {
+      if (object?.id === o.id) mine = null;
+    }
+  }
+
+  $effect(() => {
+    const o = object;
+    const radius = mineRadius;
+    mine = null;
+    if (o && owner) void loadMine(o, radius);
+  });
+
+  const ownFrames: OwnFrame[] = $derived(
+    prefs.ownFrames && mine
+      ? mine.frames.flatMap((f) =>
+          f.image
+            ? [{ image: f.image, ra: f.ra, dec: f.dec, width: f.fov[0] ?? 0, height: f.fov[1] ?? 0, rotation: f.rotation, mirrored: f.mirrored }]
+            : [],
+        )
+      : [],
+  );
+
+  async function solveMine(): Promise<void> {
+    const candidate = mine?.candidate;
+    if (candidate === null || candidate === undefined) return;
+    solveError = "";
+    try {
+      solveJob = await solveSavedFrame(candidate);
+    } catch (e) {
+      solveError = errorText(e, t);
+    }
+  }
+
+  // When the solve ends: what failed, and the frames again.
+  const solving = $derived(solveJob ? (live.app.jobs?.[solveJob] ?? null) : null);
+  $effect(() => {
+    const job = solving;
+    if (!job || job.state === "running") return;
+    untrack(() => {
+      if (job.state === "failed") solveError = job.error ?? t.plan.solveFailed;
+      solveJob = null;
+      if (object) void loadMine(object, mineRadius);
+    });
+  });
 
   const chosen = $derived.by(() => {
     const o = object;
@@ -277,6 +346,7 @@
             {rotation}
             {solved}
             survey={prefs.survey}
+            frames={ownFrames}
             highlight={object.id} />
         {/key}
       </div>
@@ -307,6 +377,26 @@
           <Button variant="text" onclick={() => (rotation = Math.round(last.rotation) % 360)}>{t.plan.useCamera}</Button>
         </div>
       {/if}
+      {#if mine && mine.frames.length}
+        <Toggle
+          label={t.plan.ownFrames}
+          hint={t.plan.ownFramesHint(mine.frames.length)}
+          checked={prefs.ownFrames}
+          onchange={(on) => prefs.setOwnFrames(on)} />
+      {/if}
+      {#if mine && mine.unsolved}
+        <div class="turn">
+          <p class="caption">
+            {solveJob ? t.plan.solvingOne : mine.candidate === null ? t.plan.unsolvedUnplugged(object.label) : t.plan.unsolved(mine.unsolved, object.label)}
+          </p>
+          <Button
+            variant="text"
+            disabled={mine.candidate === null || !live.app.solver?.available}
+            busy={solveJob !== null}
+            onclick={() => void solveMine()}>{t.plan.solveOne}</Button>
+        </div>
+      {/if}
+      {#if solveError}<Banner icon="alert" tone="error">{solveError}</Banner>{/if}
       <Toggle label={t.plan.survey} hint={t.plan.surveyHint} checked={prefs.survey} onchange={(on) => prefs.setSurvey(on)} />
     </section>
 

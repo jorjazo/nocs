@@ -7,7 +7,7 @@ EFW, EAF, PPBA on the lab Pi 5), covering what exists on `main` now. Steps marke
 | Phase | Exit criterion | Steps |
 |---|---|---|
 | [2](phase-2.md) | Manual sub-frames controlled only from a phone | 1–9, 11–13, 21 |
-| [3](phase-3.md) | Pick NGC 292 on the phone, go there and centre it; then NGC 253 | 10 |
+| [3](phase-3.md) | Pick NGC 292 on the phone, go there and centre it; then NGC 253, framed | 10, 13 |
 | [4](phase-4.md), polar half | Polar align from the phone within 1′ | 5 |
 | [4](phase-4.md), guiding half | Guided 300 s sub-frames with dithering, total RMS under 1″, round stars | 14–18 |
 | [5](phase-5.md) | A multi-filter sequence from dusk to a parked dawn, with a meridian flip | 19–20, in part: see there |
@@ -37,6 +37,8 @@ the phone over the night.
   - autofocus: overshoot ~1000 for the EAF on the 380 mm scope (its backlash is
     600–700 steps, phase 5's field notes).
 - [ ] Storage: a USB drive mounted by fstab, or internal, with room for the night.
+- [ ] Solver: ASTAP and D50 in `/opt/astap` (Live view's Solve is enabled; D05 does
+      not solve dense Milky Way fields, ADR 0018).
 - [ ] Indoors, with the lab lock: connect the profile; Guiding says "Runs the
       profile's settings"; Connect, Loop, Stop looping, Disconnect.
 
@@ -80,9 +82,21 @@ the phone over the night.
 
 **Go and centre (phase 3)**
 
-10. **Exit, phase 3.** Plan → NGC 292 → Go and centre: it lands within 1′, the
-    centring card listing each frame; then NGC 253 the same way. Choosing the
-    target also names the lights' folder (`Light/NGC_253/`).
+10. **Exit, phase 3.** Plan → search "SMC" → NGC 292's page: the altitude chart
+    over the site's horizon, the framing chart with the main camera's frame. Go and
+    centre: it lands within 1′, the centring card listing each frame. Then NGC 253
+    the same way, framed:
+    - drag the chart to place the galaxy in the frame and set the camera rotation;
+      Go and centre goes where the frame points;
+    - "Turn the camera N°" says how far to turn it by hand; turn it, Solve in Live
+      view: the dashed solved frame on the chart is within ~2° of the framing;
+    - choosing the target also names the lights' folder (`Light/NGC_253/`) and
+      Tonight shows it as tonight's target;
+    - with the survey image on (if the phone has internet), NGC 253 lies under its
+      outline.
+
+    Note whether nocsd logged that the mount "went back" after a sync, and whether
+    the next go to still landed (phase 3's decisions: the AM5 near its home).
 
 **Manual sub-frames (phase 2)**
 
@@ -93,6 +107,9 @@ the phone over the night.
     the phone locked between frames. The caption names where the last one went.
 13. **Exit, phase 2: check the frames.** Session tab: the night's frames with stars
     and HFR. Download one frame, then the night's zip (its size shows first).
+    **Phase 3, own frames:** Plan → NGC 253: "Solve one" solves the light with the
+    most stars; it then lies under the chart's stars ("My frames"), turned as the
+    camera was. Live view's "Solve this frame" on a saved light does the same.
 
 **Guiding (phase 4)**
 

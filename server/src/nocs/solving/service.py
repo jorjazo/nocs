@@ -99,19 +99,26 @@ class SolverService:
         hint: Hint | None,
         hfr: float | None = None,
         blind: bool = True,
+        publish: bool = True,
     ) -> SolveResult:
         """Solve a FITS frame; raises SolveError.
 
         ``fov`` is the frame's height in degrees, ``hfr`` its stars' median half-flux
         radius in pixels (to choose ASTAP's downsampling). With a ``hint``, the sky
-        around it is searched first, then, if ``blind``, the whole sky.
+        around it is searched first, then, if ``blind``, the whole sky. Without
+        ``publish``, ``last`` and ``failure`` stay as they are: a frame saved on an
+        earlier night says nothing about where the rig points now.
         """
         try:
             result = await self._solve(image, fov=fov, hint=hint, hfr=hfr, blind=blind)
         except SolveError as error:
+            if not publish:
+                raise
             self._failure = {"reason": error.reason.value, "message": str(error), "time": _now()}
             self._publish()
             raise
+        if not publish:
+            return result
         self._last = summary(result)
         self._last_result = result
         self._failure = None

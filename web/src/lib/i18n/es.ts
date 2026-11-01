@@ -854,6 +854,7 @@ export const es: Messages = {
     noStars: "No hay catálogo de estrellas instalado: solo objetos de cielo profundo.",
     credit: "Estrellas: Tycho-2, ESA · Objetos: OpenNGC",
     surveyCredit: { cds: "Imagen: DSS2 vía CDS hips2fits", skyview: "Imagen: DSS2 roja vía NASA SkyView" },
+    ownCredit: (count) => (count === 1 ? "Imagen: uno de tus cuadros" : `Imágenes: ${count} de tus cuadros`),
     surveyLoading: "Cargando la imagen del survey…",
     surveyFailed: "Sin imagen del survey (¿sin internet?)",
     view: (degrees) => `Vista ${degrees}`,
@@ -962,6 +963,15 @@ export const es: Messages = {
       `Gira la cámara ${degrees}°: el último cuadro resuelto está a ${now}° y el encuadre pide ${wanted}°. Resuelve otra vez para comprobar. El contorno discontinuo es ese cuadro.`,
     turnDone: (now) => `La cámara está a ${now}°, como el encuadre (último cuadro resuelto, discontinuo).`,
     useCamera: "Usar el ángulo de la cámara",
+    ownFrames: "Mis cuadros",
+    ownFramesHint: (count) =>
+      count === 1 ? "Tu cuadro resuelto de este cielo bajo la carta." : `Tus ${count} cuadros resueltos de este cielo bajo la carta, el más reciente encima.`,
+    unsolved: (count, target) =>
+      count === 1 ? `Una de tus lights de ${target} aún no está resuelta.` : `${count} de tus lights de ${target} aún no están resueltas.`,
+    unsolvedUnplugged: (target) => `Tus lights de ${target} por resolver están en un disco que no está conectado.`,
+    solveOne: "Resolver una",
+    solvingOne: "Resolviendo la light con más estrellas…",
+    solveFailed: "Ese cuadro no se resolvió.",
     survey: "Imagen del survey",
     surveyHint: "Una imagen DSS2 de CDS bajo la carta, que descarga este dispositivo cuando tiene internet.",
     choose: "Elegir para esta noche",

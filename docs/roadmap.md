@@ -93,8 +93,9 @@ Stage plan and status: [v0.1/phase-3.md](v0.1/phase-3.md).
   rotation.
 - Altitude / visibility charts for tonight.
 
-**Exit (field test):** pick M31 on the phone, the mount goes there and centers
-it within tolerance.
+**Exit (field test):** pick NGC 292 (the Small Magellanic Cloud) on the phone,
+the mount goes there and centers it within tolerance; then NGC 253, framed. (M31,
+the first choice, never clears the hill north of the lab's site.)
 
 ## Phase 4 — Guide & align
 

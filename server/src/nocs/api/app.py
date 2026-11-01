@@ -68,7 +68,7 @@ from nocs.api.schemas import (
 from nocs.api.sequences import sequences_router
 from nocs.api.sessions import sessions_router
 from nocs.api.sky import sky_router
-from nocs.api.solver import align_router, solver_router
+from nocs.api.solver import align_router, saved_frames_router, solver_router
 from nocs.api.system import system_router
 from nocs.api.targets import targets_router
 from nocs.auth import AuthStore
@@ -108,7 +108,7 @@ from nocs.imaging.worker import ImageWorker
 from nocs.indi.drivers import DriverFifo, load_catalog
 from nocs.jobs import JobManager, ResourceBusyError
 from nocs.mount.service import MountNotReadyError, MountService
-from nocs.pointing import CenteringService, PointingService
+from nocs.pointing import CenteringService, PointingService, SavedFrames
 from nocs.power.service import (
     PowerCycleError,
     PowerNotReadyError,
@@ -221,6 +221,10 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
     def pointing() -> PointingService:
         assert services.pointing is not None
         return services.pointing
+
+    def saved_frames() -> SavedFrames:
+        assert services.saved_frames is not None
+        return services.saved_frames
 
     def centering() -> CenteringService:
         assert services.centering is not None
@@ -373,8 +377,20 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
             indi_host=settings.phd2_indi_host or settings.indi_host,
             indi_port=settings.phd2_indi_port or settings.indi_port,
         )
+        services.saved_frames = SavedFrames(
+            services.jobs,
+            services.storage,
+            services.worker,
+            services.solver,
+            settings.data_dir / "sky",
+        )
         services.pointing = PointingService(
-            store, services.jobs, services.capture, services.solver, services.mount
+            store,
+            services.jobs,
+            services.capture,
+            services.solver,
+            services.mount,
+            services.saved_frames,
         )
         services.centering = CenteringService(
             store, services.jobs, services.pointing, services.mount
@@ -455,6 +471,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
     app.include_router(guiding_router(guiding))
     app.include_router(system_router(system))
     app.include_router(solver_router(pointing, centering))
+    app.include_router(saved_frames_router(saved_frames))
     app.include_router(align_router(polar))
     app.include_router(accessories_router(focuser, filter_wheel, autofocus))
     app.include_router(sequences_router(sequences))
@@ -822,6 +839,7 @@ class _Services:
     filter_wheel: FilterWheelService | None = None
     solver: SolverService | None = None
     pointing: PointingService | None = None
+    saved_frames: SavedFrames | None = None
     centering: CenteringService | None = None
     polar: PolarAlignmentService | None = None
     plan: PlanService | None = None

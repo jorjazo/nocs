@@ -101,3 +101,8 @@ position angle of its top east of north as a plate solution gives it (ADR 0018).
   gnomonic image, north up and east left, like the chart. The user's own solved
   frames move to a stage of their own (3.7c): they need the solutions kept with
   the saved frames on the server.
+- Amended in 3.7c (2026-11-01): the user's own frames come from nocsd, not the
+  internet: saved lights solved on request, their solutions kept in the frame
+  catalog and a 1024 px JPEG of each in the data directory
+  (`GET /api/frames/solved`, owner only). The chart draws them under the stars,
+  each on the corners where its solution put it.

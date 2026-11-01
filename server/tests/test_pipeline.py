@@ -125,6 +125,9 @@ def test_mono_preview(tmp_path: Path) -> None:
     image = read_jpeg(result.preview)
     assert image.ndim == 2
     assert (result.width, result.height) == (PREVIEW_WIDTH, 1280) == image.shape[::-1]
+    # Narrower when asked: a saved frame's image for the framing chart.
+    small = analyze(source, str(tmp_path / "sky.jpg"), width=1024)
+    assert (small.width, small.height) == (1024, round(1280 * 1024 / PREVIEW_WIDTH))
     assert not result.color
     assert result.stars >= 25  # 3.8 MP: measured at full resolution
     assert result.hfr == pytest.approx(GAUSSIAN_HFR, rel=0.15)

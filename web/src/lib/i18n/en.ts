@@ -870,6 +870,7 @@ export const en = {
     noStars: "No star catalog installed: deep-sky objects only.",
     credit: "Stars: Tycho-2, ESA · Objects: OpenNGC",
     surveyCredit: { cds: "Image: DSS2 via CDS hips2fits", skyview: "Image: DSS2 red via NASA SkyView" },
+    ownCredit: (count: number) => (count === 1 ? "Image: one of your frames" : `Images: ${count} of your frames`),
     surveyLoading: "Loading the survey image…",
     surveyFailed: "No survey image (offline?)",
     view: (degrees: string) => `View ${degrees}`,
@@ -978,6 +979,15 @@ export const en = {
       `Turn the camera ${degrees}°: the last solved frame is at ${now}°, the framing wants ${wanted}°. Solve again to check. The dashed outline is that frame.`,
     turnDone: (now: string) => `The camera is at ${now}°, as framed (last solved frame, dashed).`,
     useCamera: "Use the camera's angle",
+    ownFrames: "My frames",
+    ownFramesHint: (count: number) =>
+      count === 1 ? "Your solved frame of this sky under the chart." : `Your ${count} solved frames of this sky under the chart, the newest on top.`,
+    unsolved: (count: number, target: string) =>
+      count === 1 ? `One of your lights of ${target} is not solved yet.` : `${count} of your lights of ${target} are not solved yet.`,
+    unsolvedUnplugged: (target: string) => `Your lights of ${target} still to solve are on a drive that is not plugged in.`,
+    solveOne: "Solve one",
+    solvingOne: "Solving the light with the most stars…",
+    solveFailed: "That frame did not solve.",
     survey: "Survey image",
     surveyHint: "A DSS2 image from CDS under the chart, fetched by this device when it has internet.",
     choose: "Make tonight's target",

@@ -151,6 +151,8 @@ class KeptFrame:
     """Where the mount said it pointed (J2000) when the frame arrived."""
     stars: int
     hfr: float | None
+    frame_id: int | None = None
+    """The saved frame's id in the catalog; ``None`` for a preview's file."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -610,7 +612,7 @@ class CaptureService:
         self._last_frames[role] = result
         self._publish(role)
         context.progress(None, f"{label}making the preview")
-        analysis = await self._preview(role, shot, discard=not save)
+        analysis = await self._preview(role, shot, discard=not save, frame_id=frame_id)
         if frame_id is not None and analysis is not None:
             await anyio.to_thread.run_sync(
                 self._storage.set_metrics, frame_id, analysis.stars, analysis.hfr
@@ -796,7 +798,9 @@ class CaptureService:
         assert self._client is not None
         return Camera(self._client, name, images)
 
-    async def _preview(self, role: Role, shot: Shot, *, discard: bool) -> FrameAnalysis | None:
+    async def _preview(
+        self, role: Role, shot: Shot, *, discard: bool, frame_id: int | None = None
+    ) -> FrameAnalysis | None:
         """Analyse a frame in the worker and publish its preview; never raises."""
         analysis: FrameAnalysis | None = None
         try:
@@ -813,7 +817,8 @@ class CaptureService:
             return None  # failed, or a newer frame replaced it
         if role in SAVING_ROLES:
             await self._keep(
-                role, KeptFrame(shot, discard, self._pointing(), analysis.stars, analysis.hfr)
+                role,
+                KeptFrame(shot, discard, self._pointing(), analysis.stars, analysis.hfr, frame_id),
             )
         self._previews[role] = {
             "url": f"/api/previews/{FsPath(analysis.preview).name}",

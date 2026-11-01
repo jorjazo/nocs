@@ -60,6 +60,7 @@ import type {
   Site,
   SkyChart,
   SkyVisibility,
+  SolvedFrames,
   SolveRequest,
   TargetRequest,
   Template,
@@ -505,6 +506,20 @@ export function getFrames(query: FrameQuery): Promise<FrameRecord[]> {
     if (value !== undefined) params.set(key, String(value));
   }
   return request("GET", `/api/frames?${params}`);
+}
+
+// The owner's solved frames around a J2000 point, for the framing chart (3.7c), and how
+// many lights of `target` are still to solve.
+export function getSolvedFrames(ra: number, dec: number, radius: number, target?: string): Promise<SolvedFrames> {
+  const params = new URLSearchParams({ ra: String(ra), dec: String(dec), radius: String(radius) });
+  if (target) params.set("target", target);
+  return request("GET", `/api/frames/solved?${params}`);
+}
+
+// Solve a saved light for the framing chart; a `solve_saved` job.
+export async function solveSavedFrame(id: number): Promise<string> {
+  const started = await request<JobStarted>("POST", `/api/frames/${id}/solve`);
+  return started.job;
 }
 
 // -- Targets (ADR 0019, 0020) ---------------------------------------------------------

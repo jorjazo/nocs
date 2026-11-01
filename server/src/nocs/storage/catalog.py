@@ -11,12 +11,14 @@ database from version ``n`` to ``n + 1``.
 from __future__ import annotations
 
 import logging
+import math
 import sqlite3
 import threading
-from collections.abc import Mapping
-from dataclasses import dataclass
-from datetime import date, datetime
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, fields
+from datetime import UTC, date, datetime
 from pathlib import Path, PurePosixPath
+from typing import Any
 
 log = logging.getLogger(__name__)
 
@@ -125,6 +127,23 @@ MIGRATIONS: list[str] = [
         data TEXT NOT NULL                 -- JSON: a frame's id, stars and HFR; a failure's kind…
     );
     CREATE INDEX session_events_by_session ON session_events (session_id, id);
+    """,
+    """
+    -- Plate solutions of saved lights, for the framing chart's background (phase 3.7c).
+    -- A failed attempt is kept too (ra NULL, failure set), so it is not tried again.
+    CREATE TABLE solutions (
+        frame_id INTEGER PRIMARY KEY REFERENCES frames (id) ON DELETE CASCADE,
+        solved TEXT NOT NULL,              -- when, UTC ISO 8601
+        ra REAL,                           -- J2000 centre of the frame, hours
+        dec REAL,                          -- degrees
+        scale REAL,                        -- arcseconds per pixel
+        rotation REAL,                     -- of the top of the image as shown, ° east of north
+        mirrored INTEGER,
+        width INTEGER,                     -- pixels
+        height INTEGER,
+        failure TEXT
+    );
+    CREATE INDEX solutions_by_dec ON solutions (dec);
     """,
 ]
 VERSION = len(MIGRATIONS)
@@ -250,6 +269,29 @@ class FrameFilter:
 
 
 @dataclass(frozen=True, slots=True)
+class FrameSolution:
+    """Where a saved frame points, as ``nocs.solving.Solution`` gives it."""
+
+    ra: float
+    """J2000 centre, hours."""
+    dec: float
+    scale: float
+    """Arcseconds per pixel."""
+    rotation: float
+    """Position angle of the top of the image as NOCS shows it, degrees east of north."""
+    mirrored: bool
+    width: int
+    height: int
+    solved: str = ""
+    """UTC, ISO 8601."""
+
+    @property
+    def fov(self) -> tuple[float, float]:
+        """Degrees across x and y."""
+        return self.width * self.scale / 3600, self.height * self.scale / 3600
+
+
+@dataclass(frozen=True, slots=True)
 class Session:
     run: str
     sequence: str
@@ -297,7 +339,32 @@ _FRAME_JOINS = """
 """
 
 
-def _frame(row: sqlite3.Row) -> FrameRow:
+_SOLUTION_COLUMNS = "s.ra, s.dec, s.scale, s.rotation, s.mirrored, s.width, s.height, s.solved"
+
+
+def _solution(row: Sequence[Any]) -> FrameSolution:
+    ra, dec, scale, rotation, mirrored, width, height, solved = row
+    return FrameSolution(
+        float(ra),
+        float(dec),
+        float(scale),
+        float(rotation),
+        bool(mirrored),
+        int(width),
+        int(height),
+        str(solved),
+    )
+
+
+def _separation(ra1: float, dec1: float, ra2: float, dec2: float) -> float:
+    """Degrees between two J2000 points (hours, degrees)."""
+    d1, d2 = math.radians(dec1), math.radians(dec2)
+    dra = math.radians((ra2 - ra1) * 15)
+    h = math.sin((d2 - d1) / 2) ** 2 + math.cos(d1) * math.cos(d2) * math.sin(dra / 2) ** 2
+    return math.degrees(2 * math.asin(min(1.0, math.sqrt(h))))
+
+
+def _frame(row: Sequence[Any]) -> FrameRow:
     values = list(row)
     values[5] = PurePosixPath(values[5])
     values[6] = PurePosixPath(values[6])
@@ -468,6 +535,30 @@ class Catalog:
                 ),
             )
 
+    def set_solution(self, frame_id: int, solution: FrameSolution | str) -> None:
+        """A frame's solution, or why it could not be solved (a message)."""
+        solved = solution.solved if isinstance(solution, FrameSolution) else ""
+        solved = solved or datetime.now(UTC).isoformat(timespec="seconds")
+        if isinstance(solution, str):
+            values = (None,) * 7 + (solution,)
+        else:
+            values = (
+                solution.ra,
+                solution.dec,
+                solution.scale,
+                solution.rotation,
+                int(solution.mirrored),
+                solution.width,
+                solution.height,
+                None,
+            )
+        with self._lock:
+            self._db.execute(
+                "INSERT OR REPLACE INTO solutions (frame_id, solved, ra, dec, scale, rotation,"
+                " mirrored, width, height, failure) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (frame_id, solved, *values),
+            )
+
     def add_temperature(self, sample: TemperatureSample) -> None:
         with self._lock:
             self._db.execute(
@@ -630,6 +721,51 @@ class Catalog:
         with self._lock:
             rows = self._db.execute(
                 f"SELECT {_FRAME_COLUMNS} {_FRAME_JOINS} {where} ORDER BY f.id DESC {limit}", args
+            ).fetchall()
+        return [_frame(row) for row in rows]
+
+    def solution(self, frame_id: int) -> FrameSolution | None:
+        """A frame's solution; ``None`` if it was never solved or failed to."""
+        with self._lock:
+            row = self._db.execute(
+                f"SELECT {_SOLUTION_COLUMNS} FROM solutions s"
+                " WHERE frame_id = ? AND ra IS NOT NULL",
+                (frame_id,),
+            ).fetchone()
+        return _solution(row) if row is not None else None
+
+    def solved_near(
+        self, ra: float, dec: float, radius: float, limit: int = 20
+    ) -> list[tuple[FrameRow, FrameSolution]]:
+        """Solved frames whose centre is within ``radius`` degrees of a J2000 point
+        (hours, degrees), newest first."""
+        low, high = max(-90.0, dec - radius), min(90.0, dec + radius)
+        with self._lock:
+            rows = self._db.execute(
+                f"SELECT {_FRAME_COLUMNS}, {_SOLUTION_COLUMNS} {_FRAME_JOINS}"
+                " JOIN solutions s ON s.frame_id = f.id"
+                " WHERE s.ra IS NOT NULL AND s.dec BETWEEN ? AND ? ORDER BY f.started DESC",
+                (low, high),
+            ).fetchall()
+        found: list[tuple[FrameRow, FrameSolution]] = []
+        frame_columns = len(fields(FrameRow))
+        for row in rows:
+            solution = _solution(tuple(row)[frame_columns:])
+            if _separation(ra, dec, solution.ra, solution.dec) <= radius:
+                found.append((_frame(tuple(row)[:frame_columns]), solution))
+                if len(found) == limit:
+                    break
+        return found
+
+    def unsolved_lights(self, target: str) -> list[FrameRow]:
+        """Lights of ``target`` (ignoring case) never tried, most stars first, then newest."""
+        with self._lock:
+            rows = self._db.execute(
+                f"SELECT {_FRAME_COLUMNS} {_FRAME_JOINS}"
+                " LEFT JOIN solutions s ON s.frame_id = f.id"
+                " WHERE t.name = ? AND f.frame_type = 'light' AND s.frame_id IS NULL"
+                " ORDER BY coalesce(f.stars, -1) DESC, f.id DESC",
+                (target,),
             ).fetchall()
         return [_frame(row) for row in rows]
 

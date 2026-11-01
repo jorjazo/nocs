@@ -78,6 +78,20 @@ class ImageWorker:
             self._remember(key, preview)
             return result
 
+    async def render(
+        self, fits_path: str, jpeg_path: str, bayer: str | None, width: int
+    ) -> FrameAnalysis:
+        """A JPEG of a frame at most ``width`` pixels across, written where asked, and
+        its stars (a saved frame's image for the framing chart); none is dropped."""
+        loop = asyncio.get_running_loop()
+        try:
+            return await loop.run_in_executor(
+                self._executor(), pipeline.analyze, fits_path, jpeg_path, bayer, width
+            )
+        except BrokenProcessPool:
+            self._died()
+            raise
+
     async def measure(self, fits_path: str, bayer: str | None) -> StarMetrics:
         """Star count and HFR of a frame, without a preview; frames queue, none is dropped."""
         loop = asyncio.get_running_loop()

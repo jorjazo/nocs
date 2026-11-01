@@ -1,3 +1,17 @@
+<script lang="ts" module>
+  // One of the user's solved frames, as the chart draws it (J2000, degrees).
+  export type OwnFrame = {
+    image: string;
+    ra: number;
+    dec: number;
+    // Degrees across the image's x and y.
+    width: number;
+    height: number;
+    rotation: number;
+    mirrored: boolean;
+  };
+</script>
+
 <script lang="ts">
   import { untrack } from "svelte";
   import { getSkyChart } from "../lib/api";
@@ -33,6 +47,7 @@
     highlight = null,
     solved = null,
     survey = false,
+    frames = [],
   }: {
     // Where the chart opens and a double tap returns.
     target: Sky;
@@ -49,6 +64,9 @@
     // Draw a survey image under the chart, fetched by this browser from CDS
     // hips2fits (ADR 0020): only when the user turned it on, and online.
     survey?: boolean;
+    // The user's own solved frames, drawn under the stars where they landed
+    // (3.7c): the image as NOCS shows the frame, its top `rotation` east of north.
+    frames?: OwnFrame[];
   } = $props();
 
   const MIN_SPAN = 0.2;
@@ -205,6 +223,19 @@
     attempt(Math.max(0, SOURCES.indexOf(surveySource)));
   }
 
+  // -- Own frames -------------------------------------------------------------------
+
+  // Their JPEGs from nocsd, by URL; loaded once each.
+  let ownImages: Map<string, HTMLImageElement> = $state(new Map());
+  $effect(() => {
+    for (const frame of frames) {
+      if (untrack(() => ownImages.has(frame.image))) continue;
+      const image = new Image();
+      image.onload = () => (ownImages = new Map(ownImages).set(frame.image, image));
+      image.src = frame.image;
+    }
+  });
+
   // -- Drawing --------------------------------------------------------------------
 
   type Palette = { bg: string; star: string; object: string; accent: string; line: string; text: string };
@@ -240,7 +271,7 @@
   }
 
   $effect(() => {
-    void [view, magnitude, chart, field, rotation, highlight, solved, survey, surveyImage];
+    void [view, magnitude, chart, field, rotation, highlight, solved, survey, surveyImage, frames, ownImages];
     schedule();
   });
 
@@ -259,6 +290,7 @@
     context.fillRect(0, 0, width, height);
     const v = view;
     if (survey && surveyImage) drawSurvey(context, v, surveyImage);
+    drawOwnFrames(context, v);
     if (chart) {
       drawObjects(context, v, chart.objects, colors);
       drawStars(context, v, chart.stars, colors);
@@ -275,19 +307,47 @@
     const w = shown.fov * RAD * v.scale;
     const h = (w * shown.image.naturalHeight) / shown.image.naturalWidth;
     context.save();
+    context.translate(at.x - w / 2, at.y - h / 2);
+    paintImage(context, shown.image, w, h, 0.85);
+    context.restore();
+  }
+
+  // Oldest first, so the newest lies on top.
+  function drawOwnFrames(context: CanvasRenderingContext2D, v: View): void {
+    for (const frame of [...frames].reverse()) {
+      const image = ownImages.get(frame.image);
+      if (!image || !image.naturalWidth) continue;
+      const corners = skyFrameCorners(v, frame, frame.width, frame.height, frame.rotation);
+      if (!corners) continue;
+      // The image's left edge is east for a mirrored view: on the frame's right side.
+      const [a, b, , d] = frame.mirrored ? [corners[1], corners[0], corners[3], corners[2]] : corners;
+      if (!a || !b || !d) continue;
+      const w = image.naturalWidth;
+      const h = image.naturalHeight;
+      context.save();
+      // Image pixels onto the frame where it landed: its top-left, top-right and bottom-left.
+      context.transform((b.x - a.x) / w, (b.y - a.y) / w, (d.x - a.x) / h, (d.y - a.y) / h, a.x, a.y);
+      paintImage(context, image, w, h, 0.9);
+      context.restore();
+    }
+  }
+
+  // An image into the rectangle (0, 0, w, h) of the current transform.
+  function paintImage(context: CanvasRenderingContext2D, image: HTMLImageElement, w: number, h: number, alpha: number): void {
     if (prefs.theme === "night") {
       // Night mode: its light in red only, never white (docs/ux.md).
       context.filter = "grayscale(1) brightness(0.8)";
-      context.drawImage(shown.image, at.x - w / 2, at.y - h / 2, w, h);
+      context.drawImage(image, 0, 0, w, h);
       context.filter = "none";
       context.globalCompositeOperation = "multiply";
       context.fillStyle = "#ff0000";
-      context.fillRect(at.x - w / 2, at.y - h / 2, w, h);
+      context.fillRect(0, 0, w, h);
+      context.globalCompositeOperation = "source-over";
     } else {
-      context.globalAlpha = 0.85;
-      context.drawImage(shown.image, at.x - w / 2, at.y - h / 2, w, h);
+      context.globalAlpha = alpha;
+      context.drawImage(image, 0, 0, w, h);
+      context.globalAlpha = 1;
     }
-    context.restore();
   }
 
   function drawSolved(context: CanvasRenderingContext2D, v: View, palette: Palette): void {
@@ -555,7 +615,7 @@
     <span>{field ? `${frameText} · ` : ""}{t.chart.view(degrees(viewSpan(view)))}</span>
   </div>
   <div class="credit">
-    {t.chart.credit}{#if survey}<br />{surveyStatus === "failed" ? t.chart.surveyFailed : surveyStatus === "loading" ? t.chart.surveyLoading : t.chart.surveyCredit[surveySource]}{/if}
+    {t.chart.credit}{#if frames.length}<br />{t.chart.ownCredit(frames.length)}{/if}{#if survey}<br />{surveyStatus === "failed" ? t.chart.surveyFailed : surveyStatus === "loading" ? t.chart.surveyLoading : t.chart.surveyCredit[surveySource]}{/if}
   </div>
 </div>
 

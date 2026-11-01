@@ -1465,6 +1465,37 @@ class FrameRecord(WireModel):
     guiding: FrameGuiding | None = Field(description="None: not guided, or saved before 4.5.")
 
 
+class SolvedFrame(WireModel):
+    """A saved light with its plate solution: the framing chart's background (3.7c)."""
+
+    id: int
+    night: str
+    target: str | None
+    filter: str | None
+    exposure: float
+    started: str = Field(description="UTC, ISO 8601, exposure start.")
+    ra: float = Field(description="J2000 centre, hours.")
+    dec: float = Field(description="J2000 centre, degrees.")
+    rotation: float = Field(
+        description="Position angle of the top of the image as shown, degrees east of north."
+    )
+    scale: float = Field(description="Arcseconds per pixel.")
+    mirrored: bool
+    fov: list[float] = Field(description="Degrees across x and y.")
+    image: str | None = Field(
+        description="URL of its JPEG, north and rotation as the solution says; None if missing."
+    )
+    solved: str = Field(description="UTC, ISO 8601.")
+
+
+class SolvedFrames(WireModel):
+    frames: list[SolvedFrame] = Field(description="Newest first.")
+    unsolved: int = Field(description="Lights of the target never solved.")
+    candidate: int | None = Field(
+        description="The one to solve next (most stars, on a drive that is plugged in)."
+    )
+
+
 class SessionSummary(WireModel):
     """A sequence's run, as the catalog keeps it (phase 5.15)."""
 

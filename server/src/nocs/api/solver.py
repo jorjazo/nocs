@@ -1,20 +1,38 @@
-"""Plate solving commands: solve a frame of the main camera, sync the mount to it, centre."""
+"""Plate solving commands: solve a frame of the main camera, sync the mount to it, centre;
+saved frames solved for the framing chart."""
 
 from __future__ import annotations
 
 import contextlib
 from collections.abc import Callable, Generator
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Response, status
+import anyio.to_thread
+from fastapi import APIRouter, HTTPException, Query, Response, status
+from fastapi.responses import FileResponse
 
 from nocs.align.service import PolarAlignmentService, PolarOptions
-from nocs.api.schemas import CenterRequest, JobStarted, PolarAlignRequest, SolveRequest
+from nocs.api.schemas import (
+    CenterRequest,
+    JobStarted,
+    PolarAlignRequest,
+    SolvedFrame,
+    SolvedFrames,
+    SolveRequest,
+)
 from nocs.devices import DeviceError
 from nocs.imaging import CameraNotReadyError
 from nocs.jobs import ResourceBusyError
 from nocs.mount.service import MountNotReadyError, PointingError
-from nocs.pointing import CenteringService, CenterOptions, PointingService, SolveOptions
+from nocs.pointing import (
+    CenteringService,
+    CenterOptions,
+    PointingService,
+    SavedFrames,
+    SolveOptions,
+)
 from nocs.solving import Failure, SolveError
+from nocs.storage import FrameUnavailableError, StorageError
 
 
 def solver_router(
@@ -63,6 +81,64 @@ def solver_router(
     return router
 
 
+def saved_frames_router(saved: Callable[[], SavedFrames]) -> APIRouter:
+    """The owner's solved frames, under the framing chart (phase 3.7c, ADR 0020)."""
+    router = APIRouter(prefix="/api/frames")
+
+    @router.get("/solved")
+    async def solved(  # pyright: ignore[reportUnusedFunction]
+        ra: Annotated[float, Query(ge=0, lt=24, description="J2000, hours.")],
+        dec: Annotated[float, Query(ge=-90, le=90, description="J2000, degrees.")],
+        radius: Annotated[float, Query(gt=0, le=30, description="Degrees.")] = 5.0,
+        target: Annotated[
+            str | None, Query(description="A target name: count its lights still to solve.")
+        ] = None,
+    ) -> SolvedFrames:
+        """Solved frames whose centre is within ``radius`` of a point, newest first."""
+        with _errors():
+            found = await anyio.to_thread.run_sync(saved().near, ra, dec, radius, target)
+        frames: list[SolvedFrame] = []
+        for located, solution, has_image in found.solved:
+            row = located.row
+            width, height = solution.fov
+            frames.append(
+                SolvedFrame(
+                    id=row.id,
+                    night=row.night,
+                    target=row.target,
+                    filter=row.filter,
+                    exposure=row.exposure,
+                    started=row.started,
+                    ra=solution.ra,
+                    dec=solution.dec,
+                    rotation=solution.rotation,
+                    scale=solution.scale,
+                    mirrored=solution.mirrored,
+                    fov=[width, height],
+                    image=f"/api/frames/{row.id}/sky.jpg" if has_image else None,
+                    solved=solution.solved,
+                )
+            )
+        return SolvedFrames(frames=frames, unsolved=found.unsolved, candidate=found.candidate)
+
+    @router.get("/{frame_id}/sky.jpg")
+    async def sky_image(frame_id: int) -> FileResponse:  # pyright: ignore[reportUnusedFunction]
+        """A solved frame's JPEG, downscaled, as NOCS shows the frame."""
+        path = saved().image(frame_id)
+        if path is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, f"no image of frame {frame_id}")
+        # A frame's id is never reused, but a solve again rewrites its image.
+        return FileResponse(path, media_type="image/jpeg", headers={"Cache-Control": "no-cache"})
+
+    @router.post("/{frame_id}/solve", status_code=status.HTTP_202_ACCEPTED)
+    async def solve_saved(frame_id: int) -> JobStarted:  # pyright: ignore[reportUnusedFunction]
+        """Solve a saved light, for the framing chart; a job of kind ``solve_saved``."""
+        with _errors():
+            return JobStarted(job=saved().start(frame_id))
+
+    return router
+
+
 def align_router(polar: Callable[[], PolarAlignmentService]) -> APIRouter:
     router = APIRouter(prefix="/api/align")
 
@@ -103,8 +179,10 @@ def _errors() -> Generator[None]:
             else status.HTTP_409_CONFLICT
         )
         raise HTTPException(code, str(e)) from e
-    except (ResourceBusyError, PointingError) as e:
+    except (ResourceBusyError, PointingError, FrameUnavailableError) as e:
         raise HTTPException(status.HTTP_409_CONFLICT, str(e)) from e
+    except StorageError as e:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(e)) from e
     except (CameraNotReadyError, MountNotReadyError) as e:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(e)) from e
     except ValueError as e:
