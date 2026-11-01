@@ -57,3 +57,80 @@ so a compressed night does not fill the drive; bytes written still count.
 Simulator settings the tool makes: the guide simulator's seeing goes to 8″ (at the
 guide scope's 4.1″/px its default 3.5″ stars are under a pixel and PHD2 keeps losing
 them, "low HFD").
+
+## Results
+
+### PC, compressed (2 h, 5 s frames)
+
+Intel Core Ultra 7 255H, NVMe, shared with other work. Full data:
+[results/pc-compressed](../../dev/tools/soak/results/pc-compressed/summary.md).
+651 light frames (318/h; 220 Red, 216 Green, 215 Blue), 217 dithers, 64 pointing checks,
+one meridian flip at +5 min (centred to 0.03′, PHD2 calibrated again), two autofocus runs;
+**no failure**, the run ended `completed`, parked and warm.
+
+| process | RSS start → end (MB) | max | fds | CPU % mean / p95 |
+|---|---|---|---|---|
+| nocsd | 198 → 204 | 204 | 30–32 | 1.8 / 2.2 |
+| imaging worker | 203 → 238 | 391 (autofocus) | 11 | 4.6 / 6.0 |
+| PHD2 | 214 → 213 | 215 | 22 | 1.7 / 2.0 |
+| indiserver | 6 → 6 | 6 | 22 | 0.4 / 0.4 |
+| CCD simulator | 72 → 72 | 72 | 5 | 4.3 / 6.1 |
+
+- No growth: every process ends within a few MB of where it started (least-squares
+  slopes −5 to +4 MB/h, noise around frame and autofocus peaks); descriptors flat.
+- `/api/health`: median 1.7 ms, worst p99 18 ms; a clock report reaches the phone as a
+  patch in 2.4 ms (max 32 ms). 15 WebSocket connections (4 from scratch), **no version
+  gap**, every preview (644) and every 10th FITS downloaded, no failure.
+- Nothing at WARNING or above in nocsd's log.
+
+## What the soak found, and what was fixed
+
+Each of the first three ended or would have ended a night; the fixes are on `main` with tests.
+
+1. **Nights ended six minutes after the meridian flip** (PC and Pi alike). PHD2 turned
+   its calibration's RA for the side the simulator reports, but Dec guiding then ran
+   away (0.2 → 23 px in 20 s), no dither settled, and after four tries the guiding
+   policy ended the session. Whether Dec must be reversed after a flip depends on the
+   mount, so guiding now **calibrates again after every flip** (a few minutes, once a
+   night) instead of `flip_calibration`. Afterwards guide steps stay under 0.25 px and a
+   dither settles in 20 s ([ADR 0033](../adr/0033-meridian-flip.md), dated note).
+2. **A single lost guide frame threw away the sub**, and three in a row end the night
+   under the default guiding policy: with 30 s frames on the Pi, one frame in two
+   failed. A frame now fails when its star was lost in more than 10 % of its guide
+   frames ([ADR 0032](../adr/0032-sequence-recovery-and-restarts.md), dated note).
+3. **Guiding restarted right after a stop failed** ("PHD2 stopped looping"): PHD2 says
+   guiding stopped, then 3 ms later that its loop stopped too; NOCS took the first as the
+   end of the stop, and the second reached the next start. A stop from guiding now waits
+   for both (the tests' fake PHD2 sends both, as PHD2 does).
+
+Measured, not changed:
+
+4. **The WebSocket carries ~24 patches/s, ~19 kB/s per client (~70 MB an hour)**, and
+   ~88 % of it is the raw INDI property mirror (`indi.devices`: the Telescope Simulator
+   50 operations/s, the guide and main cameras 26 and 20), which only the developer
+   screen (`#/dev`) shows. Harmless on a LAN; worth coalescing (one update per property
+   per second) or sending only to clients that ask, for phones on weak Wi-Fi and for
+   the Pi's JSON encoding with several clients.
+5. **Guide frames do not wear the microSD.** nocsd writes every frame PHD2 takes (one
+   every 2 s, 2.6 MB here) to `incoming/` for its preview and deletes it a second later:
+   its `write_bytes` reads ~1 MB/s, but the card saw ~0.1 MB/s while guiding without main
+   frames, as the files are gone before writeback.
+6. **Simulator limits, not NOCS's:** the guide simulator's default 3.5″ stars are under
+   a pixel at the guide scope's 4.1″/px and PHD2 keeps losing them ("low HFD"; still
+   ~21 % of guide frames at 8″), so the tool sets 14″. PHD2 calibrates in ~4.5 min on
+   the simulators.
+
+## What limits a night
+
+Memory, CPU and descriptors do not: nothing grows, and nocsd, its worker, PHD2 and the
+drivers stay under ~800 MB together on an 8 GB Pi. **Storage does.** A 26 MP frame is
+52.2 MB, and the storage service stops saving 1 GiB before the drive is full:
+
+| free on the drive | frames | 60 s subs | 180 s subs | 300 s subs |
+|---|---|---|---|---|
+| 13 GB (the lab Pi's 32 GB card today) | ~230 | ~4.5 h | ~12 h | ~20 h |
+| 50 GB (64 GB card) | ~940 | a night | a night | a night |
+
+(hours of imaging at ~10 s overhead per frame plus a dither every 3 frames). Short subs
+on a small card fill it before dawn: the builder's disk estimate should be heeded, or
+frames go to a USB drive (ADR 0013).

@@ -1,0 +1,12 @@
+date: 2026-11-01T03:51:29-03:00
+Linux rojo 7.2.12+deb14-amd64 #1 SMP PREEMPT_DYNAMIC Debian 7.2.12-1 (2026-10-22) x86_64 GNU/Linux
+PRETTY_NAME="Debian GNU/Linux forky/sid"
+model name	: Intel(R) Core(TM) Ultra 7 255H
+cpus: 16
+               total        used        free      shared  buff/cache   available
+Mem:           31333       11108        9734        1767       12719       20225
+Swap:          31989        2351       29638
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/nvme0n1p2  907G  721G  140G  84% /
+commit: 259d860
+hours: 2 exposure: 5 keep: 60
