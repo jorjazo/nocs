@@ -65,6 +65,11 @@ import type {
   TargetRequest,
   Template,
   TrackingRequest,
+  CalibrationReport,
+  CalibrationSequence,
+  CalibrationSequenceRequest,
+  FlatPlan,
+  FlatWindows,
 } from "./types";
 
 export class ApiError extends Error {
@@ -616,4 +621,26 @@ export function sessionReport(id: number): Promise<SessionReport> {
 
 export function sessionCsvUrl(id: number): string {
   return `/api/sessions/${id}/frames.csv`;
+}
+
+// -- Calibration frames (ADR 0036) --------------------------------------------------------
+
+// What matches a night's lights (or a saved sequence's planned ones), and what is missing.
+export function getCalibration(query: { night: number } | { sequence: string }): Promise<CalibrationReport> {
+  const params = new URLSearchParams(Object.entries(query).map(([k, v]) => [k, String(v)]));
+  return request("GET", `/api/calibration?${params}`);
+}
+
+// Keeps the missing darks and bias as the "calibration" sequence, not started.
+export function makeCalibrationSequence(body: CalibrationSequenceRequest): Promise<CalibrationSequence> {
+  return request("POST", "/api/calibration/sequence", body);
+}
+
+export async function startFlats(plan: FlatPlan): Promise<string> {
+  const started = await request<JobStarted>("POST", "/api/flats", plan);
+  return started.job;
+}
+
+export function flatWindows(): Promise<FlatWindows> {
+  return request("GET", "/api/flats/window");
 }

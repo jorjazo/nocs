@@ -3,6 +3,7 @@
   // every frame with its stars and HFR, and downloads. The night's zip says its
   // size first: a night of 52 MB frames is several GB over the rig's Wi-Fi.
   import Banner from "../../components/Banner.svelte";
+  import Calibration from "./Calibration.svelte";
   import Button from "../../components/Button.svelte";
   import EmptyState from "../../components/EmptyState.svelte";
   import Icon from "../../components/Icon.svelte";
@@ -194,6 +195,8 @@
       {/each}
     </ul>
   </section>
+
+  <Calibration {night} />
 
   <section class="frames" aria-labelledby="frames-title">
     <div class="title">

@@ -8,8 +8,9 @@ export const TABS: readonly Tab[] = ["tonight", "live", "plan", "session", "rig"
 // target's page off Plan: #/plan/<catalog id>, and the sequence builder:
 // #/plan/sequence (no catalog id is "sequence"); a session's report off Session:
 // #/session/<id>.
-// Autofocus (#/focus), guiding (#/guiding) and polar alignment (#/polar) are
-// full-screen flows over whichever tab opened them.
+// Autofocus (#/focus), guiding (#/guiding), polar alignment (#/polar) and flats
+// (#/flats, or #/flats/<night> for that night's lights) are full-screen flows
+// over whichever tab opened them.
 export type Route =
   | { screen: Tab }
   | { screen: "dev" }
@@ -18,6 +19,7 @@ export type Route =
   | { screen: "sequence" }
   | { screen: "report"; id: number }
   | { screen: "polar" }
+  | { screen: "flats"; night: number | null }
   | { screen: "profile"; id: string | null }
   | { screen: "target"; id: string };
 
@@ -29,6 +31,7 @@ function parse(hash: string): Route {
   if (first === "focus") return { screen: "focus" };
   if (first === "guiding") return { screen: "guiding" };
   if (first === "polar") return { screen: "polar" };
+  if (first === "flats") return { screen: "flats", night: second && /^\d+$/.test(second) ? Number(second) : null };
   if (first === "plan" && second === "sequence") return { screen: "sequence" };
   if (first === "session" && second && /^\d+$/.test(second)) return { screen: "report", id: Number(second) };
   if (first === "plan" && second) return { screen: "target", id: decodeURIComponent(second) };
@@ -44,6 +47,7 @@ export function href(route: Route): string {
   if (route.screen === "target") return `#/plan/${encodeURIComponent(route.id)}`;
   if (route.screen === "sequence") return "#/plan/sequence";
   if (route.screen === "report") return `#/session/${route.id}`;
+  if (route.screen === "flats") return route.night === null ? "#/flats" : `#/flats/${route.night}`;
   return `#/${route.screen}`;
 }
 

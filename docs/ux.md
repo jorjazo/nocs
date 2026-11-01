@@ -426,6 +426,29 @@ Session report (stage 5.15):
   the ambient temperature (solid and dashed); the autofocus runs with their
   position, HFR, filter and what triggered them; every event; Frames as CSV.
 
+Calibration frames (ADR 0036):
+
+- Under a night's groups, the Session tab shows its calibration: one row per group
+  of lights (filter, exposure, sensor temperature, gain, binning) with chips for
+  its darks, its flats and the bias the flats need: green with the count and the
+  newest night when the set is complete (20 darks, 20 flats, 50 bias), amber with
+  "2/20" when short, amber "Missing" when there is none. Matches come from any
+  night (darks and bias for 180 days; flats the same night, or the same rotation).
+- *Take darks and bias…* opens a sheet: a warning to cover the telescope or the
+  camera, darks per exposure, bias, warm at the end; Start asks a second tap ("It
+  is covered: start"), builds the `calibration` sequence and starts it, so the
+  Session monitor shows it like any sequence. Sets it cannot take (another camera,
+  a region of the sensor) are named in a banner.
+- *Take flats…* opens the flats wizard (`#/flats/<night>`, full screen): Panel or
+  Twilight sky with what each does; for the sky, the next dusk and dawn windows;
+  the night's filters, each with its focuser position and a count (on for those
+  missing flats); the level (50 % of full scale); Advanced: the shortest and
+  longest exposure. Gain, offset and binning are the night's lights'. While it runs:
+  the state, what it waits for (the twilight), and per filter the flats kept of the
+  count, the latest exposure and level, and a bar; Cancel; then Take more or Done.
+- *Download with calibration* is the night's zip with the matching frames of other
+  nights added.
+
 ## 8. Open UX questions
 
 - How to expose the full sequence tree editor (advanced) without cluttering the

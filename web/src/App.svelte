@@ -19,6 +19,7 @@
   import Focus from "./screens/focus/Focus.svelte";
   import Guiding from "./screens/guiding/Guiding.svelte";
   import Polar from "./screens/polar/Polar.svelte";
+  import Flats from "./screens/flats/Flats.svelte";
   import Live from "./screens/live/Live.svelte";
   import Plan from "./screens/plan/Plan.svelte";
   import SequenceScreen from "./screens/plan/Sequence.svelte";
@@ -103,6 +104,8 @@
   <Guiding {offline} />
 {:else if router.route.screen === "polar"}
   <Polar {offline} />
+{:else if router.route.screen === "flats"}
+  <Flats {offline} night={router.route.night} />
 {:else}
   <NavBar />
   <main class="content" class:full>
