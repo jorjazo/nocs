@@ -157,7 +157,8 @@ full night from a phone with no other computer involved.
 - SMB share for desktop access to images.
 - Remote access outside the LAN.
 - Canon DSLR (gphoto) polish.
-- Flats wizard and calibration frame library (darks, bias, flats).
+- Flats wizard and calibration frame library (darks, bias, flats): planned in
+  [beyond/calibration.md](beyond/calibration.md) (ADR 0036).
 - Filter wheels: find out which filter sits in each slot (e.g. from the
   brightness of a flat per slot) instead of asking the user (ADR 0016).
 - Mosaic planning.
