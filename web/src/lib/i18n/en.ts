@@ -711,7 +711,11 @@ export const en = {
       bad_fit:
         "The points do not follow a V. Seeing or clouds may have changed during the sweep; try again, perhaps with more frames per point.",
       worse: "The last frame was worse than the first: conditions may have changed. Try again.",
+      backlash:
+        "The first points of the sweep had the same stars although the focuser moved: its backlash was not taken up. Use a larger overshoot (Advanced).",
     } satisfies Record<AutofocusProblem, string>,
+    suggestOvershoot: (steps: string) => `An overshoot of ${steps} steps should take the backlash up.`,
+    useOvershoot: "Use it for this focuser",
     again: "Run again",
     done: "Done",
   },

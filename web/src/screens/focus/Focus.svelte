@@ -195,6 +195,14 @@
     });
   }
 
+  function useOvershoot(value: number | null): void {
+    if (value === null) return;
+    void act(async () => {
+      overshoot = value;
+      await setFocuserBacklash({ direction, overshoot: value });
+    });
+  }
+
   function again(): void {
     watched = null;
     error = "";
@@ -393,6 +401,14 @@
           </Chip>
           {#if shown.problem}
             <p class="body">{t.autofocus.problem[shown.problem]}</p>
+            {#if shown.suggested_overshoot}
+              <p class="body">{t.autofocus.suggestOvershoot(formatPlain(shown.suggested_overshoot, locale))}</p>
+              {#if auth.owner}
+                <Button variant="text" {busy} onclick={() => useOvershoot(shown.suggested_overshoot ?? null)}
+                  >{t.autofocus.useOvershoot}</Button
+                >
+              {/if}
+            {/if}
           {:else if shown.detail}
             <p class="body">{shown.detail}</p>
           {/if}

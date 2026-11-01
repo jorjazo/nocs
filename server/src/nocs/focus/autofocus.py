@@ -19,7 +19,7 @@ it goes (the most recent one, finished or not)::
 
     {job, state, phase, started, finished, step, start_position, start_hfr,
      start_stars, temperature, ambient, filter, points, fit, position, hfr,
-     stars, problem, detail, suggested_step}
+     stars, problem, detail, suggested_overshoot, suggested_step}
 
 Options left out come from the imaging train's sweep in the profile and from the
 physical focuser's backlash settings (``options``). Finished runs are recorded
@@ -122,9 +122,11 @@ type _Shot = Callable[[], Awaitable[Measure]]
 
 
 class AutofocusError(Exception):
-    def __init__(self, problem: Problem, detail: str) -> None:
+    def __init__(self, problem: Problem, detail: str, *, overshoot: int | None = None) -> None:
         super().__init__(detail)
         self.problem = problem
+        self.overshoot = overshoot
+        """For backlash: an overshoot that would take it up."""
 
 
 class RunState(StrEnum):
@@ -199,6 +201,7 @@ class _Run:
     final: Measure | None = None
     problem: Problem | None = None
     detail: str | None = None
+    suggested_overshoot: int | None = None
     finished: str | None = None
 
     def summary(self) -> dict[str, Json]:
@@ -234,6 +237,7 @@ class _Run:
             "stars": self.final.stars if self.final else None,
             "problem": self.problem.value if self.problem else None,
             "detail": self.detail,
+            "suggested_overshoot": self.suggested_overshoot,
             "suggested_step": (
                 suggest_step(fit, (self.options.points - 1) // 2)
                 if fit and self.state is RunState.SUCCEEDED
@@ -333,6 +337,7 @@ class AutofocusService:
             run.state = RunState.CANCELLED if _cancelled(e) else RunState.FAILED
             if isinstance(e, AutofocusError):
                 run.problem, run.detail = e.problem, str(e)
+                run.suggested_overshoot = e.overshoot
             elif not _cancelled(e):
                 run.detail = str(e) or type(e).__name__
             await self._restore(context, focuser, run)
@@ -397,7 +402,11 @@ class AutofocusService:
                 break
             if verdict.extend is None:
                 assert verdict.problem is not None
-                raise AutofocusError(verdict.problem, verdict.detail or verdict.problem.value)
+                raise AutofocusError(
+                    verdict.problem,
+                    verdict.detail or verdict.problem.value,
+                    overshoot=verdict.overshoot,
+                )
             side = verdict.extend
             added = extension(taken, side, options.step, 1, maximum)
             budget[side] -= len(added)

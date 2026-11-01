@@ -198,6 +198,17 @@ without the driver FIFO.
   driver. The EAF's own temperature compensation (`TEMPC_SWITCH`) is off and must
   stay off while NOCS focuses.
 
+## Field test (2026-10-31, lab rig outside)
+
+- The ZWO EAF on the 380 mm scope has ~600–700 steps of backlash. With the default
+  overshoot (one step of the sweep) every sweep began with a plateau of identical
+  HFR over hundreds of steps and failed as a bad fit, "not turning" or "flat";
+  overshoot 1000 with a step of 30–40 worked. Autofocus now recognises that plateau
+  (at least 3 points at the start whose HFR changes less than a quarter as much per
+  step as the points after them) and fails with its own reason, *backlash*,
+  suggesting an overshoot of 1.5 × (plateau + one step); the Focus screen offers to
+  keep it for the focuser.
+
 ## Tuning under the sky (first clear night)
 
 1. Focus by hand in Live view until stars show; note the position.

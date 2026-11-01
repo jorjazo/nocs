@@ -200,3 +200,26 @@ def test_a_flat_sweep_is_not_a_v() -> None:
     verdict = assess(points, can_extend=(Direction.INWARD, Direction.OUTWARD))
     assert verdict.problem is Problem.FLAT
     assert verdict.detail == "the HFR hardly changes across the sweep (0.82 to 0.83)"
+
+
+def test_a_plateau_at_the_start_of_a_sweep_is_backlash() -> None:
+    # The lab EAF on the 380 mm scope (field test, 2026-10-31): ~650 steps of backlash,
+    # an overshoot of one 40-step step. The first moves outward only took up slack.
+    truth = Hyperbola(a=2.0, b=120, c=10000)
+    positions = [9600 + 40 * i for i in range(21)]
+    slack = 650
+    moved = [max(positions[0], p - slack) for p in positions]
+    points = [Point(p, truth(m), 50) for p, m in zip(positions, moved, strict=True)]
+    verdict = assess(points)
+    assert verdict.problem is Problem.BACKLASH
+    assert verdict.overshoot is not None
+    assert 1000 <= verdict.overshoot <= 1200
+    assert "overshoot of" in (verdict.detail or "")
+
+
+def test_a_sweep_that_starts_moving_at_once_is_no_plateau() -> None:
+    truth = Hyperbola(a=2.0, b=120, c=10000)
+    positions = [9600 + 100 * i for i in range(9)]
+    assert assess(sweep(truth, positions)).fit is not None
+    flat = [Point(p, 2.0, 50) for p in positions]
+    assert assess(flat).problem is Problem.FLAT  # no V at all: not backlash

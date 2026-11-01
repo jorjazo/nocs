@@ -696,7 +696,11 @@ export const es: Messages = {
       bad_fit:
         "Los puntos no forman una V. El seeing o las nubes pueden haber cambiado durante el barrido; vuelve a intentarlo, quizá con más imágenes por punto.",
       worse: "La última imagen salió peor que la primera: las condiciones pueden haber cambiado. Vuelve a intentarlo.",
+      backlash:
+        "Los primeros puntos del barrido tuvieron las mismas estrellas aunque el enfocador se movió: no se absorbió su holgura. Usa un sobrepaso mayor (Avanzado).",
     },
+    suggestOvershoot: (steps) => `Un sobrepaso de ${steps} pasos debería absorber la holgura.`,
+    useOvershoot: "Usarlo para este enfocador",
     again: "Repetir",
     done: "Listo",
   },
