@@ -105,6 +105,15 @@ def test_downsample_from_star_size_and_frame_size() -> None:
     assert downsample_for(4.4, 1080) == 1  # small frames keep every pixel
 
 
+def test_raw_colour_frames_downsample_at_least_twice() -> None:
+    rows = 4176  # an ASI2600MC frame
+    assert downsample_for(None, rows, bayer=True) == 2
+    assert downsample_for(1.8, rows, bayer=True) == 2  # focused: rejected at -z 1
+    assert downsample_for(5.0, rows, bayer=True) == 2
+    assert downsample_for(22.0, 6388, bayer=True) == 3
+    assert downsample_for(1.0, 1080, bayer=True) == 2
+
+
 def test_databases(tmp_path: Path) -> None:
     for name in ("d50_0101.1476", "d50_0102.1476", "g05_0101.1476", "readme.txt"):
         (tmp_path / name).touch()

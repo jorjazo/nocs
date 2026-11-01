@@ -100,14 +100,20 @@ class Hint:
     radius: float = 10.0
 
 
-def downsample_for(hfr: float | None, height: int) -> int:
+def downsample_for(hfr: float | None, height: int, *, bayer: bool = False) -> int:
     """ASTAP's downsampling factor for a frame ``height`` rows high whose stars have a
-    median half-flux radius of ``hfr`` pixels (``None``: unknown, no downsampling)."""
+    median half-flux radius of ``hfr`` pixels (``None``: unknown, no downsampling).
+
+    A raw colour frame (``bayer``) is downsampled at least twice: at full size its
+    focused stars are a checkerboard of the colour filters, which ASTAP rejects ("Not
+    enough stars", "increase downsampling") while -z 2 solved the same ASI2600MC frame
+    in 0.9 s on the Pi."""
+    least = 2 if bayer else 1
     if hfr is None or not math.isfinite(hfr):
-        return 1
+        return least
     by_stars = math.floor(2 * hfr / STAR_DIAMETER)
     by_size = height // ROWS_PER_STEP
-    return max(1, min(MAX_DOWNSAMPLE, by_stars, by_size))
+    return max(least, min(MAX_DOWNSAMPLE, by_stars, by_size))
 
 
 def find_databases(directory: Path) -> list[Database]:

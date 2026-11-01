@@ -53,12 +53,15 @@ class ImageInfo:
     width: int
     height: int
     bottom_up: bool
+    bayer: bool = False
+    """A raw colour frame, still a mosaic of the colour filters."""
 
 
 def image_info(path: Path) -> ImageInfo:
     header = _fits.getheader(path)
     row_order = str(header.get("ROWORDER", "TOP-DOWN")).strip().upper()
-    return ImageInfo(int(header["NAXIS1"]), int(header["NAXIS2"]), row_order == "BOTTOM-UP")
+    bayer = bool(str(header.get("BAYERPAT", "")).strip()) and int(header.get("NAXIS", 2)) == 2
+    return ImageInfo(int(header["NAXIS1"]), int(header["NAXIS2"]), row_order == "BOTTOM-UP", bayer)
 
 
 class SolverService:
@@ -143,7 +146,7 @@ class SolverService:
     ) -> SolveResult:
         astap = self.check(fov)
         info = await anyio.to_thread.run_sync(image_info, image)
-        downsample = downsample_for(hfr, info.height)
+        downsample = downsample_for(hfr, info.height, bayer=info.bayer)
         attempts = [hint, None] if hint is not None and blind else [hint]
         async with self._lock:
             self._solving = True
