@@ -384,7 +384,12 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
         task = asyncio.create_task(bridge.run(), name="indi-bridge")
         guiding_task = asyncio.create_task(services.guiding.run(), name="phd2")
         system_task = asyncio.create_task(services.system.run(), name="nocs-system")
-        time_keeper = TimeKeeper(services.clock, services.jobs, services.system)
+        time_keeper = TimeKeeper(
+            services.clock,
+            services.jobs,
+            services.system,
+            memory=settings.data_dir / "clock-set-from-client",
+        )
         time_task = asyncio.create_task(time_keeper.run(), name="timekeeping")
         services.gps = GpsService(store, services.equipment, settings.gpsd_host, settings.gpsd_port)
         gps_task = asyncio.create_task(services.gps.run(), name="gpsd")

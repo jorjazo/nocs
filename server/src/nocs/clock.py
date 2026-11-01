@@ -24,9 +24,9 @@ from nocs.state import Path, StateStore
 log = logging.getLogger(__name__)
 
 ROOT: Path = ("clock",)
-TRUSTED_SOURCES = frozenset({"ntp", "gps"})
-"""System time sources that make the time known without a client. ``client`` is left
-out: whether a client set the system clock does not survive a restart of nocsd yet."""
+TRUSTED_SOURCES = frozenset({"ntp", "gps", "client"})
+"""System time sources that make the time known without a client reporting it now:
+``client`` is a system clock a client's time set earlier this boot (ADR 0029)."""
 THRESHOLD = 5.0
 """Seconds the system clock may be off before NOCS stops trusting it."""
 
@@ -52,7 +52,8 @@ class Clock:
     @property
     def known(self) -> bool:
         """Whether the time is known: a client confirmed (or corrected) it since nocsd
-        started, or NTP or a GPS keeps the system clock (ADR 0029)."""
+        started, NTP or a GPS keeps the system clock, or a client's time set it this
+        boot (ADR 0029)."""
         return self._reference is not None or self._source in TRUSTED_SOURCES
 
     @property

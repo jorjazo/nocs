@@ -151,6 +151,39 @@ async def test_the_clock_is_set_from_the_client_when_nothing_keeps_it(tools: Too
     assert store.get(("clock", "source")) == "client"
 
 
+async def test_a_clock_set_this_boot_stays_known_after_a_restart(
+    tools: Tools, tmp_path: Path
+) -> None:
+    tools.answer("chronyc", "sources", "")
+    boot_id = tmp_path / "boot_id"
+    boot_id.write_text("boot-1\n")
+    memory = tmp_path / "data/clock-set-from-client"
+    store = StateStore()
+    keeper = TimeKeeper(
+        wrong_clock(store),
+        JobManager(store),
+        FakeHelper("time.set"),
+        memory=memory,
+        boot_id=boot_id,
+    )
+    await keeper.check()
+    # nocsd restarts: no client yet, and the clock is right now.
+    store = StateStore()
+    clock = Clock(store)
+    helper = FakeHelper("time.set")
+    await TimeKeeper(clock, JobManager(store), helper, memory=memory, boot_id=boot_id).check()
+    assert helper.calls == []
+    assert store.get(("clock", "source")) == "client"
+    assert clock.known
+    # After a reboot it is not known until something sets it again.
+    boot_id.write_text("boot-2\n")
+    store = StateStore()
+    clock = Clock(store)
+    await TimeKeeper(clock, JobManager(store), helper, memory=memory, boot_id=boot_id).check()
+    assert store.get(("clock", "source")) == "none"
+    assert not clock.known
+
+
 async def test_never_during_a_job(tools: Tools) -> None:
     tools.answer("chronyc", "sources", "")
     store = StateStore()
@@ -186,7 +219,6 @@ def test_a_clock_kept_by_ntp_or_a_gps_is_known_without_a_client() -> None:
     clock.add_listener(lambda: told.append(clock.known))
     assert not clock.known
     clock.set_source("none")
-    clock.set_source("client")  # not trusted across restarts of nocsd yet
     assert not clock.known
     assert told == []
     clock.set_source("ntp")

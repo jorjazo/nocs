@@ -9,11 +9,15 @@ does not jump in the middle of an exposure. ``nocs.clock`` keeps correcting NOCS
 own timestamps until then, and wherever nocs-system cannot (a PC).
 
 Reading the source needs no privileges: ``chronyc -c sources`` (or timedatectl).
+Having set the clock is remembered for the rest of the boot, across restarts of
+nocsd, by writing the boot's id to a file: the clock stays known (phase 5.12 resumes
+a sequence only once it is).
 """
 
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 import anyio
 
@@ -25,6 +29,7 @@ log = logging.getLogger(__name__)
 
 CHECK = 30.0
 """Seconds between looks at the clock's source."""
+BOOT_ID = Path("/proc/sys/kernel/random/boot_id")
 
 
 async def clock_source() -> str:
@@ -50,11 +55,24 @@ async def _output(*argv: str) -> str | None:
 
 
 class TimeKeeper:
-    def __init__(self, clock: Clock, jobs: JobManager, helper: SystemHelper) -> None:
+    def __init__(
+        self,
+        clock: Clock,
+        jobs: JobManager,
+        helper: SystemHelper,
+        *,
+        memory: Path | None = None,
+        boot_id: Path = BOOT_ID,
+    ) -> None:
+        """``memory``: where to remember that the clock was set from a client this boot."""
         self._clock = clock
         self._jobs = jobs
         self._helper = helper
-        self._set_from_client = False
+        self._memory = memory
+        self._boot = _read(boot_id)
+        self._set_from_client = (
+            memory is not None and self._boot is not None and _read(memory) == self._boot
+        )
         self._reported = anyio.Event()
         clock.add_listener(lambda: self._reported.set())
 
@@ -70,6 +88,7 @@ class TimeKeeper:
         source = await clock_source()
         if source == "none" and self._clock.corrected and await self._set():
             self._set_from_client = True
+            self._remember()
         self._clock.set_source("client" if source == "none" and self._set_from_client else source)
 
     async def _set(self) -> bool:
@@ -84,3 +103,19 @@ class TimeKeeper:
         log.warning("set the system clock from a client's, %.1f s off before", offset or 0.0)
         self._clock.refresh()
         return True
+
+    def _remember(self) -> None:
+        if self._memory is None or self._boot is None:
+            return
+        try:
+            self._memory.parent.mkdir(parents=True, exist_ok=True)
+            self._memory.write_text(self._boot + "\n")
+        except OSError as e:
+            log.warning("cannot remember that the clock was set: %s", e)
+
+
+def _read(path: Path) -> str | None:
+    try:
+        return path.read_text().strip() or None
+    except OSError:
+        return None
