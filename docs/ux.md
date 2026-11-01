@@ -469,3 +469,10 @@ Appliance (phase 6):
 - Rig gains "This computer" (health, name, restart, shut down, INDI and PHD2
   restarts, diagnostics) and "Network" (where the box is, known networks, joining
   one, the access point, the mode); USB drives with Eject sit under Storage.
+- Rig's "File sharing" (ADR 0037), below Network, where nocs-system runs the share: a
+  switch ("Share frames with computers", saying it is read-only and open to anyone on
+  the network); while on, a chip with the computers connected, how to open it from
+  Windows (`\\<name>.local\Internal`), a Mac and Linux (`smb://<name>.local`) as
+  selectable text (no clipboard over plain HTTP), the `nocs` / `nocs` login for
+  Windows 11, the shared folders (Internal, then each USB drive by label) and a note
+  that copying can slow saving on the microSD. On but not running shows a warning.

@@ -4435,6 +4435,13 @@ export interface SetPropertyRequest {
   };
 }
 /**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "ShareRequest".
+ */
+export interface ShareRequest {
+  on: boolean;
+}
+/**
  * Refused (409) while a job runs, unless ``force``.
  *
  * This interface was referenced by `NOCSAPI`'s JSON-Schema

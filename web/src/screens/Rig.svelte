@@ -36,6 +36,7 @@
   import MountSheet from "./devices/MountSheet.svelte";
   import PowerSheet from "./devices/PowerSheet.svelte";
   import NetworkSection from "./NetworkSection.svelte";
+  import ShareSection from "./ShareSection.svelte";
   import StorageDrives from "./StorageDrives.svelte";
   import SystemSection from "./SystemSection.svelte";
   import type { CameraState, Optics, PairedDevice, Profile, Role, RoleState } from "../lib/types";
@@ -437,6 +438,8 @@
     <SystemSection />
 
     <NetworkSection />
+
+    <ShareSection />
 
     <section aria-labelledby="access-title">
       <h2 class="heading section-title" id="access-title">{t.access.title}</h2>

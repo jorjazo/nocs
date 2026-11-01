@@ -75,7 +75,12 @@ is doing. The box runs the night by itself: you can lock the phone, or close the
 browser, and come back to it later.
 
 Frames go to `NOCS/<night>/<type>/<target>/<filter>/` on the USB drive (or the card),
-and you can download them from the app.
+and you can download them from the app. At home, a computer can also open them as a
+network folder: switch on **File sharing** on Rig, then open `\\nocs.local\Internal`
+in Windows' File Explorer or `smb://nocs.local` on a Mac (Finder → Go → Connect to
+Server) or on Linux. It is read-only and needs no password, so anyone on that network
+can read the frames while it is on; Windows 11 asks for a login: user `nocs`, password
+`nocs`.
 
 ## 6. At the end
 
