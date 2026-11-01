@@ -1,0 +1,37 @@
+#!/bin/sh
+# The systemd handling follows what dh_installsystemd generates. deb-systemd-invoke
+# honours policy-rc.d, so nothing starts inside an image build (ADR 0026).
+#
+# Network changes take effect at the next boot: switching the network over while
+# someone is connected would cut them off (ADR 0028).
+set -e
+
+unit=nocs-firewall.service
+
+if [ "$1" = "configure" ] || [ "$1" = "abort-upgrade" ] || [ "$1" = "abort-deconfigure" ] || [ "$1" = "abort-remove" ]; then
+    deb-systemd-helper unmask "$unit" >/dev/null || true
+    if deb-systemd-helper --quiet was-enabled "$unit"; then
+        deb-systemd-helper enable "$unit" >/dev/null || true
+    else
+        deb-systemd-helper update-state "$unit" >/dev/null || true
+    fi
+fi
+
+if [ "$1" = "configure" ] && [ -z "$2" ]; then
+    # NetworkManager takes the network over from systemd-networkd (netplan's
+    # renderer in /usr/lib/netplan/01-nocs-network-manager.yaml).
+    systemctl disable systemd-networkd.service systemd-networkd.socket \
+        systemd-networkd-wait-online.service >/dev/null 2>&1 || true
+fi
+
+if [ -d /run/systemd/system ]; then
+    systemctl --system daemon-reload >/dev/null || true
+    deb-systemd-invoke restart "$unit" >/dev/null || true
+    # nocs-system reads which operations it may perform when it starts.
+    deb-systemd-invoke try-restart nocs-system.service >/dev/null || true
+    if [ "$1" = "configure" ] && [ -z "$2" ]; then
+        # nocsd moves to port 80; sshd, chrony and gpsd read their new settings.
+        deb-systemd-invoke try-restart nocsd.service chrony.service gpsd.service >/dev/null || true
+        deb-systemd-invoke reload ssh.service >/dev/null 2>&1 || true
+    fi
+fi

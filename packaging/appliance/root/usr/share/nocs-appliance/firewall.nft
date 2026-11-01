@@ -1,0 +1,20 @@
+#!/usr/sbin/nft -f
+# NOCS (ADR 0028): what the network may reach on the box. indiserver (7624) and
+# PHD2's event server (4400), which have no authentication, only from the box itself.
+# NetworkManager adds its own tables for the access point; this one only filters
+# what comes in.
+table inet nocs
+delete table inet nocs
+table inet nocs {
+    chain input {
+        type filter hook input priority filter; policy drop;
+        iif lo accept
+        ct state established,related accept
+        ct state invalid drop
+        meta l4proto { icmp, ipv6-icmp } accept
+        tcp dport { 22, 80 } accept
+        udp dport 5353 accept
+        udp dport { 67, 68 } accept
+        meta l4proto { tcp, udp } th dport 53 accept
+    }
+}

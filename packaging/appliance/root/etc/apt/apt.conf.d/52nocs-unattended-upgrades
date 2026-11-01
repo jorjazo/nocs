@@ -1,0 +1,3 @@
+// NOCS (ADR 0025): download updates, and install them only when the owner asks.
+APT::Periodic::Unattended-Upgrade "0";
+APT::Periodic::Download-Upgradeable-Packages "1";

@@ -6,7 +6,7 @@ name: Image
 on:
   push:
     branches: [main, "image-test/**"]
-    paths: [packaging/image/**, .github/workflows/image.yml]
+    paths: [packaging/image/**, packaging/appliance/**, .github/workflows/image.yml]
     tags: ["v*"]
   workflow_dispatch:
 
@@ -47,7 +47,13 @@ jobs:
       - name: Allow user namespaces for the container's bwrap
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - name: Build and boot the image
-        run: sudo --preserve-env=HOME CACHE="$HOME/.cache/nocs" packaging/image/build.sh packaging/out/nocs_*_arm64.deb
+        env:
+          NOCS_APT_URL: ${{ vars.NOCS_APT_URL }}
+          # A tag's image follows the stable suite, any other one testing (ADR 0035).
+          NOCS_APT_SUITE: ${{ startsWith(github.ref, 'refs/tags/v') && 'stable' || 'testing' }}
+        run: |
+          sudo --preserve-env=HOME,NOCS_APT_URL,NOCS_APT_SUITE CACHE="$HOME/.cache/nocs" \
+            packaging/image/build.sh packaging/out/nocs_*_arm64.deb
       - name: Let the cache read ASTAP's files
         if: always()
         run: sudo chown -R "$(id -u):$(id -g)" ~/.cache/nocs || true
@@ -60,3 +66,24 @@ jobs:
             packaging/out/*.manifest.txt
           compression-level: 0
           retention-days: 7
+      - name: Publish a release's image
+        if: startsWith(github.ref, 'refs/tags/v') && vars.NOCS_APT_URL != ''
+        env:
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          NOCS_APT_URL: ${{ vars.NOCS_APT_URL }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          image=$(ls packaging/out/*.img.xz)
+          python3 packaging/repo/publish.py image --keep 2 "$image" "$image.sha256" \
+            packaging/out/*.manifest.txt
+          prerelease=()
+          [[ $GITHUB_REF_NAME == *-* ]] && prerelease=(--prerelease)
+          gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes "${prerelease[@]}" \
+            || true  # the Packages workflow may have made it first
+          gh release upload "$GITHUB_REF_NAME" --clobber "$image.sha256" packaging/out/*.manifest.txt
+          link="$NOCS_APT_URL/images/$(basename "$image")"
+          notes=$(gh release view "$GITHUB_REF_NAME" --json body --jq .body)
+          gh release edit "$GITHUB_REF_NAME" --notes "$(printf '**Raspberry Pi 5 image:** %s\n\n%s' "$link" "$notes")"

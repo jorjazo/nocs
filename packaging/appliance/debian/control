@@ -1,0 +1,19 @@
+Package: nocs-appliance
+Version: @VERSION@
+Architecture: all
+Maintainer: Jorge Valencia <jorjazo@gmail.com>
+Installed-Size: @SIZE@
+Depends: nocs, network-manager, dnsmasq-base, iw, nftables, chrony, gpsd, avahi-daemon
+Section: science
+Priority: optional
+Homepage: https://github.com/jorjazo/nocs
+Description: make this computer a dedicated NOCS box
+ NOCS runs at the telescope and is operated from a phone, tablet or desktop
+ browser, on top of INDI drivers.
+ .
+ This package turns a computer into the NOCS appliance, as on the Raspberry Pi
+ image: NetworkManager runs the network (access point, home Wi-Fi and the
+ fallback), a firewall closes indiserver and PHD2 to the network, nocsd serves
+ port 80, the privileged helper may do everything nocsd asks, updates are only
+ downloaded, and a USB GPS sets the clock. Do not install it on a computer that
+ is used for anything else.

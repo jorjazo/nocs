@@ -1,0 +1,5 @@
+# NOCS (ADR 0028): NetworkManager runs the network, so that the box can be an
+# access point; the Wi-Fi Raspberry Pi Imager presets through cloud-init goes to it.
+network:
+  version: 2
+  renderer: NetworkManager

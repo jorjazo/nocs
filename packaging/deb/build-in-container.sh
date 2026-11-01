@@ -30,6 +30,11 @@ install -D -m 755 /src/dev/phd2/entrypoint.sh "$stage/opt/nocs/libexec/nocs-phd2
 (cd /src/packaging/deb/root && find . -type f) | while read -r file; do
     install -D -m 644 "/src/packaging/deb/root/$file" "$stage/$file"
 done
+# The apt repository's public key (ADR 0035), once it has one.
+keyring=/src/packaging/repo/nocs-archive-keyring.asc
+if [[ -f $keyring ]]; then
+    install -D -m 644 "$keyring" "$stage/usr/share/keyrings/nocs-archive-keyring.asc"
+fi
 
 size=$(du -sk "$stage" | cut -f1)
 sed -e "s/@VERSION@/$VERSION/" -e "s/@ARCH@/$arch/" -e "s/@SIZE@/$size/" \

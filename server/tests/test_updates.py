@@ -94,6 +94,14 @@ async def test_rollback_installs_the_cached_package(tools: Tools, paths: UpdateP
     await updates.rollback({})
     await drive(updates)
     assert tools.calls()[-1].endswith(f"dpkg -i {paths.archives / 'nocs_0.1.0_arm64.deb'}")
+    # The appliance's settings go back with it.
+    (paths.archives / "nocs-appliance_0.1.0_all.deb").write_bytes(b"")
+    await updates.rollback({})
+    await drive(updates)
+    assert tools.calls()[-1].endswith(
+        f"dpkg -i {paths.archives / 'nocs_0.1.0_arm64.deb'} "
+        f"{paths.archives / 'nocs-appliance_0.1.0_all.deb'}"
+    )
 
 
 async def test_rollback_needs_the_package_in_the_cache(tools: Tools, paths: UpdatePaths) -> None:

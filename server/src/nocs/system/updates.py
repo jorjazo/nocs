@@ -7,7 +7,8 @@ the apt or dpkg that is doing it. Their progress and result are read back from t
 unit and its journal, so they survive the restarts they cause.
 
 Before installing, the installed version of ``nocs`` is kept; rolling back installs
-it again from apt's cache with dpkg.
+it again from apt's cache with dpkg, with ``nocs-appliance`` of the same version when
+the cache has it.
 """
 
 from __future__ import annotations
@@ -147,12 +148,14 @@ class Updates:
 
     async def _rollback(self) -> None:
         previous = str(self._saved["previous"])
-        debs = sorted(self._paths.archives.glob(f"nocs_{previous.replace(':', '%3a')}_*.deb"))
+        version = previous.replace(":", "%3a")
+        debs = sorted(self._paths.archives.glob(f"nocs_{version}_*.deb"))
         if not debs:
             raise HelperError("failed", f"NOCS {previous} is no longer in apt's cache")
+        appliance = sorted(self._paths.archives.glob(f"nocs-appliance_{version}_all.deb"))
         self._saved |= {"task": "rollback"}
         self._save()
-        await self._start("dpkg", "-i", str(debs[0]))
+        await self._start("dpkg", "-i", str(debs[0]), *(str(deb) for deb in appliance[:1]))
 
     async def _start(self, *argv: str) -> None:
         """Run ``argv`` as the ``nocs-update`` unit, outside nocs-system's own cgroup."""

@@ -1,0 +1,18 @@
+[Unit]
+Description=NOCS firewall (ADR 0028)
+Documentation=https://github.com/jorjazo/nocs/blob/main/docs/adr/0028-networking.md
+DefaultDependencies=no
+After=nftables.service
+Before=network-pre.target shutdown.target
+Wants=network-pre.target
+Conflicts=shutdown.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/nft -f /usr/share/nocs-appliance/firewall.nft
+ExecReload=/usr/sbin/nft -f /usr/share/nocs-appliance/firewall.nft
+ExecStop=/usr/sbin/nft delete table inet nocs
+
+[Install]
+WantedBy=sysinit.target

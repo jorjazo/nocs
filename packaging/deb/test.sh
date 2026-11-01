@@ -2,9 +2,11 @@
 # Install a nocs .deb on a clean Ubuntu 26.04 with systemd running, and check that
 # its services come up: nocsd answers, is connected to indiserver, starts a driver
 # through the FIFO, reaches nocs-system (which reboots nothing on a PC), and PHD2
-# listens (ADR 0025, ADR 0027).
+# listens (ADR 0025, ADR 0027). Given nocs-appliance too, it then installs it and
+# checks that the box became the appliance: the firewall, nocsd on port 80, every
+# operation of nocs-system.
 #
-#   packaging/deb/test.sh packaging/out/nocs_<version>_<arch>.deb
+#   packaging/deb/test.sh packaging/out/nocs_<version>_<arch>.deb [nocs-appliance_<version>_all.deb]
 #
 # The container runs systemd, so it needs --privileged. PLATFORM as in build.sh.
 set -euo pipefail
@@ -16,7 +18,10 @@ name=nocs-deb-test-$$
 context=$(mktemp -d)
 trap 'docker rm -f "$name" >/dev/null 2>&1 || true; rm -rf "$context"' EXIT
 
+appliance=${2:+$(realpath "$2")}
 cp "$deb" "$context/"
+mkdir -p "$context/appliance"
+[[ -n $appliance ]] && cp "$appliance" "$context/appliance/"
 cat > "$context/Containerfile" <<'CONTAINERFILE'
 FROM ubuntu:26.04
 ARG DEBIAN_FRONTEND=noninteractive
@@ -27,6 +32,7 @@ RUN apt-get update \
     && add-apt-repository -y ppa:pch/phd2
 # Not in /tmp, which systemd mounts empty when it runs.
 COPY *.deb /debs/
+COPY appliance/ /debs/appliance/
 # Without systemd running, the package enables nocsd but starts nothing.
 RUN apt-get install -y /debs/*.deb phd2 xvfb
 # Docker's images forbid starting services (exit 101); a real system does not.
@@ -93,3 +99,22 @@ echo "PASS"
 CHECK
 }
 check
+
+[[ -n $appliance ]] || exit 0
+docker exec -i "$name" bash -s <<'CHECK'
+set -euo pipefail
+fail() { echo "FAIL: $*"; systemctl status --no-pager nocsd nocs-firewall || true; journalctl --no-pager -n 60 -u nocsd -u nocs-firewall; exit 1; }
+DEBIAN_FRONTEND=noninteractive apt-get install -y /debs/appliance/*.deb >/dev/null 2>&1 \
+    || fail "nocs-appliance does not install"
+[[ $(systemctl is-active nocs-firewall) == active ]] || fail "the firewall is not up"
+[[ $(nft list chain inet nocs input) == *'policy drop'* ]] || fail "no firewall rules"
+[[ $(systemctl is-enabled systemd-networkd.service) == disabled ]] || fail "systemd-networkd is still enabled"
+health() { curl -fsS -H 'Host: localhost' http://127.0.0.1/api/health; }
+for _ in $(seq 60); do health 2>/dev/null | grep -q '"indi_connected":true' && break; sleep 1; done
+health | grep -q '"indi_connected":true' || fail "nocsd does not answer on port 80"
+runuser -u nocs -- /opt/nocs/venv/bin/nocs-system call hello | grep -q '"network.status"' \
+    || fail "nocs-system does not offer the appliance's operations"
+DEBIAN_FRONTEND=noninteractive apt-get remove -y nocs-appliance >/dev/null 2>&1 || fail "nocs-appliance does not remove"
+! nft list table inet nocs >/dev/null 2>&1 || fail "the firewall stayed after removing nocs-appliance"
+echo "PASS: appliance"
+CHECK

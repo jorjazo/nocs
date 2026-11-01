@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Build the nocs .deb for this machine's architecture (ADR 0025).
+# Build the nocs .deb for this machine's architecture, and nocs-appliance (ADR 0025).
 #
-#   packaging/deb/build.sh            builds the web app, then the package, into packaging/out
+#   packaging/deb/build.sh            builds the web app, then the packages, into packaging/out
 #
 # Environment (defaults in brackets):
 #   OUT [packaging/out]  VERSION [from server/pyproject.toml and git]
@@ -39,4 +39,5 @@ docker run --rm "${platform[@]}" \
     -v nocs-deb-uv-cache:/root/.cache/uv \
     -e VERSION="$VERSION" -e WEB_DIST=/web -e HOST_UID="$(id -u)" -e HOST_GID="$(id -g)" \
     nocs-deb-builder /src/packaging/deb/build-in-container.sh
-ls -l "$out"/nocs_"$VERSION"_*.deb
+"$repo/packaging/appliance/build.sh" "$VERSION" "$out"
+ls -l "$out"/nocs_"$VERSION"_*.deb "$out"/nocs-appliance_"$VERSION"_all.deb

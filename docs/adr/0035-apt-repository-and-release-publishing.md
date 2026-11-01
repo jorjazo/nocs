@@ -35,7 +35,7 @@ the host open. Facts that shape the choice:
   nocs-archive-keyring.asc                     the public key
   dists/{stable,testing}/InRelease, Release, Release.gpg
   dists/{stable,testing}/main/binary-{amd64,arm64}/Packages(.gz)
-  pool/main/n/nocs/nocs_<version>_<arch>.deb   and a .stanza next to each
+  pool/main/n/nocs/nocs_<version>_<arch>.deb
   images/nocs-<version>-pi5-arm64.img.xz       with .sha256 and .manifest.txt
   ```
 
@@ -65,11 +65,11 @@ the host open. Facts that shape the choice:
   the next push fixes it). The last **5** builds per architecture are kept.
 - **`stable`**: tagged releases (`v*`), also added to `testing` so that it never
   sorts behind `stable`. The last **3** releases are kept.
-- The repository is regenerated from small files: each `.deb` in the pool has a
-  `.stanza` next to it (its entry in `Packages`), so a publish downloads the
-  stanzas, not the packages, writes `Packages` and `Release` for the suite, signs
-  them, uploads the new packages first and the indices last, and only then deletes
-  packages that no suite names any more (`packaging/repo/publish.sh`).
+- Each suite's `Packages` files are its state: a publish downloads them, not the
+  packages, adds the new entries, keeps the newest versions, writes `Release`,
+  signs it, uploads the new packages first and the indices last, and only then
+  deletes packages that no suite names any more (`packaging/repo/publish.py`).
+  Publishes run one at a time.
 - A flashed Pi follows `stable`. Switching to `testing` is a documented edit of
   `/etc/apt/sources.list.d/nocs.sources`; there is no switch in the app in v0.1.
 

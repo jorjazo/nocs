@@ -1,11 +1,14 @@
 name: Packages
 
-# Builds the nocs .deb natively on each architecture and installs it on a clean
-# Ubuntu 26.04 with systemd running (ADR 0025). Packages are kept as artifacts
-# until the apt repository exists (phase 6.10).
+# Builds the nocs .deb natively on each architecture, and nocs-appliance, and
+# installs them on a clean Ubuntu 26.04 with systemd running (ADR 0025). Pushes to
+# main go to the apt repository's testing suite, tags to stable and testing, with a
+# GitHub release (ADR 0035); without the repository's variable and secrets they stay
+# artifacts.
 on:
   push:
     branches: [main]
+    tags: ["v*"]
   pull_request:
   workflow_dispatch:
 
@@ -41,9 +44,55 @@ jobs:
       - name: Allow user namespaces for the container's bwrap
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - name: Install and start on Ubuntu 26.04
-        run: packaging/deb/test.sh packaging/out/nocs_*_${{ matrix.arch }}.deb
+        run: packaging/deb/test.sh packaging/out/nocs_*_${{ matrix.arch }}.deb packaging/out/nocs-appliance_*_all.deb
       - uses: actions/upload-artifact@v4
         with:
           name: nocs-${{ matrix.arch }}
           path: packaging/out/*.deb
           retention-days: 14
+
+  repository:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Publish to a local repository and install from it
+        run: packaging/repo/test.sh
+
+  publish:
+    needs: [deb, repository]
+    if: github.event_name == 'push' && vars.NOCS_APT_URL != ''
+    runs-on: ubuntu-latest
+    # One publish at a time: each rewrites the suites' indices.
+    concurrency:
+      group: apt-repository
+      cancel-in-progress: false
+    permissions:
+      contents: write  # the GitHub release
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          path: debs
+      - name: Publish to the apt repository
+        env:
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          APT_SIGNING_KEY: ${{ secrets.APT_SIGNING_KEY }}
+        run: |
+          suites=(--suite testing:5)
+          [[ $GITHUB_REF == refs/tags/v* ]] && suites+=(--suite stable:3)
+          # nocs-appliance is built on both runners; one copy is enough.
+          python3 packaging/repo/publish.py debs "${suites[@]}" \
+            debs/nocs-amd64/*.deb debs/nocs-arm64/nocs_*_arm64.deb
+      - name: GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          prerelease=()
+          [[ $GITHUB_REF_NAME == *-* ]] && prerelease=(--prerelease)
+          gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes "${prerelease[@]}" \
+            || true  # the Image workflow may have made it first
+          gh release upload "$GITHUB_REF_NAME" --clobber debs/nocs-amd64/*.deb debs/nocs-arm64/nocs_*_arm64.deb

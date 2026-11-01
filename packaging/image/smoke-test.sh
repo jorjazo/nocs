@@ -58,7 +58,7 @@ for _ in $(seq 60); do (echo > /dev/tcp/127.0.0.1/4400) 2>/dev/null && break; sl
 [[ $(hostname) == nocs ]] || fail "the host name is $(hostname), not nocs"
 chronyd -p 2>/dev/null | grep -q '^refclock SHM 0' || fail "chrony does not read the GPS"
 [[ $(systemctl is-enabled gpsd.socket) == enabled ]] || fail "gpsd is not enabled"
-for unit in NetworkManager nftables; do
+for unit in NetworkManager nocs-firewall; do
     [[ $(systemctl is-active "$unit") == active ]] || fail "$unit is not active"
 done
 [[ $(systemctl is-enabled systemd-networkd.service) == disabled ]] || fail "systemd-networkd still runs"
