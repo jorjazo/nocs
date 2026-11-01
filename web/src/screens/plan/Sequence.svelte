@@ -241,6 +241,13 @@
             disabled={!canGuide && !draft.guide}
             onchange={(on) => (draft.guide = on)} />
         </li>
+        <li>
+          <Toggle
+            label={t.sequence.flip}
+            hint={draft.flip !== false ? t.sequence.flipHint(formatPlain(draft.flip_after ?? 5, locale)) : t.sequence.flipOff}
+            checked={draft.flip !== false}
+            onchange={(on) => (draft.flip = on)} />
+        </li>
         {#if draft.guide}
           <li>
             <button type="button" class="option" onclick={() => (sheet = "dither")}>
@@ -351,6 +358,14 @@
       <section class="advanced">
         {#if draft.order !== "in_turn" && draft.rows.length > 1}
           <Stepper label={t.sequence.batch} bind:value={() => draft.batch ?? 5, (v) => v !== null && (draft.batch = v)} min={1} max={1000} />
+        {/if}
+        {#if draft.flip !== false}
+          <Stepper
+            label={t.sequence.flipAfter}
+            bind:value={() => draft.flip_after ?? 5, (v) => v !== null && (draft.flip_after = v)}
+            min={0}
+            max={60}
+            unit="min" />
         {/if}
         <h2>{t.sequence.steps}</h2>
         <p class="muted small">{t.sequence.stepsHint}</p>

@@ -116,6 +116,7 @@ export type Node =
   | Slew
   | Center
   | Recenter
+  | Flip
   | SelectFilter
   | Autofocus
   | Guide
@@ -143,7 +144,7 @@ export type Darkness = "civil" | "nautical" | "astronomical";
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "Trigger".
  */
-export type Trigger = AutofocusTrigger | DitherTrigger | RecenterTrigger;
+export type Trigger = AutofocusTrigger | DitherTrigger | RecenterTrigger | FlipTrigger;
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "DriverName".
@@ -153,7 +154,7 @@ export type DriverName = string;
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "FailureKind".
  */
-export type FailureKind = "device" | "clouds" | "guiding" | "focus" | "solve" | "storage" | "other";
+export type FailureKind = "device" | "clouds" | "guiding" | "focus" | "solve" | "flip" | "storage" | "other";
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "FrameKind".
@@ -2724,6 +2725,17 @@ export interface Recenter {
   kind?: "recenter";
 }
 /**
+ * Go to the container's target again once it is past the meridian, so the mount
+ * changes sides (ADR 0033); centre it when ``center`` is set.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "Flip".
+ */
+export interface Flip {
+  center?: Center | null;
+  kind?: "flip";
+}
+/**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "SelectFilter".
  */
@@ -2873,6 +2885,23 @@ export interface RecenterTrigger {
   every?: number;
   kind?: "recenter";
   recenter?: Recenter;
+}
+/**
+ * Flip the mount when its target crosses the meridian (ADR 0033).
+ *
+ * Before each frame: a frame that would end past the flip point waits for it, or
+ * flips first once the target is past the meridian.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "FlipTrigger".
+ */
+export interface FlipTrigger {
+  /**
+   * Minutes past the meridian at which to flip.
+   */
+  after?: number;
+  flip?: Flip;
+  kind?: "flip";
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -3822,6 +3851,14 @@ export interface Template {
    */
   dither_pixels?: number;
   end?: EndPlan;
+  /**
+   * Flip the mount at the meridian (ADR 0033).
+   */
+  flip?: boolean;
+  /**
+   * Minutes past the meridian.
+   */
+  flip_after?: number;
   focus?: FocusPlan | null;
   guide?: boolean;
   /**

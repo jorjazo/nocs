@@ -39,6 +39,8 @@ from nocs.sequence.model import (
     DitherTrigger,
     ExposurePlan,
     FailureKind,
+    Flip,
+    FlipTrigger,
     FocusMemory,
     Guide,
     Node,
@@ -70,6 +72,11 @@ WAIT_POLL = 30.0
 """Seconds between looks at the sky (or the clock) while a ``Wait`` waits."""
 WAIT_STEP = 5.0
 """Seconds between safe points while a policy waits."""
+FRAME_OVERHEAD = 3.0
+"""Seconds a frame takes beyond its exposure, to tell whether it ends before a flip."""
+GUARD_POLL = 30.0
+GUARD_MARGIN = 15.0
+"""Minutes past the flip point after which the meridian guard stops tracking (ADR 0033)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,6 +122,10 @@ class Executor(Protocol):
 
     def focuser_temperature(self) -> float | None: ...
 
+    async def stop_tracking(self) -> None:
+        """The meridian guard: the mount must not track into its pier (ADR 0033)."""
+        ...
+
     async def recover(self, error: StepError, attempt: int) -> str | None:
         """Before retrying a ``device`` failure for the ``attempt``-th time, try to bring
         the device back (ADR 0030); what was done, or ``None``. Raising is reported
@@ -153,6 +164,11 @@ class Checkpoint(SequenceModel):
     """Frames taken since the last dither (or the start)."""
     since_recenter: int = 0
     """Frames taken since the pointing was last checked or centred."""
+    pointed_ha: float | None = None
+    """The target's hour angle when the mount last went to it: negative, east of the
+    meridian, it flips once the target crosses (ADR 0033)."""
+    pointed: Target | None = None
+    """That target."""
     ending: bool = False
     """*End* has begun: a resumed run goes straight to it."""
     ended: AwareDatetime | None = None
@@ -296,10 +312,13 @@ class Runner:
         on_change: Callable[[], None] | None = None,
         sleep: Callable[[float], Awaitable[None]] = anyio.sleep,
         place: Callable[[], sky.Place | None] = lambda: None,
+        guard_sleep: Callable[[float], Awaitable[None]] = anyio.sleep,
     ) -> None:
         """Run ``sequence`` afresh, or from ``checkpoint`` after a restart."""
         self._sequence = sequence
         self._sleep = sleep
+        self._guard_sleep = guard_sleep
+        """The guard's own clock: real time, even when the steps' waits are faked."""
         self._place = place
         self._reported: BaseException | None = None
         """The failure that ended the session, already in the events."""
@@ -338,6 +357,10 @@ class Runner:
         self._resume = anyio.Event()
         self._filter: str | None = None
         """The filter the runner last selected; ``None`` when it does not know."""
+        self._flipping = False
+        self._waiting_meridian = False
+        self._guarded = False
+        """The guard stopped tracking (once per pointing)."""
 
     # -- control --------------------------------------------------------------------
 
@@ -380,6 +403,16 @@ class Runner:
     # -- running --------------------------------------------------------------------
 
     async def run(self) -> Outcome:
+        outcome = Outcome.FAILED
+        async with anyio.create_task_group() as group:
+            group.start_soon(self._guard)
+            try:
+                outcome = await self._run()
+            finally:
+                group.cancel_scope.cancel()
+        return outcome
+
+    async def _run(self) -> Outcome:
         checkpoint = self._checkpoint
         if self._resumed:
             self._event(EventKind.RESUMED_AFTER_RESTART, f"restart {checkpoint.restarts}")
@@ -510,8 +543,9 @@ class Runner:
             self._focused()
         elif isinstance(action, Guide):
             data["on"] = action.on
-        elif isinstance(action, Center | Slew):
+        if isinstance(action, Center | Slew | Flip):
             self._checkpoint.since_recenter = 0  # pointed afresh
+            self._pointed_at(target)
         self._event(EventKind.ACTION, action.kind, here, data)
         await self._save()
         return True
@@ -634,8 +668,17 @@ class Runner:
         await self._safe_point()
 
     async def _trigger(self, path: PathKey, row: PlanRow, target: Target | None) -> bool:
-        """Fire the first trigger that is due before this frame; whether one was."""
-        for trigger in [t for scope in self._scopes for t in scope.container.triggers]:
+        """Fire the first trigger that is due before this frame; whether one was.
+
+        A meridian flip goes before anything else, and may wait for the meridian.
+        """
+        triggers = [t for scope in self._scopes for t in scope.container.triggers]
+        flip = next((t for t in triggers if isinstance(t, FlipTrigger)), None)
+        if flip is not None and await self._flip(flip, path, row, target):
+            return True
+        for trigger in triggers:
+            if isinstance(trigger, FlipTrigger):
+                continue
             reason = self._due(trigger, row)
             if reason is None:
                 continue
@@ -653,11 +696,106 @@ class Runner:
             return True
         return False
 
+    async def _flip(
+        self, trigger: FlipTrigger, path: PathKey, row: PlanRow, target: Target | None
+    ) -> bool:
+        """Flip, or wait for the meridian, when the frame would end past the flip point;
+        whether it did either (ADR 0033)."""
+        ha = self._minutes_past(target)
+        if ha is None:
+            return False
+        frame = (row.exposure + FRAME_OVERHEAD) / 60
+        if ha + frame <= trigger.after:
+            self._waiting_meridian = False
+            return False
+        if ha < 0:
+            # Too close to flip after this frame, too early to flip now: wait.
+            if not self._waiting_meridian:
+                self._waiting_meridian = True
+                self._event(
+                    EventKind.TRIGGER, f"flip: waiting {-ha:.1f} min for the meridian", path
+                )
+            self._current = path
+            await self._wait(min(-ha * 60, WAIT_POLL))
+            return True
+        self._waiting_meridian = False
+        self._event(EventKind.TRIGGER, f"flip: {ha:+.1f} min past the meridian", path)
+        self._flipping = True
+        try:
+            await self._action(trigger.flip, tuple(path.split(".")), target)
+        finally:
+            self._flipping = False
+        return True
+
+    def _minutes_past(self, target: Target | None) -> float | None:
+        """Minutes the target is past the meridian, when the mount went to it east of the
+        meridian and has not flipped since; else None (nothing to flip)."""
+        checkpoint = self._checkpoint
+        if checkpoint.pointed_ha is None or checkpoint.pointed_ha >= 0:
+            return None
+        if target is None or target.ra is None or target.dec is None:
+            return None
+        if checkpoint.pointed is not None and checkpoint.pointed != target:
+            return None
+        return sky.hour_angle(self._where(), target.ra, target.dec, self._now()) * 60
+
+    def _pointed_at(self, target: Target | None) -> None:
+        checkpoint = self._checkpoint
+        place = self._place()
+        if place is None or target is None or target.ra is None or target.dec is None:
+            checkpoint.pointed_ha, checkpoint.pointed = None, None
+            return
+        checkpoint.pointed_ha = sky.hour_angle(place, target.ra, target.dec, self._now())
+        checkpoint.pointed = target
+        self._guarded = False
+
+    async def _guard(self) -> None:
+        """Stop tracking a target well past its flip point with no flip under way, paused
+        included: a mount tracking into its pier is what must never happen (ADR 0033)."""
+        while True:
+            await self._guard_sleep(GUARD_POLL)
+            if self._state in (RunState.ENDING, RunState.FINISHED) or self._flipping:
+                continue
+            after = max(
+                (t.after for t in self._flip_triggers()),
+                default=None,
+            )
+            if after is None:
+                continue
+            try:
+                ha = self._minutes_past(self._checkpoint.pointed)
+            except ValueError:
+                continue
+            if ha is None or ha <= after + GUARD_MARGIN or self._guarded:
+                continue
+            self._guarded = True
+            message = f"{ha:.0f} min past the meridian without a flip: tracking stopped"
+            try:
+                await self._executor.stop_tracking()
+            except Exception as e:
+                message = f"{ha:.0f} min past the meridian without a flip; tracking on: {e}"
+            log.warning("sequence %s: %s", self._sequence.name, message)
+            self._event(EventKind.RECOVERY, message, self._current, {"guard": True})
+
+    def _flip_triggers(self) -> list[FlipTrigger]:
+        found: list[FlipTrigger] = []
+
+        def walk(container: Container) -> None:
+            found.extend(t for t in container.triggers if isinstance(t, FlipTrigger))
+            for child in container.children:
+                if isinstance(child, Container):
+                    walk(child)
+
+        walk(self._sequence.targets)
+        return found
+
     def _due(self, trigger: Trigger, row: PlanRow) -> str | None:
         if isinstance(trigger, DitherTrigger):
             return trigger.due(self._checkpoint.since_dither)
         if isinstance(trigger, RecenterTrigger):
             return trigger.due(self._checkpoint.since_recenter)
+        if isinstance(trigger, FlipTrigger):
+            return None
         return trigger.due(
             self._checkpoint.focus,
             filter=row.filter if row.filter is not None else self._filter,

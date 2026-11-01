@@ -402,6 +402,11 @@ class GuidingService:
         finally:
             self._queues.discard(queue)
 
+    async def flip_calibration(self) -> None:
+        """Tell PHD2 the mount changed sides of the pier, for a mount that does not
+        report its side to PHD2 (ADR 0033)."""
+        await self._client().call("flip_calibration")
+
     def guide_pixels(self, main_pixels: float) -> float:
         """Main camera pixels as guide camera pixels, from both trains' pixel scales."""
         main = self._store.get(("cameras", Role.MAIN_CAMERA.value, "field", "scale"))

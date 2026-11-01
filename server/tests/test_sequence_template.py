@@ -20,6 +20,7 @@ from nocs.sequence.model import (
     Center,
     Cool,
     DitherTrigger,
+    FlipTrigger,
     FocusPlan,
     Guide,
     RecenterTrigger,
@@ -59,7 +60,7 @@ def test_a_template_makes_the_night_s_tree() -> None:
     assert wait == Wait(altitude=30)
     assert isinstance(imaging, Container)
     assert imaging.conditions == [WhileAbove(altitude=30)]
-    assert imaging.triggers == [AutofocusTrigger(temperature_change=1.0)]
+    assert imaging.triggers == [AutofocusTrigger(temperature_change=1.0), FlipTrigger()]
     slew, focus, plan = imaging.children
     assert (slew, focus) == (Slew(), Autofocus())
     assert isinstance(plan, ExposurePlan)
@@ -87,7 +88,7 @@ def test_options_change_the_tree() -> None:
     [imaging] = target.children
     assert isinstance(imaging, Container)
     assert imaging.conditions == []
-    assert imaging.triggers == [AutofocusTrigger(filter_change=True, temperature_change=None)]
+    assert imaging.triggers[0] == AutofocusTrigger(filter_change=True, temperature_change=None)
     # The filter trigger focuses before the first frame: no autofocus of its own.
     assert [c.kind for c in imaging.children] == ["slew", "guide", "expose"]
     assert sequence.end.children[0] == Guide(on=False)
@@ -103,9 +104,9 @@ def test_a_guided_template_dithers_every_n_frames() -> None:
         assert isinstance(imaging, Container)
         return [t.kind for t in imaging.triggers]
 
-    assert triggers(ngc253(guide=True, dither_every=3)) == ["autofocus", "dither"]
+    assert triggers(ngc253(guide=True, dither_every=3)) == ["autofocus", "flip", "dither"]
     # Without guiding there is nothing to dither.
-    assert triggers(ngc253(dither_every=3)) == ["autofocus"]
+    assert triggers(ngc253(dither_every=3, flip=False)) == ["autofocus"]
     [target] = expand(ngc253(guide=True, dither_every=3, dither_pixels=8)).targets.children
     assert isinstance(target, Container)
     imaging = target.children[-1]
@@ -212,3 +213,6 @@ def test_a_template_centres_and_checks_the_pointing() -> None:
     recenter = imaging.triggers[-1]
     assert isinstance(recenter, RecenterTrigger)
     assert (recenter.every, recenter.recenter.drift) == (10, 3)
+    flip = imaging.triggers[-2]
+    assert isinstance(flip, FlipTrigger)
+    assert flip.flip.center == Center()  # a flip centres again

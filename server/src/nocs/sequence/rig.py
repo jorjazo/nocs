@@ -34,7 +34,7 @@ from nocs.guiding import (
     Settle,
 )
 from nocs.imaging.capture import FRAME_TYPES, CameraNotReadyError, CameraSettings, Captured
-from nocs.jobs import JobContext, JobManager
+from nocs.jobs import JobContext, JobManager, ResourceBusyError
 from nocs.mount.service import MountNotReadyError, PointingError
 from nocs.pointing import CenteringError, CenterOptions, FrameSolve, SolveOptions, offset
 from nocs.sequence.model import (
@@ -44,6 +44,7 @@ from nocs.sequence.model import (
     Cool,
     Dither,
     ExposurePlan,
+    Flip,
     Guide,
     Outputs,
     Park,
@@ -138,6 +139,7 @@ class Guiding(Protocol):
     def guiding(self) -> bool: ...
     async def start(self, context: JobContext) -> Json: ...
     def guide_pixels(self, main_pixels: float) -> float: ...
+    async def flip_calibration(self) -> None: ...
     async def dither(
         self,
         context: JobContext,
@@ -244,6 +246,8 @@ def _role(action: Action) -> Role | None:
             return CAMERA
         case Unpark() | Park() | Slew():
             return Role.MOUNT
+        case Flip():
+            return Role.MOUNT
         case Center() | Recenter():
             return None  # a failure to solve or centre is the solver's ("solve")
         case SelectFilter():
@@ -315,6 +319,8 @@ class RigExecutor:
                 await self._mount().slew(context, ra, dec)
             case Center():
                 return await self._center(action, _aim(target))
+            case Flip():
+                return await self._flip(action, _aim(target))
             case Recenter():
                 ra, dec = _aim(target)
                 if parts.pointing is None:
@@ -432,6 +438,34 @@ class RigExecutor:
         return done
 
     # -- internals --------------------------------------------------------------------
+
+    async def _flip(self, action: Flip, aim: tuple[float, float]) -> dict[str, Json]:
+        """Go to the target again on the other side of the pier (ADR 0033)."""
+        before = self._store.get(("mount", "pier_side"))
+        await self._stop_guiding()
+        done: dict[str, Json] = {}
+        if action.center is not None:
+            done.update(await self._center(action.center, aim))
+        else:
+            await self._mount().slew(self._context, *aim)
+        after = self._store.get(("mount", "pier_side"))
+        done["pier_side"] = after
+        if isinstance(before, str) and before == after:
+            raise StepError("flip", f"the mount is still on the {after} side of the pier")
+        guiding = self._parts.guiding
+        if after is None and guiding is not None and self._guided:
+            # PHD2 cannot tell from the mount: flip its calibration (with a side
+            # reported, PHD2 flips it by itself).
+            await guiding.flip_calibration()
+            done["calibration"] = "flipped"
+        return done
+
+    async def stop_tracking(self) -> None:
+        mount = self._mount()
+        try:
+            await mount.set_tracking(False, job=self._context.id)
+        except ResourceBusyError:
+            await mount.set_tracking(False)  # paused: the sequence lent the mount
 
     async def _center(self, action: Center, aim: tuple[float, float]) -> dict[str, Json]:
         """Centre ``aim`` (3.3's centring); how many frames it took and how far it was."""

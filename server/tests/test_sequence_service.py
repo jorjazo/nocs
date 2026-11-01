@@ -166,6 +166,9 @@ class Rig:
     def guide_under(self, job_id: str | None) -> None:
         self.under.append(job_id)
 
+    async def flip_calibration(self) -> None:
+        self.calls.append("flip calibration")
+
     def guide_pixels(self, main_pixels: float) -> float:
         return main_pixels / 2
 

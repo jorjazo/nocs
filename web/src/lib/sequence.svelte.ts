@@ -5,7 +5,7 @@
 import { listSequences } from "./api";
 import { formatDecimal, formatDuration, formatPlain, formatTemperature, formatTime } from "./format";
 import type { Messages } from "./i18n";
-import type { AutofocusTrigger, DitherTrigger, RecenterTrigger } from "./generated/api";
+import type { AutofocusTrigger, DitherTrigger, FlipTrigger, RecenterTrigger } from "./generated/api";
 import { newTemplate, sequenceId } from "./sequence";
 import type { Container, Node, PlannedTarget, PowerOutput, SequenceEvent, SequenceRun, Template } from "./types";
 
@@ -112,6 +112,8 @@ export function describeNode(node: Node, t: Messages, locale: string, outputs: P
       return n.center;
     case "recenter":
       return n.recenter;
+    case "flip":
+      return n.flip;
     case "outputs":
       return n.outputs(outputLabels(node.outputs, outputs), node.on);
     case "wait":
@@ -142,6 +144,10 @@ export function describeContainer(container: Container, t: Messages, locale: str
     const s = t.sequence;
     if (each.kind === "dither") {
       parts.push(n.ditherEvery((each as DitherTrigger).every ?? 1));
+      continue;
+    }
+    if (each.kind === "flip") {
+      parts.push(n.flipAfter(formatPlain((each as FlipTrigger).after ?? 5, locale)));
       continue;
     }
     if (each.kind === "recenter") {
@@ -190,11 +196,15 @@ export function describeEvent(event: SequenceEvent, t: Messages, locale: string)
     case "failed":
       return e.failed(event.message);
     case "recovery":
-      return e.recovery(event.message);
+      return data.guard ? e.guard : e.recovery(event.message);
     case "skipped":
       return e.skipped(event.message);
-    case "trigger":
+    case "trigger": {
+      const waiting = /^flip: waiting ([\d.]+) min/.exec(event.message);
+      if (waiting) return e.flipWaiting(formatDecimal(Number(waiting[1]), locale, 1));
+      if (event.message.startsWith("flip:")) return e.flipDue;
       return e.trigger(event.message.replace(/^autofocus: /, ""));
+    }
     case "condition": {
       const condition = data.condition as keyof typeof e.condition;
       return e.condition[condition] ?? event.message;
@@ -236,6 +246,8 @@ export function describeEvent(event: SequenceEvent, t: Messages, locale: string)
           if (drift === null) return n.recenter;
           return data.centered ? e.recentered(formatDecimal(drift, locale, 1)) : e.checked(formatDecimal(drift, locale, 1));
         }
+        case "flip":
+          return e.flipped(typeof data.pier_side === "string" ? data.pier_side : "?");
         case "dither":
           return typeof data.skipped === "string" ? e.ditherSkipped : e.dithered(formatDecimal(number("pixels") ?? 0, locale, 1));
         case "unpark":

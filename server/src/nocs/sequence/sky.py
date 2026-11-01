@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 
 from nocs.devices import Location
 from nocs.equipment import HorizonPoint
+from nocs.mount.coords import j2000_to_jnow, sidereal_time
 from nocs.sky import Darkness, horizon_altitude, night, tonight
 from nocs.sky.almanac import TWILIGHTS
 from nocs.sky.ephemeris import refraction, sky
@@ -49,3 +50,9 @@ def altitude(place: Place, ra: float, dec: float, when: datetime) -> tuple[float
     apparent = float(geometric + refraction(geometric, chart.pressure))
     limit = float(horizon_altitude(place.horizon, position.az)[0])
     return apparent, limit
+
+
+def hour_angle(place: Place, ra: float, dec: float, when: datetime) -> float:
+    """A J2000 target's hour angle at ``when``, hours from -12 to 12 (west positive)."""
+    now = j2000_to_jnow(ra, dec, when)
+    return (sidereal_time(place.site.longitude, when) - now.ra + 12) % 24 - 12

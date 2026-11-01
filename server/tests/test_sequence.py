@@ -38,6 +38,7 @@ from nocs.sequence.model import (
     Autofocus,
     AutofocusTrigger,
     Cool,
+    FlipTrigger,
     Park,
     Policy,
     SelectFilter,
@@ -122,6 +123,9 @@ class Rig:
 
     async def resumed(self) -> None:
         self.calls.append("resumed")
+
+    async def stop_tracking(self) -> None:
+        self.calls.append("stop tracking")
 
     def focuser_temperature(self) -> float | None:
         return self.temperature
@@ -789,3 +793,109 @@ async def test_the_sky_needs_the_site() -> None:
     runner = Runner(sequence, rig, now=rig.now)
     assert await runner.run() is Outcome.FAILED
     assert "site is unknown" in str(runner.status()["error"])
+
+
+# -- meridian flip (ADR 0033) ----------------------------------------------------------
+
+
+def before_the_meridian(minutes: float) -> Target:
+    """A target ``minutes`` east of the meridian at Diaguitas at ``START``."""
+    ha0 = sky.hour_angle(DIAGUITAS, 0.0, -20.0, START)
+    return Target(name="West soon", ra=(ha0 + minutes / 60) % 24, dec=-20.0)
+
+
+def flipping(target: Target, *rows: PlanRow) -> Sequence:
+    plan = ExposurePlan(rows=list(rows))
+    imaging = Container(
+        name=target.name,
+        target=target,
+        triggers=[FlipTrigger(after=5)],
+        children=[Slew(), plan],
+    )
+    return night(imaging)
+
+
+async def test_a_target_crossing_the_meridian_flips_once_past_it() -> None:
+    rig = Rig()
+    events: list[Event] = []
+    sequence = flipping(before_the_meridian(2), row("L", 12))
+    assert await at_site(sequence, rig, events).run() is Outcome.COMPLETED
+    taken = [c for c in rig.calls if c == "flip" or c.startswith("L ")]
+    # 60 s frames from about 2 min before the meridian: the 7th or 8th would end past
+    # +5 min (J2000 coordinates, a slightly faster sidereal clock).
+    assert taken.index("flip") in (6, 7)
+    assert taken.count("flip") == 1
+    assert len(frames(rig)) == 12
+    [trigger] = [e for e in events if e.kind is EventKind.TRIGGER]
+    assert trigger.message.startswith("flip: +4")
+
+
+async def test_a_long_frame_waits_for_the_meridian_then_flips() -> None:
+    rig = Rig()
+    events: list[Event] = []
+    sequence = flipping(before_the_meridian(2), row("L", 2, exposure=600))
+    assert await at_site(sequence, rig, events).run() is Outcome.COMPLETED
+    assert [c for c in rig.calls if c == "flip" or c.startswith("L ")] == [
+        "flip",
+        "L 600",
+        "L 600",
+    ]
+    assert 120 <= rig.slept <= 150  # until the meridian, in looks of 30 s
+    triggers = [e.message for e in events if e.kind is EventKind.TRIGGER]
+    assert triggers[0].startswith("flip: waiting 2.")
+    assert triggers[1].startswith("flip: +0")
+
+
+async def test_a_target_west_of_the_meridian_never_flips() -> None:
+    rig = Rig()
+    sequence = flipping(before_the_meridian(-30), row("L", 10, exposure=300))
+    assert await at_site(sequence, rig).run() is Outcome.COMPLETED
+    assert "flip" not in rig.calls
+
+
+async def test_a_flip_that_fails_twice_ends_the_session() -> None:
+    rig = Rig()
+    still = StepError("flip", "the mount is still on the west side of the pier")
+    rig.errors["flip"] = [still, still]
+    events: list[Event] = []
+    sequence = flipping(before_the_meridian(2), row("L", 12))
+    assert await at_site(sequence, rig, events).run() is Outcome.FAILED
+    assert rig.calls[-2:] == ["park", "warm"]
+    assert [e.data.get("then") for e in events if e.kind is EventKind.FAILED][:2] == [
+        "retry",
+        "end",
+    ]
+
+
+async def test_the_guard_stops_tracking_a_paused_run_past_the_meridian() -> None:
+    rig = Rig()
+    events: list[Event] = []
+    polls = anyio.Event()
+
+    async def guard_sleep(seconds: float) -> None:
+        polls.set()
+        await anyio.sleep(0.001)
+
+    runner = Runner(
+        flipping(before_the_meridian(2), row("L", 3)),
+        rig,
+        now=rig.now,
+        sleep=rig.sleep,
+        place=lambda: DIAGUITAS,
+        on_event=events.append,
+        guard_sleep=guard_sleep,
+    )
+    rig.on_frame = lambda n: runner.pause() if n == 1 else None
+    async with anyio.create_task_group() as tg:
+        tg.start_soon(runner.run)
+        while runner.state is not RunState.PAUSED:
+            await anyio.lowlevel.checkpoint()
+        await polls.wait()
+        assert "stop tracking" not in rig.calls
+        rig.time += timedelta(minutes=30)  # left paused well past the flip point
+        while "stop tracking" not in rig.calls:  # noqa: ASYNC110 (a fake rig, no event to wait on)
+            await anyio.sleep(0.001)
+        assert rig.calls.count("stop tracking") == 1
+        runner.resume()
+    assert [e.data for e in events if e.kind is EventKind.RECOVERY] == [{"guard": True}]
+    assert "flip" in rig.calls  # resumed: past the flip point, it flips first

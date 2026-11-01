@@ -111,6 +111,14 @@ class Recenter(SequenceModel):
     center: Center = Field(default_factory=Center)
 
 
+class Flip(SequenceModel):
+    """Go to the container's target again once it is past the meridian, so the mount
+    changes sides (ADR 0033); centre it when ``center`` is set."""
+
+    kind: Literal["flip"] = "flip"
+    center: Center | None = None
+
+
 class SelectFilter(SequenceModel):
     kind: Literal["filter"] = "filter"
     filter: Name
@@ -157,6 +165,7 @@ type Action = Annotated[
     | Slew
     | Center
     | Recenter
+    | Flip
     | SelectFilter
     | Autofocus
     | Guide
@@ -226,6 +235,7 @@ type Instruction = Annotated[
     | Slew
     | Center
     | Recenter
+    | Flip
     | SelectFilter
     | Autofocus
     | Guide
@@ -370,8 +380,22 @@ class RecenterTrigger(SequenceModel):
         return f"{frames} frames" if frames >= self.every else None
 
 
+class FlipTrigger(SequenceModel):
+    """Flip the mount when its target crosses the meridian (ADR 0033).
+
+    Before each frame: a frame that would end past the flip point waits for it, or
+    flips first once the target is past the meridian.
+    """
+
+    kind: Literal["flip"] = "flip"
+    after: float = Field(
+        default=5, ge=0, le=60, description="Minutes past the meridian at which to flip."
+    )
+    flip: Flip = Field(default_factory=Flip)
+
+
 type Trigger = Annotated[
-    AutofocusTrigger | DitherTrigger | RecenterTrigger, Field(discriminator="kind")
+    AutofocusTrigger | DitherTrigger | RecenterTrigger | FlipTrigger, Field(discriminator="kind")
 ]
 
 # -- containers and sequences -------------------------------------------------------
@@ -408,6 +432,7 @@ type Node = Annotated[
     | Slew
     | Center
     | Recenter
+    | Flip
     | SelectFilter
     | Autofocus
     | Guide
@@ -424,7 +449,9 @@ Container.model_rebuild()
 
 # -- recovery (ADR 0032) ------------------------------------------------------------
 
-type FailureKind = Literal["device", "clouds", "guiding", "focus", "solve", "storage", "other"]
+type FailureKind = Literal[
+    "device", "clouds", "guiding", "focus", "solve", "flip", "storage", "other"
+]
 
 
 class Policy(SequenceModel):
@@ -447,6 +474,7 @@ DEFAULT_POLICIES: dict[FailureKind, Policy] = {
     "device": Policy(retries=2, wait=60),
     "focus": Policy(then="skip"),
     "solve": Policy(retries=1, then="skip_target"),
+    "flip": Policy(retries=1, wait=10),
     "storage": Policy(),
     "other": Policy(),
 }
@@ -457,6 +485,8 @@ def needs_site(sequence: Sequence) -> bool:
 
     def asks(container: Container) -> bool:
         if any(not isinstance(c, UntilTime) for c in container.conditions):
+            return True
+        if any(isinstance(t, FlipTrigger) for t in container.triggers):
             return True
         for child in container.children:
             if isinstance(child, Container) and asks(child):
@@ -522,6 +552,8 @@ class Template(SequenceModel):
         default=None, ge=1, le=1000, description="Check the pointing every so many frames."
     )
     recenter_drift: float = Field(default=2.0, gt=0, le=60, description="Arcminutes.")
+    flip: bool = Field(default=True, description="Flip the mount at the meridian (ADR 0033).")
+    flip_after: float = Field(default=5, ge=0, le=60, description="Minutes past the meridian.")
     end: EndPlan = Field(default_factory=EndPlan)
     recovery: dict[FailureKind, Policy] = Field(default_factory=dict[FailureKind, Policy])
 

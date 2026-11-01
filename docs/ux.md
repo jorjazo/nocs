@@ -369,7 +369,9 @@ Sequence builder (stage 5.13):
   many °C, when stars grow, every so many minutes), Guiding (with a guide camera),
   Centring (go only, or centre by plate solving and check the pointing every so many
   frames, centring again past a drift in arcminutes; on by default with a solver),
-  Dither (while guiding: every so many frames, up to so many main camera pixels),
+  Meridian flip (on by default: so many minutes past the meridian, set under
+  Advanced; frames are never cut), Dither (while guiding: every so many frames, up
+  to so many main camera pixels),
   Rotate filters (in turns of 5, or each filter to its end), Night (dusk, the
   twilight, dawn, the minimum altitude), Cooling (with a cooled camera) and When
   finished (park, warm, power outputs off).

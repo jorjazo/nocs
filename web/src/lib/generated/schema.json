@@ -2759,6 +2759,7 @@
         "guiding",
         "focus",
         "solve",
+        "flip",
         "storage",
         "other"
       ],
@@ -2902,6 +2903,53 @@
         "confirmed"
       ],
       "title": "FilterWheelState",
+      "type": "object"
+    },
+    "Flip": {
+      "additionalProperties": false,
+      "description": "Go to the container's target again once it is past the meridian, so the mount\nchanges sides (ADR 0033); centre it when ``center`` is set.",
+      "properties": {
+        "center": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Center"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "kind": {
+          "const": "flip",
+          "default": "flip",
+          "type": "string"
+        }
+      },
+      "title": "Flip",
+      "type": "object"
+    },
+    "FlipTrigger": {
+      "additionalProperties": false,
+      "description": "Flip the mount when its target crosses the meridian (ADR 0033).\n\nBefore each frame: a frame that would end past the flip point waits for it, or\nflips first once the target is past the meridian.",
+      "properties": {
+        "after": {
+          "default": 5,
+          "description": "Minutes past the meridian at which to flip.",
+          "maximum": 60,
+          "minimum": 0,
+          "type": "number"
+        },
+        "flip": {
+          "$ref": "#/$defs/Flip"
+        },
+        "kind": {
+          "const": "flip",
+          "default": "flip",
+          "type": "string"
+        }
+      },
+      "title": "FlipTrigger",
       "type": "object"
     },
     "FocusPlan": {
@@ -5436,6 +5484,9 @@
         },
         {
           "$ref": "#/$defs/Recenter"
+        },
+        {
+          "$ref": "#/$defs/Flip"
         },
         {
           "$ref": "#/$defs/SelectFilter"
@@ -9179,6 +9230,18 @@
         "end": {
           "$ref": "#/$defs/EndPlan"
         },
+        "flip": {
+          "default": true,
+          "description": "Flip the mount at the meridian (ADR 0033).",
+          "type": "boolean"
+        },
+        "flip_after": {
+          "default": 5,
+          "description": "Minutes past the meridian.",
+          "maximum": 60,
+          "minimum": 0,
+          "type": "number"
+        },
         "focus": {
           "anyOf": [
             {
@@ -9344,6 +9407,7 @@
         "mapping": {
           "autofocus": "#/$defs/AutofocusTrigger",
           "dither": "#/$defs/DitherTrigger",
+          "flip": "#/$defs/FlipTrigger",
           "recenter": "#/$defs/RecenterTrigger"
         },
         "propertyName": "kind"
@@ -9357,6 +9421,9 @@
         },
         {
           "$ref": "#/$defs/RecenterTrigger"
+        },
+        {
+          "$ref": "#/$defs/FlipTrigger"
         }
       ]
     },

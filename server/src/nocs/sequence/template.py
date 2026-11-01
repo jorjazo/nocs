@@ -29,6 +29,8 @@ from nocs.sequence.model import (
     Dither,
     DitherTrigger,
     ExposurePlan,
+    Flip,
+    FlipTrigger,
     Guide,
     Node,
     Outputs,
@@ -79,6 +81,9 @@ def expand(template: Template) -> Sequence:
                     minutes=focus.minutes,
                 )
             )
+    if template.flip:
+        center = Center() if template.center else None
+        triggers.append(FlipTrigger(after=template.flip_after, flip=Flip(center=center)))
     if template.recenter_every is not None:
         recenter = Recenter(drift=template.recenter_drift)
         triggers.append(RecenterTrigger(every=template.recenter_every, recenter=recenter))
