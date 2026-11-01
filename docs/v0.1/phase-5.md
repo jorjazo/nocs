@@ -136,7 +136,7 @@ phase 4.5 (dithering) and phase 3.3 (centring) to land.
 | 5.16 | Dither | Dither every N frames (4.5's dither and settle), in templates and the builder | Simulators with PHD2 | 4 | Waits for 4.5 |
 | 5.17 | Centre and re-centre | Centre at the start of each target and after a flip (3.3's `center`); re-centre when a solve every N frames drifts past a tolerance | Simulators with an injected pointing error | 5 | Waits for 3.3 |
 | 5.18 | Meridian flip | Spike first (the Telescope Simulator's and the AM5 driver's pier side after a go to past the meridian; `MERIDIAN_FLIP` off and on); the flip instruction and trigger, the guard, PHD2's calibration (ADR 0033) | Simulators: a target 3 min before the meridian flips mid-sequence; lab AM5/AM7 indoors (lab lock) | 12 | Better after 3.3 |
-| 5.19 | A simulated night, lab and field test | `dev/tools/simnight`: a compressed night on the simulators (3 filters, autofocus triggers, a flip, *until time*, park), a shorter version in CI; lab run on the Pi (lab lock); field-test checklist in [field-test.md](field-test.md) | Exit criterion | 8 | |
+| 5.19 | A simulated night, lab and field test | `dev/tools/simnight`: a compressed night on the simulators (3 filters, autofocus triggers, a flip, *until time*, park), a shorter version in CI; lab run on the Pi (lab lock); field-test steps in [field-test.md](field-test.md) (19–20) | Exit criterion | 8 | |
 
 About 107 h, so the whole phase comes to ~143 h against the roadmap's 80–120 h.
 What keeps it there: no tree editor (the tree is read only), one target per
