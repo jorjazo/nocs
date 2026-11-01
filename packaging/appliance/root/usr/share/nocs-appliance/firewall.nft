@@ -1,6 +1,8 @@
 #!/usr/sbin/nft -f
 # NOCS (ADR 0028): what the network may reach on the box. indiserver (7624) and
 # PHD2's event server (4400), which have no authentication, only from the box itself.
+# The SMB share of the frames (ADR 0037: SMB, WS-Discovery) only on the LAN interfaces,
+# and only while the owner has it on: nothing listens there otherwise.
 # NetworkManager adds its own tables for the access point; this one only filters
 # what comes in.
 table inet nocs
@@ -16,5 +18,9 @@ table inet nocs {
         udp dport 5353 accept
         udp dport { 67, 68 } accept
         meta l4proto { tcp, udp } th dport 53 accept
+        iifname "wlan0" tcp dport { 445, 5357 } accept
+        iifname "eth*" tcp dport { 445, 5357 } accept
+        iifname "wlan0" udp dport 3702 accept
+        iifname "eth*" udp dport 3702 accept
     }
 }

@@ -3,4 +3,9 @@ set -e
 
 if [ -d /run/systemd/system ] && [ "$1" = "remove" ]; then
     deb-systemd-invoke stop nocs-firewall.service >/dev/null || true
+    deb-systemd-invoke stop nocs-wsdd.service nocs-share.service >/dev/null || true
+fi
+if [ "$1" = "remove" ]; then
+    # The share goes with the package (ADR 0037).
+    systemctl disable nocs-wsdd.service nocs-share.service >/dev/null 2>&1 || true
 fi

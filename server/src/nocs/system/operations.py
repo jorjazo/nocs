@@ -21,6 +21,7 @@ import anyio.to_thread
 
 from nocs.system.network import Network
 from nocs.system.protocol import HelperError, Message, validate_hostname
+from nocs.system.share import UNITS as SHARE_UNITS
 from nocs.system.share import Share
 from nocs.system.updates import Updates
 
@@ -84,6 +85,11 @@ async def set_hostname(context: Context, args: Message) -> Message:
     name = validate_hostname(name)
     await run("hostnamectl", "set-hostname", name)
     await anyio.to_thread.run_sync(update_hosts, context.hosts, name)
+    if context.share is not None:  # smbd and wsdd announce the name they started with
+        try:
+            await run("systemctl", "try-restart", *SHARE_UNITS)
+        except HelperError as e:
+            log.warning("share: %s", e)
     return {"name": name}
 
 

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from nocs.system.operations import Context, eject
+from nocs.system.operations import Context, eject, set_hostname
 from nocs.system.protocol import HelperError
 from nocs.system.server import load_config
 from nocs.system.share import Folder, Share, SharePaths, folders, share_name, smb_conf
@@ -280,3 +280,14 @@ def test_load_config_runs_the_share_where_its_group_is_on(
     )
     assert load_config(path).context.share is not None
     assert "must be an absolute path" in caplog.text
+
+
+async def test_a_new_host_name_restarts_the_share(tmp_path: Path, tools: Path) -> None:
+    (tmp_path / "hosts").write_text("127.0.0.1\tlocalhost\n")
+    (tools.parent / "bin/hostnamectl").write_text("#!/bin/sh\n")
+    (tools.parent / "bin/hostnamectl").chmod(0o755)
+    share = Share(paths(tmp_path), owner=OWNER)
+    await set_hostname(Context(hosts=tmp_path / "hosts", share=share), {"name": "rig2"})
+    assert calls(tools, "systemctl") == [
+        "systemctl try-restart nocs-share.service nocs-wsdd.service"
+    ]
