@@ -422,16 +422,19 @@ class GuidingService:
         lost = sum(1 for e in entries if e.kind == "lost")
         if result is None and lost == 0:
             return None
+        if result is not None and result.count < 2:
+            result = None  # one step has no spread: its "RMS" would read 0″
         scale = self._pixel_scale
 
         def arcsec(pixels: float | None) -> Json:
             return round(pixels * scale, 3) if pixels is not None and scale else None
 
+        steps = sum(1 for e in entries if e.kind == "step")
         return {
             "rms_ra": arcsec(result.ra if result else None),
             "rms_dec": arcsec(result.dec if result else None),
             "rms_total": arcsec(result.total if result else None),
-            "steps": result.count if result else 0,
+            "steps": steps,
             "lost": lost,
         }
 

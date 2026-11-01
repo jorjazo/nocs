@@ -9,6 +9,7 @@
   import ConfirmButton from "../components/ConfirmButton.svelte";
   import Icon from "../components/Icon.svelte";
   import NumberField from "../components/NumberField.svelte";
+  import Toggle from "../components/Toggle.svelte";
   import ScreenHeader from "../components/ScreenHeader.svelte";
   import TextField from "../components/TextField.svelte";
   import { deleteProfile, getProfile, listDrivers, listSerialPorts, putProfile } from "../lib/api";
@@ -57,6 +58,8 @@
   let devices = $state<Partial<Record<Role, DeviceDraft>>>({});
   let imaging = $state<OpticsDraft>(opticsDraft(null));
   let guiding = $state<OpticsDraft>(opticsDraft(null));
+  // An off-axis guider or a camera's own guide sensor: guiding uses the imaging optics.
+  let throughImaging = $state(false);
   let siteName = $state("");
   let latitude = $state<number | null>(null);
   let longitude = $state<number | null>(null);
@@ -94,6 +97,7 @@
         );
         imaging = opticsDraft(profile.imaging);
         guiding = opticsDraft(profile.guiding);
+        throughImaging = profile.guiding_through_imaging ?? false;
         siteName = profile.site?.name ?? "";
         latitude = profile.site?.latitude ?? null;
         longitude = profile.site?.longitude ?? null;
@@ -178,6 +182,7 @@
       devices: configs,
       imaging: optics(imaging, original?.imaging),
       guiding: optics(guiding, original?.guiding),
+      guiding_through_imaging: throughImaging,
       site:
         latitude !== null && longitude !== null
           ? { name: siteName.trim(), latitude, longitude, elevation: elevation ?? 0 }
@@ -313,7 +318,7 @@
 
     <fieldset class="section" disabled={!auth.owner}>
       <legend class="heading">{t.editor.optics}</legend>
-      {#each [{ key: "imaging", label: t.editor.imaging, draft: imaging }, { key: "guiding", label: t.editor.guiding, draft: guiding }] as train (train.key)}
+      {#each [{ key: "imaging", label: t.editor.imaging, draft: imaging }, ...(throughImaging ? [] : [{ key: "guiding", label: t.editor.guiding, draft: guiding }])] as train (train.key)}
         <div class="train">
           <h3 class="label">{train.label}</h3>
           <div class="grid">
@@ -344,6 +349,11 @@
           </div>
         </div>
       {/each}
+      <Toggle
+        label={t.editor.throughImaging}
+        hint={t.editor.throughImagingHint}
+        checked={throughImaging}
+        onchange={(value) => (throughImaging = value)} />
     </fieldset>
 
     <fieldset class="section" disabled={!auth.owner}>

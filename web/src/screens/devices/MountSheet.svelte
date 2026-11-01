@@ -20,8 +20,10 @@
     sendMountSite,
     sendMountTime,
     setTracking,
+    stopGuiding,
     unparkMount,
   } from "../../lib/api";
+  import { guidingActive } from "../../lib/guiding.svelte";
   import { auth } from "../../lib/auth.svelte";
   import { holder } from "../../lib/camera.svelte";
   import { errorText } from "../../lib/errors";
@@ -130,9 +132,12 @@
   const modes = $derived(
     (mount?.track_modes ?? []).map((value) => ({ value, label: t.mount.modes[value] ?? value })),
   );
+  // PHD2 calibrates or guides: NOCS holds the mount until guiding stops (ADR 0023).
+  const guiding = $derived(guidingActive(live.app.guiding));
   const padReason = $derived.by((): string | null => {
     if (!owner) return t.mount.locked;
     if (mount?.parked) return t.mount.padParked;
+    if (guiding) return t.guiding.padHeld;
     if (job) return t.mount.padBusy;
     return null;
   });
@@ -154,6 +159,19 @@
       </div>
       <Chip tone={activity.moving ? "accent" : mount.tracking ? "ok" : "neutral"}>{activity.text}</Chip>
     </div>
+
+    {#if guiding}
+      <Banner icon="guide" tone="warning">
+        {t.guiding.mountHeld}
+        {#snippet action()}
+          {#if owner}
+            <Button variant="text" disabled={busy !== null} onclick={() => void run("guiding", stopGuiding)}>
+              {t.guiding.stop}
+            </Button>
+          {/if}
+        {/snippet}
+      </Banner>
+    {/if}
 
     <section aria-label={t.mount.pad}>
       <MountPad {mount} disabled={padReason !== null} reason={padReason} />

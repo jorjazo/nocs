@@ -977,6 +977,8 @@ async def test_guiding_figures_for_a_frame(phd2: FakePhd2, tmp_path: Path) -> No
         assert figures["rms_dec"] == 0.0
         assert figures["rms_ra"] == pytest.approx(0.1886 * 4.13, abs=0.01)
         assert service.frame_guiding(300, 400) is None
+        one = service.frame_guiding(199, 201)  # one step: counted, no RMS
+        assert one == {"rms_ra": None, "rms_dec": None, "rms_total": None, "steps": 1, "lost": 0}
 
 
 def guiding_state(service: GuidingService) -> Any:

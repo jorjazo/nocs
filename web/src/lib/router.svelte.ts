@@ -5,11 +5,13 @@ export type Tab = "tonight" | "live" | "plan" | "session" | "rig";
 export const TABS: readonly Tab[] = ["tonight", "live", "plan", "session", "rig"];
 
 // The profile editor hangs off Rig: #/rig/profile/<id>, or #/rig/profile/new.
-// Autofocus (#/focus) is a full-screen flow over whichever tab opened it.
+// Autofocus (#/focus) and guiding (#/guiding) are full-screen flows over
+// whichever tab opened them.
 export type Route =
   | { screen: Tab }
   | { screen: "dev" }
   | { screen: "focus" }
+  | { screen: "guiding" }
   | { screen: "profile"; id: string | null };
 
 const DEFAULT: Route = { screen: "tonight" };
@@ -18,6 +20,7 @@ function parse(hash: string): Route {
   const [first, second, third] = hash.replace(/^#\/?/, "").split("/");
   if (first === "dev") return { screen: "dev" };
   if (first === "focus") return { screen: "focus" };
+  if (first === "guiding") return { screen: "guiding" };
   if (first === "rig" && second === "profile" && third) {
     return { screen: "profile", id: third === "new" ? null : decodeURIComponent(third) };
   }

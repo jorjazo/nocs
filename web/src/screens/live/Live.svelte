@@ -13,7 +13,16 @@
   import Tile from "../../components/Tile.svelte";
   import { cancelJob, expose, loop, selectFilter, setCameraSettings } from "../../lib/api";
   import { auth } from "../../lib/auth.svelte";
-  import { CAMERA_ROLES, cameraJobs, capture, holder, MAX_LOOP_EXPOSURE, slotLabel } from "../../lib/camera.svelte";
+  import {
+    CAMERA_ROLES,
+    cameraJobs,
+    capture,
+    DITHER_EVERY,
+    holder,
+    MAX_LOOP_EXPOSURE,
+    MAX_SERIES,
+    slotLabel,
+  } from "../../lib/camera.svelte";
   import { errorText } from "../../lib/errors";
   import { formatDecimal, formatPlain, formatSeconds, formatTemperature } from "../../lib/format";
   import { i18n } from "../../lib/i18n";
@@ -28,6 +37,8 @@
   import Histogram from "./Histogram.svelte";
   import SettingSheet, { type Setting } from "./SettingSheet.svelte";
   import Shutter from "./Shutter.svelte";
+  import Stepper from "../../components/Stepper.svelte";
+  import { guidingActive } from "../../lib/guiding.svelte";
   import CenteringCard from "./CenteringCard.svelte";
   import SolvePanel from "./SolvePanel.svelte";
   import Viewer from "./Viewer.svelte";
@@ -41,6 +52,10 @@
   const camera = $derived(cameras[role] ?? null);
   const preview = $derived(camera?.preview ?? null);
   const owner = $derived(auth.owner);
+  // While PHD2 has the guide camera, it is PHD2's: its frames show here (ADR 0023).
+  const inUse = $derived(camera?.used_by === "phd2");
+  const guiding = $derived(live.app.guiding ?? null);
+  const guideActive = $derived(guidingActive(guiding));
 
   // Only the main camera saves frames, and only it gets the filter and the
   // focuser (ADR 0013). A main camera exposure locks both; a loop does not, so
@@ -87,8 +102,20 @@
     return typeof path === "string" ? path : null;
   });
 
+  // "frame 3/10: …" from a series' job, as "3/10 · ".
+  const seriesPrefix = $derived.by(() => {
+    const match = running?.info.message?.match(/^frame (\d+)\/(\d+): /);
+    return match ? `${match[1]}/${match[2]} · ` : "";
+  });
   const status = $derived.by((): { tone: Tone; text: string } | null => {
+    const plain = seriesStatus();
+    return plain ? { tone: plain.tone, text: seriesPrefix + plain.text } : null;
+  });
+
+  function seriesStatus(): { tone: Tone; text: string } | null {
+    if (inUse) return { tone: "accent", text: guiding?.app_state ? t.guiding.state[guiding.app_state] : t.guiding.unknown };
     if (running) {
+      if (running.info.message?.includes("dither")) return { tone: "accent", text: t.guiding.dithering };
       if (remaining !== null) {
         const left = formatPlain(Math.ceil(remaining), locale);
         if (looping) return { tone: "accent", text: t.live.status.loopLeft(left) };
@@ -104,7 +131,7 @@
     }
     if (failed) return { tone: "error", text: t.live.status.failed };
     return null;
-  });
+  }
 
   // -- Actions -------------------------------------------------------------------------
 
@@ -130,7 +157,8 @@
         return;
       }
       if (exposure === null) return;
-      await expose(role, exposure, main ? capture.save : undefined);
+      const dither = capture.ditherEvery > 0 ? { every: capture.ditherEvery, pixels: capture.ditherPixels } : null;
+      await expose(role, exposure, main ? capture.save : undefined, main ? { count: capture.count, dither } : undefined);
     });
   }
 
@@ -164,6 +192,7 @@
   const padReason = $derived.by((): string | null => {
     if (!owner) return t.mount.locked;
     if (mount?.parked) return t.mount.padParked;
+    if (guideActive) return t.guiding.padHeld;
     if (mountJob) return t.mount.padBusy;
     return null;
   });
@@ -176,6 +205,25 @@
       (region.width < camera.sensor.width || region.height < camera.sensor.height),
   );
   const coolerOn = $derived(camera ? (camera.cooler ?? camera.target !== null) : false);
+
+  // Frames in a series, kept per device; the stepper's text may be invalid meanwhile.
+  let count = $state<number | null>(capture.count);
+  $effect(() => {
+    if (count !== null) capture.setCount(count);
+  });
+  const shutterLabel = $derived.by(() => {
+    const series = main && (count ?? 1) > 1;
+    if (main && capture.save) return series ? t.live.captureSeriesSave(count ?? 1) : t.live.captureSave;
+    return series ? t.live.captureSeries(count ?? 1) : t.live.capture;
+  });
+  const ditherLabel = (every: number) => (every === 0 ? t.live.ditherOff : t.live.every(every));
+  const guidingText = $derived.by(() => {
+    if (!guiding?.phd2.connected) return t.guiding.open;
+    const total = guiding.stats?.rms_total;
+    if (guideActive && total != null) return t.guiding.chip(`${formatDecimal(total, locale, 2)}″`);
+    if (guiding.app_state && guiding.app_state !== "Stopped") return t.guiding.chipState(t.guiding.state[guiding.app_state]);
+    return t.guiding.open;
+  });
 </script>
 
 <svelte:window
@@ -318,6 +366,13 @@
         {/if}
       {/if}
 
+      {#if cameras.guide_camera || guiding?.phd2.connected}
+        <a class="autofocus" href={href({ screen: "guiding" })}>
+          <Icon name="guide" size={20} />
+          {guidingText}
+        </a>
+      {/if}
+
       {#if main && live.app.solver}
         <SolvePanel
           solver={live.app.solver}
@@ -332,26 +387,43 @@
         <CenteringCard centering={live.app.centering} />
       {/if}
 
+      {#if inUse}<Banner icon="guide">{t.live.guideInUse}</Banner>{/if}
+
+      {#if main}
+        <div class="series">
+          <Stepper label={t.live.frames} bind:value={count} min={1} max={MAX_SERIES} disabled={!owner || !!running} />
+          <div class="group">
+            <span class="label muted">{t.live.ditherEvery}</span>
+            <SegmentedControl
+              label={t.live.ditherEvery}
+              options={DITHER_EVERY.map((every) => ({ value: String(every), label: ditherLabel(every) }))}
+              value={String(capture.ditherEvery)}
+              disabled={!owner || !!running || (count ?? 1) <= 1}
+              onchange={(value) => capture.setDitherEvery(Number(value))} />
+          </div>
+        </div>
+      {/if}
+
       <div class="tiles">
         <Tile
           label={t.live.exposure}
           value={formatSeconds(camera.exposure, locale)}
-          disabled={!owner || !!running}
+          disabled={!owner || !!running || inUse}
           onclick={() => (editing = "exposure")} />
         <Tile
           label={t.live.gain}
           value={camera.gain === null ? "—" : formatPlain(camera.gain, locale)}
-          disabled={!owner || !!running || !camera.gain_range}
+          disabled={!owner || !!running || inUse || !camera.gain_range}
           onclick={() => (editing = "gain")} />
         <Tile
           label={t.live.offset}
           value={camera.offset === null ? "—" : formatPlain(camera.offset, locale)}
-          disabled={!owner || !!running || !camera.offset_range}
+          disabled={!owner || !!running || inUse || !camera.offset_range}
           onclick={() => (editing = "offset")} />
         <Tile
           label={t.live.binning}
           value="{camera.binning[0]}×{camera.binning[1]}"
-          disabled={!owner || !!running || camera.max_binning <= 1}
+          disabled={!owner || !!running || inUse || camera.max_binning <= 1}
           onclick={() => (editing = "binning")} />
         {#if main}
           <!-- Guide frames are only for looking; PHD2 keeps its own darks. -->
@@ -415,7 +487,7 @@
             class="action"
             class:on={looping}
             aria-pressed={looping}
-            disabled={!owner || busy || (!!running && !looping)}
+            disabled={!owner || busy || inUse || (!!running && !looping)}
             onclick={toggleLoop}>
             <Icon name="loop" />
             {t.live.loop}
@@ -423,8 +495,8 @@
           <Shutter
             running={!!running}
             {progress}
-            label={running ? t.live.stop : main && capture.save ? t.live.captureSave : t.live.capture}
-            disabled={!owner || busy}
+            label={running ? t.live.stop : shutterLabel}
+            disabled={!owner || busy || inUse}
             onclick={shoot} />
           {#if main}
             <button
@@ -565,6 +637,22 @@
     align-items: center;
     gap: var(--space-3);
     padding: var(--space-2) var(--space-2) var(--space-2) 0;
+  }
+  .series {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-3);
+  }
+  .series .group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+  @media (min-width: 768px) {
+    .series {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+      align-items: end;
+    }
   }
   .autofocus {
     display: inline-flex;

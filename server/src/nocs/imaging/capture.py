@@ -39,7 +39,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path as FsPath
 from pathlib import PurePosixPath
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 import anyio
 
@@ -233,6 +233,18 @@ class DitherPlan:
     """Main camera pixels (converted to the guide camera's)."""
     settle: Settle = field(default_factory=Settle)
     ra_only: bool = False
+
+
+class _Labeled:
+    """A job's context whose messages say which frame of a series they are about."""
+
+    def __init__(self, context: JobContext, label: str) -> None:
+        self.id = context.id
+        self._context = context
+        self._label = label
+
+    def progress(self, fraction: float | None, message: str | None = None) -> None:
+        self._context.progress(fraction, f"{self._label}{message}" if message else message)
 
 
 def _exposure_resources(role: Role) -> list[str]:
@@ -512,7 +524,8 @@ class CaptureService:
         context.progress(None, f"{label}dithering")
         try:
             pixels = guider.guide_pixels(plan.pixels)
-            await guider.dither(context, pixels, settle=plan.settle, ra_only=plan.ra_only)
+            labeled = cast(JobContext, _Labeled(context, label))
+            await guider.dither(labeled, pixels, settle=plan.settle, ra_only=plan.ra_only)
         except (GuidingError, GuidingNotReadyError, ValueError, ConnectionError, TimeoutError) as e:
             return f"dither: {e}"
         return None

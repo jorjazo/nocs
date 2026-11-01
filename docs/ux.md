@@ -189,6 +189,24 @@ Focuser, filter wheel and profile editor (stage 2.8):
   suggestions, serial port from `/dev/serial/by-id/`; then both trains' optics
   and the site. Changes to a connected profile apply when it is next connected.
 
+Guiding (stage 4.6):
+
+- Guiding opens as a full-screen flow (`#/guiding`) from a link under the mount in
+  Live view, which reads "Guiding · 0.42″" while PHD2 guides. It shows PHD2's
+  state and whether it runs the profile's settings, the graph (RA solid in
+  `guide-ra`, Dec dashed in `guide-dec`; dithers as dotted lines, lost frames as
+  rings, settling steps paler; ″ or px), the RMS of the last 100 steady steps,
+  SNR and HFD, the calibration, and the actions that fit: connect or loop, start
+  guiding (calibrating first, or again on request), dither now, stop, disconnect.
+- While PHD2 holds the guide camera, Live view shows its frames with a note, and
+  its own shutter, loop and settings are off. While PHD2 calibrates or guides,
+  the mount sheet says the mount waits and offers "Stop guiding"; the pad shows
+  why it is off.
+- Live view takes a series of the main camera (frames stepper) and dithers every
+  n frames; the status says which frame of the series runs.
+- The profile editor says when the guide camera looks through the imaging
+  optics (an OAG or the Duo's sensor); the guiding train's fields go away then.
+
 Mount (stage 2.9):
 
 - The mount opens as a sheet from its row in Rig and from its readout in Live

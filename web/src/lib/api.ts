@@ -12,6 +12,8 @@ import type {
   ClockRequest,
   ConnectRequest,
   CoolingRequest,
+  DitherNowRequest,
+  DitherRequest,
   Driver,
   EjectRequest,
   EquatorialGoto,
@@ -20,6 +22,8 @@ import type {
   FilterSelectRequest,
   FocuserBacklashRequest,
   FocuserMoveRequest,
+  GuideRequest,
+  GuideSteps,
   HorizontalGoto,
   HostnameRequest,
   JobStarted,
@@ -247,9 +251,19 @@ export function setCooling(role: CameraRoleName, body: CoolingRequest): Promise<
 }
 
 // The frame type is the camera's current one; `save` defaults to the server's
-// choice (the main camera saves, the guide camera never does).
-export async function expose(role: CameraRoleName, exposure: number, save?: boolean): Promise<string> {
+// choice (the main camera saves, the guide camera never does). A series of the
+// main camera may dither between its frames while PHD2 guides (ADR 0024).
+export async function expose(
+  role: CameraRoleName,
+  exposure: number,
+  save?: boolean,
+  series?: { count: number; dither: DitherRequest | null },
+): Promise<string> {
   const body: ExposeRequest = save === undefined ? { exposure } : { exposure, save };
+  if (series && series.count > 1) {
+    body.count = series.count;
+    body.dither = series.dither;
+  }
   const started = await request<JobStarted>("POST", `/api/cameras/${role}/expose`, body);
   return started.job;
 }
@@ -262,6 +276,45 @@ export async function loop(role: CameraRoleName, exposure: number): Promise<stri
 
 export function cancelJob(job: string): Promise<void> {
   return request("POST", `/api/jobs/${job}/cancel`);
+}
+
+// -- Guiding with PHD2 (ADR 0022–0024) ---------------------------------------------
+
+export function connectGuiding(): Promise<void> {
+  return request("POST", "/api/guiding/connect");
+}
+
+export function disconnectGuiding(): Promise<void> {
+  return request("POST", "/api/guiding/disconnect");
+}
+
+export function loopGuiding(exposure?: number): Promise<void> {
+  return request("POST", "/api/guiding/loop", exposure === undefined ? {} : { exposure });
+}
+
+export function setGuidingExposure(exposure: number): Promise<void> {
+  return request("PUT", "/api/guiding/exposure", { exposure });
+}
+
+// Starting to guide is a job: it ends once PHD2 has settled; guiding goes on.
+export async function startGuiding(body: GuideRequest = {}): Promise<string> {
+  const started = await request<JobStarted>("POST", "/api/guiding/guide", body);
+  return started.job;
+}
+
+export function stopGuiding(): Promise<void> {
+  return request("POST", "/api/guiding/stop");
+}
+
+// Up to `pixels` of the main camera; the job ends once PHD2 has settled.
+export async function ditherNow(body: DitherNowRequest): Promise<string> {
+  const started = await request<JobStarted>("POST", "/api/guiding/dither", body);
+  return started.job;
+}
+
+// The guiding run's graph: entries numbered above `after`, oldest first.
+export function guideSteps(after = 0): Promise<GuideSteps> {
+  return request("GET", `/api/guiding/steps?after=${after}`);
 }
 
 // -- Power box (ADR 0017) ------------------------------------------------------

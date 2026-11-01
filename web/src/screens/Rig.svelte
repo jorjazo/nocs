@@ -132,7 +132,11 @@
     ]),
   );
   const guiding = $derived(
-    train(profile?.guiding, cameras?.guide_camera, [deviceName(devicesByRole.guide_camera)]),
+    train(
+      profile?.guiding_through_imaging ? profile.imaging : profile?.guiding,
+      cameras?.guide_camera,
+      [deviceName(devicesByRole.guide_camera)],
+    ),
   );
 
   const power = $derived(live.app.power ?? null);

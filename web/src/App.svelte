@@ -15,6 +15,7 @@
   import AuthScreen from "./screens/AuthScreen.svelte";
   import Dev from "./screens/dev/Dev.svelte";
   import Focus from "./screens/focus/Focus.svelte";
+  import Guiding from "./screens/guiding/Guiding.svelte";
   import Live from "./screens/live/Live.svelte";
   import Placeholder from "./screens/Placeholder.svelte";
   import ProfileEditor from "./screens/ProfileEditor.svelte";
@@ -83,6 +84,8 @@
 {:else if router.route.screen === "focus"}
   <!-- Guided flows take the whole screen, without the tabs (docs/ux.md §1). -->
   <Focus {offline} />
+{:else if router.route.screen === "guiding"}
+  <Guiding {offline} />
 {:else}
   <NavBar />
   <main class="content" class:full>

@@ -20,6 +20,7 @@ export const ICONS = {
     circle(12, 13, 3.5),
   ],
   mount: ["M5 9.5l11-5 1.8 3.8-11 5z", "M11.5 11.5l-4 9M11.5 11.5l4 9M11.5 11.5v3"],
+  guide: [circle(12, 12, 7), circle(12, 12, 1.8), "M12 2.5v3.5M12 18v3.5M2.5 12H6M18 12h3.5"],
   focus: ["M4 9V5h4M16 5h4v4M20 15v4h-4M8 19H4v-4", "M12 9v6M9 12h6"],
   filter: [circle(12, 12, 8.5), circle(12, 8.3, 1.8), circle(8.6, 14.2, 1.8), circle(15.4, 14.2, 1.8)],
   power: ["M13.5 3L5.5 13.5h6l-1 7.5 8-10.5h-6z"],
