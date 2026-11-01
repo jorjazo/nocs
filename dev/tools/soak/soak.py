@@ -41,6 +41,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import contextlib
+import gzip
 import json
 import math
 import os
@@ -283,6 +284,10 @@ def system_sample(storage: Path) -> dict[str, Any]:
         "mem_available": meminfo.get("MemAvailable", 0) * 1024,
         "storage_free": vfs.f_bavail * vfs.f_frsize,
         "sectors_written": disk_sectors_written(storage),
+        # multiprocessing's named semaphores (all users' here): a leak shows as growth.
+        "semaphores": sum(1 for n in os.listdir("/dev/shm") if n.startswith("sem."))
+        if os.path.isdir("/dev/shm")
+        else None,
     }
 
 
@@ -842,7 +847,13 @@ def fmt(value: float | None, digits: int = 1) -> str:
 
 
 def summarize(out: Path, warmup: float) -> str:
-    samples = [json.loads(line) for line in (out / "samples.jsonl").read_text().splitlines()]
+    path = out / "samples.jsonl"
+    text = (
+        path.read_text()
+        if path.exists()
+        else gzip.decompress(path.with_suffix(".jsonl.gz").read_bytes()).decode()
+    )
+    samples = [json.loads(line) for line in text.splitlines()]
     if not samples:
         return "no samples\n"
     hours = samples[-1]["elapsed"] / 3600
@@ -891,6 +902,9 @@ def summarize(out: Path, warmup: float) -> str:
         f"- load average (1 min): mean {statistics.fmean(x['load'] for x in system):.2f},"
         f" max {max(x['load'] for x in system):.2f}",
         f"- available memory: {min(x['mem_available'] for x in system) / 1e9:.2f} GB at least",
+        f"- POSIX semaphores in /dev/shm: {system[0].get('semaphores')} → {system[-1].get('semaphores')}"
+        f" (max {max((x.get('semaphores') or 0) for x in system)}); nocsd's children:"
+        f" {max(sum(v['count'] for k, v in s['processes'].items() if k.startswith('nocsd/')) for s in samples)} at most",
         f"- storage free: {system[0]['storage_free'] / 1e9:.1f} → {system[-1]['storage_free'] / 1e9:.1f} GB"
         f" (frames pruned meanwhile: {samples[-1]['pruned']})",
     ]
