@@ -47,6 +47,7 @@ from nocs.system.protocol import (
     Message,
     decode,
     encode,
+    redact,
 )
 from nocs.system.updates import Updates
 
@@ -135,7 +136,7 @@ class Helper:
             if group not in self._config.enabled:
                 raise HelperError("disabled", f"{op} is switched off (group {group!r} in {CONFIG})")
             async with self._lock:
-                log.info("%s %s", op, json.dumps(args))
+                log.info("%s %s", op, json.dumps(redact(args)))  # pyright: ignore[reportUnknownArgumentType]
                 result = await OPERATIONS[op](self._config.context, args)  # pyright: ignore[reportUnknownArgumentType]
         except HelperError as e:
             log.info("%s: %s", e.code, e)
