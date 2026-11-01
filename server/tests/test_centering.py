@@ -88,7 +88,13 @@ class FakeMount:
         return self.said
 
     async def sync(
-        self, ra: float, dec: float, when: datetime | None = None, *, job: str | None = None
+        self,
+        ra: float,
+        dec: float,
+        when: datetime | None = None,
+        *,
+        job: str | None = None,
+        check: bool = True,
     ) -> Coordinates:
         assert job is not None
         assert self.jobs.holder(Role.MOUNT.value) == job

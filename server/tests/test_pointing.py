@@ -97,7 +97,13 @@ class FakeMounts:
         return self.where
 
     async def sync(
-        self, ra: float, dec: float, when: datetime | None = None, *, job: str | None = None
+        self,
+        ra: float,
+        dec: float,
+        when: datetime | None = None,
+        *,
+        job: str | None = None,
+        check: bool = True,
     ) -> Coordinates:
         if job is None:
             self.jobs.check_free([Role.MOUNT.value])

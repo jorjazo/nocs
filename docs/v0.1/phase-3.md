@@ -54,7 +54,9 @@ shared with polar alignment (phase 4) and re-centring and the meridian flip
 - A sync is watched for 2.5 s: if the mount reports a position more than 1′ from
   it, the sync fails with that reason instead of succeeding (the AM5 near its home
   position took a sync and went back at its next poll, on the lab bench and in the
-  first field test).
+  first field test). Not inside a centring run: the telescope simulator also reports
+  its old position again after a sync (22.6′ back) yet aims its next go to by it, and
+  centring's next frame shows whether the sync took.
 
 ## Measured
 

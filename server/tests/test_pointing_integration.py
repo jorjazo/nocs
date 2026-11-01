@@ -287,7 +287,7 @@ def test_center_corrects_the_pointing_error(api: TestClient, method: str) -> Non
         result = center(api, method=method, tolerance=1.0, attempts=5, settle=1.0)
     finally:
         clear_alignment(api)
-    assert result["state"] == "succeeded", result
+    assert result["state"] == "succeeded", (result["error"], result)
     solved = [a for a in result["attempts"] if a["error"] is not None]
     cos_dec = math.cos(math.radians(FIELD[1]))
     expected = math.hypot(INDEX_DEC, INDEX_HA * cos_dec)

@@ -89,7 +89,13 @@ class Mounts(Protocol):
 
     def position(self) -> Coordinates: ...
     async def sync(
-        self, ra: float, dec: float, when: datetime | None = None, *, job: str | None = None
+        self,
+        ra: float,
+        dec: float,
+        when: datetime | None = None,
+        *,
+        job: str | None = None,
+        check: bool = True,
     ) -> Coordinates: ...
 
 
@@ -100,6 +106,10 @@ class SolveOptions:
     binning: int | None = None
     """For this frame only; the camera's current binning when ``None``."""
     sync: bool = False
+    check_sync: bool = True
+    """Fail when the mount goes back from the sync. Centring checks with its next
+    frame instead: the telescope simulator reports its old position again after a
+    sync, yet aims by it."""
     blind: bool = True
     """Search the whole sky when the frame is not where the mount says."""
 
@@ -242,7 +252,7 @@ class PointingService:
         self._describe(solved)
         if options.sync:
             context.progress(None, "syncing the mount")
-            solved = await self._sync(solved, job=context.id)
+            solved = await self._sync(solved, job=context.id, check=options.check_sync)
         return solved
 
     async def sync(self) -> dict[str, Json]:
@@ -264,9 +274,11 @@ class PointingService:
 
     # -- internals ----------------------------------------------------------
 
-    async def _sync(self, solved: FrameSolve, job: str | None = None) -> FrameSolve:
+    async def _sync(
+        self, solved: FrameSolve, job: str | None = None, check: bool = True
+    ) -> FrameSolve:
         solution = solved.result.solution
-        await self._mount.sync(solution.ra, solution.dec, solved.taken, job=job)
+        await self._mount.sync(solution.ra, solution.dec, solved.taken, job=job, check=check)
         synced = FrameSolve(
             solved.result,
             solved.taken,

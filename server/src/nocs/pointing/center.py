@@ -90,7 +90,11 @@ class CenterOptions:
     @property
     def solve_options(self) -> SolveOptions:
         return SolveOptions(
-            exposure=self.exposure, binning=self.binning, sync=self.method == "sync"
+            exposure=self.exposure,
+            binning=self.binning,
+            sync=self.method == "sync",
+            # The next frame shows whether the sync took.
+            check_sync=False,
         )
 
 

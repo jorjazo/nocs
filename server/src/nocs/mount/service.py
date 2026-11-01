@@ -246,14 +246,21 @@ class MountService:
         return jnow_to_j2000(position.ra, position.dec, self._clock.now())
 
     async def sync(
-        self, ra: float, dec: float, when: datetime | None = None, *, job: str | None = None
+        self,
+        ra: float,
+        dec: float,
+        when: datetime | None = None,
+        *,
+        job: str | None = None,
+        check: bool = True,
     ) -> Coordinates:
         """Tell the mount it points at J2000 ``ra``, ``dec``; returns the JNow sent.
 
         ``when`` is the time the position is for (a solved frame's mid-exposure),
         else now. Refused while the mount is parked, slewing or not tracking (the
         sky would have moved since), or locked by a job other than ``job``. Raises
-        SyncNotKeptError when the mount goes back from the sync within a few seconds.
+        SyncNotKeptError when the mount goes back from the sync within a few seconds,
+        unless ``check`` is false.
         """
         if not 0 <= ra < 24 or not -90 <= dec <= 90:
             raise ValueError(f"coordinates out of range: RA {ra} h, Dec {dec}°")
@@ -271,7 +278,8 @@ class MountService:
         jnow = j2000_to_jnow(ra, dec, when or self._clock.now())
         log.info("syncing %s to RA %s, Dec %s (J2000)", mount.name, _hms(ra), _dms(dec))
         await mount.sync(jnow.ra, jnow.dec)
-        await check_sync_kept(mount, jnow)
+        if check:
+            await check_sync_kept(mount, jnow)
         return jnow
 
     async def set_tracking(
