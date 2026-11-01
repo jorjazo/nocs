@@ -1,6 +1,6 @@
 # SMB share plan — the box's images on a desktop PC
 
-Status: in progress (S0 decided 2026-11-01, S1 and S2 implemented) · Last updated: 2026-11-01 · Roadmap: [Beyond v0.1](../roadmap.md#beyond-v01-unordered-backlog) · Decision: [ADR 0037](../adr/0037-smb-share.md)
+Status: in progress (S0 decided 2026-11-01, S1–S3 implemented) · Last updated: 2026-11-01 · Roadmap: [Beyond v0.1](../roadmap.md#beyond-v01-unordered-backlog) · Decision: [ADR 0037](../adr/0037-smb-share.md)
 
 Goal: at home, a desktop PC (Windows, macOS, Linux) opens the box's frames as a
 network folder, without downloading zips through the phone or taking the USB drive
@@ -99,8 +99,9 @@ and nothing announces it.
    data directory (it holds `config/auth.json` and the catalog) nor a drive's other
    files. nocs-system builds the list itself from what is mounted under `/media/nocs`
    and from its configured internal directory, so nocsd never names a path for root to
-   share; nocsd asks it to refresh when its own list of drives changes (it reads it
-   every 5 s), and an ejected drive's share goes away. Samba's `follow symlinks = no`
+   share. Mounting a drive adds its share and ejecting one removes it first (so smbd
+   does not keep it busy); while the share is on, nocsd asks for a refresh every 10 s,
+   which rewrites the configuration only when something changed (a drive pulled out). Samba's `follow symlinks = no`
    keeps a link inside a folder from reaching anything else. (Rejected: one `NOCS`
    share with a folder per volume, which needs symlinks across filesystems and
    Samba's `wide links`, or bind mounts.)
@@ -143,7 +144,7 @@ and nothing announces it.
 | S0 | Decisions | This plan; ADR 0037 | Review with the maintainer | 2 h | Done: decided 2026-11-01 |
 | S1 | nocs-system `share` | The `share` group: `smb.conf` built from the volumes (a pure function), `status`, `enable`, `refresh`; the `nocs` / `nocs` login; `systemctl`, `smbpasswd`, `smbcontrol`, `smbstatus` with argument lists | Unit tests with fake tools on the `PATH` (as `test_system.py`, `test_network.py`): the config for no drives, two drives, a label clash, an unlabelled drive; refusals | 3–4 h | Implemented: `nocs.system.share` (`share.status`, `share.enable`, `share.refresh`); mounting and ejecting a drive refresh the share, ejecting closes its share before unmounting; the group is switched on by the appliance in S2 |
 | S2 | Packaging | `nocs-appliance`: `Depends` on `samba` and `wsdd`; masks Samba's own units in `postinst`; `nocs-share.service`, `nocs-wsdd.service` (priorities, sandboxing); firewall rules by interface; `share` in `appliance.conf`; image build unchanged but bigger | `packaging/deb/test.sh` with the appliance in the systemd container: switch on with `nocs-system call`, `smbclient -N` lists and reads `Internal` as a guest, and as `nocs` / `nocs`; refuses a write, a wrong password for `nocs`, and sees no `config/`; off: nothing on 445. The image builds and its smoke test passes; its size noted | 4–6 h | Implemented: the units, masks, firewall rules and `share` in `appliance.conf`; `hostname.set` restarts the share's services. The generated `smb.conf` checked with Samba 4.23.6 in an Ubuntu 26.04 container (below); `test.sh` and the image's smoke test check the rest in CI |
-| S3 | nocsd | `share` state (schemas, TS types), refresh when drives change, the endpoint | API tests with a fake helper; the schema test of the live state | 2–3 h | |
+| S3 | nocsd | `share` state (schemas, TS types), refresh when drives change, the endpoint | API tests with a fake helper; the schema test of the live state | 2–3 h | Implemented: `share` state (`on`, `running`, `shares`, `clients`) read every 10 s with a refresh first while on; `PUT /api/system/share {on}`; types regenerated |
 | S4 | Web UI | Rig: "File sharing" under Network: switch (saying anyone on the network can read the frames), the shares and how to open them (`\\<name>.local\Internal`, `smb://<name>.local`, the `nocs` / `nocs` login for Windows 11), connected computers; en/es; `docs/ux.md`; `docs/user/` (quick start; troubleshooting: Windows 11 and guests) | Browser against a fake helper, phone and wide, Night mode, both languages | 3–4 h | |
 | S5 | Test Pi | Windows 11, macOS, Linux on the home network and on the access point; Ethernet; discovery; throughput; frame saving during a copy; memory and disk writes | Test Pi window | 2–3 h | |
 
