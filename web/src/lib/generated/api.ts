@@ -1042,6 +1042,10 @@ export interface IndiServer {
   error: string | null;
   host: string;
   port: number;
+  /**
+   * It answers pings; False while connected to an indiserver that does not (ADR 0030).
+   */
+  responsive: boolean;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema

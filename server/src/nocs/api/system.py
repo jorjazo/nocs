@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 from collections.abc import Callable, Generator
+from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Response, status
 
@@ -26,6 +27,15 @@ def system_router(system: Callable[[], SystemService]) -> APIRouter:
     async def power_off(request: ShutdownRequest | None = None) -> Response:  # pyright: ignore[reportUnusedFunction]
         with _system_errors():
             await system().power_off(force=request is not None and request.force)
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    @router.post("/services/{service}/restart", status_code=status.HTTP_204_NO_CONTENT)
+    async def restart_service(  # pyright: ignore[reportUnusedFunction]
+        service: Literal["indiserver", "phd2"], request: ShutdownRequest | None = None
+    ) -> Response:
+        """Restart indiserver (every device reconnects) or PHD2 (ADR 0030)."""
+        with _system_errors():
+            await system().restart_service(service, force=request is not None and request.force)
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     @router.get("/diagnostics")

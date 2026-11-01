@@ -1,8 +1,14 @@
 """Keeps a connection to indiserver and mirrors every device property into the state store.
 
+A connected indiserver is pinged every ``PING_EVERY`` seconds: it answers itself,
+whatever its drivers do. After ``MISSES`` unanswered pings it is taken as hung: the
+bridge asks for it to be restarted (``on_hung``, nocs-system on the appliance) and
+connects again (ADR 0030). A kernel keeps accepting connections for a frozen
+process, so connecting alone proves nothing.
+
 State layout under ``("indi",)``::
 
-    server:  {host, port, connected, error}
+    server:  {host, port, connected, responsive, error}
     devices: {<device>: {interfaces: [...], properties: {<name>: <property>}}}
     messages: last driver messages (newest last)
 """
@@ -10,8 +16,9 @@ State layout under ``("indi",)``::
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
-from collections.abc import Callable, Mapping
+from collections.abc import Awaitable, Callable, Mapping
 
 from nocs.devices import DeviceInterface
 from nocs.indi import (
@@ -36,6 +43,10 @@ log = logging.getLogger(__name__)
 
 ROOT: Path = ("indi",)
 _BACKOFF = (1.0, 2.0, 5.0, 10.0)
+PING_EVERY = 10.0
+PING_TIMEOUT = 10.0
+MISSES = 3
+"""Unanswered pings in a row after which indiserver is taken as hung (~1 min)."""
 _MAX_MESSAGES = 50
 
 
@@ -89,8 +100,15 @@ class NotConnectedError(Exception):
 
 
 class IndiBridge:
-    def __init__(self, store: StateStore, host: str, port: int) -> None:
+    def __init__(
+        self,
+        store: StateStore,
+        host: str,
+        port: int,
+        on_hung: Callable[[], Awaitable[None]] | None = None,
+    ) -> None:
         self._store = store
+        self._on_hung = on_hung
         self._host = host
         self._port = port
         self._client: IndiClient | None = None
@@ -132,9 +150,13 @@ class IndiBridge:
                 self._publish_server(connected=True)
                 log.info("connected to indiserver at %s:%s", self._host, self._port)
                 self._notify(client)
+                watch = asyncio.create_task(self._watch(client, lost), name="indi-ping")
                 try:
                     await lost.wait()
                 finally:
+                    watch.cancel()
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await watch
                     self._client = None
                     self._notify(None)
                     await client.close()
@@ -142,6 +164,42 @@ class IndiBridge:
             delay = _BACKOFF[min(attempt, len(_BACKOFF) - 1)]
             attempt += 1
             await asyncio.sleep(delay)
+
+    async def _watch(self, client: IndiClient, lost: asyncio.Event) -> None:
+        """Ping until the connection is lost; end it when indiserver stops answering."""
+        misses = 0
+        while True:
+            await asyncio.sleep(PING_EVERY)
+            try:
+                await client.ping(PING_TIMEOUT)
+            except TimeoutError:
+                misses += 1
+            except ConnectionError:
+                return
+            else:
+                if misses:
+                    log.info("indiserver answers again")
+                    self._publish_server(connected=True)
+                misses = 0
+                continue
+            silent = misses * (PING_EVERY + PING_TIMEOUT) - PING_EVERY
+            log.warning("indiserver has not answered a ping for %.0f s", silent)
+            if misses < MISSES:
+                self._publish_server(
+                    connected=True,
+                    responsive=False,
+                    error=f"indiserver has not answered for {silent:.0f} s",
+                )
+                continue
+            log.error("indiserver is hung: restarting it")
+            self._publish_server(connected=False, error="indiserver stopped answering")
+            if self._on_hung is not None:
+                try:
+                    await self._on_hung()
+                except Exception as e:  # reported; the bridge reconnects anyway
+                    log.error("cannot restart indiserver: %s", e)
+            lost.set()
+            return
 
     async def set_property(
         self, device: str, name: str, values: Mapping[str, str | float | bool]
@@ -158,11 +216,19 @@ class IndiBridge:
             except Exception:
                 log.exception("indiserver connection watcher failed")
 
-    def _publish_server(self, *, connected: bool, error: str | None = None) -> None:
+    def _publish_server(
+        self, *, connected: bool, responsive: bool = True, error: str | None = None
+    ) -> None:
         with self._store.transaction():
             self._store.set(
                 (*ROOT, "server"),
-                {"host": self._host, "port": self._port, "connected": connected, "error": error},
+                {
+                    "host": self._host,
+                    "port": self._port,
+                    "connected": connected,
+                    "responsive": connected and responsive,
+                    "error": error,
+                },
             )
             if not connected:
                 self._store.set((*ROOT, "devices"), {})

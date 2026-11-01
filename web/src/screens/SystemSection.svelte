@@ -5,7 +5,15 @@
   import Button from "../components/Button.svelte";
   import ConfirmButton from "../components/ConfirmButton.svelte";
   import TextField from "../components/TextField.svelte";
-  import { ApiError, DIAGNOSTICS_URL, powerOff, reboot, setHostname, useGpsSite } from "../lib/api";
+  import {
+    ApiError,
+    DIAGNOSTICS_URL,
+    powerOff,
+    reboot,
+    restartService,
+    setHostname,
+    useGpsSite,
+  } from "../lib/api";
   import { auth } from "../lib/auth.svelte";
   import { errorText } from "../lib/errors";
   import { formatBytes, formatDecimal, formatPlain, formatTemperature, formatTime } from "../lib/format";
@@ -59,12 +67,14 @@
 
   // -- Actions --------------------------------------------------------------------
 
-  type Action = "rename" | "restart" | "shutDown" | "gps";
+  type Action = "rename" | "restart" | "shutDown" | "gps" | "indiserver" | "phd2";
   let busy = $state<Action | null>(null);
   let error = $state("");
   // A restart or shut down refused because something runs: offer to force it.
   let refused = $state<Action | null>(null);
-  let done = $state<"restarting" | "shuttingDown" | "gpsUsed" | null>(null);
+  let done = $state<"restarting" | "shuttingDown" | "gpsUsed" | "restartedIndi" | "restartedPhd2" | null>(
+    null,
+  );
 
   async function act(action: Action, run: () => Promise<void>): Promise<boolean> {
     busy = action;
@@ -100,6 +110,12 @@
 
   async function restart(force = false): Promise<void> {
     if (await act("restart", () => reboot(force))) done = "restarting";
+  }
+
+  async function restartEngine(service: "indiserver" | "phd2", force = false): Promise<void> {
+    if (await act(service, () => restartService(service, force))) {
+      done = service === "indiserver" ? "restartedIndi" : "restartedPhd2";
+    }
   }
 
   async function useGps(): Promise<void> {
@@ -199,7 +215,27 @@
         <p class="muted">{t.system.noPower}</p>
       {/if}
       {#if error}<p class="error">{error}</p>{/if}
-      {#if refused === "restart"}
+      {#if can("services.restart")}
+        <div class="buttons">
+          <ConfirmButton
+            label={t.system.restartIndi}
+            confirmLabel={t.system.confirmRestartIndi}
+            busy={busy === "indiserver"}
+            onconfirm={() => restartEngine("indiserver")} />
+          <ConfirmButton
+            label={t.system.restartPhd2}
+            confirmLabel={t.system.confirmRestartPhd2}
+            busy={busy === "phd2"}
+            onconfirm={() => restartEngine("phd2")} />
+        </div>
+      {/if}
+      {#if refused === "indiserver" || refused === "phd2"}
+        {@const service = refused}
+        <ConfirmButton
+          label={service === "indiserver" ? t.system.restartIndiAnyway : t.system.restartPhd2Anyway}
+          confirmLabel={service === "indiserver" ? t.system.confirmRestartIndi : t.system.confirmRestartPhd2}
+          onconfirm={() => restartEngine(service, true)} />
+      {:else if refused === "restart"}
         <ConfirmButton label={t.system.restartAnyway} confirmLabel={t.system.confirmRestart} onconfirm={() => restart(true)} />
       {:else if refused === "shutDown"}
         <ConfirmButton label={t.system.shutDownAnyway} confirmLabel={t.system.confirmShutDown} onconfirm={() => shutDown(true)} />

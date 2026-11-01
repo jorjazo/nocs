@@ -227,6 +227,21 @@ async def synchronised() -> str | None:
     return "chrony" if len(fields) >= 14 and fields[13] != "Not synchronised" else None
 
 
+# -- services -----------------------------------------------------------------
+
+SERVICES = {"indiserver": "nocs-indiserver.service", "phd2": "nocs-phd2.service"}
+"""The services nocsd may restart: the engines it depends on, never itself."""
+
+
+async def restart_service(_: Context, args: Message) -> Message:
+    """Restart indiserver (all drivers start again) or PHD2, e.g. when hung (ADR 0030)."""
+    service = args.get("service")
+    if not isinstance(service, str) or set(args) != {"service"} or service not in SERVICES:
+        raise HelperError("invalid", f"the arguments are {{service: {' or '.join(SERVICES)}}}")
+    await run("systemctl", "restart", SERVICES[service])
+    return {}
+
+
 OPERATIONS: dict[str, Operation] = {
     "power.reboot": reboot,
     "power.poweroff": power_off,
@@ -234,4 +249,5 @@ OPERATIONS: dict[str, Operation] = {
     "storage.mount": mount,
     "storage.eject": eject,
     "time.set": set_time,
+    "services.restart": restart_service,
 }

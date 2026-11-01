@@ -20,6 +20,7 @@ from nocs.indi.protocol import (
     DeleteProperty,
     IndiMessage,
     Message,
+    PingReply,
     ProtocolError,
     SetProperty,
     StreamParser,
@@ -27,6 +28,7 @@ from nocs.indi.protocol import (
     encode_enable_blob,
     encode_get_properties,
     encode_new_vector,
+    encode_ping,
 )
 
 log = logging.getLogger(__name__)
@@ -80,6 +82,8 @@ class IndiClient:
         self._writer: asyncio.StreamWriter | None = None
         self._read_task: asyncio.Task[None] | None = None
         self._write_lock = asyncio.Lock()
+        self._pings: dict[str, asyncio.Future[None]] = {}
+        self._ping_count = 0
 
     # -- connection -------------------------------------------------------
 
@@ -160,6 +164,22 @@ class IndiClient:
 
     # -- commands ---------------------------------------------------------
 
+    async def ping(self, timeout: float = 10.0) -> float:
+        """Seconds indiserver takes to answer a ping (it answers itself, whatever its
+        drivers do); ``TimeoutError`` when it does not (ADR 0030)."""
+        self._ping_count += 1
+        uid = f"nocs-{self._ping_count}"
+        answered = asyncio.get_running_loop().create_future()
+        self._pings[uid] = answered
+        start = asyncio.get_running_loop().time()
+        try:
+            await self._send(encode_ping(uid))
+            async with asyncio.timeout(timeout):
+                await answered
+        finally:
+            self._pings.pop(uid, None)
+        return asyncio.get_running_loop().time() - start
+
     async def get_properties(self, device: str | None = None, name: str | None = None) -> None:
         await self._send(encode_get_properties(device, name))
 
@@ -235,6 +255,9 @@ class IndiClient:
                 self._emit(PropertyDeleted(device, name))
             case Message(device=device, timestamp=timestamp, message=text):
                 self._emit(MessageReceived(device, timestamp, text))
+            case PingReply(uid=uid):
+                if (answered := self._pings.get(uid)) is not None and not answered.done():
+                    answered.set_result(None)
 
     def _emit(self, event: IndiEvent) -> None:
         for listener in list(self._listeners):

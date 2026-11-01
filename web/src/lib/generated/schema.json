@@ -3763,12 +3763,17 @@
         },
         "port": {
           "type": "integer"
+        },
+        "responsive": {
+          "description": "It answers pings; False while connected to an indiserver that does not (ADR 0030).",
+          "type": "boolean"
         }
       },
       "required": [
         "host",
         "port",
         "connected",
+        "responsive",
         "error"
       ],
       "title": "IndiServer",

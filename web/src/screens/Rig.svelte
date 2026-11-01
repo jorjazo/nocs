@@ -355,9 +355,13 @@
           {#if server}
             <DeviceRow icon="server" title={t.rig.indiServer} subtitle="{server.host}:{server.port}" error={server.error}>
               {#snippet trailing()}
-                <Chip tone={server.connected ? "ok" : "error"}>
-                  {server.connected ? t.rig.indiConnected : t.rig.indiOffline}
-                </Chip>
+                {#if server.connected && !server.responsive}
+                  <Chip tone="warning">{t.rig.indiNotAnswering}</Chip>
+                {:else}
+                  <Chip tone={server.connected ? "ok" : "error"}>
+                    {server.connected ? t.rig.indiConnected : t.rig.indiOffline}
+                  </Chip>
+                {/if}
               {/snippet}
             </DeviceRow>
           {/if}

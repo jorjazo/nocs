@@ -151,6 +151,11 @@ export function powerOff(force = false): Promise<void> {
   return request("POST", "/api/system/poweroff", { force } satisfies ShutdownRequest);
 }
 
+// Restarting indiserver drops every device; refused (409) while a job runs, unless forced.
+export function restartService(service: "indiserver" | "phd2", force = false): Promise<void> {
+  return request("POST", `/api/system/services/${service}/restart`, { force } satisfies ShutdownRequest);
+}
+
 export function setHostname(name: string): Promise<void> {
   return request("PUT", "/api/system/hostname", { name } satisfies HostnameRequest);
 }

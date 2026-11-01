@@ -160,9 +160,15 @@ EOF
 mkdir -p "$root/etc/nocs/system.conf.d"
 cat > "$root/etc/nocs/system.conf.d/appliance.conf" <<'EOF'
 # NOCS appliance (ADR 0027): restart, shut down, rename, mount and eject USB drives,
-# and set the clock from a client when nothing else keeps it.
+# set the clock from a client when nothing else keeps it, restart indiserver/PHD2.
 [operations]
-enabled = power hostname storage time
+enabled = power hostname storage time services
+EOF
+# A hung kernel reboots the Pi (its hardware watchdog, ADR 0030).
+mkdir -p "$root/etc/systemd/system.conf.d"
+cat > "$root/etc/systemd/system.conf.d/nocs-watchdog.conf" <<'EOF'
+[Manager]
+RuntimeWatchdogSec=30s
 EOF
 echo nocs > "$root/etc/hostname"
 sed -i '/^127\.0\.1\.1/d' "$root/etc/hosts"

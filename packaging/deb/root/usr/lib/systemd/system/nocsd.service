@@ -19,6 +19,10 @@ Environment=NOCS_INDI_UPLOAD_DIR=/var/lib/nocs/indi-uploads
 Environment=NOCS_PHD2_SETTINGS=/var/lib/nocs/phd2.phd
 Environment=NOCS_SYSTEM_SOCKET=/run/nocs-system/socket
 EnvironmentFile=/etc/nocs/nocsd.env
+# nocsd feeds the watchdog from its event loop: stuck for 30 s, it is restarted.
+Type=notify
+NotifyAccess=main
+WatchdogSec=30
 ExecStart=/opt/nocs/venv/bin/nocsd
 Restart=on-failure
 RestartSec=5

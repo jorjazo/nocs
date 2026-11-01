@@ -104,6 +104,7 @@ from nocs.power.service import PowerService, WeatherService
 from nocs.sequence import CheckpointFile, SequenceStore
 from nocs.sequence.rig import Parts
 from nocs.sequence.service import SequenceService
+from nocs.services import watchdog
 from nocs.services.gps import GpsService, NoFixError
 from nocs.services.indi_bridge import IndiBridge, NotConnectedError
 from nocs.services.system import OperationUnavailableError, SystemService
@@ -132,7 +133,16 @@ _HELLO_TIMEOUT = 5.0
 
 def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
     store = store if store is not None else StateStore()
-    bridge = IndiBridge(store, settings.indi_host, settings.indi_port)
+
+    async def restart_hung_indiserver() -> None:
+        """Where nocs-system can restart services: a hung indiserver gets in the way of
+        everything, so it is restarted whatever runs (ADR 0030)."""
+        if services.system is not None and services.system.offers("services.restart"):
+            await services.system.restart_service("indiserver", force=True)
+
+    bridge = IndiBridge(
+        store, settings.indi_host, settings.indi_port, on_hung=restart_hung_indiserver
+    )
     fifo = DriverFifo(settings.indi_fifo) if settings.indi_fifo is not None else None
     auth = AuthStore(settings.config_dir / "auth.json")
     sockets = Sockets()
@@ -314,10 +324,11 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
         time_task = asyncio.create_task(time_keeper.run(), name="timekeeping")
         services.gps = GpsService(store, services.equipment, settings.gpsd_host, settings.gpsd_port)
         gps_task = asyncio.create_task(services.gps.run(), name="gpsd")
+        watchdog_task = asyncio.create_task(watchdog.run(), name="systemd-watchdog")
         try:
             yield
         finally:
-            for background in (gps_task, time_task, system_task, guiding_task):
+            for background in (watchdog_task, gps_task, time_task, system_task, guiding_task):
                 background.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
                     await background

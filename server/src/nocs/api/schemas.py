@@ -67,6 +67,10 @@ class IndiServer(StateModel):
     host: str
     port: int
     connected: bool
+    responsive: bool = Field(
+        description="It answers pings; False while connected to an indiserver that does not"
+        " (ADR 0030)."
+    )
     error: str | None
 
 

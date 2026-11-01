@@ -141,6 +141,14 @@ class SystemService:
     async def power_off(self, *, force: bool = False) -> None:
         await self._power("power.poweroff", force)
 
+    async def restart_service(self, service: str, *, force: bool = False) -> None:
+        """Restart indiserver or PHD2. Restarting indiserver drops every device, so it is
+        refused while a job runs, unless forced (as when it is hung, ADR 0030)."""
+        if not force and (kinds := self._jobs.active()):
+            raise SystemBusyError(kinds)
+        log.warning("restarting %s", service)
+        await self._call("services.restart", {"service": service})
+
     async def set_hostname(self, name: str) -> str:
         """Rename the box; the new name, as nocs-system stored it."""
         try:

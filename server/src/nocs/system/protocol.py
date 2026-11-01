@@ -25,6 +25,7 @@ GROUPS: dict[str, str] = {
     "storage.mount": "storage",
     "storage.eject": "storage",
     "time.set": "time",
+    "services.restart": "services",
 }
 """Every operation nocs-system knows, with the group that enables it."""
 

@@ -89,7 +89,14 @@ class Message:
     message: str
 
 
-type IndiMessage = DefineProperty | SetProperty | DeleteProperty | Message
+@dataclass(frozen=True, slots=True)
+class PingReply:
+    """indiserver's own answer to a ``pingRequest``: it is alive (ADR 0030)."""
+
+    uid: str
+
+
+type IndiMessage = DefineProperty | SetProperty | DeleteProperty | Message | PingReply
 
 
 class ProtocolError(Exception):
@@ -196,6 +203,8 @@ def parse_element(elem: ET.Element) -> IndiMessage | None:
             return DeleteProperty(a["device"], a.get("name"), a.get("timestamp"), a.get("message"))
         if elem.tag == "message":
             return Message(a.get("device"), a.get("timestamp"), a.get("message", ""))
+        if elem.tag == "pingReply":
+            return PingReply(a.get("uid", ""))
     except (KeyError, ValueError) as e:
         raise ProtocolError(f"malformed <{elem.tag}>: {e}") from e
     return None
@@ -279,6 +288,10 @@ class StreamParser:
 
 def _serialize(elem: ET.Element) -> bytes:
     return ET.tostring(elem, encoding="unicode").encode() + b"\n"
+
+
+def encode_ping(uid: str) -> bytes:
+    return _serialize(ET.Element("pingRequest", uid=uid))
 
 
 def encode_get_properties(device: str | None = None, name: str | None = None) -> bytes:

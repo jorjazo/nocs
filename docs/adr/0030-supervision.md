@@ -14,8 +14,14 @@ would not stop a slewing mount. Facts:
   exposure has a known duration. Both give natural deadlines.
 - A `getProperties` for one device makes indiserver ask that driver to define its
   properties again: an answer proves that indiserver and the driver both work.
-  Whether indiserver also answers ping messages, and what it does with a driver
-  that stops reading, is to be measured.
+  Asked regularly, it would also re-send every definition into the state.
+- **Measured** (stage 6.9, simulators in a container, INDI 2.2.5): indiserver
+  answers a `<pingRequest uid=…/>` itself with `<pingReply uid=…/>` within a
+  millisecond, also while one of its drivers is stopped (`SIGSTOP`). A stopped
+  driver answers nothing, and its device's `getProperties` stays unanswered,
+  while the other driver and pings carry on, even with 2000 requests queued for
+  the stopped one. A frozen indiserver (`docker pause`) answers no ping, yet the
+  kernel still accepts new connections to it: connecting proves nothing.
 - A camera stuck in its SDK often needs more than a driver restart: a USB reset,
   or cutting its power. ADR 0017 records which power box output feeds which
   device.
@@ -27,13 +33,10 @@ would not stop a slewing mount. Facts:
 
 ## Decision
 
-- **A spike first** (stage 6.9): freeze a simulator driver and indiserver with
-  `SIGSTOP` and see what nocsd notices and when, and whether indiserver answers
-  pings. The thresholds below are revised with what it finds, before this ADR is
-  accepted.
 - **Detection, in nocsd:**
-  - **indiserver:** a probe every 10 s on nocsd's connection; three missing
-    answers in a row (10 s each) mean it is hung.
+  - **indiserver:** a ping every 10 s on nocsd's connection; three unanswered in a
+    row (10 s each) mean it is hung. The state shows it as not answering from the
+    first miss.
   - **devices:** a command without `Ok` or `Alert` before its deadline, or an
     exposure not received 60 s after it should have ended, marks the device
     **unresponsive**; a probe of that device (its `CONNECTION` property) confirms
