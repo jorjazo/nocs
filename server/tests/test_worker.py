@@ -11,6 +11,7 @@ import pytest
 from test_pipeline import star_field, write_fits
 
 from nocs.imaging.worker import ImageWorker, WorkerClosedError
+from nocs.stacking.stack import Look, StackLostError
 
 
 @pytest.fixture
@@ -120,3 +121,23 @@ async def test_no_worker_starts_once_closed(tmp_path: Path, frame: str) -> None:
         await worker.analyze("main_camera", frame, None)
     with pytest.raises(WorkerClosedError):
         await worker.measure(frame, None)
+
+
+async def test_the_live_stack_lives_in_the_worker(worker: ImageWorker, tmp_path: Path) -> None:
+    path = write_fits(tmp_path / "s.fits", star_field(1200, 800, 40))
+    look = Look()
+    first = await worker.stack_add("s1", path, None, new=True, stars=None, hfr=None, look=look)
+    second = await worker.stack_add("s1", path, None, new=False, stars=None, hfr=None, look=look)
+    assert (first.frames, second.frames) == (1, 2)
+    assert second.preview is not None
+    assert worker.preview_path(Path(second.preview.path).name) is not None
+    # Previews of the stack are kept like a camera's: the oldest go.
+    third = await worker.stack_add("s1", path, None, new=False, stars=None, hfr=None, look=look)
+    assert third.preview is not None
+    assert first.preview is not None
+    assert worker.preview_path(Path(first.preview.path).name) is None
+    rendered = await worker.stack_render("s1", Look(background=0.1))
+    assert worker.preview_path(Path(rendered.path).name) is not None
+    await worker.stack_drop("s1")
+    with pytest.raises(StackLostError):
+        await worker.stack_add("s1", path, None, new=False, stars=None, hfr=None, look=look)

@@ -14,6 +14,7 @@ left tracebacks and multiprocessing's semaphores half cleaned up at every stop.
 from __future__ import annotations
 
 import asyncio
+import functools
 import logging
 import multiprocessing
 import re
@@ -21,12 +22,15 @@ import signal
 import threading
 import uuid
 from collections import defaultdict, deque
+from collections.abc import Callable
 from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures.process import BrokenProcessPool
 from pathlib import Path
 
 from nocs.imaging import pipeline
 from nocs.imaging.pipeline import FrameAnalysis, StarMetrics
+from nocs.stacking import stack
+from nocs.stacking.stack import Added, Look, Rendered
 
 log = logging.getLogger(__name__)
 
@@ -114,6 +118,77 @@ class ImageWorker:
         except BrokenProcessPool:
             self._died()
             raise
+
+    async def stack_add(
+        self,
+        stack_id: str,
+        fits_path: str,
+        bayer: str | None,
+        *,
+        new: bool,
+        stars: int | None,
+        hfr: float | None,
+        look: Look,
+    ) -> Added:
+        """Offer a frame to the live stack ``stack_id`` held by the worker (ADR 0037) and,
+        when it goes in, render the stack as a new preview under the key ``stack``.
+
+        Raises ``StackLostError`` when the worker does not hold that stack (it was
+        restarted) and ``new`` is false.
+        """
+        preview = self.previews_dir / f"{uuid.uuid4().hex}.jpg"
+        call = functools.partial(
+            stack.add_frame,
+            stack_id,
+            fits_path,
+            bayer,
+            new=new,
+            stars=stars,
+            hfr=hfr,
+            preview_path=str(preview),
+            look=look,
+        )
+        added = await self._run(call)
+        if added.preview is not None:
+            await self._expire("stack", preview)
+        return added
+
+    async def stack_render(self, stack_id: str, look: Look) -> Rendered:
+        """The stack as it stands, rendered with ``look`` as a new preview."""
+        preview = self.previews_dir / f"{uuid.uuid4().hex}.jpg"
+        rendered = await self._run(functools.partial(stack.render, stack_id, str(preview), look))
+        await self._expire("stack", preview)
+        return rendered
+
+    async def stack_save(
+        self,
+        stack_id: str,
+        fits_path: str,
+        jpeg_path: str,
+        look: Look,
+        header: dict[str, str | int | float | bool | None],
+    ) -> Rendered:
+        """Write the stack as a FITS and a full-size JPEG where asked."""
+        return await self._run(
+            functools.partial(stack.save, stack_id, fits_path, jpeg_path, look, header)
+        )
+
+    async def stack_drop(self, stack_id: str) -> None:
+        """Free a stack's memory in the worker; nothing if it has none."""
+        if self._pool is not None:
+            await self._run(functools.partial(stack.drop, stack_id))
+
+    async def _run[T](self, call: Callable[[], T]) -> T:
+        loop = asyncio.get_running_loop()
+        try:
+            return await loop.run_in_executor(self._executor(), call)
+        except BrokenProcessPool:
+            self._died()
+            raise
+
+    async def _expire(self, key: str, preview: Path) -> None:
+        if expired := self._remember(key, preview):
+            await asyncio.to_thread(_unlink, expired)
 
     def preview_path(self, name: str) -> Path | None:
         """The file of a preview by name, if it is one of ours and still exists."""
