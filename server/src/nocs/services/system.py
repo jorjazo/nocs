@@ -19,6 +19,7 @@ import logging
 import socket
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import cast
 
 import anyio
 import anyio.to_thread
@@ -40,6 +41,9 @@ REFRESH = 60.0
 """Seconds between checks of what nocs-system offers once it answers."""
 SAMPLE = 5.0
 """Seconds between health readings."""
+NETWORK = 10.0
+"""Seconds between readings of the Wi-Fi's state, where nocs-system manages it."""
+NETWORK_ROOT = ("network",)
 
 
 class SystemBusyError(Exception):
@@ -72,16 +76,21 @@ class SystemService:
         self._health: dict[str, Json] | None = None
         self._under_voltage_seen: str | None = None
         self._published: dict[str, Json] | None = None
+        self._network: Json = None
         self._publish()
+        store.set(NETWORK_ROOT, None)
 
     async def run(self) -> None:
         """Keep the health and the list of operations current until cancelled."""
-        next_hello = 0.0
+        next_hello = next_network = 0.0
         while True:
             if anyio.current_time() >= next_hello:
                 await self.refresh()
                 next_hello = anyio.current_time() + (REFRESH if self._helper else RETRY)
             await self.sample()
+            if anyio.current_time() >= next_network:
+                await self.read_network()
+                next_network = anyio.current_time() + NETWORK
             await anyio.sleep(SAMPLE)
 
     async def sample(self) -> None:
@@ -141,6 +150,26 @@ class SystemService:
     async def power_off(self, *, force: bool = False) -> None:
         await self._power("power.poweroff", force)
 
+    async def read_network(self) -> None:
+        """Publish the network's state (ADR 0028), or ``None`` where NOCS does not manage it."""
+        state: Json = None
+        if self.offers("network.status"):
+            try:
+                state = _network_state(await client.call("network.status", socket=self._socket))
+            except (HelperUnavailableError, HelperError) as e:
+                log.info("cannot read the network's state: %s", e)
+                return
+        if state != self._network:
+            self._network = state
+            self._store.set(NETWORK_ROOT, state)
+
+    async def network(self, op: str, args: Message) -> None:
+        """``network.join``, ``forget``, ``access_point`` or ``mode``; then read the state."""
+        if not op.startswith("network.") or op == "network.status":
+            raise ValueError(f"not a network operation: {op}")
+        await self._call(op, args)
+        await self.read_network()
+
     async def restart_service(self, service: str, *, force: bool = False) -> None:
         """Restart indiserver or PHD2. Restarting indiserver drops every device, so it is
         refused while a job runs, unless forced (as when it is hung, ADR 0030)."""
@@ -196,3 +225,35 @@ class SystemService:
         if state != self._published:  # refreshed every minute, mostly unchanged
             self._published = state
             self._store.set(ROOT, state)
+
+
+def _network_state(status: Message) -> Json:
+    """nocs-system's network status as the state shows it: the time of the last join in
+    ISO 8601, nothing it does not know."""
+    last = status.get("last_join")
+    if isinstance(last, dict):
+        join = cast(dict[str, object], last)
+        at = join.get("at")
+        last_join: Json = {
+            "ssid": str(join.get("ssid", "")),
+            "ok": bool(join.get("ok")),
+            "error": join["error"] if isinstance(join.get("error"), str) else None,  # pyright: ignore[reportAssignmentType]
+            "at": datetime.fromtimestamp(at, UTC).isoformat(timespec="seconds")
+            if isinstance(at, int | float)
+            else None,
+        }
+    else:
+        last_join = None
+    keys = ("wifi", "mode", "ssid", "ethernet", "pin", "country", "ap_ssid")
+    state: dict[str, Json] = {key: cast(Json, status.get(key)) for key in keys}
+    known = status.get("known")
+    state |= {
+        "ap_default_password": bool(status.get("ap_default_password")),
+        "ap_clients": int(cast(int, status.get("ap_clients") or 0)),
+        "known": [k for k in cast(list[object], known) if isinstance(k, str)]
+        if isinstance(known, list)
+        else [],
+        "joining": cast(Json, status.get("joining")),
+        "last_join": last_join,
+    }
+    return state

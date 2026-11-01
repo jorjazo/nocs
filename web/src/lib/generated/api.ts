@@ -111,6 +111,24 @@ export interface NOCSAPI {
   [k: string]: unknown;
 }
 /**
+ * Changes apply at once when the box is an access point: phones on it must join
+ * it again (with the new password).
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "AccessPointRequest".
+ */
+export interface AccessPointRequest {
+  /**
+   * Two letters, ISO 3166 (e.g. CL).
+   */
+  country?: string | null;
+  /**
+   * 8 to 63 characters.
+   */
+  password?: string | null;
+  ssid?: string | null;
+}
+/**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "AltitudeLimits".
  */
@@ -169,6 +187,10 @@ export interface AppState {
    * None: no mount is ready.
    */
   mount?: MountState | null;
+  /**
+   * None where NOCS does not manage the network (a PC).
+   */
+  network?: NetworkState | null;
   /**
    * None: no power box is ready.
    */
@@ -1202,6 +1224,69 @@ export interface MountSite {
    * Degrees, east positive (-180..180).
    */
   longitude: number;
+}
+/**
+ * The appliance's network, managed by nocs-system (ADR 0028).
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "NetworkState".
+ */
+export interface NetworkState {
+  /**
+   * Devices on the access point now.
+   */
+  ap_clients: number;
+  /**
+   * The access point still has the default password: the first run changes it.
+   */
+  ap_default_password: boolean;
+  /**
+   * The access point's name, NOCS-xxxx by default.
+   */
+  ap_ssid: string;
+  /**
+   * Regulatory country for the radio; "00" until set.
+   */
+  country: string;
+  /**
+   * A cable is connected.
+   */
+  ethernet: boolean;
+  /**
+   * The network being joined right now.
+   */
+  joining: string | null;
+  /**
+   * Networks the box joins by itself.
+   */
+  known: string[];
+  last_join: LastJoin | null;
+  mode: "ap" | "station" | "none";
+  /**
+   * auto: station when a known network is in range, else access point.
+   */
+  pin: "auto" | "ap" | "station";
+  /**
+   * The network joined, as a station.
+   */
+  ssid: string | null;
+  /**
+   * The box has a Wi-Fi device.
+   */
+  wifi: boolean;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "LastJoin".
+ */
+export interface LastJoin {
+  /**
+   * UTC.
+   */
+  at: string | null;
+  error: string | null;
+  ok: boolean;
+  ssid: string;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -2576,6 +2661,34 @@ export interface Site {
    */
   longitude: number;
   name?: string;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "NetworkForgetRequest".
+ */
+export interface NetworkForgetRequest {
+  ssid: string;
+}
+/**
+ * Accepted at once (202): the box leaves its access point to join in a moment, and
+ * comes back as an access point within a minute if it cannot (ADR 0028).
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "NetworkJoinRequest".
+ */
+export interface NetworkJoinRequest {
+  /**
+   * None for an open network.
+   */
+  password?: string | null;
+  ssid: string;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "NetworkModeRequest".
+ */
+export interface NetworkModeRequest {
+  pin: "auto" | "ap" | "station";
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema

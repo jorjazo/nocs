@@ -75,5 +75,8 @@ driver started through the FIFO, PHD2 and D50. The outputs are
 in it. Write it with Raspberry Pi Imager ("Use custom"), whose customisation
 (Wi-Fi, SSH key) cloud-init applies at first boot; booting it on a Pi 5, from a
 microSD card and from a USB SSD, is checked by hand ([ADR 0026](../docs/adr/0026-raspberry-pi-image.md)).
-NetworkManager and the access point (6.6) and `nocs-appliance`, which will take
-over the appliance's configuration from this script, come in later stages.
+The image also hands the network to NetworkManager (nocs-system runs the access
+point and the fallback, ADR 0028), loads an nftables firewall that keeps indiserver
+and PHD2 to the box, serves nocsd on port 80, takes SSH keys only, and turns the
+hardware watchdog on. `nocs-appliance`, a later stage, will take this configuration
+over from the script.

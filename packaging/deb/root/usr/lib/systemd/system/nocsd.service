@@ -11,6 +11,8 @@ After=network.target nocs-indiserver.service nocs-phd2.service nocs-system.servi
 [Service]
 User=nocs
 Group=nocs
+Environment=NOCS_HOST=0.0.0.0
+Environment=NOCS_PORT=8000
 Environment=NOCS_CONFIG_DIR=/var/lib/nocs/config
 Environment=NOCS_DATA_DIR=/var/lib/nocs
 Environment=NOCS_WEB_DIR=/opt/nocs/web

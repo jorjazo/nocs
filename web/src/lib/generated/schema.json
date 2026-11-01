@@ -1,5 +1,48 @@
 {
   "$defs": {
+    "AccessPointRequest": {
+      "additionalProperties": false,
+      "description": "Changes apply at once when the box is an access point: phones on it must join\nit again (with the new password).",
+      "properties": {
+        "country": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Two letters, ISO 3166 (e.g. CL)."
+        },
+        "password": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "8 to 63 characters."
+        },
+        "ssid": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "AccessPointRequest",
+      "type": "object"
+    },
     "AltitudeLimits": {
       "additionalProperties": false,
       "properties": {
@@ -174,6 +217,18 @@
           ],
           "default": null,
           "description": "None: no mount is ready."
+        },
+        "network": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NetworkState"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "None where NOCS does not manage the network (a PC)."
         },
         "power": {
           "anyOf": [
@@ -3936,6 +3991,46 @@
       ],
       "type": "string"
     },
+    "LastJoin": {
+      "additionalProperties": false,
+      "properties": {
+        "at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "UTC."
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ok": {
+          "type": "boolean"
+        },
+        "ssid": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "ssid",
+        "ok",
+        "error",
+        "at"
+      ],
+      "title": "LastJoin",
+      "type": "object"
+    },
     "LoopRequest": {
       "additionalProperties": false,
       "description": "Expose repeatedly for previews (nothing is saved) until the job is cancelled.",
@@ -4306,6 +4401,165 @@
       "maxLength": 80,
       "minLength": 1,
       "type": "string"
+    },
+    "NetworkForgetRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "ssid": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "ssid"
+      ],
+      "title": "NetworkForgetRequest",
+      "type": "object"
+    },
+    "NetworkJoinRequest": {
+      "additionalProperties": false,
+      "description": "Accepted at once (202): the box leaves its access point to join in a moment, and\ncomes back as an access point within a minute if it cannot (ADR 0028).",
+      "properties": {
+        "password": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "None for an open network."
+        },
+        "ssid": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "ssid"
+      ],
+      "title": "NetworkJoinRequest",
+      "type": "object"
+    },
+    "NetworkModeRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "pin": {
+          "enum": [
+            "auto",
+            "ap",
+            "station"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "pin"
+      ],
+      "title": "NetworkModeRequest",
+      "type": "object"
+    },
+    "NetworkState": {
+      "additionalProperties": false,
+      "description": "The appliance's network, managed by nocs-system (ADR 0028).",
+      "properties": {
+        "ap_clients": {
+          "description": "Devices on the access point now.",
+          "type": "integer"
+        },
+        "ap_default_password": {
+          "description": "The access point still has the default password: the first run changes it.",
+          "type": "boolean"
+        },
+        "ap_ssid": {
+          "description": "The access point's name, NOCS-xxxx by default.",
+          "type": "string"
+        },
+        "country": {
+          "description": "Regulatory country for the radio; \"00\" until set.",
+          "type": "string"
+        },
+        "ethernet": {
+          "description": "A cable is connected.",
+          "type": "boolean"
+        },
+        "joining": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The network being joined right now."
+        },
+        "known": {
+          "description": "Networks the box joins by itself.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "last_join": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LastJoin"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "mode": {
+          "enum": [
+            "ap",
+            "station",
+            "none"
+          ],
+          "type": "string"
+        },
+        "pin": {
+          "description": "auto: station when a known network is in range, else access point.",
+          "enum": [
+            "auto",
+            "ap",
+            "station"
+          ],
+          "type": "string"
+        },
+        "ssid": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The network joined, as a station."
+        },
+        "wifi": {
+          "description": "The box has a Wi-Fi device.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "wifi",
+        "mode",
+        "ssid",
+        "ethernet",
+        "pin",
+        "country",
+        "ap_ssid",
+        "ap_default_password",
+        "ap_clients",
+        "known",
+        "joining",
+        "last_join"
+      ],
+      "title": "NetworkState",
+      "type": "object"
     },
     "NightGroup": {
       "properties": {

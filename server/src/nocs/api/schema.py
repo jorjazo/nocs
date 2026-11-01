@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from pydantic.json_schema import models_json_schema
 
 from nocs.api.schemas import (
+    AccessPointRequest,
     AppState,
     AuthStatus,
     AutoDewRequest,
@@ -46,6 +47,9 @@ from nocs.api.schemas import (
     LoopRequest,
     MountMoveRequest,
     MountSiteRequest,
+    NetworkForgetRequest,
+    NetworkJoinRequest,
+    NetworkModeRequest,
     NightInfo,
     ObserverRequest,
     OutputRequest,
@@ -85,6 +89,10 @@ MODELS: list[tuple[type[BaseModel], Mode]] = [
     (LoopRequest, "validation"),
     (DestinationRequest, "validation"),
     (EjectRequest, "validation"),
+    (NetworkJoinRequest, "validation"),
+    (NetworkForgetRequest, "validation"),
+    (AccessPointRequest, "validation"),
+    (NetworkModeRequest, "validation"),
     (TargetRequest, "validation"),
     (TemplateRequest, "validation"),
     (EquatorialGoto, "validation"),

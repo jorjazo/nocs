@@ -19,6 +19,7 @@ from typing import cast
 import anyio
 import anyio.to_thread
 
+from nocs.system.network import Network
 from nocs.system.protocol import HelperError, Message, validate_hostname
 
 log = logging.getLogger("nocs.system")
@@ -34,6 +35,8 @@ class Context:
     sys_class_block: Path = Path("/sys/class/block")
     owner: str = "nocs"
     """The user served, who must be able to write to the drives mounted for it."""
+    network: Network | None = None
+    """The Wi-Fi's actor, where the network group is on (ADR 0028)."""
 
 
 type Operation = Callable[[Context, Message], Awaitable[Message]]
@@ -242,6 +245,35 @@ async def restart_service(_: Context, args: Message) -> Message:
     return {}
 
 
+# -- network (ADR 0028) --------------------------------------------------------
+
+
+def _network(context: Context) -> Network:
+    if context.network is None:
+        raise HelperError("disabled", "the network is not NOCS's to manage here")
+    return context.network
+
+
+async def network_status(context: Context, args: Message) -> Message:
+    return await _network(context).status(args)
+
+
+async def network_join(context: Context, args: Message) -> Message:
+    return await _network(context).join(args)
+
+
+async def network_forget(context: Context, args: Message) -> Message:
+    return await _network(context).forget(args)
+
+
+async def network_access_point(context: Context, args: Message) -> Message:
+    return await _network(context).access_point(args)
+
+
+async def network_mode(context: Context, args: Message) -> Message:
+    return await _network(context).set_mode(args)
+
+
 OPERATIONS: dict[str, Operation] = {
     "power.reboot": reboot,
     "power.poweroff": power_off,
@@ -250,4 +282,9 @@ OPERATIONS: dict[str, Operation] = {
     "storage.eject": eject,
     "time.set": set_time,
     "services.restart": restart_service,
+    "network.status": network_status,
+    "network.join": network_join,
+    "network.forget": network_forget,
+    "network.access_point": network_access_point,
+    "network.mode": network_mode,
 }

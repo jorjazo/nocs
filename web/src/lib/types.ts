@@ -5,6 +5,7 @@
 import type * as Api from "./generated/api";
 
 export type {
+  AccessPointRequest,
   AppState,
   AuthStatus,
   AutofocusFit,
@@ -73,6 +74,10 @@ export type {
   MountMotion,
   MountSiteRequest,
   MountState,
+  NetworkForgetRequest,
+  NetworkJoinRequest,
+  NetworkModeRequest,
+  NetworkState,
   ObserverRequest,
   Optics,
   OutputKindName,

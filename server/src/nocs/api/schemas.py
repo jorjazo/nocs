@@ -663,6 +663,34 @@ class GuidingState(StateModel):
 type HealthWarningName = Literal["under_voltage", "throttled", "hot", "memory", "disk"]
 
 
+class LastJoin(StateModel):
+    ssid: str
+    ok: bool
+    error: str | None
+    at: str | None = Field(description="UTC.")
+
+
+class NetworkState(StateModel):
+    """The appliance's network, managed by nocs-system (ADR 0028)."""
+
+    wifi: bool = Field(description="The box has a Wi-Fi device.")
+    mode: Literal["ap", "station", "none"]
+    ssid: str | None = Field(description="The network joined, as a station.")
+    ethernet: bool = Field(description="A cable is connected.")
+    pin: Literal["auto", "ap", "station"] = Field(
+        description="auto: station when a known network is in range, else access point."
+    )
+    country: str = Field(description='Regulatory country for the radio; "00" until set.')
+    ap_ssid: str = Field(description="The access point's name, NOCS-xxxx by default.")
+    ap_default_password: bool = Field(
+        description="The access point still has the default password: the first run changes it."
+    )
+    ap_clients: int = Field(description="Devices on the access point now.")
+    known: list[str] = Field(description="Networks the box joins by itself.")
+    joining: str | None = Field(description="The network being joined right now.")
+    last_join: LastJoin | None
+
+
 class GpsState(StateModel):
     """A USB GPS through gpsd (ADR 0029); positions to 4 decimals, at most every 10 s."""
 
@@ -791,6 +819,9 @@ class AppState(StateModel):
     system: SystemState | None = None
     sequence: SequenceState | None = None
     gps: GpsState | None = None
+    network: NetworkState | None = Field(
+        default=None, description="None where NOCS does not manage the network (a PC)."
+    )
 
 
 # -- HTTP --------------------------------------------------------------------
@@ -1011,6 +1042,39 @@ class ShutdownRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     force: bool = False
+
+
+class NetworkJoinRequest(BaseModel):
+    """Accepted at once (202): the box leaves its access point to join in a moment, and
+    comes back as an access point within a minute if it cannot (ADR 0028)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    ssid: str
+    password: str | None = Field(default=None, description="None for an open network.")
+
+
+class NetworkForgetRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ssid: str
+
+
+class AccessPointRequest(BaseModel):
+    """Changes apply at once when the box is an access point: phones on it must join
+    it again (with the new password)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    ssid: str | None = None
+    password: str | None = Field(default=None, description="8 to 63 characters.")
+    country: str | None = Field(default=None, description="Two letters, ISO 3166 (e.g. CL).")
+
+
+class NetworkModeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    pin: Literal["auto", "ap", "station"]
 
 
 class EjectRequest(BaseModel):

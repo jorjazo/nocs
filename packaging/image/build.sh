@@ -115,7 +115,7 @@ in_image add-apt-repository -y --no-update ppa:mutlaqja/ppa
 in_image add-apt-repository -y --no-update ppa:pch/phd2
 in_image apt-get update
 in_image apt-get install -y /tmp/nocs.deb indi-bin indi-3rdparty-drivers phd2 xvfb avahi-daemon \
-    chrony gpsd
+    chrony gpsd network-manager dnsmasq-base iw nftables
 in_image dpkg -i /tmp/d50.deb
 mkdir -p "$root/opt/astap"
 unzip -o -q "$CACHE/astap/astap_cli_aarch64.zip" -d "$root/opt/astap"
@@ -160,15 +160,71 @@ EOF
 mkdir -p "$root/etc/nocs/system.conf.d"
 cat > "$root/etc/nocs/system.conf.d/appliance.conf" <<'EOF'
 # NOCS appliance (ADR 0027): restart, shut down, rename, mount and eject USB drives,
-# set the clock from a client when nothing else keeps it, restart indiserver/PHD2.
+# set the clock from a client when nothing else keeps it, restart indiserver/PHD2,
+# and run the Wi-Fi: access point, station and the fallback (ADR 0028).
 [operations]
-enabled = power hostname storage time services
+enabled = power hostname storage time services network
 EOF
 # A hung kernel reboots the Pi (its hardware watchdog, ADR 0030).
 mkdir -p "$root/etc/systemd/system.conf.d"
 cat > "$root/etc/systemd/system.conf.d/nocs-watchdog.conf" <<'EOF'
 [Manager]
 RuntimeWatchdogSec=30s
+EOF
+# NetworkManager runs the network, so that the box can be an access point; netplan
+# (and the Wi-Fi that Raspberry Pi Imager presets through cloud-init) hand it over
+# (ADR 0028).
+cat > "$root/etc/netplan/01-nocs-network-manager.yaml" <<'EOF'
+# NOCS (ADR 0028): NetworkManager runs the network.
+network:
+  version: 2
+  renderer: NetworkManager
+EOF
+chmod 600 "$root/etc/netplan/01-nocs-network-manager.yaml"
+in_image systemctl disable systemd-networkd.service systemd-networkd.socket \
+    systemd-networkd-wait-online.service
+mkdir -p "$root/etc/NetworkManager/conf.d"
+cat > "$root/etc/NetworkManager/conf.d/nocs.conf" <<'EOF'
+# NOCS (ADR 0028): Wi-Fi power saving makes the Pi miss frames from phones.
+[connection]
+wifi.powersave=2
+EOF
+# Only what clients need reaches the box; indiserver (7624) and PHD2's event server
+# (4400), which have no authentication, only from the box itself (ADR 0028).
+cat > "$root/etc/nftables.conf" <<'EOF'
+#!/usr/sbin/nft -f
+# NOCS (ADR 0028): what the network may reach on the box. NetworkManager adds its
+# own tables for the access point; this one only filters what comes in.
+table inet nocs
+delete table inet nocs
+table inet nocs {
+    chain input {
+        type filter hook input priority filter; policy drop;
+        iif lo accept
+        ct state established,related accept
+        ct state invalid drop
+        meta l4proto { icmp, ipv6-icmp } accept
+        tcp dport { 22, 80 } accept
+        udp dport 5353 accept
+        udp dport { 67, 68 } accept
+        meta l4proto { tcp, udp } th dport 53 accept
+    }
+}
+EOF
+in_image systemctl enable nftables.service
+# nocsd on port 80: http://nocs.local, without a port (ADR 0028).
+mkdir -p "$root/etc/systemd/system/nocsd.service.d"
+cat > "$root/etc/systemd/system/nocsd.service.d/appliance.conf" <<'EOF'
+[Service]
+Environment=NOCS_PORT=80
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+EOF
+# SSH only with a key (from Raspberry Pi Imager's presets): never a password.
+cat > "$root/etc/ssh/sshd_config.d/50-nocs.conf" <<'EOF'
+# NOCS (ADR 0028): keys only.
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PermitRootLogin no
 EOF
 echo nocs > "$root/etc/hostname"
 sed -i '/^127\.0\.1\.1/d' "$root/etc/hosts"

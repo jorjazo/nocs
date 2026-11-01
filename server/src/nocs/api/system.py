@@ -1,4 +1,5 @@
-"""Reboot, power off and rename the box through nocs-system (ADR 0027); diagnostics."""
+"""Reboot, power off, rename and network the box through nocs-system (ADR 0027,
+ADR 0028); diagnostics."""
 
 from __future__ import annotations
 
@@ -8,7 +9,14 @@ from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Response, status
 
-from nocs.api.schemas import HostnameRequest, ShutdownRequest
+from nocs.api.schemas import (
+    AccessPointRequest,
+    HostnameRequest,
+    NetworkForgetRequest,
+    NetworkJoinRequest,
+    NetworkModeRequest,
+    ShutdownRequest,
+)
 from nocs.services.system import OperationUnavailableError, SystemBusyError, SystemService
 from nocs.system.client import HelperUnavailableError
 from nocs.system.protocol import HelperError
@@ -36,6 +44,38 @@ def system_router(system: Callable[[], SystemService]) -> APIRouter:
         """Restart indiserver (every device reconnects) or PHD2 (ADR 0030)."""
         with _system_errors():
             await system().restart_service(service, force=request is not None and request.force)
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    # -- network (ADR 0028) -----------------------------------------------------
+
+    @router.post("/network/join", status_code=status.HTTP_202_ACCEPTED)
+    async def network_join(request: NetworkJoinRequest) -> Response:  # pyright: ignore[reportUnusedFunction]
+        args: dict[str, object] = {"ssid": request.ssid}
+        if request.password is not None:
+            args["password"] = request.password
+        with _system_errors():
+            await system().network("network.join", args)
+        return Response(status_code=status.HTTP_202_ACCEPTED)
+
+    @router.post("/network/forget", status_code=status.HTTP_204_NO_CONTENT)
+    async def network_forget(request: NetworkForgetRequest) -> Response:  # pyright: ignore[reportUnusedFunction]
+        with _system_errors():
+            await system().network("network.forget", {"ssid": request.ssid})
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    @router.put("/network/access-point", status_code=status.HTTP_204_NO_CONTENT)
+    async def network_access_point(request: AccessPointRequest) -> Response:  # pyright: ignore[reportUnusedFunction]
+        args = {k: v for k, v in request.model_dump().items() if v is not None}
+        if not args:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "nothing to change")
+        with _system_errors():
+            await system().network("network.access_point", args)
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    @router.put("/network/mode", status_code=status.HTTP_204_NO_CONTENT)
+    async def network_mode(request: NetworkModeRequest) -> Response:  # pyright: ignore[reportUnusedFunction]
+        with _system_errors():
+            await system().network("network.mode", {"pin": request.pin})
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     @router.get("/diagnostics")

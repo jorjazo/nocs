@@ -35,6 +35,7 @@ from anyio.abc import SocketAttribute, SocketStream, TaskStatus
 from anyio.streams.buffered import BufferedByteReceiveStream
 
 from nocs.system import client
+from nocs.system.network import Network
 from nocs.system.operations import OPERATIONS, Context
 from nocs.system.protocol import (
     GROUPS,
@@ -76,12 +77,13 @@ def load_config(path: Path, socket_path: Path = SOCKET) -> Config:
     known = set(GROUPS.values())
     for group in sorted(set(groups) - known):
         log.warning("%s: unknown group of operations %r", path, group)
+    enabled = frozenset(groups) & known
     return Config(
         uid=user.pw_uid,
         gid=user.pw_gid,
-        enabled=frozenset(groups) & known,
+        enabled=enabled,
         socket=socket_path,
-        context=Context(owner=user.pw_name),
+        context=Context(owner=user.pw_name, network=Network() if "network" in enabled else None),
     )
 
 
@@ -104,7 +106,10 @@ class Helper:
             os.chown(path, 0, self._config.gid)
         log.info("serving %s, operations: %s", path, ", ".join(self.operations()) or "none")
         task_status.started()
-        await listener.serve(self._connection)
+        async with anyio.create_task_group() as tg:
+            if self._config.context.network is not None:
+                tg.start_soon(self._config.context.network.run)
+            await listener.serve(self._connection)
 
     async def reply(self, line: bytes) -> Message:
         request_id: object = None

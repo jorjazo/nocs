@@ -2,6 +2,7 @@
 // ApiError: status 0 means the request never reached nocsd.
 
 import type {
+  AccessPointRequest,
   AuthStatus,
   AutofocusRequest,
   AutofocusRun,
@@ -29,6 +30,9 @@ import type {
   JobStarted,
   LoopRequest,
   MountSiteRequest,
+  NetworkForgetRequest,
+  NetworkJoinRequest,
+  NetworkModeRequest,
   ObserverRequest,
   OutputRequest,
   PairedDevice,
@@ -163,6 +167,24 @@ export function setHostname(name: string): Promise<void> {
 // The GPS's position becomes the active profile's site, and the mount's (ADR 0029).
 export function useGpsSite(): Promise<Site> {
   return request("POST", "/api/gps/site");
+}
+
+// The box leaves its access point to join in a moment (202): the phone must follow it.
+export function joinNetwork(ssid: string, password: string | null): Promise<void> {
+  return request("POST", "/api/system/network/join", { ssid, password } satisfies NetworkJoinRequest);
+}
+
+export function forgetNetwork(ssid: string): Promise<void> {
+  return request("POST", "/api/system/network/forget", { ssid } satisfies NetworkForgetRequest);
+}
+
+// Applied at once when the box is an access point: phones on it must join it again.
+export function setAccessPoint(body: AccessPointRequest): Promise<void> {
+  return request("PUT", "/api/system/network/access-point", body);
+}
+
+export function setNetworkMode(pin: NetworkModeRequest["pin"]): Promise<void> {
+  return request("PUT", "/api/system/network/mode", { pin } satisfies NetworkModeRequest);
 }
 
 // A zip for bug reports: versions, the state and the last day of logs.

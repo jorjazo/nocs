@@ -31,12 +31,16 @@ Facts that shape the decision:
 
 ## Decision
 
-- **NetworkManager runs the appliance's network** (`nocs-appliance` switches
-  netplan's renderer and disables systemd-networkd). nocs-system changes it
-  (ADR 0027); nocsd reads its state.
+- **NetworkManager runs the appliance's network** (the image switches netplan's
+  renderer and disables systemd-networkd; `nocs-appliance` will). nocs-system
+  changes it (ADR 0027), writing the connections as NetworkManager keyfiles of its
+  own (mode 0600), so that no password appears on a command line; nocsd reads the
+  state through nocs-system (`network.status`), since the clients on the access
+  point and the saved passwords are root's to see, and never gets a password.
 - **Access point:** SSID `NOCS-xxxx` (the last four hex digits of the Pi's serial
   number), WPA2, address `10.42.0.1/24`, 2.4 GHz on a channel valid for the
-  country. Its password starts as a **fixed default, printed in the quick start**;
+  country. Its password starts as a **fixed default (`nocs-setup`), printed in the
+  quick start**;
   the first run makes the owner change it (and the country) before anything else.
   The access point's DNS answers `<hostname>.local` and `<hostname>` with
   `10.42.0.1`, so phones that do not speak mDNS still find the box by the same name
@@ -64,8 +68,9 @@ Facts that shape the decision:
   indiserver's and PHD2's ports are reachable only from the box itself. An owner
   who wants KStars or another INDI client on the network switches "INDI clients
   on the network" on, which opens 7624 alone.
-- **SSH is off by default.** It is switched on with a public key, from the app or
-  from Imager's presets (ADR 0026); password logins are never enabled.
+- **SSH takes keys only, and there are none by default**, so it lets nobody in
+  until a public key comes from Imager's presets (ADR 0026) or, later, from the app;
+  password logins are never enabled.
 - **No HTTPS in v0.1.** The limits of plain HTTP stay as ADR 0014 lists them
   (no geolocation, no offline installation, no wake lock); HTTPS comes with remote
   access.

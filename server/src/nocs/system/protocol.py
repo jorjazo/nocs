@@ -26,6 +26,11 @@ GROUPS: dict[str, str] = {
     "storage.eject": "storage",
     "time.set": "time",
     "services.restart": "services",
+    "network.status": "network",
+    "network.join": "network",
+    "network.forget": "network",
+    "network.access_point": "network",
+    "network.mode": "network",
 }
 """Every operation nocs-system knows, with the group that enables it."""
 
