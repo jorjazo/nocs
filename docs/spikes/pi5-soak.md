@@ -83,6 +83,37 @@ one meridian flip at +5 min (centred to 0.03′, PHD2 calibrated again), two aut
   gap**, every preview (644) and every 10th FITS downloaded, no failure.
 - Nothing at WARNING or above in nocsd's log.
 
+### Lab Pi 5, first night (4.6 h, 30 s frames)
+
+Raspberry Pi 5 8 GB, active cooler, Ubuntu 26.04, frames on the 32 GB microSD, beside the
+lab's own `nocsd@`, `indiserver@` and `phd2@` (idle). Data:
+[results/pi5-first](../../dev/tools/soak/results/pi5-first/summary.md). 432 frames
+(93/h), 144 dithers, 42 pointing checks, the flip (calibrated again), 5 autofocus runs,
+**no failure until the drive filled**: the tool's pruning stopped at 2.7 h (its sampler
+died on a guide frame deleted under it, fixed), the frames piled up, and at 1 GiB free
+nocsd ended the night as designed (`storage` failure, then park and warm).
+
+| process | RSS start → end (MB) | max | fds | CPU % mean / p95 |
+|---|---|---|---|---|
+| nocsd | 152 → 163 | 175 | 30–33 | 4.5 / 5.8 |
+| imaging worker | 160 → 160 | 349 (autofocus) | 11–13 | 10.7 / 13.4 |
+| PHD2 | 243 → 233 | 243 | 22 | 4.2 / 4.6 |
+| indiserver | 8 → 8 | 10 | 22 | 0.9 / 1.0 |
+| CCD simulator | 76 → 73 | 128 | 5 | 4.1 / 8.3 |
+
+- No growth, 53–62 °C, `get_throttled=0x0` throughout, load ≤ 1.3, 6.6 GB available.
+- The card took 1.46 MB/s of writes (24 GB in 4.6 h): the frames, 52 MB every ~38 s.
+- WebSocket: 31 connections (8 from scratch), no version gap, 17.5 kB/s; 429 previews
+  and 43 FITS downloaded, slowest preview 121 ms.
+- **Event-loop stalls**: `/api/health` median 3.7 ms, but 11 of 245 half-minute windows
+  had a probe over 300 ms (up to 1.9 s; 7.5 s while the card was full), at the end of a
+  frame, a dither or an autofocus; patches up to 640 ms late. A profile (py-spy, 15 min)
+  put the loop in `logging`'s `flush` of uvicorn's access log: `run.sh` wrote nocsd's
+  output to a file on the microSD, and with ext4's `data=ordered` an append waits while
+  the card writes back a 52 MB frame. Under systemd the output goes to journald through
+  a socket, which absorbs that; the soak now pipes it the same way. The second night
+  checks the stalls are gone.
+
 ## What the soak found, and what was fixed
 
 Each of the first three ended or would have ended a night; the fixes are on `main` with tests.
@@ -105,17 +136,24 @@ Each of the first three ended or would have ended a night; the fixes are on `mai
 
 Measured, not changed:
 
-4. **The WebSocket carries ~24 patches/s, ~19 kB/s per client (~70 MB an hour)**, and
+4. **A log line can block the event loop** when its sink is slow (above: a file on the
+   microSD while a frame is written back, up to 1.9 s). journald's socket absorbs it on
+   the appliance, but a `QueueHandler` (records written by a thread) would make it
+   impossible. Also on the loop: decoding the guide camera's BLOBs that NOCS previews
+   from PHD2 (base64 and XML, ~1.7 % of the loop's time in 50–100 ms pieces every 2 s;
+   ADR 0012 wanted BLOBs off the loop).
+
+5. **The WebSocket carries ~24 patches/s, ~19 kB/s per client (~70 MB an hour)**, and
    ~88 % of it is the raw INDI property mirror (`indi.devices`: the Telescope Simulator
    50 operations/s, the guide and main cameras 26 and 20), which only the developer
    screen (`#/dev`) shows. Harmless on a LAN; worth coalescing (one update per property
    per second) or sending only to clients that ask, for phones on weak Wi-Fi and for
    the Pi's JSON encoding with several clients.
-5. **Guide frames do not wear the microSD.** nocsd writes every frame PHD2 takes (one
+6. **Guide frames do not wear the microSD.** nocsd writes every frame PHD2 takes (one
    every 2 s, 2.6 MB here) to `incoming/` for its preview and deletes it a second later:
    its `write_bytes` reads ~1 MB/s, but the card saw ~0.1 MB/s while guiding without main
    frames, as the files are gone before writeback.
-6. **Simulator limits, not NOCS's:** the guide simulator's default 3.5″ stars are under
+7. **Simulator limits, not NOCS's:** the guide simulator's default 3.5″ stars are under
    a pixel at the guide scope's 4.1″/px and PHD2 keeps losing them ("low HFD"; still
    ~21 % of guide frames at 8″), so the tool sets 14″. PHD2 calibrates in ~4.5 min on
    the simulators.
@@ -134,3 +172,7 @@ drivers stay under ~800 MB together on an 8 GB Pi. **Storage does.** A 26 MP fra
 (hours of imaging at ~10 s overhead per frame plus a dither every 3 frames). Short subs
 on a small card fill it before dawn: the builder's disk estimate should be heeded, or
 frames go to a USB drive (ADR 0013).
+
+The first Pi night showed that ending for real: with the tool's pruning stopped, 4.6 h of
+30 s frames filled the card's 10 GB, and at 1 GiB free nocsd failed the frame for
+`storage`, ended the session, parked and warmed the camera.

@@ -54,7 +54,10 @@ env NOCS_HOST=127.0.0.1 NOCS_PORT=28000 \
     NOCS_PHD2_INDI_HOST=indi NOCS_PHD2_INDI_PORT=7624 \
     NOCS_ASTAP="$ASTAP" NOCS_ASTAP_DB="$ASTAP_DB" \
     NOCS_SYSTEM_SOCKET="$OUT/run/no-nocs-system" NOCS_GPSD_PORT=1 \
-    "$ROOT/server/.venv/bin/nocsd" > "$OUT/nocsd.log" 2>&1 &
+    "$ROOT/server/.venv/bin/nocsd" > >(cat > "$OUT/nocsd.log") 2>&1 &
+# Through a pipe, as into journald under systemd: written straight to a file on the
+# microSD, a log line waits for the card while it takes a frame (ext4 data=ordered),
+# and with it nocsd's event loop (up to 1.9 s on the lab Pi).
 NOCSD=$!
 cleanup() {
     kill "$NOCSD" 2>/dev/null && wait "$NOCSD" 2>/dev/null || true

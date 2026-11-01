@@ -767,10 +767,13 @@ class Night:
                     errors.write(line + "\n")
 
     def prune(self) -> None:
-        frames = sorted(
-            (p for p in self.storage.rglob("*") if p.suffix.lower() in (".fits", ".fit", ".xisf")),
-            key=lambda p: p.stat().st_mtime,
-        )
+        # Saved frames only: incoming/ holds guide frames for a second (ADR 0023).
+        found: list[tuple[float, Path]] = []
+        for path in (self.storage / "NOCS").rglob("*"):
+            if path.suffix.lower() in (".fits", ".fit", ".xisf"):
+                with contextlib.suppress(OSError):  # moved or deleted meanwhile
+                    found.append((path.stat().st_mtime, path))
+        frames = [path for _, path in sorted(found)]
         for path in frames[: max(0, len(frames) - self.args.keep_frames)]:
             with contextlib.suppress(OSError):
                 path.unlink()
@@ -779,7 +782,10 @@ class Night:
     async def sampler(self) -> None:
         while True:
             await asyncio.sleep(self.args.every)
-            await self.flush_sample()
+            try:
+                await self.flush_sample()
+            except Exception as e:  # one bad sample must not end the recording (or pruning)
+                self.note(f"sample: {e!r}")
 
     async def flush_sample(self) -> None:
         window, self.window = self.window, Window()
