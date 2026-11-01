@@ -76,6 +76,25 @@ def test_connect_and_disconnect_simulator_profile(api: TestClient) -> None:
     )
 
 
+def test_restart_a_drivers_device(api: TestClient) -> None:
+    """indiserver stops a driver it was started with, deletes its devices, and starts it
+    again from the FIFO; NOCS connects the role again (ADR 0030)."""
+    assert api.put("/api/profiles/simulators", json=SIMULATORS).status_code == 204
+    assert api.post("/api/equipment/connect", json={"profile": "simulators"}).status_code == 202
+    wait(api, lambda s: s["equipment"]["connection"] == "connected")
+    try:
+        assert api.post("/api/equipment/roles/focuser/restart").status_code == 204
+        devices = state(api)["equipment"]["devices"]
+        assert {role: d["status"] for role, d in devices.items()} == dict.fromkeys(
+            SIMULATORS["devices"], "ready"
+        ), devices
+    finally:
+        assert api.post("/api/equipment/disconnect").status_code == 202
+        wait(api, lambda s: s["equipment"]["connection"] == "disconnected", timeout=10)
+    # A preloaded driver keeps running, as before the restart.
+    assert "Focuser Simulator" in state(api)["indi"]["devices"]
+
+
 def test_profile_api_errors(api: TestClient) -> None:
     assert api.get("/api/profiles/nothing").status_code == 404
     assert api.put("/api/profiles/Bad Id", json=SIMULATORS).status_code == 422

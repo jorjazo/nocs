@@ -126,6 +126,12 @@ class Rig:
     def focuser_temperature(self) -> float | None:
         return self.temperature
 
+    async def recover(self, error: StepError, attempt: int) -> str | None:
+        if error.role is None:
+            return None
+        self.calls.append(f"recover {error.role} {attempt}")
+        return f"recovered {error.role}"
+
 
 def target(*rows: PlanRow, batch: int = 5, **container: object) -> Container:
     plan = ExposurePlan(rows=list(rows), batch=batch)
@@ -619,7 +625,7 @@ async def test_clouds_until_the_condition_ends_the_target() -> None:
 
 async def test_a_device_that_keeps_failing_ends_the_session_parked() -> None:
     rig = Rig()
-    rig.errors["frame"] = [StepError("device", "the camera timed out")] * 3
+    rig.errors["frame"] = [StepError("device", "the camera timed out", role="main_camera")] * 3
     events: list[Event] = []
     runner = run(night(target(row("L", 4))), rig, events)
     assert await runner.run() is Outcome.FAILED
@@ -631,6 +637,14 @@ async def test_a_device_that_keeps_failing_ends_the_session_parked() -> None:
     assert rig.slept == 120
     assert rig.calls[-2:] == ["park", "warm"]
     assert runner.status()["error"] == "the camera timed out"
+    # Before each retry the rig tried to bring the camera back (ADR 0030).
+    assert [c for c in rig.calls if c.startswith("recover")] == [
+        "recover main_camera 1",
+        "recover main_camera 2",
+    ]
+    assert [e.message for e in events if e.kind is EventKind.RECOVERY] == [
+        "recovered main_camera"
+    ] * 2
 
 
 async def test_a_failed_autofocus_is_skipped_and_waits_for_the_next_reason() -> None:

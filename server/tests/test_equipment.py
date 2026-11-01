@@ -10,6 +10,7 @@ from fakes import FakeClient, driver_info, number_property, switch_property
 from nocs.devices import DeviceInterface
 from nocs.equipment import (
     DeviceConfig,
+    DriverRestartError,
     EquipmentBusyError,
     EquipmentService,
     Profile,
@@ -41,10 +42,13 @@ class FakeBridge:
 
 
 class FakeFifo(DriverFifo):
-    def __init__(self, on_start: Callable[[str], object]) -> None:
+    def __init__(
+        self, on_start: Callable[[str], object], on_stop: Callable[[str], object] = lambda _: None
+    ) -> None:
         super().__init__(Path("/nonexistent"))
         self.commands: list[tuple[str, str]] = []
         self.on_start = on_start
+        self.on_stop = on_stop
 
     def start(self, driver: str) -> None:
         self.commands.append(("start", driver))
@@ -52,6 +56,7 @@ class FakeFifo(DriverFifo):
 
     def stop(self, driver: str) -> None:
         self.commands.append(("stop", driver))
+        self.on_stop(driver)
 
 
 class Server:
@@ -412,3 +417,52 @@ async def test_notices_devices_disconnected_or_gone(
     server.client.delete("Focuser")
     assert statuses(store)["focuser"] == "error"
     assert equipment(store, "devices", "focuser", "error") == "Focuser disappeared"
+
+
+async def test_restarts_a_roles_driver_and_connects_it_again(
+    make_service: Factory, store: StateStore, server: Server
+) -> None:
+    loop = asyncio.get_running_loop()
+    # indiserver kills a stopped driver and deletes its devices.
+    fifo = FakeFifo(
+        lambda driver: loop.call_soon(server.run, driver),
+        lambda driver: loop.call_soon(server.client.delete, Server.DEVICES[driver][0]),
+    )
+    server.run(FOCUSER_DRIVER)
+    server.run(POWER_DRIVER)
+    service = make_service(fifo)
+    service.connect("rig")
+    await connected(store)
+    seen: list[Json] = []
+    service.add_listener(lambda: seen.append(equipment(store, "devices", "focuser", "status")))
+
+    await service.restart_driver(Role.FOCUSER)
+
+    assert fifo.commands == [("stop", FOCUSER_DRIVER), ("start", FOCUSER_DRIVER)]
+    assert statuses(store) == {"focuser": "ready", "weather": "ready"}
+    assert "error" not in seen  # its devices going away was expected
+    # It was running before NOCS connected, so it keeps running after.
+    service.disconnect()
+    await until(store, lambda: equipment(store, "connection") == "disconnected")
+    assert fifo.commands[2:] == []
+
+
+async def test_a_driver_that_does_not_stop_is_reported(
+    make_service: Factory, store: StateStore, server: Server, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(service_module, "DRIVER_STOP_TIMEOUT", 0.05)
+    fifo = FakeFifo(lambda driver: None)  # indiserver itself hung: nothing goes away
+    server.run(FOCUSER_DRIVER)
+    server.run(POWER_DRIVER)
+    service = make_service(fifo)
+    service.connect("rig")
+    await connected(store)
+    with pytest.raises(DriverRestartError, match="cannot restart"):
+        await service.restart_driver(Role.FOCUSER)
+    assert statuses(store)["focuser"] == "error"
+
+
+async def test_restarting_needs_a_connected_profile(make_service: Factory, fifo: FakeFifo) -> None:
+    service = make_service(fifo)
+    with pytest.raises(DriverRestartError, match="not connected"):
+        await service.restart_driver(Role.FOCUSER)

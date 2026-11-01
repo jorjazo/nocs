@@ -15,6 +15,8 @@
     connectProfile,
     disconnectEquipment,
     getProfile,
+    powerCycle,
+    restartDriver,
     listDevices,
     revokeDevice,
     setObserver,
@@ -70,10 +72,21 @@
   const devicesByRole = $derived(Object.fromEntries(roleList) as Partial<Record<Role, RoleState>>);
   const anyError = $derived(roleList.some(([, device]) => device.status === "error"));
 
-  let busy = $state<"connect" | "disconnect" | null>(null);
+  let busy = $state<"connect" | "disconnect" | `restart:${Role}` | `cycle:${Role}` | null>(null);
   let actionError = $state("");
 
-  async function run(kind: "connect" | "disconnect", action: () => Promise<void>): Promise<void> {
+  // Devices of a connected profile that dropped out: the owner can restart their driver,
+  // or cut the power of the output that feeds them (never the mount's, ADR 0030).
+  const failing = $derived(
+    connection === "connected" && auth.owner
+      ? roleList.filter(([, device]) => device.status === "error" || device.status === "disconnected")
+      : [],
+  );
+  function fed(role: Role): boolean {
+    return role !== "mount" && (power?.outputs.some((output) => output.feeds.includes(role)) ?? false);
+  }
+
+  async function run(kind: NonNullable<typeof busy>, action: () => Promise<void>): Promise<void> {
     busy = kind;
     actionError = "";
     try {
@@ -353,6 +366,21 @@
               {/snippet}
             </DeviceRow>
           {/each}
+          {#each failing as [role, device] (role)}
+            <li class="recover">
+              <span>{t.rig.recover(device.device ?? t.roles[role])}</span>
+              <Button busy={busy === `restart:${role}`} onclick={() => run(`restart:${role}`, () => restartDriver(role))}>
+                {t.rig.restartDriver}
+              </Button>
+              {#if fed(role)}
+                <ConfirmButton
+                  label={t.rig.powerCycle}
+                  confirmLabel={t.rig.confirmPowerCycle}
+                  busy={busy === `cycle:${role}`}
+                  onconfirm={() => run(`cycle:${role}`, () => powerCycle(role))} />
+              {/if}
+            </li>
+          {/each}
           {#if server}
             <DeviceRow icon="server" title={t.rig.indiServer} subtitle="{server.host}:{server.port}" error={server.error}>
               {#snippet trailing()}
@@ -539,6 +567,16 @@
     gap: var(--space-3);
     flex-wrap: wrap;
     margin-top: var(--space-1);
+  }
+  .recover {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) 0;
+  }
+  .recover span {
+    flex: 1 1 12rem;
   }
   .error {
     color: var(--error);

@@ -47,6 +47,8 @@ log = logging.getLogger(__name__)
 ROOT: Path = ("equipment",)
 
 DRIVER_START_TIMEOUT = 20.0
+DRIVER_STOP_TIMEOUT = 10.0
+"""Seconds for indiserver to remove a stopped driver's devices."""
 """How long a driver may take to define its devices."""
 DISCONNECT_TIMEOUT = 10.0
 SETTLE_QUIET = 0.5
@@ -104,6 +106,10 @@ class EquipmentBusyError(Exception):
     """The request conflicts with the profile currently connected."""
 
 
+class DriverRestartError(Exception):
+    """A role's driver could not be restarted, or its roles did not come back."""
+
+
 def driver_devices(client: IndiClient, driver: str) -> list[str]:
     """Devices defined by a driver executable, according to their ``DRIVER_INFO``."""
     names: list[str] = []
@@ -154,6 +160,8 @@ class EquipmentService:
         self._locks: defaultdict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
         self._status: dict[Role, DeviceStatus] = {}
         self._listeners: list[Callable[[], None]] = []
+        self._restarting: set[str] = set()
+        """Devices whose driver is being restarted: their going away is expected."""
 
         with store.transaction():
             self._publish_profiles()
@@ -245,6 +253,57 @@ class EquipmentService:
         if self._connection in (Connection.DISCONNECTED, Connection.DISCONNECTING):
             return
         self._spawn(self._disconnect(self._task))
+
+    async def restart_driver(self, role: Role) -> None:
+        """Stop the driver of ``role`` and start it again, then connect every role it
+        serves (ADR 0030): the first step against a device that stopped answering.
+
+        indiserver kills a stopped driver, hung or not. Raises ``DriverRestartError``
+        when it cannot be done or a role does not come back ready.
+        """
+        profile, client = self._profile, self._client
+        if self._connection is not Connection.CONNECTED or profile is None or client is None:
+            raise DriverRestartError("the profile is not connected")
+        if role not in profile.devices:
+            raise DriverRestartError(f"the profile has no {role.value}")
+        if self._fifo is None:
+            raise DriverRestartError("indiserver has no driver FIFO")
+        driver = profile.devices[role].driver
+        if driver in self._restarting:
+            raise DriverRestartError(f"{driver} is already being restarted")
+        roles = [r for r, config in profile.devices.items() if config.driver == driver]
+        names = {self._resolved[r] for r in roles if r in self._resolved}
+        names.update(driver_devices(client, driver))
+        log.warning("restarting %s for the %s", driver, role.value)
+        self._restarting.add(driver)
+        self._restarting.update(names)
+        try:
+            for r in roles:
+                self._publish_role(r, status=DeviceStatus.WAITING)
+            try:
+                self._fifo.stop(driver)
+                await client.wait_for(lambda c: not names & c.devices.keys(), DRIVER_STOP_TIMEOUT)
+                self._fifo.start(driver)
+            except (DriverControlError, TimeoutError) as e:
+                error = str(e) or f"{driver} did not stop"
+                for r in roles:
+                    self._publish_role(r, status=DeviceStatus.ERROR, error=error)
+                raise DriverRestartError(f"cannot restart {driver}: {error}") from e
+            # Whether disconnecting stops it stays as it was: a driver NOCS found
+            # running keeps running.
+            for r in roles:
+                self._resolved.pop(r, None)
+            async with anyio.create_task_group() as group:
+                for r in roles:
+                    group.start_soon(self._connect_role, client, r, profile.devices[r])
+            if Role.MAIN_CAMERA in roles or Role.GUIDE_CAMERA in roles:
+                await self._configure_cameras(client, profile)
+        finally:
+            self._restarting.discard(driver)
+            self._restarting.difference_update(names)
+        failed = [r.value for r in roles if self._status.get(r) is not DeviceStatus.READY]
+        if failed:
+            raise DriverRestartError(f"{driver} restarted, but not ready: {', '.join(failed)}")
 
     async def close(self) -> None:
         """Stop working on the server's shutdown. Devices and drivers stay as they are."""
@@ -463,7 +522,7 @@ class EquipmentService:
         if self._connection is not Connection.CONNECTED:
             return
         match event:
-            case PropertyDeleted(device=device, name=None):
+            case PropertyDeleted(device=device, name=None) if device not in self._restarting:
                 for role in self._roles_of(device):
                     self._publish_role(
                         role, status=DeviceStatus.ERROR, error=f"{device} disappeared"

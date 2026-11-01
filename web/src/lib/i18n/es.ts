@@ -140,6 +140,10 @@ export const es: Messages = {
     wheelNew: "Rueda nueva: indica sus filtros",
     advanced: "Propiedades INDI",
     advancedHint: "Todas las propiedades de todos los drivers, para diagnosticar problemas.",
+    recover: (device) => `${device} no responde`,
+    restartDriver: "Reiniciar driver",
+    powerCycle: "Cortar la energía",
+    confirmPowerCycle: "Toca otra vez: 5 s sin energía",
   },
   access: {
     title: "Acceso",

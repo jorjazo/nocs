@@ -154,6 +154,10 @@ export const en = {
     wheelNew: "New wheel: set its filters",
     advanced: "INDI properties",
     advancedHint: "Every property of every driver, for troubleshooting.",
+    recover: (device: string) => `${device} is not answering`,
+    restartDriver: "Restart driver",
+    powerCycle: "Power cycle",
+    confirmPowerCycle: "Tap again: power off 5 s",
   },
   access: {
     title: "Access",

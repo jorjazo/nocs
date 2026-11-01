@@ -75,11 +75,13 @@ class FrameResult:
 
 
 class StepError(Exception):
-    """A step failed with a kind of failure the recovery policies know (ADR 0032)."""
+    """A step failed with a kind of failure the recovery policies know (ADR 0032);
+    ``role`` names the device behind a ``device`` failure, when it is known."""
 
-    def __init__(self, kind: FailureKind, message: str) -> None:
+    def __init__(self, kind: FailureKind, message: str, *, role: str | None = None) -> None:
         super().__init__(message)
         self.kind: FailureKind = kind
+        self.role = role
 
 
 class Executor(Protocol):
@@ -102,6 +104,12 @@ class Executor(Protocol):
         ...
 
     def focuser_temperature(self) -> float | None: ...
+
+    async def recover(self, error: StepError, attempt: int) -> str | None:
+        """Before retrying a ``device`` failure for the ``attempt``-th time, try to bring
+        the device back (ADR 0030); what was done, or ``None``. Raising is reported
+        and the retry goes on."""
+        ...
 
 
 # -- checkpoint ---------------------------------------------------------------------
@@ -212,6 +220,7 @@ class EventKind(StrEnum):
     PAUSED = "paused"
     RESUMED = "resumed"
     FAILED = "failed"
+    RECOVERY = "recovery"
     SKIPPED = "skipped"
     ENDING = "ending"
     ENDED = "ended"
@@ -559,6 +568,8 @@ class Runner:
                 )
                 if again:
                     tries += 1
+                    if isinstance(e, StepError) and e.kind == "device":
+                        await self._recover(e, tries, path)
                     await self._wait(policy.wait)
                     continue
                 match policy.then:
@@ -573,6 +584,15 @@ class Runner:
                     case "end":
                         self._reported = e
                         raise
+
+    async def _recover(self, error: StepError, attempt: int, path: PathKey) -> None:
+        try:
+            done = await self._executor.recover(error, attempt)
+        except Exception as e:
+            self._event(EventKind.RECOVERY, f"recovery failed: {e}", path, {"role": error.role})
+        else:
+            if done is not None:
+                self._event(EventKind.RECOVERY, done, path, {"role": error.role})
 
     async def _wait(self, seconds: float) -> None:
         """Wait, letting stops, pauses and conditions that end take effect meanwhile."""

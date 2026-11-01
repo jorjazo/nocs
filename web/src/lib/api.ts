@@ -47,6 +47,7 @@ import type {
   PairRequest,
   PlannedTarget,
   Profile,
+  Role,
   SerialPortInfo,
   ShutdownRequest,
   Site,
@@ -242,6 +243,15 @@ export function connectProfile(profile: string): Promise<void> {
 
 export function disconnectEquipment(): Promise<void> {
   return request("POST", "/api/equipment/disconnect");
+}
+
+// Bring back a device that stopped answering (ADR 0030).
+export function restartDriver(role: Role): Promise<void> {
+  return request("POST", `/api/equipment/roles/${role}/restart`);
+}
+
+export function powerCycle(role: Role): Promise<void> {
+  return request("POST", `/api/equipment/roles/${role}/power-cycle`);
 }
 
 export function setIndiProperty(

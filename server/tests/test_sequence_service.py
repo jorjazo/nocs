@@ -162,8 +162,23 @@ class Rig:
     ) -> None:
         self.calls.append(f"output {output_id} {on}")
 
+    # recovery
+    async def restart_driver(self, role: Role) -> None:
+        self.calls.append(f"restart {role.value}")
+
+    async def power_cycle(self, role: Role, *, job: str | None = None) -> None:
+        self.calls.append(f"power cycle {role.value} for {job}")
+
     def parts(self) -> Parts:
-        return Parts(capture=self, filters=self, focus=self, mount=self, guiding=self, power=self)
+        return Parts(
+            capture=self,
+            filters=self,
+            focus=self,
+            mount=self,
+            guiding=self,
+            power=self,
+            recovery=self,
+        )
 
 
 def lrgb(**end: object) -> Sequence:
@@ -521,3 +536,35 @@ async def test_a_sequence_that_asks_about_the_sky_needs_the_site(setup: Any) -> 
     service.put("dark", dark)
     with pytest.raises(ValueError, match="set the site"):
         service.start("dark")
+
+
+async def test_a_failed_device_is_restarted_then_power_cycled(setup: Any) -> None:
+    _, rig, _, jobs, _ = setup
+    from nocs.sequence import rig as rig_module
+    from nocs.sequence.runner import StepError
+
+    executor = rig_module.RigExecutor(JobContext(jobs, "job"), jobs, StateStore(), rig.parts())
+    await executor.action(Cool(temperature=-10), None)
+
+    async def stuck(*args: object, **kwargs: object) -> Captured:
+        raise TimeoutError("no frame")
+
+    rig.capture = stuck  # pyright: ignore[reportAttributeAccessIssue]
+    plan = ExposurePlan(rows=[PlanRow(filter="L", exposure=1, count=1)])
+    with pytest.raises(StepError) as failed:
+        await executor.frame(plan, plan.rows[0], None)
+    assert (failed.value.kind, failed.value.role) == ("device", "main_camera")
+    rig.calls.clear()
+    assert await executor.recover(failed.value, 1) == "restarted the main_camera's driver"
+    assert await executor.recover(failed.value, 2) == "power cycled the main_camera"
+    assert await executor.recover(failed.value, 3) is None
+    # The restarted camera is asked to cool again.
+    assert rig.calls == [
+        "restart main_camera",
+        "cooling True -10.0",
+        "power cycle main_camera for job",
+        "cooling True -10.0",
+    ]
+    mount = StepError("device", "no answer", role="mount")
+    assert await executor.recover(mount, 1) == "restarted the mount's driver"
+    assert await executor.recover(mount, 2) is None  # never power cycled

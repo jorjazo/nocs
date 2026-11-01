@@ -77,6 +77,7 @@ from nocs.devices import DeviceError, Location
 from nocs.devices.camera import Region
 from nocs.equipment import (
     Connection,
+    DriverRestartError,
     EquipmentBusyError,
     EquipmentService,
     HorizonPoint,
@@ -107,7 +108,12 @@ from nocs.indi.drivers import DriverFifo, load_catalog
 from nocs.jobs import JobManager, ResourceBusyError
 from nocs.mount.service import MountNotReadyError, MountService
 from nocs.pointing import CenteringService, PointingService
-from nocs.power.service import PowerService, WeatherService
+from nocs.power.service import (
+    PowerCycleError,
+    PowerNotReadyError,
+    PowerService,
+    WeatherService,
+)
 from nocs.sequence import CheckpointFile, SequenceStore
 from nocs.sequence.rig import Parts
 from nocs.sequence.service import RESOURCES as SEQUENCE_RESOURCES
@@ -231,6 +237,15 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
         assert services.sequences is not None
         return services.sequences
 
+    class RigRecovery:
+        """Bringing a device back for a sequence (ADR 0030)."""
+
+        async def restart_driver(self, role: Role) -> None:
+            await equipment().restart_driver(role)
+
+        async def power_cycle(self, role: Role, *, job: str | None = None) -> None:
+            await power().power_cycle(role, job=job)
+
     def sequence_parts() -> Parts:
         return Parts(
             capture=capture(),
@@ -239,6 +254,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
             mount=mount(),
             guiding=guiding(),
             power=power(),
+            recovery=RigRecovery(),
         )
 
     def sequence_place() -> Place | None:
@@ -532,6 +548,31 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
     async def disconnect() -> None:  # pyright: ignore[reportUnusedFunction]
         await guiding().release()  # PHD2 lets go of the camera and mount first (ADR 0023)
         equipment().disconnect()
+
+    @app.post("/api/equipment/roles/{role}/restart", status_code=status.HTTP_204_NO_CONTENT)
+    async def restart_driver(role: Role) -> Response:  # pyright: ignore[reportUnusedFunction]
+        """Restart the driver of a device that stopped answering (ADR 0030)."""
+        try:
+            jobs().check_free([role.value])
+            await equipment().restart_driver(role)
+        except (ResourceBusyError, DriverRestartError) as e:
+            raise HTTPException(status.HTTP_409_CONFLICT, str(e)) from e
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    @app.post("/api/equipment/roles/{role}/power-cycle", status_code=status.HTTP_204_NO_CONTENT)
+    async def power_cycle(role: Role) -> Response:  # pyright: ignore[reportUnusedFunction]
+        """Cut the power of a device that stopped answering for a few seconds, then
+        restart its driver (ADR 0030). Never the mount."""
+        try:
+            jobs().check_free([role.value])
+            await power().power_cycle(role)
+        except (ResourceBusyError, PowerCycleError, DriverRestartError) as e:
+            raise HTTPException(status.HTTP_409_CONFLICT, str(e)) from e
+        except PowerNotReadyError as e:
+            raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(e)) from e
+        except (DeviceError, ConnectionError) as e:
+            raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(e)) from e
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     @app.post("/api/jobs/{job_id}/cancel", status_code=status.HTTP_202_ACCEPTED)
     async def cancel_job(job_id: str) -> None:  # pyright: ignore[reportUnusedFunction]

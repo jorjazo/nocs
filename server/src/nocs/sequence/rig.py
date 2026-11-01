@@ -4,6 +4,9 @@ Everything happens inside the sequence's job, which holds the main camera, the
 filter wheel, the focuser and the mount (ADR 0031). Cooling and power outputs
 take no lock. Guiding runs under the job's hold of the mount, so the sequence
 stops it before every slew and park.
+
+Before retrying a device that failed, the rig restarts its driver, then (next
+time) power cycles the output that feeds it, never the mount's (ADR 0030).
 """
 
 from __future__ import annotations
@@ -135,6 +138,11 @@ class Power(Protocol):
     ) -> None: ...
 
 
+class Recovery(Protocol):
+    async def restart_driver(self, role: Role) -> None: ...
+    async def power_cycle(self, role: Role, *, job: str | None = None) -> None: ...
+
+
 @dataclass(frozen=True, slots=True)
 class Parts:
     """The services a sequence drives; ``None`` for what the rig lacks."""
@@ -145,6 +153,7 @@ class Parts:
     mount: MountControl | None
     guiding: Guiding | None
     power: Power | None
+    recovery: Recovery | None = None
 
 
 def take_back(jobs: JobManager, job: str, guiding: Guiding | None) -> None:
@@ -155,8 +164,9 @@ def take_back(jobs: JobManager, job: str, guiding: Guiding | None) -> None:
 
 
 @contextlib.contextmanager
-def _classified() -> Generator[None]:
-    """Turn the rig's failures into the kinds the recovery policies know (ADR 0032)."""
+def _classified(role: Role | None = None) -> Generator[None]:
+    """Turn the rig's failures into the kinds the recovery policies know (ADR 0032);
+    a device failure names ``role``, the device the step drives."""
     try:
         yield
     except StepError:
@@ -180,7 +190,25 @@ def _classified() -> Generator[None]:
         MountNotReadyError,
         PointingError,
     ) as e:
-        raise StepError("device", str(e) or type(e).__name__) from e
+        role_name = role.value if role is not None else None
+        raise StepError("device", str(e) or type(e).__name__, role=role_name) from e
+
+
+def _role(action: Action) -> Role | None:
+    """The device an action drives, for a device failure."""
+    match action:
+        case Cool() | Warm():
+            return CAMERA
+        case Unpark() | Park() | Slew():
+            return Role.MOUNT
+        case SelectFilter():
+            return Role.FILTER_WHEEL
+        case Autofocus():
+            return Role.FOCUSER
+        case Outputs():
+            return Role.POWER
+        case _:
+            return None
 
 
 class RigExecutor:
@@ -200,13 +228,15 @@ class RigExecutor:
         self._sleep = sleep
         self._guided = False
         """The sequence asked for guiding: frames are taken guided."""
+        self._cooling: Cool | None = None
+        """The cooling asked for, to ask again after the camera's driver restarts."""
 
     async def action(self, action: Action, target: Target | None) -> dict[str, Json] | None:
-        with _classified():
+        with _classified(_role(action)):
             return await self._action(action, target)
 
     async def frame(self, plan: ExposurePlan, row: PlanRow, target: Target | None) -> FrameResult:
-        with _classified():
+        with _classified(CAMERA):
             await self._keep_guiding()
             return await self._frame(plan, row, target)
 
@@ -214,11 +244,13 @@ class RigExecutor:
         context, parts = self._context, self._parts
         match action:
             case Cool():
+                self._cooling = action
                 await parts.capture.set_cooling(CAMERA, True, action.temperature, action.ramp)
                 if action.wait:
                     await self._reach(action.temperature, COOLING_TOLERANCE, action.ramp)
                 return {"temperature": parts.capture.camera(CAMERA).temperature}
             case Warm():
+                self._cooling = None
                 await self._warm(action.ramp)
             case Unpark():
                 await self._mount().unpark(job=context.id)
@@ -308,6 +340,24 @@ class RigExecutor:
 
     def focuser_temperature(self) -> float | None:
         return number(self._store, ("focuser", "temperature"))
+
+    async def recover(self, error: StepError, attempt: int) -> str | None:
+        recovery = self._parts.recovery
+        if recovery is None or error.role is None:
+            return None
+        role = Role(error.role)
+        if attempt == 1:
+            await recovery.restart_driver(role)
+            done = f"restarted the {role.value}'s driver"
+        elif attempt == 2 and role is not Role.MOUNT:
+            await recovery.power_cycle(role, job=self._context.id)
+            done = f"power cycled the {role.value}"
+        else:
+            return None
+        if role is CAMERA and (cool := self._cooling) is not None:
+            # A restarted driver starts with its cooler off.
+            await self._parts.capture.set_cooling(CAMERA, True, cool.temperature, cool.ramp)
+        return done
 
     # -- internals --------------------------------------------------------------------
 

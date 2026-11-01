@@ -15,6 +15,7 @@ from nocs.equipment.profiles import (
 from nocs.equipment.service import (
     Connection,
     DeviceStatus,
+    DriverRestartError,
     EquipmentBusyError,
     EquipmentService,
 )
@@ -23,6 +24,7 @@ __all__ = [
     "Connection",
     "DeviceConfig",
     "DeviceStatus",
+    "DriverRestartError",
     "EquipmentBusyError",
     "EquipmentService",
     "HorizonPoint",

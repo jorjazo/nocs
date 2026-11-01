@@ -880,6 +880,7 @@ class SequenceEvent(StateModel):
         "paused",
         "resumed",
         "failed",
+        "recovery",
         "skipped",
         "ending",
         "ended",

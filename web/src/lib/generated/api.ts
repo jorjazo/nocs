@@ -1782,6 +1782,7 @@ export interface SequenceEvent {
     | "paused"
     | "resumed"
     | "failed"
+    | "recovery"
     | "skipped"
     | "ending"
     | "ended";

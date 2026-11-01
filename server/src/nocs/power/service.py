@@ -14,11 +14,18 @@ off shows the duty cycle it gets back when switched on. Cutting an output (off,
 or a new voltage) is refused while a role it feeds is busy, or while any job
 runs when the profile does not say what it feeds, unless forced. Commands to one
 box run one at a time: each sends whole vectors built from the current values.
+
+A device that stopped answering can be power cycled through the output that feeds
+it (ADR 0030): off for a few seconds, back as it was, then its driver restarted.
+Never the mount, which would lose its position.
 """
 
 from __future__ import annotations
 
 import asyncio
+import logging
+
+import anyio
 
 from nocs.devices import (
     DeviceError,
@@ -35,9 +42,20 @@ from nocs.jobs import JobManager
 from nocs.services.device_state import DeviceState
 from nocs.state import Json, StateStore
 
+log = logging.getLogger(__name__)
+
+CYCLE_OFF = 5.0
+"""Seconds an output stays off in a power cycle."""
+CYCLE_SETTLE = 5.0
+"""Seconds for a device to come up on USB after its power is back."""
+
 
 class PowerNotReadyError(Exception):
     pass
+
+
+class PowerCycleError(Exception):
+    """A role cannot be power cycled."""
 
 
 class AutoDewError(Exception):
@@ -118,6 +136,60 @@ class PowerService(DeviceState):
                         self._check_feeds_free(output_id, job)
                     await box.set_on(output_id, on)
         self.publish()
+
+    def feeding(self, role: Role) -> str | None:
+        """The output whose profile entry says it feeds ``role``."""
+        for output_id, config in self._outputs_config().items():
+            if role in config.feeds:
+                return output_id
+        return None
+
+    async def power_cycle(
+        self,
+        role: Role,
+        *,
+        job: str | None = None,
+        off: float = CYCLE_OFF,
+        settle: float = CYCLE_SETTLE,
+    ) -> None:
+        """Switch off the output that feeds ``role``, back on as it was after ``off``
+        seconds, and restart the role's driver (ADR 0030).
+
+        Refused for the mount, for an output that also feeds the mount, and while
+        another role the output feeds is in use (but by ``job``).
+        """
+        if role is Role.MOUNT:
+            raise PowerCycleError("the mount is never power cycled: it would lose its position")
+        output_id = self.feeding(role)
+        if output_id is None:
+            raise PowerCycleError(f"the profile names no output that feeds the {role.value}")
+        if Role.MOUNT in self._outputs_config()[output_id].feeds:
+            raise PowerCycleError(f"{output_id} also feeds the mount")
+        box = self.box()
+        kind, _ = parse_output_id(output_id)
+        output = box.output(output_id)
+        if kind is OutputKind.DEW:
+            raise PowerCycleError(f"{output_id} is a dew heater")
+        if not output.on:
+            raise PowerCycleError(f"{output.label} is off")
+        others = [r.value for r in self._outputs_config()[output_id].feeds if r is not role]
+        self._jobs.check_free(r for r in others if job is None or self._jobs.holder(r) != job)
+        log.warning("power cycling %s for the %s", output.label, role.value)
+        async with self._lock:
+            if kind is OutputKind.VARIABLE:
+                await box.set_voltage(output_id, None)
+            else:
+                await box.set_on(output_id, False)
+        self.publish()
+        await anyio.sleep(off)
+        async with self._lock:
+            if kind is OutputKind.VARIABLE:
+                await box.set_voltage(output_id, output.voltage)
+            else:
+                await box.set_on(output_id, True)
+        self.publish()
+        await anyio.sleep(settle)
+        await self._equipment.restart_driver(role)
 
     async def set_auto_dew(self, on: bool) -> None:
         box = self.box()

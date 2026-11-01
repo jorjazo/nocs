@@ -25,7 +25,7 @@ from nocs.equipment import DeviceConfig, OutputConfig, Profile, Role
 from nocs.indi import IndiClient, PropertyState
 from nocs.indi.properties import NumberElement, SwitchElement
 from nocs.jobs import JobManager, ResourceBusyError
-from nocs.power.service import AutoDewError, PowerService, WeatherService
+from nocs.power.service import AutoDewError, PowerCycleError, PowerService, WeatherService
 from nocs.state import Json, StateStore
 
 RECORDING = "lab-rig-2026-10-30.xml"
@@ -196,10 +196,14 @@ class FakeEquipment:
     def __init__(self, profile: Profile, devices: dict[Role, str]) -> None:
         self.active_profile = profile
         self.devices = devices
+        self.restarted: list[Role] = []
         self._listeners: list[Callable[[], None]] = []
 
     def ready_device(self, role: Role) -> str | None:
         return self.devices.get(role)
+
+    async def restart_driver(self, role: Role) -> None:
+        self.restarted.append(role)
 
     def add_listener(self, listener: Callable[[], None]) -> Callable[[], None]:
         self._listeners.append(listener)
@@ -393,3 +397,49 @@ def test_power_endpoints_need_the_owner_and_a_box() -> None:
         assert response.status_code == 503
         assert http.put("/api/power/auto-dew", json={"on": "x"}).status_code == 422
         assert http.get("/api/state").json()["state"]["power"] is None
+        # Bringing a device back (ADR 0030): not while nothing is connected, never the mount.
+        restart = http.post("/api/equipment/roles/focuser/restart")
+        assert (restart.status_code, restart.json()["detail"]) == (
+            409,
+            "the profile is not connected",
+        )
+        cycle = http.post("/api/equipment/roles/mount/power-cycle")
+        assert cycle.status_code == 409
+        assert "never" in cycle.json()["detail"]
+        assert http.post("/api/equipment/roles/telescope/restart").status_code == 422
+
+
+async def test_power_cycling_a_device(
+    store: StateStore, jobs: JobManager, client: FakeClient, driver: PpbaDriver
+) -> None:
+    profile = lab_profile(
+        {
+            "dc:1": OutputConfig(feeds=[Role.MAIN_CAMERA, Role.FILTER_WHEEL]),
+            "dc:2": OutputConfig(feeds=[Role.FOCUSER, Role.MOUNT]),
+        }
+    )
+    power = make_power(store, jobs, client, profile)
+    equipment = power._equipment  # pyright: ignore[reportPrivateUsage]
+    assert isinstance(equipment, FakeEquipment)
+    sent = len(client.sent)
+
+    await power.power_cycle(Role.MAIN_CAMERA, off=0, settle=0)
+    assert [values["POWER_CHANNEL_1"] for _, _, values in client.sent[sent:]] == [False, True]
+    assert PowerBox(client, PPBA).output("dc:1").on
+    assert equipment.restarted == [Role.MAIN_CAMERA]
+
+    # What else the output feeds must be free, but for the job asking.
+    token = jobs.reserve("sequence", [Role.MAIN_CAMERA.value, Role.FILTER_WHEEL.value])
+    with pytest.raises(ResourceBusyError):
+        await power.power_cycle(Role.MAIN_CAMERA, off=0, settle=0)
+    await power.power_cycle(Role.MAIN_CAMERA, job=token, off=0, settle=0)
+    jobs.release(token)
+
+    for role, reason in (
+        (Role.MOUNT, "never"),
+        (Role.FOCUSER, "also feeds the mount"),
+        (Role.GUIDE_CAMERA, "no output"),
+    ):
+        with pytest.raises(PowerCycleError, match=reason):
+            await power.power_cycle(role, off=0, settle=0)
+    power.close()

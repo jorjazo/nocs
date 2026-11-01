@@ -62,6 +62,13 @@ the right serial port (`/dev/serial/by-id/…`).
 you can also restart it on Rig → This computer → Restart INDI. Every device
 reconnects; an exposure in progress is lost.
 
+**A device stops answering** (Error or Offline while the rig is connected). Rig
+offers **Restart driver** under it, and **Power cycle** when the profile says which
+power box output feeds it: the output goes off for 5 seconds, then the driver
+restarts. A running sequence does both by itself before retrying (first the driver,
+then the power), and lists them in its events. The mount is never power cycled: it
+would lose its position.
+
 **A USB drive is "Not mounted".** Rig shows why: NOCS reads FAT, exFAT, NTFS, ext4,
 btrfs and XFS. An ejected drive stays unmounted until you unplug it.
 
