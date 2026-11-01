@@ -132,13 +132,15 @@ the phone over the night.
 
 19. **A short sequence.** Plan → Sequence on the night's target: two filters,
     3 × 120 s each, autofocus at the start, guiding on, park and warm when finished.
-    Start it with guiding stopped (starting while PHD2 guides is refused for now,
-    phase 5's QA notes). Watch it in the Session tab: frame i of N per filter, the
+    Start it with guiding running by hand: the sequence takes it over. Watch it in the Session tab: frame i of N per filter, the
     events, the guiding graph; Pause, then Resume. Lock the phone.
 20. **Exit, phase 5, in part.** If the night allows, a longer run on a target that
     stays on one side of the meridian, until dawn or a set time, ending parked.
-    The meridian flip (5.18), dithering (5.16) and re-centring (5.17) inside a
-    sequence are not built yet: the full exit waits for them.
+    For the full exit, a target that crosses the meridian: on the AM5 keep its own
+    flip off (`MERIDIAN_FLIP` disabled, post-meridian tracking on, as in the lab) or
+    its limit past NOCS's flip point (5 min by default); centring on, guiding with
+    dither every 3 frames. NOCS flips before the frame that would end past that
+    point (the lab AM5 took 33 s), centres, calibrates guiding again and carries on.
 
 **End (phase 2)**
 
