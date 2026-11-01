@@ -3656,11 +3656,19 @@ export interface SequenceEstimate {
    * Seconds the frames take, without focusing or slewing.
    */
   duration: number;
+  /**
+   * UTC, ISO 8601: when the plan would be done, or the window close if that comes first.
+   */
+  ends: string | null;
   frames: number;
   /**
    * Seconds of exposure.
    */
   integration: number;
+  /**
+   * UTC, ISO 8601: when imaging would start tonight (now, or when the target's window opens); None without the site or a window left tonight.
+   */
+  starts: string | null;
   /**
    * Seconds tonight's dark window keeps the target above the minimum altitude and the horizon; None while the site is unknown.
    */

@@ -130,7 +130,7 @@ phase 4.5 (dithering) and phase 3.3 (centring) to land.
 | 5.10 | Templates and end of session | "This target, these filters, tonight": a template (target, plan rows, order, start/end, cooling, autofocus settings, guiding, end actions) expanded into a tree; time and disk estimates; *end*: park, warm, outputs off | Template → tree unit tests; simulators run a template | 8 | Implemented: `Template` (target, plan rows, order, dusk, dawn, minimum altitude, cooling, focus at start and on reasons, guiding, end actions, recovery) expanded by `nocs.sequence.template.expand`, kept in the sequence for the builder; `PUT /api/sequences/{id}/template`, `POST /api/sequences/estimate` (frames, integration, duration with 3 s per frame, bytes from the sensor, tonight's window from `nocs.sky`). A fake night from 17:00 at Diaguitas: waits for dusk, focuses, 70 frames, parks |
 | 5.11 | Autofocus triggers | The reasons are in the engine (5.7); here they meet the rig: the focuser's temperature and each frame's HFR from the executor, the run's result in the session's events | Simulators: writable focuser temperature and a moved focuser trigger a run | 4 | Implemented: each run's position, HFR and temperature in the session's events; simulators: a 2 °C warmer focuser and a focuser knocked 15000 steps out each brought a run |
 | 5.12 | Recovery and restarts | Failure kinds and policies, defaults; events into the catalog (migration 4, after 4.5's); resume after a nocsd restart; the supervisor hook for ADR 0030 (ADR 0032) | Simulators: no stars (`SIM_LIMITINGMAG`), a driver killed mid-frame, nocsd restarted mid-run, PHD2 losing its star | 10 | Implemented ([ADR 0032](../adr/0032-sequence-recovery-and-restarts.md)): policies per kind with defaults, clouds from star counts, lost guide star, waits through safe points; catalog v4 `sessions` and `session_events`; nocsd resumes a run after a restart (connects the profile, waits for the rig and the time). Simulators: a cloud (`SIM_LIMITINGMAG` 0) and a restart of nocsd mid-run. Not yet on the simulators: a driver killed mid-frame, PHD2 losing its star |
-| 5.13 | Sequence builder | Plan → Sequence: target (search when 3.4 lands, else typed coordinates), plan rows per filter, order, behaviours (autofocus triggers, guiding, later dither and flip), end actions, time and disk estimates, save and start; the expanded tree read only under Advanced; en/es | Phone, wide, Night mode | 10 | |
+| 5.13 | Sequence builder | Plan → Sequence: target (search when 3.4 lands, else typed coordinates), plan rows per filter, order, behaviours (autofocus triggers, guiding, later dither and flip), end actions, time and disk estimates, save and start; the expanded tree read only under Advanced; en/es | Phone, wide, Night mode | 10 | Implemented: Plan → Target / Sequence (`#/plan/sequence`); one sequence per target, id from its name; row and behaviour sheets edit the template live; estimates with when it starts and ends tonight (`starts`, `ends`) and the drive's free space; the steps under Advanced from `POST /api/sequences/expand`. Checked in the browser against the simulators: phone, wide, Night mode, a start that opens the Session tab |
 | 5.14 | Session monitor | Session tab: target and row, frame i of N per filter, exposure countdown, latest frame with HFR and stars, sensor temperature, guiding RMS (from 4.4 when there), event timeline, pause / resume / stop; a running-session indicator on the other tabs; "pause and do it" where a command was refused; tablet in two columns with a filmstrip | Phone and tablet, against a simulated run | 10 | |
 | 5.15 | Session report | `GET /api/sessions` and `/{id}/report`: window, frames and integration per filter, HFR and stars over time, temperatures, autofocus runs, guiding RMS per frame (4.5), events and recoveries, how it ended; a report screen from the Session tab; frames as CSV | A simulated run's report | 8 | |
 | 5.16 | Dither | Dither every N frames (4.5's dither and settle), in templates and the builder | Simulators with PHD2 | 4 | Waits for 4.5 |
@@ -157,8 +157,22 @@ additions to the capture, filter, mount, guiding and power services.
 4. v0.1 scope: the tree is **read only** and the builder takes **one target** per
    sequence (the model takes several).
 5. Plans run in **batches of 5 per filter** by default.
-6. Still open: exported screenshots of the Sequence and Session artboards for
+6. The Sequence and Session artboards were read from the Phase 1 canvas for
    stages 5.13 and 5.14.
+
+Decided while building (2026-11-01, recommended options):
+
+- **One sequence per target** in the builder, its id made from the target's name
+  (`ngc-253`): opening the builder on tonight's target loads its sequence or starts
+  one with one row (the wheel's current filter, 20 × 120 s), autofocus at the start
+  and every 1 °C, guiding when the profile has a guide camera, park and warm at the
+  end. No list of saved sequences in v0.1: the API keeps them all.
+- **Edits apply at once** to a draft kept while the page is open; Start saves first.
+- The **estimate** also says when imaging would start and end tonight (the target's
+  next dark window above the minimum altitude, and the plan or the window, whichever
+  ends first), so the tile reads like the artboard: "Imaging time · ends ~01:52".
+- *End* stops guiding only when PHD2 guides (a PHD2 shared with someone else is left
+  alone).
 
 ## Measured
 

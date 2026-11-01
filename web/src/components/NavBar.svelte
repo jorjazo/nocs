@@ -10,7 +10,7 @@
   const current = $derived.by<Tab>(() => {
     const screen = router.route.screen;
     if (screen === "dev" || screen === "profile") return "rig";
-    if (screen === "target") return "plan";
+    if (screen === "target" || screen === "sequence") return "plan";
     if (screen === "focus" || screen === "guiding") return "tonight";
     return screen;
   });

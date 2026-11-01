@@ -502,8 +502,9 @@ async def test_without_the_rig_or_after_three_restarts_only_the_end_runs(
     job = await service.recover(lambda: None, lambda: False, wait=10, poll=2, sleep=sleep)
     assert job is not None
     await jobs.wait(job)
-    # A fresh camera is warm already: no ramp, the cooler goes off.
-    assert rig.calls == ["stop guiding", "park", "cooling False None", "output dc:1 False"]
+    # A fresh camera is warm already: no ramp, the cooler goes off. PHD2 does not guide,
+    # so guiding is left alone.
+    assert rig.calls == ["park", "cooling False None", "output dc:1 False"]
     assert checkpoint.load() is None
 
     checkpoint = await interrupted(tmp_path, frames=1)

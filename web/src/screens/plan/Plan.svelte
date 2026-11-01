@@ -1,10 +1,12 @@
 <script lang="ts">
   // Plan → Target (stage 3.6): tonight's target, if one is chosen, and the
   // catalog search with how long each result is up in the dark tonight. A result
-  // opens the target's page (#/plan/<id>). The sequence builder joins in 5.13.
+  // opens the target's page (#/plan/<id>). The sequence builder is the other
+  // half of Plan (#/plan/sequence).
   import Button from "../../components/Button.svelte";
   import ConfirmButton from "../../components/ConfirmButton.svelte";
   import Icon from "../../components/Icon.svelte";
+  import PlanSwitch from "./PlanSwitch.svelte";
   import RigStatus from "../../components/RigStatus.svelte";
   import ScreenHeader from "../../components/ScreenHeader.svelte";
   import TextField from "../../components/TextField.svelte";
@@ -89,6 +91,7 @@
 </ScreenHeader>
 
 <div class="screen">
+  <PlanSwitch value="target" />
   {#if planned}
     <section class="card current" aria-labelledby="planned-title">
       <span class="label muted">{t.plan.tonightsTarget}</span>

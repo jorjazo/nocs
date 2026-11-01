@@ -283,7 +283,7 @@ class RigExecutor:
                 if action.on:
                     await parts.guiding.start(context)
                 else:
-                    await parts.guiding.stop()
+                    await self._stop_guiding()  # PHD2 may be someone else's when not guiding
             case Outputs():
                 if parts.power is None:
                     raise ValueError("the rig has no power box")

@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import contextlib
-import dataclasses
 from collections.abc import Callable, Generator
+from datetime import datetime
 
 import anyio
 from fastapi import APIRouter, HTTPException, Response, status
@@ -21,6 +21,7 @@ from nocs.jobs import ResourceBusyError
 from nocs.sequence import Sequence, SequenceError
 from nocs.sequence.model import Template
 from nocs.sequence.service import SequenceBusyError, SequenceService
+from nocs.sequence.template import expand
 
 
 def sequences_router(sequences: Callable[[], SequenceService]) -> APIRouter:
@@ -62,7 +63,21 @@ def sequences_router(sequences: Callable[[], SequenceService]) -> APIRouter:
     async def estimate(template: Template) -> SequenceEstimate:  # pyright: ignore[reportUnusedFunction]
         with _errors():
             found = await anyio.to_thread.run_sync(sequences().estimate, template)
-        return SequenceEstimate(**dataclasses.asdict(found))
+        return SequenceEstimate(
+            frames=found.frames,
+            integration=found.integration,
+            duration=found.duration,
+            bytes=found.bytes,
+            window=found.window,
+            starts=_iso(found.starts),
+            ends=_iso(found.ends),
+        )
+
+    @router.post("/sequences/expand")
+    async def expand_template(template: Template) -> Sequence:  # pyright: ignore[reportUnusedFunction]
+        """The sequence a template makes, without keeping it (the builder's Advanced view)."""
+        with _errors():
+            return expand(template)
 
     @router.post("/sequences/{sequence_id}/start", status_code=status.HTTP_202_ACCEPTED)
     async def start(sequence_id: str) -> JobStarted:  # pyright: ignore[reportUnusedFunction]
@@ -88,6 +103,10 @@ def sequences_router(sequences: Callable[[], SequenceService]) -> APIRouter:
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     return router
+
+
+def _iso(when: datetime | None) -> str | None:
+    return when.isoformat(timespec="seconds") if when is not None else None
 
 
 @contextlib.contextmanager

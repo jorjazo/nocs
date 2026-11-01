@@ -20,6 +20,7 @@
   import Guiding from "./screens/guiding/Guiding.svelte";
   import Live from "./screens/live/Live.svelte";
   import Plan from "./screens/plan/Plan.svelte";
+  import SequenceScreen from "./screens/plan/Sequence.svelte";
   import TargetDetail from "./screens/plan/TargetDetail.svelte";
   import ProfileEditor from "./screens/ProfileEditor.svelte";
   import Rig from "./screens/Rig.svelte";
@@ -133,6 +134,8 @@
       <Tonight />
     {:else if router.route.screen === "plan"}
       <Plan />
+    {:else if router.route.screen === "sequence"}
+      <SequenceScreen />
     {:else if router.route.screen === "target"}
       {#key router.route.id}<TargetDetail id={router.route.id} />{/key}
     {:else if router.route.screen === "profile"}

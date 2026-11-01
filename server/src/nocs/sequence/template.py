@@ -123,6 +123,10 @@ class Estimate:
     window: float | None
     """Seconds tonight's dark window keeps the target above the minimum altitude and the
     horizon, when the site is known."""
+    starts: datetime | None = None
+    """When imaging would start tonight: now, or when the target's window opens."""
+    ends: datetime | None = None
+    """When it would end: the plan done, or the window closed, whichever comes first."""
 
 
 def estimate(
@@ -143,7 +147,7 @@ def estimate(
             row.count * (width * height * 2 // (row.binning or 1) ** 2 + HEADER_BYTES)
             for row in template.rows
         )
-    window = None
+    window = starts = ends = None
     target = template.target
     if place is not None and target.ra is not None and target.dec is not None:
         when = now or datetime.now(UTC)
@@ -155,4 +159,10 @@ def estimate(
             horizon=place.horizon,
         )
         window = seen.observable
-    return Estimate(frames, integration, duration, size, window)
+        current = when.timestamp()
+        opens = next((w for w in seen.windows if w.end > current), None)
+        if opens is not None:
+            start = max(current, opens.start)
+            starts = datetime.fromtimestamp(start, UTC)
+            ends = datetime.fromtimestamp(min(start + duration, opens.end), UTC)
+    return Estimate(frames, integration, duration, size, window, starts, ends)

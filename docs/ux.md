@@ -342,12 +342,38 @@ Tonight and Plan (stage 3.6):
   target"; going also makes it tonight's target, and the centring card follows
   the run.
 
+Sequence builder (stage 5.13):
+
+- Plan has two halves, Target and Sequence, as a segmented control on top
+  (`#/plan` and `#/plan/sequence`). The builder edits the sequence of tonight's
+  target (one per target, saved under an id from its name); without one it leads
+  to the search. Changing tonight's target opens that target's sequence.
+- Top to bottom, as on the Phase 1 artboard: the target and its night ("From
+  astronomical dusk · until dawn · above 30°", Change goes to the search); the
+  exposures, one row per filter with frames × exposure, the time it takes and − +
+  for the count (a row opens a sheet: filter, exposure, frames, gain, offset,
+  binning, Remove; Add filter takes the first filter of the wheel no row uses);
+  During the night: Autofocus (a sheet: at the start, on filter change, every so
+  many °C, when stars grow, every so many minutes), Guiding (with a guide camera),
+  Rotate filters (in turns of 5, or each filter to its end), Night (dusk, the
+  twilight, dawn, the minimum altitude), Cooling (with a cooled camera) and When
+  finished (park, warm, power outputs off).
+- Two estimate tiles: imaging time with when it starts and ends tonight, and the
+  frames with their size against the free space of the drive frames go to; a
+  warning when tonight's window is shorter than the plan, or the target is not up
+  in the dark at all. Edits apply at once; Save and the primary Start sequence
+  (which saves first and opens the Session tab). While a sequence runs, a banner
+  leads to it and Start is off.
+- Advanced: frames per turn, and the steps the template makes, read only (start,
+  targets, end, with each container's conditions and triggers). The draft lives
+  while the page is open; a reload goes back to what was saved.
+
 ## 8. Open UX questions
 
 - Persistent "session running" indicator on non-session screens (banner vs.
   tab badge).
 - How to expose the full sequence tree editor (advanced) without cluttering the
-  template view.
+  template view (v0.1 shows the tree read only under Advanced).
 - Image interaction on phones: star inspection, FITS header view (pinch-zoom is
   in Live view since stage 2.7).
 - Spanish copy review: text lengths in Spanish are ~20–30 % longer; layouts must

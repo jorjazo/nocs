@@ -6967,12 +6967,34 @@
           "description": "Seconds the frames take, without focusing or slewing.",
           "type": "number"
         },
+        "ends": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "UTC, ISO 8601: when the plan would be done, or the window close if that comes first."
+        },
         "frames": {
           "type": "integer"
         },
         "integration": {
           "description": "Seconds of exposure.",
           "type": "number"
+        },
+        "starts": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "UTC, ISO 8601: when imaging would start tonight (now, or when the target's window opens); None without the site or a window left tonight."
         },
         "window": {
           "anyOf": [
@@ -6991,7 +7013,9 @@
         "integration",
         "duration",
         "bytes",
-        "window"
+        "window",
+        "starts",
+        "ends"
       ],
       "title": "SequenceEstimate",
       "type": "object"

@@ -5,6 +5,7 @@
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 from owner import pair_owner
 from test_sequence import DIAGUITAS, NGC_253, Rig, frames
@@ -131,8 +132,20 @@ def test_an_estimate_of_the_plan() -> None:
     assert 3.6e9 < found.bytes < 3.7e9  # 70 frames of 52 MB
     assert found.window is not None
     assert 3 * 3600 < found.window < 7 * 3600
+    # At 22:00 local NGC 253 is up in the dark: imaging starts now and the plan (2.9 h)
+    # ends before the window closes.
+    assert found.starts == datetime(2026, 11, 1, 1, tzinfo=UTC)
+    assert found.ends == datetime(2026, 11, 1, 1, tzinfo=UTC) + timedelta(seconds=found.duration)
+    # In the afternoon it starts when the window opens, and a long plan ends when it closes.
+    afternoon = datetime(2026, 11, 1, 18, tzinfo=UTC)
+    long = template.model_copy(update={"rows": [PlanRow(exposure=300, count=200)]})
+    later = estimate(long, place=DIAGUITAS, now=afternoon)
+    assert later.starts is not None
+    assert later.ends is not None
+    assert later.starts > afternoon
+    assert (later.ends - later.starts).total_seconds() == pytest.approx(later.window, abs=1)
     blind = estimate(template)
-    assert (blind.bytes, blind.window) == (None, None)
+    assert (blind.bytes, blind.window, blind.starts, blind.ends) == (None, None, None, None)
 
 
 def test_the_api_builds_a_sequence_from_a_template(tmp_path: Path) -> None:
@@ -157,6 +170,11 @@ def test_the_api_builds_a_sequence_from_a_template(tmp_path: Path) -> None:
             "duration": 10410.0,
             "bytes": None,
             "window": None,
+            "starts": None,
+            "ends": None,
         }
+        expanded = client.post("/api/sequences/expand", json=body)
+        assert expanded.status_code == 200, expanded.text
+        assert expanded.json()["end"]["children"][0] == {"kind": "park"}
         bad = {**body, "target": {"name": "somewhere"}}
         assert client.put("/api/sequences/x/template", json=bad).status_code == 422

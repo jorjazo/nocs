@@ -48,6 +48,10 @@ import type {
   PlannedTarget,
   Profile,
   Role,
+  Sequence,
+  SequenceEstimate,
+  SequencePauseRequest,
+  SequenceStopRequest,
   SerialPortInfo,
   ShutdownRequest,
   Site,
@@ -55,6 +59,7 @@ import type {
   SkyVisibility,
   SolveRequest,
   TargetRequest,
+  Template,
   TrackingRequest,
 } from "./types";
 
@@ -526,4 +531,45 @@ export function choosePlanTarget(target: PlannedTarget): Promise<void> {
 
 export function forgetPlanTarget(): Promise<void> {
   return request("DELETE", "/api/plan/target");
+}
+
+// -- Sequences (ADR 0031) -----------------------------------------------------
+
+export function listSequences(): Promise<Record<string, Sequence>> {
+  return request("GET", "/api/sequences");
+}
+
+// Builds the sequence from the template and keeps both under `id`.
+export function saveTemplate(id: string, template: Template): Promise<void> {
+  return request("PUT", `/api/sequences/${encodeURIComponent(id)}/template`, template);
+}
+
+export function deleteSequence(id: string): Promise<void> {
+  return request("DELETE", `/api/sequences/${encodeURIComponent(id)}`);
+}
+
+export function estimateTemplate(template: Template): Promise<SequenceEstimate> {
+  return request("POST", "/api/sequences/estimate", template);
+}
+
+// The steps a template makes, without keeping them.
+export function expandTemplate(template: Template): Promise<Sequence> {
+  return request("POST", "/api/sequences/expand", template);
+}
+
+export async function startSequence(id: string): Promise<string> {
+  const started = await request<JobStarted>("POST", `/api/sequences/${encodeURIComponent(id)}/start`);
+  return started.job;
+}
+
+export function pauseSequence(body: SequencePauseRequest = {}): Promise<void> {
+  return request("POST", "/api/sequence/pause", body);
+}
+
+export function resumeSequence(): Promise<void> {
+  return request("POST", "/api/sequence/resume");
+}
+
+export function stopSequence(body: SequenceStopRequest = {}): Promise<void> {
+  return request("POST", "/api/sequence/stop", body);
 }
