@@ -3,6 +3,7 @@
 import asyncio
 import os
 import signal
+import threading
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -61,6 +62,26 @@ async def test_old_previews_are_deleted(worker: ImageWorker, frame: str) -> None
         assert result is not None
         previews.append(Path(result.preview))
     assert [p.exists() for p in previews] == [False, True, True]
+
+
+async def test_old_previews_are_deleted_off_the_event_loop(
+    worker: ImageWorker, frame: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # On the Pi's microSD an unlink waited up to 4 s for ext4 while a frame was written
+    # back, and the event loop with it (soak test, 2026-11-01).
+    loop = threading.get_ident()
+    unlinked_in: list[int] = []
+    unlink = Path.unlink
+
+    def recording(self: Path, missing_ok: bool = False) -> None:
+        unlinked_in.append(threading.get_ident())
+        unlink(self, missing_ok=missing_ok)
+
+    monkeypatch.setattr(Path, "unlink", recording)
+    for _ in range(3):
+        assert await worker.analyze("main_camera", frame, None) is not None
+    assert unlinked_in
+    assert loop not in unlinked_in
 
 
 async def test_errors_come_back(worker: ImageWorker, tmp_path: Path) -> None:

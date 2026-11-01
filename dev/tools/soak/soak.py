@@ -44,12 +44,14 @@ import contextlib
 import json
 import math
 import os
+import queue
 import random
 import re
 import signal
 import statistics
 import subprocess
 import sys
+import threading
 import time
 from collections import Counter
 from dataclasses import dataclass, field
@@ -396,6 +398,9 @@ class Night:
         self.frames_seen: set[int] = set()
         self.pruned = 0
         self.log_offset = 0
+        self.writes: queue.Queue[tuple[Path, str] | None] = queue.Queue()
+        self.writing = threading.Thread(target=self.writer, daemon=True)
+        self.writing.start()
 
     # setup
 
@@ -558,6 +563,8 @@ class Night:
             with contextlib.suppress(Exception):
                 await self.save_report()
             await self.http.aclose()
+            self.writes.put(None)
+            await asyncio.to_thread(self.writing.join)
         print(f"night over: {outcome}", flush=True)
         return 0 if outcome == "completed" else 1
 
@@ -590,12 +597,13 @@ class Night:
                 grace += timedelta(minutes=20)
 
     def record_events(self, current: dict[str, Any]) -> None:
-        with (self.out / "events.jsonl").open("a") as f:
-            for event in dig(current, "sequence", "events") or []:
-                key = (event["time"], event["kind"], event["message"])
-                if key not in self.events_seen:
-                    self.events_seen.add(key)
-                    f.write(json.dumps(event) + "\n")
+        lines = []
+        for event in dig(current, "sequence", "events") or []:
+            key = (event["time"], event["kind"], event["message"])
+            if key not in self.events_seen:
+                self.events_seen.add(key)
+                lines.append(json.dumps(event) + "\n")
+        self.append("events.jsonl", "".join(lines))
 
     async def save_report(self) -> None:
         sessions = await self.call("GET", "/api/sessions")
@@ -745,8 +753,19 @@ class Night:
     # recording
 
     def note(self, text: str) -> None:
-        with (self.out / "soak.log").open("a") as f:
-            f.write(f"{iso(now_utc())} {text}\n")
+        self.append("soak.log", f"{iso(now_utc())} {text}\n")
+
+    def append(self, name: str, text: str) -> None:
+        """Append in the writer thread: on a microSD busy with a frame, an append can wait
+        seconds, and this loop's waits would read as nocsd's latency."""
+        if text:
+            self.writes.put((self.out / name, text))
+
+    def writer(self) -> None:
+        while (item := self.writes.get()) is not None:
+            path, text = item
+            with path.open("a") as f:
+                f.write(text)
 
     def scan_log(self) -> None:
         path: Path = self.args.log
@@ -802,8 +821,7 @@ class Night:
             "pruned": self.pruned,
             **window.summary(),
         }
-        with (self.out / "samples.jsonl").open("a") as f:
-            f.write(json.dumps(sample) + "\n")
+        self.append("samples.jsonl", json.dumps(sample) + "\n")
 
 
 # -- summary --------------------------------------------------------------------------

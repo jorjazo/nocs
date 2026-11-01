@@ -75,7 +75,10 @@ class ImageWorker:
             except BrokenProcessPool:
                 self._died()
                 raise
-            self._remember(key, preview)
+            if expired := self._remember(key, preview):
+                # Off the loop: while the microSD writes back a frame, ext4 can make an
+                # unlink wait seconds for its journal (soak test on the Pi, 2026-11-01).
+                await asyncio.to_thread(_unlink, expired)
             return result
 
     async def render(
@@ -163,11 +166,19 @@ class ImageWorker:
             )
         return self._pool
 
-    def _remember(self, key: str, preview: Path) -> None:
+    def _remember(self, key: str, preview: Path) -> list[Path]:
+        """Keep ``preview``; returns the previews it pushes out, to delete."""
         previews = self._previews[key]
         previews.append(preview)
+        expired: list[Path] = []
         while len(previews) > self._keep:
-            previews.popleft().unlink(missing_ok=True)
+            expired.append(previews.popleft())
+        return expired
+
+
+def _unlink(paths: list[Path]) -> None:
+    for path in paths:
+        path.unlink(missing_ok=True)
 
 
 def _ignore_stop_signals() -> None:
