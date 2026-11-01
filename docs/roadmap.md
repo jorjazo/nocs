@@ -154,7 +154,8 @@ full night from a phone with no other computer involved.
 ## Beyond v0.1 (unordered backlog)
 
 - Robustness: crash recovery of a running sequence, long-run soak tests.
-- SMB share for desktop access to images.
+- SMB share for desktop access to images: planned in
+  [beyond/smb.md](beyond/smb.md) (ADR 0037).
 - Remote access outside the LAN.
 - Canon DSLR (gphoto) polish.
 - Flats wizard and calibration frame library (darks, bias, flats): planned in
