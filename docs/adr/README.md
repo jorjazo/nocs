@@ -42,5 +42,6 @@ that supersedes the old one.
 | [0034](0034-polar-alignment.md) | Polar alignment from three solved frames | Proposed |
 | [0035](0035-apt-repository-and-release-publishing.md) | Apt repository, signing and release publishing | Proposed |
 | [0036](0036-calibration-frames.md) | Calibration frames: flats wizard, darks and bias, and their library | Proposed |
+| [0037](0037-smb-share.md) | An SMB share of the frames for desktop computers | Proposed |
 
 Template: Context → Decision → Consequences.
