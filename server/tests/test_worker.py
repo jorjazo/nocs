@@ -1,13 +1,15 @@
 """The imaging worker process: analysis off the event loop, newest frame wins."""
 
 import asyncio
+import os
+import signal
 from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
 from test_pipeline import star_field, write_fits
 
-from nocs.imaging.worker import ImageWorker
+from nocs.imaging.worker import ImageWorker, WorkerClosedError
 
 
 @pytest.fixture
@@ -65,3 +67,35 @@ async def test_errors_come_back(worker: ImageWorker, tmp_path: Path) -> None:
     (tmp_path / "broken.fits").write_bytes(b"not a FITS file")
     with pytest.raises(OSError, match="not appear to be a valid FITS"):
         await worker.analyze("main_camera", str(tmp_path / "broken.fits"), None)
+
+
+async def test_only_nocsd_stops_the_worker(tmp_path: Path, frame: str) -> None:
+    # Ctrl-C and systemd signal the whole process group; the worker leaves it to nocsd.
+    worker = ImageWorker(tmp_path / "previews")
+    pool = worker._executor()  # pyright: ignore[reportPrivateUsage]
+    pid = await asyncio.get_running_loop().run_in_executor(pool, os.getpid)
+    os.kill(pid, signal.SIGINT)
+    os.kill(pid, signal.SIGTERM)
+    assert await worker.analyze("main_camera", frame, None) is not None
+    worker.close()
+    with pytest.raises(ProcessLookupError):
+        os.kill(pid, 0)
+
+
+async def test_closing_lets_the_frame_in_hand_finish(tmp_path: Path, frame: str) -> None:
+    worker = ImageWorker(tmp_path / "previews")
+    task = asyncio.create_task(worker.analyze("main_camera", frame, None))
+    await asyncio.sleep(0.5)  # the worker is starting or analysing
+    await asyncio.to_thread(worker.close)
+    assert await task is not None
+
+
+async def test_no_worker_starts_once_closed(tmp_path: Path, frame: str) -> None:
+    # A frame that arrives while nocsd stops must not spawn a worker mid-shutdown.
+    worker = ImageWorker(tmp_path / "previews")
+    worker.start()
+    worker.close()
+    with pytest.raises(WorkerClosedError):
+        await worker.analyze("main_camera", frame, None)
+    with pytest.raises(WorkerClosedError):
+        await worker.measure(frame, None)

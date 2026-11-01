@@ -394,7 +394,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
             await capture().close()
             await equipment().close()
             await storage().close()
-            services.worker.close()
+            await anyio.to_thread.run_sync(services.worker.close)
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await task
