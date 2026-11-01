@@ -31,6 +31,7 @@
   import { i18n } from "../../lib/i18n";
   import { live } from "../../lib/live.svelte";
   import { formatDec, formatRa, mountActivity, parseDec, parseRa } from "../../lib/mount.svelte";
+  import { router } from "../../lib/router.svelte";
   import CenteringCard from "../live/CenteringCard.svelte";
   import MountPad from "./MountPad.svelte";
 
@@ -261,6 +262,10 @@
           onchange={(mode) => void run("tracking", () => setTracking({ mode }))} />
       {/if}
     </section>
+
+    {#if live.app.cameras?.main_camera}
+      <Button wide onclick={() => router.go({ screen: "polar" })}>{t.polar.open}</Button>
+    {/if}
 
     {#if owner}
       <div class="buttons">

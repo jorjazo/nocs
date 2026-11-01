@@ -46,6 +46,7 @@ import type {
   PairedDevice,
   PairRequest,
   PlannedTarget,
+  PolarAlignRequest,
   Profile,
   Role,
   Sequence,
@@ -458,6 +459,19 @@ export function syncToSolution(): Promise<void> {
 export async function centerOn(body: CenterRequest): Promise<string> {
   const started = await request<JobStarted>("POST", "/api/solver/center", body);
   return started.job;
+}
+
+// -- Polar alignment (ADR 0034) ----------------------------------------------------
+
+// From where the mount points: three solved frames, then the knobs frame by frame.
+export async function startPolarAlign(body: PolarAlignRequest): Promise<string> {
+  const started = await request<JobStarted>("POST", "/api/align/polar", body);
+  return started.job;
+}
+
+// Ends the knobs' phase: back to the start (unless asked not to).
+export function finishPolarAlign(): Promise<void> {
+  return request("POST", "/api/align/polar/finish");
 }
 
 // -- Frames and nights (ADR 0013) -----------------------------------------------------

@@ -373,6 +373,13 @@
         </div>
       {/if}
 
+      {#if mount && main}
+        <a class="autofocus" href={href({ screen: "polar" })}>
+          <Icon name="mount" size={20} />
+          {mountJob?.info.kind === "polar_align" ? t.live.polarRunning : t.polar.open}
+        </a>
+      {/if}
+
       {#if cameras.guide_camera || guiding?.phd2.connected}
         <a class="autofocus" href={href({ screen: "guiding" })}>
           <Icon name="guide" size={20} />

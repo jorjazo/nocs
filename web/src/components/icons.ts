@@ -48,6 +48,7 @@ export const ICONS = {
   plus: ["M12 5v14M5 12h14"],
   minus: ["M5 12h14"],
   download: ["M12 4v11", "M7 10.5l5 5 5-5", "M5 20h14"],
+  check: ["M5 12.5l4.5 4.5L19 7.5"],
   up: ["M6 15l6-6 6 6"],
   down: ["M6 9l6 6 6-6"],
   left: ["M15 6l-6 6 6 6"],

@@ -6,12 +6,12 @@
   import ThemeButton from "./ThemeButton.svelte";
 
   // The INDI property screen and the profile editor hang off Rig; the guided
-  // flows (autofocus, guiding) belong to Tonight.
+  // flows (autofocus, guiding, polar alignment) belong to Tonight.
   const current = $derived.by<Tab>(() => {
     const screen = router.route.screen;
     if (screen === "dev" || screen === "profile") return "rig";
     if (screen === "target" || screen === "sequence") return "plan";
-    if (screen === "focus" || screen === "guiding") return "tonight";
+    if (screen === "focus" || screen === "guiding" || screen === "polar") return "tonight";
     return screen;
   });
 </script>

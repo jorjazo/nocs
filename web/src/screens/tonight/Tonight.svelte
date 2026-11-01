@@ -2,7 +2,7 @@
   // Tonight (stage 3.6), the home screen: conditions, the night from sunset to
   // sunrise with the dark window and the Moon, tonight's target, and the
   // get-ready checklist whose next pending step carries the one primary button
-  // (docs/ux.md §1). Polar alignment and the sequence join it in their phases.
+  // (docs/ux.md §1). The sequence joins it in phase 5.
   import Button from "../../components/Button.svelte";
   import Chip from "../../components/Chip.svelte";
   import NightBar from "../../components/NightBar.svelte";
@@ -20,6 +20,7 @@
   import { nearest, phase } from "../../lib/sky/night";
   import { separation } from "../../lib/sky/projection";
   import { tonight } from "../../lib/tonight.svelte";
+  import { formatAngle } from "../polar/angle";
   import type { TargetVisibility } from "../../lib/types";
 
   const t = $derived(i18n.t);
@@ -102,6 +103,24 @@
         route: { screen: "rig" },
       },
     ];
+    if (live.app.mount && live.app.cameras?.main_camera) {
+      const run = live.app.polar_alignment ?? null;
+      const tonightRun = run?.finished && Date.parse(run.finished) > nightStart && run.axis ? run : null;
+      const aligned = !!tonightRun?.aligned;
+      const off = tonightRun?.axis ? formatAngle(tonightRun.axis.total, locale) : "";
+      list.push({
+        key: "polar",
+        title: t.tonight.steps.polar,
+        detail: aligned
+          ? t.tonight.polarAligned(formatTime(tonightRun?.finished ?? "", locale), off)
+          : tonightRun
+            ? t.tonight.polarOff(off)
+            : t.tonight.notPolarAligned,
+        done: aligned,
+        action: t.tonight.polarAlign,
+        route: { screen: "polar" },
+      });
+    }
     if (live.app.focuser) {
       const run = live.app.autofocus ?? null;
       const tonightRun = run?.finished && Date.parse(run.finished) > nightStart ? run : null;

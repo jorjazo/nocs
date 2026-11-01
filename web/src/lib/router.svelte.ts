@@ -7,14 +7,15 @@ export const TABS: readonly Tab[] = ["tonight", "live", "plan", "session", "rig"
 // The profile editor hangs off Rig: #/rig/profile/<id>, or #/rig/profile/new; a
 // target's page off Plan: #/plan/<catalog id>, and the sequence builder:
 // #/plan/sequence (no catalog id is "sequence").
-// Autofocus (#/focus) and guiding (#/guiding) are full-screen flows over
-// whichever tab opened them.
+// Autofocus (#/focus), guiding (#/guiding) and polar alignment (#/polar) are
+// full-screen flows over whichever tab opened them.
 export type Route =
   | { screen: Tab }
   | { screen: "dev" }
   | { screen: "focus" }
   | { screen: "guiding" }
   | { screen: "sequence" }
+  | { screen: "polar" }
   | { screen: "profile"; id: string | null }
   | { screen: "target"; id: string };
 
@@ -25,6 +26,7 @@ function parse(hash: string): Route {
   if (first === "dev") return { screen: "dev" };
   if (first === "focus") return { screen: "focus" };
   if (first === "guiding") return { screen: "guiding" };
+  if (first === "polar") return { screen: "polar" };
   if (first === "plan" && second === "sequence") return { screen: "sequence" };
   if (first === "plan" && second) return { screen: "target", id: decodeURIComponent(second) };
   if (first === "rig" && second === "profile" && third) {

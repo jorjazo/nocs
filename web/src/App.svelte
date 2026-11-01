@@ -18,6 +18,7 @@
   import Dev from "./screens/dev/Dev.svelte";
   import Focus from "./screens/focus/Focus.svelte";
   import Guiding from "./screens/guiding/Guiding.svelte";
+  import Polar from "./screens/polar/Polar.svelte";
   import Live from "./screens/live/Live.svelte";
   import Plan from "./screens/plan/Plan.svelte";
   import SequenceScreen from "./screens/plan/Sequence.svelte";
@@ -99,6 +100,8 @@
   <Focus {offline} />
 {:else if router.route.screen === "guiding"}
   <Guiding {offline} />
+{:else if router.route.screen === "polar"}
+  <Polar {offline} />
 {:else}
   <NavBar />
   <main class="content" class:full>
