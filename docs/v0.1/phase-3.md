@@ -146,6 +146,8 @@ active profile's" site. Left:
 - Fixed in 3.7c: without a site (no profile chosen), Tonight asked
   `/api/sky/tonight` again as soon as each 409 came back, hundreds of times a
   second; a failure now waits 30 s.
-- `plan.target.name` keeps the common name in the language of whoever chose it
-  ("M 42 · Gran Nebulosa de Orión" on an English phone). Showing the catalog's name
-  in the viewer's language, from `plan.target.id`, would fix it for every screen.
+- Fixed after 3.7c: `plan.target.name` kept the common name in the language of
+  whoever chose it ("M 42 · Gran Nebulosa de Orión" on an English phone). Tonight
+  and Plan now show the catalog's name in the viewer's language from
+  `plan.target.id` (`lib/catalog.svelte.ts`); the stored name stays for targets
+  without an id. Sequences name their target on their own (phase 5).

@@ -10,6 +10,7 @@
   import ScreenHeader from "../../components/ScreenHeader.svelte";
   import WeatherCard from "../../components/WeatherCard.svelte";
   import { getVisibility } from "../../lib/api";
+  import { plannedName } from "../../lib/catalog.svelte";
   import { auth } from "../../lib/auth.svelte";
   import { errorText } from "../../lib/errors";
   import { formatDecimal, formatDuration, formatTime } from "../../lib/format";
@@ -148,7 +149,7 @@
     list.push({
       key: "frame",
       title: t.tonight.steps.frame,
-      detail: !planned ? t.tonight.noTarget : centred ? t.tonight.centred(planned.name) : t.tonight.notCentred(planned.name),
+      detail: !planned ? t.tonight.noTarget : centred ? t.tonight.centred(plannedName(planned, locale)) : t.tonight.notCentred(plannedName(planned, locale)),
       done: centred,
       action: planned ? t.tonight.openTarget : t.tonight.chooseTarget,
       route: planned?.id ? { screen: "target", id: planned.id } : { screen: "plan" },
@@ -227,7 +228,7 @@
     <section class="card target" aria-labelledby="target-title">
       <div class="row">
         <h2 id="target-title">
-          {#if planned.id}<a href={href({ screen: "target", id: planned.id })}>{planned.name}</a>{:else}{planned.name}{/if}
+          {#if planned.id}<a href={href({ screen: "target", id: planned.id })}>{plannedName(planned, locale)}</a>{:else}{planned.name}{/if}
         </h2>
         {#if altitudeNow !== null}
           <Chip tone={altitudeNow > 0 ? "accent" : "neutral"}>{t.tonight.altitudeNow(formatDecimal(altitudeNow, locale, 0))}</Chip>

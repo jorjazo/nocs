@@ -18,6 +18,7 @@
   import { live } from "../../lib/live.svelte";
   import { formatDec, formatRa } from "../../lib/mount.svelte";
   import { href, router } from "../../lib/router.svelte";
+  import { plannedName } from "../../lib/catalog.svelte";
   import { objectName, objectSummary } from "../../lib/targets";
   import type { CatalogMatch, TargetVisibility } from "../../lib/types";
 
@@ -95,7 +96,7 @@
   {#if planned}
     <section class="card current" aria-labelledby="planned-title">
       <span class="label muted">{t.plan.tonightsTarget}</span>
-      <h2 id="planned-title">{planned.name}</h2>
+      <h2 id="planned-title">{plannedName(planned, locale)}</h2>
       <p class="muted mono">{formatRa(planned.ra)} · {formatDec(planned.dec)}</p>
       <div class="buttons">
         {#if planned.id}
