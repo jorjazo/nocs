@@ -1,0 +1,24 @@
+# WS-Discovery for the SMB share (ADR 0037): Windows lists the box under Network.
+# Started and stopped with nocs-share.service by nocs-system, on the box's LAN
+# interfaces only.
+[Unit]
+Description=NOCS SMB share: Windows discovery (wsdd)
+Documentation=https://github.com/jorjazo/nocs/blob/main/docs/adr/0037-smb-share.md
+Wants=network-online.target
+After=network.target network-online.target nocs-share.service
+BindsTo=nocs-share.service
+
+[Service]
+ExecStart=/usr/bin/wsdd --shortlog --interface wlan0 --interface eth0
+Restart=on-failure
+DynamicUser=yes
+Nice=10
+MemoryMax=128M
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+
+[Install]
+WantedBy=multi-user.target

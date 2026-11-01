@@ -4,7 +4,7 @@
 # through the FIFO, reaches nocs-system (which reboots nothing on a PC), and PHD2
 # listens (ADR 0025, ADR 0027). Given nocs-appliance too, it then installs it and
 # checks that the box became the appliance: the firewall, nocsd on port 80, every
-# operation of nocs-system.
+# operation of nocs-system, the SMB share switched on and off.
 #
 #   packaging/deb/test.sh packaging/out/nocs_<version>_<arch>.deb [nocs-appliance_<version>_all.deb]
 #
@@ -114,7 +114,35 @@ for _ in $(seq 60); do health 2>/dev/null | grep -q '"indi_connected":true' && b
 health | grep -q '"indi_connected":true' || fail "nocsd does not answer on port 80"
 runuser -u nocs -- /opt/nocs/venv/bin/nocs-system call hello | grep -q '"network.status"' \
     || fail "nocs-system does not offer the appliance's operations"
+# The SMB share (ADR 0037): off, Samba's own services masked, nothing on 445.
+listening() { (echo > /dev/tcp/127.0.0.1/445) 2>/dev/null; }
+for unit in smbd nmbd; do
+    [[ $(systemctl is-enabled "$unit" 2>/dev/null) == masked ]] || fail "$unit is not masked"
+    [[ $(systemctl is-active "$unit") != active ]] || fail "$unit runs"
+done
+! listening || fail "something listens on 445 with the share off"
+share() { local args=${2:-'{}'}; runuser -u nocs -- /opt/nocs/venv/bin/nocs-system call "share.$1" "$args"; }
+share enable '{"on": true}' | grep -q '"on": true' || fail "the share does not switch on"
+for _ in $(seq 30); do listening && break; sleep 1; done
+[[ $(systemctl is-active nocs-share nocs-wsdd) == $'active\nactive' ]] \
+    || { journalctl --no-pager -n 40 -u nocs-share -u nocs-wsdd; fail "smbd or wsdd is not running"; }
+DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends smbclient >/dev/null 2>&1
+install -d -o nocs -g nocs /var/lib/nocs/NOCS/2026-11-01
+echo frame > /var/lib/nocs/NOCS/2026-11-01/a.fits
+smbclient -N -L //127.0.0.1 2>/dev/null | grep -q 'Internal *Disk' || fail "the share does not list Internal to a guest"
+smbclient -N //127.0.0.1/Internal -c 'get 2026-11-01/a.fits /tmp/a.fits' >/dev/null 2>&1 \
+    && [[ $(cat /tmp/a.fits) == frame ]] || fail "a guest cannot read a frame"
+smbclient -U nocs%nocs //127.0.0.1/Internal -c ls 2>/dev/null | grep -q 2026-11-01 || fail "nocs / nocs cannot log in"
+smbclient -U nocs%wrong //127.0.0.1/Internal -c ls >/dev/null 2>&1 && fail "a wrong password for nocs was let in"
+smbclient -N //127.0.0.1/Internal -c 'put /tmp/a.fits b.fits' 2>&1 | grep -q ACCESS_DENIED || fail "the share is writable"
+smbclient -N //127.0.0.1/Internal -c 'ls ../config/*' 2>&1 | grep -q auth.json && fail "the data directory is shared"
+share status | grep -q '"name": "Internal"' || fail "share.status does not list Internal"
+share enable '{"on": false}' >/dev/null || fail "the share does not switch off"
+! listening || fail "smbd still listens with the share off"
+systemctl enable --now nocs-share >/dev/null 2>&1  # left on, for the removal below
 DEBIAN_FRONTEND=noninteractive apt-get remove -y nocs-appliance >/dev/null 2>&1 || fail "nocs-appliance does not remove"
 ! nft list table inet nocs >/dev/null 2>&1 || fail "the firewall stayed after removing nocs-appliance"
+! listening || fail "smbd still listens after removing nocs-appliance"
+[[ $(systemctl is-enabled smbd 2>/dev/null) != masked ]] || fail "smbd stayed masked after removing nocs-appliance"
 echo "PASS: appliance"
 CHECK
