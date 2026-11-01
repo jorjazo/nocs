@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import itertools
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -20,7 +20,8 @@ from nocs.calibration.flats import (
     next_exposure,
     trend_of,
 )
-from nocs.devices import FrameType
+from nocs.calibration.twilight import flat_spot, sun, windows
+from nocs.devices import Coordinates, FrameType, Location
 from nocs.equipment import Role
 from nocs.imaging import CameraSettings, Shot
 from nocs.imaging.capture import Captured
@@ -153,3 +154,108 @@ async def test_a_panel_too_bright_says_so(tmp_path: Path) -> None:
     assert filter["state"] == "failed"
     assert "too bright at 0.01 s" in filter["message"]
     assert "too bright" in state["error"]
+
+
+SITE = Location(-30.0277, -70.6733, 700)
+EVENING = datetime(2026, 11, 1, 20, 0, tzinfo=UTC)
+
+
+class FakeMount:
+    def __init__(self) -> None:
+        self.slews: list[tuple[float, float]] = []
+        self.tracking: list[bool | None] = []
+
+    async def slew(
+        self, context: JobContext, ra: float, dec: float, *, force: bool = False
+    ) -> Coordinates:
+        self.slews.append((ra, dec))
+        return Coordinates(ra, dec)
+
+    async def set_tracking(
+        self, on: bool | None, mode: str | None = None, *, job: str | None = None
+    ) -> None:
+        self.tracking.append(on)
+
+
+async def sky_run(
+    camera: FakeCamera, plan: FlatPlan, start: datetime
+) -> tuple[dict[str, Any], dict[str, Any], FakeMount]:
+    store = StateStore()
+    jobs = JobManager(store)
+    mount = FakeMount()
+
+    async def sleep(seconds: float) -> None:
+        camera.now += seconds
+
+    service = FlatsService(
+        store,
+        jobs,
+        camera,
+        lambda: camera,
+        lambda: None,
+        Levels(),
+        clock=lambda: camera.now,
+        site=lambda: SITE,
+        mount=lambda: mount,
+        now=lambda: start + timedelta(seconds=camera.now),
+        sleep=sleep,
+    )
+    job_id = service.start(plan)
+    await jobs.wait(job_id)
+    state = store.get(("flats",))
+    assert isinstance(state, dict)
+    FlatsState.model_validate(state)
+    job = store.get(("jobs", job_id))
+    assert isinstance(job, dict)
+    return job, state, mount
+
+
+def test_twilight_windows_at_the_lab_site() -> None:
+    found = windows(SITE, EVENING)
+    assert [w.phase for w in found] == ["dusk", "dawn"]
+    for window in found:
+        assert 25 * 60 < (window.end - window.start).total_seconds() < 70 * 60
+    dusk = found[0]
+    assert sun(SITE, dusk.start)[0] == pytest.approx(-1, abs=0.3)
+    spot = flat_spot(SITE, dusk.start)
+    assert -90 <= spot.dec <= 90
+
+
+async def test_dusk_flats_wait_follow_the_sky_and_put_narrowband_first(tmp_path: Path) -> None:
+    dusk = windows(SITE, EVENING)[0]
+    # 5 minutes before the window; the sky halves every 2 minutes.
+    start = dusk.start - timedelta(minutes=5)
+    rates = {"L": 3e6, "Ha": 3e6 / 60}
+
+    def light(filter: str | None, now: float) -> float:
+        return rates[filter or "L"] * 0.5 ** (now / 120)
+
+    camera = FakeCamera(tmp_path, light)
+    plan = FlatPlan(
+        source="sky",
+        filters=[FlatFilter(filter="L", count=6), FlatFilter(filter="Ha", count=4)],
+        min_exposure=0.1,
+        max_exposure=30,
+    )
+    job, state, mount = await sky_run(camera, plan, start)
+    assert job["state"] == "succeeded", (job, state)
+    assert [f["filter"] for f in state["filters"]] == ["Ha", "L"]
+    assert [(f["done"], f["state"]) for f in state["filters"]] == [(4, "done"), (6, "done")]
+    assert [f for f, _, _ in camera.kept] == ["Ha"] * 4 + ["L"] * 6
+    target = 0.5 * FULL_SCALE
+    assert all(abs(level - target) <= 0.2 * FULL_SCALE for _, _, level in camera.kept)
+    exposures = [e for f, e, _ in camera.kept if f == "L"]
+    assert exposures == sorted(exposures)  # longer as it gets darker
+    assert len(mount.slews) == 1
+    assert mount.tracking == [False]
+    assert camera.now > 5 * 60  # it waited for the window
+
+
+async def test_sky_flats_after_the_twilight_fail(tmp_path: Path) -> None:
+    dusk = windows(SITE, EVENING)[0]
+    camera = FakeCamera(tmp_path, lambda f, _: 1.0)
+    plan = FlatPlan(source="sky", filters=[FlatFilter(filter="L")])
+    job, state, mount = await sky_run(camera, plan, dusk.end + timedelta(minutes=20))
+    assert job["state"] == "failed"
+    assert "twilight is over" in (state["error"] or "")
+    assert not mount.slews

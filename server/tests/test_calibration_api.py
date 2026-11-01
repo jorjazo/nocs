@@ -132,3 +132,9 @@ def test_the_library_of_a_night(tmp_path: Path) -> None:
         assert client.get("/api/calibration", params={"night": 99}).status_code == 404
         response = client.get("/api/calibration", params={"sequence": "none"})
         assert response.status_code == 404
+        # No profile: no site for the twilight, no camera for flats or darks.
+        assert client.get("/api/flats/window").status_code == 409
+        response = client.post("/api/flats", json={"filters": [{"filter": "L"}]})
+        assert response.status_code == 503, response.text
+        response = client.post("/api/calibration/sequence", json={"night": night["id"]})
+        assert response.status_code == 409, response.text

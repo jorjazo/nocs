@@ -944,6 +944,10 @@ export interface FilterWheelState {
 export interface FlatsState {
   error: string | null;
   filters: FlatFilterState[];
+  /**
+   * What it waits for (the twilight), or None.
+   */
+  message: string | null;
   source: "panel" | "sky";
   state: "running" | "succeeded" | "failed" | "cancelled";
   /**
@@ -2628,6 +2632,40 @@ export interface CalibrationReport {
   night: string | null;
 }
 /**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "CalibrationSequence".
+ */
+export interface CalibrationSequence {
+  frames: number;
+  /**
+   * The sequence kept; start it as any other.
+   */
+  id: string;
+  /**
+   * Darks and bias it cannot take: another camera, or a region of the sensor.
+   */
+  left_out: CalibrationNeed[];
+}
+/**
+ * Darks and bias missing for a night's lights, or for a saved sequence's.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "CalibrationSequenceRequest".
+ */
+export interface CalibrationSequenceRequest {
+  bias?: number;
+  /**
+   * Wanted per exposure.
+   */
+  darks?: number;
+  night?: number | null;
+  sequence?: string | null;
+  /**
+   * Warm the camera at the end.
+   */
+  warm?: boolean;
+}
+/**
  * Only the fields present are changed.
  *
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -3346,6 +3384,84 @@ export interface FilterSelectRequest {
    * 1-based.
    */
   slot?: number | null;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "FlatFilter".
+ */
+export interface FlatFilter {
+  count?: number;
+  /**
+   * None: whatever the wheel holds.
+   */
+  filter?: string | null;
+  /**
+   * Focuser position for this filter's flats (the lights').
+   */
+  focus?: number | null;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "FlatPlan".
+ */
+export interface FlatPlan {
+  binning?: number | null;
+  /**
+   * @minItems 1
+   */
+  filters: [FlatFilter, ...FlatFilter[]];
+  gain?: number | null;
+  /**
+   * Fraction of full scale.
+   */
+  level?: number;
+  /**
+   * Seconds.
+   */
+  max_exposure?: number;
+  /**
+   * Seconds.
+   */
+  min_exposure?: number;
+  offset?: number | null;
+  source?: "panel" | "sky";
+  /**
+   * First try; 1 s on a panel, 0.5 s on the sky.
+   */
+  start_exposure?: number | null;
+  /**
+   * Accepted fraction around the level.
+   */
+  tolerance?: number;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "FlatWindows".
+ */
+export interface FlatWindows {
+  /**
+   * The Sun's altitude now, degrees.
+   */
+  sun: number;
+  /**
+   * The next day's, an open one first.
+   */
+  windows: TwilightWindow[];
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "TwilightWindow".
+ */
+export interface TwilightWindow {
+  /**
+   * The Sun 10° below at dusk; the reverse at dawn.
+   */
+  end: string;
+  phase: "dusk" | "dawn";
+  /**
+   * UTC, ISO 8601: the Sun 1° below the horizon at dusk.
+   */
+  start: string;
 }
 /**
  * When a template's sequence focuses: at the start, and on these reasons.

@@ -19,6 +19,8 @@ from nocs.api.schemas import (
     AutofocusRequest,
     AutofocusRun,
     CalibrationReport,
+    CalibrationSequence,
+    CalibrationSequenceRequest,
     CameraSettingsRequest,
     CatalogMatch,
     CatalogObject,
@@ -37,6 +39,7 @@ from nocs.api.schemas import (
     ExposeRequest,
     FilterNamesRequest,
     FilterSelectRequest,
+    FlatWindows,
     FocuserBacklashRequest,
     FocuserMoveRequest,
     FrameRecord,
@@ -85,6 +88,7 @@ from nocs.api.schemas import (
     TemplateRequest,
     TrackingRequest,
 )
+from nocs.calibration.flats import FlatPlan
 from nocs.equipment import Profile
 from nocs.sequence import Sequence
 from nocs.sequence.model import Template
@@ -134,6 +138,10 @@ MODELS: list[tuple[type[BaseModel], Mode]] = [
     (SessionSummary, "serialization"),
     (SessionReport, "serialization"),
     (CalibrationReport, "serialization"),
+    (CalibrationSequenceRequest, "validation"),
+    (CalibrationSequence, "serialization"),
+    (FlatPlan, "validation"),
+    (FlatWindows, "serialization"),
     (SequencePauseRequest, "validation"),
     (SequenceStopRequest, "validation"),
     (GuideSteps, "serialization"),

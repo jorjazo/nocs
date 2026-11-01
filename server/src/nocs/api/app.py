@@ -305,6 +305,10 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
         profile = equipment().active_profile
         return profile.site.longitude if profile is not None and profile.site else None
 
+    def site_location() -> Location | None:
+        site = saved_site()
+        return Location(site.latitude, site.longitude, site.elevation) if site else None
+
     def saved_site() -> Site | None:
         """From the profile as saved: a new horizon needs no reconnection."""
         active = equipment().active
@@ -426,6 +430,9 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
             filter_wheel,
             ready_focuser,
             services.storage,
+            site=site_location,
+            mount=mount,
+            now=services.clock.now,
         )
         services.sequences = SequenceService(
             store,

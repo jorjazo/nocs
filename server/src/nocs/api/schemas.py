@@ -943,6 +943,7 @@ class FlatsState(StateModel):
     target: float = Field(description="ADU wanted.")
     tolerance: float = Field(description="Fraction of full scale around it.")
     filters: list[FlatFilterState]
+    message: str | None = Field(description="What it waits for (the twilight), or None.")
     error: str | None
 
 
@@ -1600,6 +1601,17 @@ class CalibrationSequence(WireModel):
     left_out: list[CalibrationNeed] = Field(
         description="Darks and bias it cannot take: another camera, or a region of the sensor."
     )
+
+
+class TwilightWindow(WireModel):
+    phase: Literal["dusk", "dawn"]
+    start: str = Field(description="UTC, ISO 8601: the Sun 1° below the horizon at dusk.")
+    end: str = Field(description="The Sun 10° below at dusk; the reverse at dawn.")
+
+
+class FlatWindows(WireModel):
+    sun: float = Field(description="The Sun's altitude now, degrees.")
+    windows: list[TwilightWindow] = Field(description="The next day's, an open one first.")
 
 
 class SessionSummary(WireModel):

@@ -19,13 +19,16 @@ import asyncio
 import logging
 import math
 import time
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import Literal, Protocol
 
+import anyio
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from nocs.devices import FrameType
+from nocs.calibration import twilight
+from nocs.devices import Coordinates, FrameType, Location
 from nocs.equipment import Role
 from nocs.imaging import CameraSettings, Shot
 from nocs.imaging.capture import Captured
@@ -42,6 +45,8 @@ DARK = 0.01 * FULL_SCALE
 """Signal below this tells nothing about the light: try ten times longer."""
 MAX_MISSES = 8
 """Frames out of the band in a row before a filter gives up."""
+SKY_WAIT = 20.0
+"""Seconds between looks at a twilight sky not ready yet."""
 OVERHEAD = 2.0
 """Seconds between two frames' exposures (download, measure), for the sky's trend."""
 
@@ -172,6 +177,15 @@ class Focuser(Protocol):
     async def move_to(self, position: int) -> None: ...
 
 
+class Mount(Protocol):
+    async def slew(
+        self, context: JobContext, ra: float, dec: float, *, force: bool = False
+    ) -> Coordinates: ...
+    async def set_tracking(
+        self, on: bool | None, mode: str | None = None, *, job: str | None = None
+    ) -> None: ...
+
+
 class Levels(Protocol):
     def set_level(self, frame_id: int, level: float | None) -> None: ...
 
@@ -209,6 +223,11 @@ class FlatsService:
         focuser: Callable[[], Focuser | None],
         levels: Levels,
         clock: Callable[[], float] = time.monotonic,
+        *,
+        site: Callable[[], Location | None] = lambda: None,
+        mount: Callable[[], Mount | None] = lambda: None,
+        now: Callable[[], datetime] = lambda: datetime.now(UTC),
+        sleep: Callable[[float], Awaitable[None]] = anyio.sleep,
     ) -> None:
         self._store = store
         self._jobs = jobs
@@ -217,8 +236,21 @@ class FlatsService:
         self._focuser = focuser
         self._levels = levels
         self._clock = clock
+        self._site = site
+        self._mount = mount
+        self._now = now
+        self._sleep = sleep
+        self._message: str | None = None
         self._published: dict[str, Json] | None = None
         store.set(ROOT, None)
+
+    def windows(self) -> tuple[float, list[twilight.Window]]:
+        """The Sun's altitude now and the twilight windows of the next day."""
+        site = self._site()
+        if site is None:
+            raise FlatsError("sky flats need the site: set it in the profile")
+        now = self._now()
+        return twilight.sun(site, now)[0], twilight.windows(site, now)
 
     def resources(self, plan: FlatPlan) -> list[str]:
         roles = [Role.MAIN_CAMERA, Role.FILTER_WHEEL, Role.FOCUSER]
@@ -238,18 +270,26 @@ class FlatsService:
 
     async def run(self, context: JobContext, plan: FlatPlan) -> dict[str, Json]:
         """Take the plan's flats inside ``context``'s job; what each filter got."""
-        progress = [_Progress(f.filter, f.count) for f in plan.filters]
+        wanted = list(plan.filters)
+        progress = [_Progress(f.filter, f.count) for f in wanted]
+        self._message = None
         self._publish(plan, progress, "running", None)
         outcome: Literal["succeeded", "failed", "cancelled"] = "failed"
         error: str | None = None
         try:
+            phase: twilight.Phase | None = None
+            if plan.source == "sky":
+                phase = await self._open_sky(context, plan, progress)
+                names = [f.filter for f in wanted]
+                wanted = twilight.ordered(wanted, names, phase)
+                progress[:] = twilight.ordered(list(progress), names, phase)
             await self._configure(context, plan)
             pedestal = await self._pedestal(context, plan.min_exposure)
             log.info("flats: pedestal %.0f ADU", pedestal)
             exposure = plan.start_exposure or (1.0 if plan.source == "panel" else 0.5)
-            for wanted, filter in zip(plan.filters, progress, strict=True):
+            for filter, state in zip(wanted, progress, strict=True):
                 exposure = await self._filter(
-                    context, plan, wanted, filter, pedestal, exposure, progress
+                    context, plan, filter, state, pedestal, exposure, progress, phase
                 )
             failed = [p for p in progress if p.state == "failed"]
             outcome = "failed" if len(failed) == len(progress) else "succeeded"
@@ -268,10 +308,48 @@ class FlatsService:
                     p.state, p.message = "failed", error
             raise
         finally:
+            self._message = None
             self._publish(plan, progress, outcome, error)
         if outcome == "failed":
             raise FlatsError(error or "no flats were taken")
         return {"filters": [p.summary() for p in progress]}
+
+    async def _open_sky(
+        self, context: JobContext, plan: FlatPlan, progress: list[_Progress]
+    ) -> twilight.Phase:
+        """Wait for the twilight window, then point high up opposite the Sun, not tracking."""
+        site = self._site()
+        if site is None:
+            raise FlatsError("sky flats need the site: set it in the profile")
+        mount = self._mount()
+        if mount is None:
+            raise FlatsError("sky flats need the mount")
+        phase = twilight.phase(site, self._now())
+        while True:
+            altitude, _ = twilight.sun(site, self._now())
+            if twilight.SUN_LOW <= altitude <= twilight.SUN_HIGH:
+                break
+            if (phase == "dusk") == (altitude < twilight.SUN_LOW):
+                raise FlatsError(f"the {phase} twilight is over: the Sun is at {altitude:.0f}°")
+            edge = twilight.SUN_HIGH if phase == "dusk" else twilight.SUN_LOW
+            self._message = f"waiting for the Sun to reach {edge:g}° (now {altitude:.1f}°)"
+            context.progress(None, self._message)
+            self._publish(plan, progress, "running", None)
+            await self._sleep(SKY_WAIT)
+        spot = twilight.flat_spot(site, self._now())
+        self._message = "pointing opposite the Sun"
+        self._publish(plan, progress, "running", None)
+        await mount.slew(context, spot.ra, spot.dec)
+        await mount.set_tracking(False, job=context.id)
+        self._message = None
+        return phase
+
+    def _sky_open(self, phase: twilight.Phase) -> bool:
+        site = self._site()
+        if site is None:
+            return False
+        altitude, _ = twilight.sun(site, self._now())
+        return altitude >= twilight.SUN_LOW if phase == "dusk" else altitude <= twilight.SUN_HIGH
 
     async def _configure(self, context: JobContext, plan: FlatPlan) -> None:
         settings = CameraSettings(gain=plan.gain, offset=plan.offset, binning=plan.binning)
@@ -295,6 +373,7 @@ class FlatsService:
         pedestal: float,
         exposure: float,
         everything: list[_Progress],
+        phase: twilight.Phase | None,
     ) -> float:
         """Take one filter's flats; the exposure it ended with, the next filter's start."""
         progress.state = "running"
@@ -346,6 +425,18 @@ class FlatsService:
                 )
             self._publish(plan, everything, "running", None)
             if problem := _out_of_reach(plan, exposure, level, target, band, wanted_next):
+                if phase is not None and _time_helps(phase, wanted_next, exposure):
+                    if not self._sky_open(phase):
+                        progress.state, progress.message = "failed", f"the {phase} twilight is over"
+                        self._publish(plan, everything, "running", None)
+                        return exposure
+                    self._message = f"{name}: {problem}; waiting"
+                    context.progress(None, self._message)
+                    self._publish(plan, everything, "running", None)
+                    await self._sleep(SKY_WAIT)
+                    self._message = None
+                    exposure = wanted_next
+                    continue
                 if plan.source == "sky" and progress.done:
                     progress.state, progress.message = "ended", problem
                     self._publish(plan, everything, "running", None)
@@ -372,11 +463,18 @@ class FlatsService:
             "target": round(plan.target),
             "tolerance": plan.tolerance,
             "filters": [p.summary() for p in progress],
+            "message": self._message,
             "error": error,
         }
         if summary != self._published:
             self._store.set(ROOT, summary)
             self._published = summary
+
+
+def _time_helps(phase: twilight.Phase, wanted: float, exposure: float) -> bool:
+    """Whether waiting brings the exposure within reach: a sky too bright at dusk (it
+    wants a shorter one), too dark at dawn (a longer one)."""
+    return wanted < exposure if phase == "dusk" else wanted > exposure
 
 
 def _out_of_reach(

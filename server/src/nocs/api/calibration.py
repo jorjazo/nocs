@@ -17,10 +17,12 @@ from nocs.api.schemas import (
     CalibrationSequence,
     CalibrationSequenceRequest,
     CalibrationSetup,
+    FlatWindows,
     JobStarted,
+    TwilightWindow,
 )
 from nocs.calibration.darks import SEQUENCE_ID, frames
-from nocs.calibration.flats import FlatPlan, FlatsService
+from nocs.calibration.flats import FlatPlan, FlatsError, FlatsService
 from nocs.calibration.library import Match, Need, Report, Setup, Wanted
 from nocs.calibration.service import CalibrationError, CalibrationService
 from nocs.imaging import CameraNotReadyError
@@ -34,6 +36,25 @@ def calibration_router(
     calibration: Callable[[], CalibrationService], flats: Callable[[], FlatsService]
 ) -> APIRouter:
     router = APIRouter(prefix="/api")
+
+    @router.get("/flats/window")
+    async def flat_windows() -> FlatWindows:  # pyright: ignore[reportUnusedFunction]
+        """When the twilight sky makes flats, at the profile's site."""
+        try:
+            sun, found = await anyio.to_thread.run_sync(flats().windows)
+        except FlatsError as e:
+            raise HTTPException(status.HTTP_409_CONFLICT, str(e)) from e
+        return FlatWindows(
+            sun=round(sun, 2),
+            windows=[
+                TwilightWindow(
+                    phase=w.phase,
+                    start=w.start.isoformat(timespec="seconds"),
+                    end=w.end.isoformat(timespec="seconds"),
+                )
+                for w in found
+            ],
+        )
 
     @router.post("/flats", status_code=status.HTTP_202_ACCEPTED)
     async def take_flats(plan: FlatPlan) -> JobStarted:  # pyright: ignore[reportUnusedFunction]

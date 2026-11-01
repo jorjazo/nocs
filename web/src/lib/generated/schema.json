@@ -1378,6 +1378,78 @@
       "title": "CalibrationReport",
       "type": "object"
     },
+    "CalibrationSequence": {
+      "properties": {
+        "frames": {
+          "type": "integer"
+        },
+        "id": {
+          "description": "The sequence kept; start it as any other.",
+          "type": "string"
+        },
+        "left_out": {
+          "description": "Darks and bias it cannot take: another camera, or a region of the sensor.",
+          "items": {
+            "$ref": "#/$defs/CalibrationNeed"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "frames",
+        "left_out"
+      ],
+      "title": "CalibrationSequence",
+      "type": "object"
+    },
+    "CalibrationSequenceRequest": {
+      "description": "Darks and bias missing for a night's lights, or for a saved sequence's.",
+      "properties": {
+        "bias": {
+          "default": 50,
+          "maximum": 500,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "darks": {
+          "default": 20,
+          "description": "Wanted per exposure.",
+          "maximum": 500,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "night": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "sequence": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "warm": {
+          "default": true,
+          "description": "Warm the camera at the end.",
+          "type": "boolean"
+        }
+      },
+      "title": "CalibrationSequenceRequest",
+      "type": "object"
+    },
     "CalibrationSetup": {
       "description": "What calibration frames share with their lights (flats need not share gain and offset).",
       "properties": {
@@ -3197,6 +3269,44 @@
       "title": "FilterWheelState",
       "type": "object"
     },
+    "FlatFilter": {
+      "additionalProperties": false,
+      "properties": {
+        "count": {
+          "default": 20,
+          "maximum": 200,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "filter": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "None: whatever the wheel holds."
+        },
+        "focus": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Focuser position for this filter's flats (the lights')."
+        }
+      },
+      "title": "FlatFilter",
+      "type": "object"
+    },
     "FlatFilterState": {
       "additionalProperties": false,
       "properties": {
@@ -3274,6 +3384,129 @@
       "title": "FlatFilterState",
       "type": "object"
     },
+    "FlatPlan": {
+      "additionalProperties": false,
+      "properties": {
+        "binning": {
+          "anyOf": [
+            {
+              "maximum": 8,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "filters": {
+          "items": {
+            "$ref": "#/$defs/FlatFilter"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "gain": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "level": {
+          "default": 0.5,
+          "description": "Fraction of full scale.",
+          "maximum": 0.9,
+          "minimum": 0.1,
+          "type": "number"
+        },
+        "max_exposure": {
+          "default": 60,
+          "description": "Seconds.",
+          "exclusiveMinimum": 0,
+          "maximum": 600,
+          "type": "number"
+        },
+        "min_exposure": {
+          "default": 0.01,
+          "description": "Seconds.",
+          "exclusiveMinimum": 0,
+          "maximum": 60,
+          "type": "number"
+        },
+        "offset": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "source": {
+          "default": "panel",
+          "enum": [
+            "panel",
+            "sky"
+          ],
+          "type": "string"
+        },
+        "start_exposure": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "maximum": 600,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "First try; 1 s on a panel, 0.5 s on the sky."
+        },
+        "tolerance": {
+          "default": 0.1,
+          "description": "Accepted fraction around the level.",
+          "exclusiveMinimum": 0,
+          "maximum": 0.5,
+          "type": "number"
+        }
+      },
+      "required": [
+        "filters"
+      ],
+      "title": "FlatPlan",
+      "type": "object"
+    },
+    "FlatWindows": {
+      "properties": {
+        "sun": {
+          "description": "The Sun's altitude now, degrees.",
+          "type": "number"
+        },
+        "windows": {
+          "description": "The next day's, an open one first.",
+          "items": {
+            "$ref": "#/$defs/TwilightWindow"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "sun",
+        "windows"
+      ],
+      "title": "FlatWindows",
+      "type": "object"
+    },
     "FlatsState": {
       "additionalProperties": false,
       "description": "The flats wizard's run in progress or the last one (ADR 0036).",
@@ -3293,6 +3526,17 @@
             "$ref": "#/$defs/FlatFilterState"
           },
           "type": "array"
+        },
+        "message": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "What it waits for (the twilight), or None."
         },
         "source": {
           "enum": [
@@ -3325,6 +3569,7 @@
         "target",
         "tolerance",
         "filters",
+        "message",
         "error"
       ],
       "title": "FlatsState",
@@ -9897,6 +10142,32 @@
           "$ref": "#/$defs/FlipTrigger"
         }
       ]
+    },
+    "TwilightWindow": {
+      "properties": {
+        "end": {
+          "description": "The Sun 10\u00b0 below at dusk; the reverse at dawn.",
+          "type": "string"
+        },
+        "phase": {
+          "enum": [
+            "dusk",
+            "dawn"
+          ],
+          "type": "string"
+        },
+        "start": {
+          "description": "UTC, ISO 8601: the Sun 1\u00b0 below the horizon at dusk.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "phase",
+        "start",
+        "end"
+      ],
+      "title": "TwilightWindow",
+      "type": "object"
     },
     "UnmountedDrive": {
       "additionalProperties": false,
