@@ -99,10 +99,13 @@
       : null,
   );
   const solveJob = $derived(jobs.latest?.info.kind === "solve" ? jobs.latest : null);
+  // Where the last frame went: a single frame's result, or a series' last frame.
   const savedPath = $derived.by(() => {
     const latest = jobs.latest?.info;
     if (latest?.kind !== "expose" || latest.state !== "succeeded") return null;
-    const path = latest.result?.path;
+    const frames = latest.result?.frames;
+    const last: unknown = Array.isArray(frames) ? frames.at(-1) : latest.result;
+    const path = typeof last === "object" && last !== null && "path" in last ? last.path : null;
     return typeof path === "string" ? path : null;
   });
 
