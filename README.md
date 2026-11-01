@@ -7,7 +7,8 @@ operated from any phone, tablet or computer through the browser.
 
 The goal: the ease of use of a dedicated appliance, without the vendor lock-in.
 
-> **Status:** design phase. Nothing usable yet.
+> **Status:** in development towards the first release, v0.1 (see the
+> [roadmap](docs/roadmap.md)). Not ready for a night under the sky yet.
 
 ## Key ideas
 
@@ -23,6 +24,7 @@ The goal: the ease of use of a dedicated appliance, without the vendor lock-in.
 
 ## Documentation
 
+- [User guide](docs/user/): quick start, supported hardware, troubleshooting
 - [Product and architecture design](docs/design.md)
 - [UX and design system](docs/ux.md)
 - [Architecture decision records](docs/adr/)
