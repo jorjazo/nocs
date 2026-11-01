@@ -84,6 +84,8 @@ CAMERA = Role.GUIDE_CAMERA
 HOLDER = "phd2"
 CONNECT_TIMEOUT = 60.0
 STOP_MARGIN = 15.0
+LOOP_STOPPED = 2.0
+"""How long after guiding stopped PHD2 may take to tell that its loop stopped too."""
 SETTLE_MARGIN = 30.0
 """Beyond PHD2's own settle timeout, before NOCS stops waiting for its answer."""
 MAX_DITHER = 50.0
@@ -115,6 +117,7 @@ _STATE_OF_EVENT = {
     "Paused": "Paused",
 }
 """Events that tell PHD2's state unambiguously."""
+
 _QUERY_EVENTS = frozenset({"Resumed", "StarSelected", "CalibrationComplete", "CalibrationFailed"})
 """Events after which PHD2's state is asked for."""
 
@@ -778,12 +781,25 @@ class GuidingService:
             self._set_app_state(state)
         if self._app_state in IDLE_STATES:
             return
-        await client.call("stop_capture")
-        timeout = (self._exposure or EXPOSURE_RANGE[1]) + STOP_MARGIN
+        guided = self._app_state in GUIDING_STATES
+        queue: asyncio.Queue[Phd2Message] = asyncio.Queue()
+        self._queues.add(queue)
         try:
-            await asyncio.wait_for(self._idle.wait(), timeout)
-        except TimeoutError:
-            raise TimeoutError(f"PHD2 did not stop within {timeout:g} s") from None
+            await client.call("stop_capture")
+            timeout = (self._exposure or EXPOSURE_RANGE[1]) + STOP_MARGIN
+            try:
+                await asyncio.wait_for(self._idle.wait(), timeout)
+            except TimeoutError:
+                raise TimeoutError(f"PHD2 did not stop within {timeout:g} s") from None
+            if guided:
+                # PHD2 tells that guiding stopped, then that its loop did: left unread,
+                # the second would reach the next start as the end of its own loop.
+                with contextlib.suppress(TimeoutError):
+                    async with asyncio.timeout(LOOP_STOPPED):
+                        while not _ends_loop(await queue.get()):
+                            pass
+        finally:
+            self._queues.discard(queue)
 
     async def _read_exposure(self, client: Phd2Client) -> None:
         milliseconds = await client.call("get_exposure")
@@ -1116,3 +1132,7 @@ def _checked(settle: Settle | None) -> Settle:
     if settle.pixels <= 0 or settle.time < 0 or settle.timeout <= 0:
         raise ValueError("settling needs a positive distance and timeout")
     return settle
+
+
+def _ends_loop(message: Phd2Message) -> bool:
+    return isinstance(message, Phd2Closed) or message.name == "LoopingExposuresStopped"

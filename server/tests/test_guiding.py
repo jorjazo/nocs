@@ -320,7 +320,15 @@ class FakePhd2:
     def _stopped(self) -> None:
         was = self.state
         self.state = "Stopped"
-        self.event("GuidingStopped" if was == "Guiding" else "LoopingExposuresStopped")
+        if was in ("Calibrating", "Guiding", "LostLock"):
+            # As PHD2: guiding stops first, and the loop a moment later (3 ms on the
+            # simulators; 10 ms here).
+            self.event("GuidingStopped")
+            asyncio.get_running_loop().call_later(
+                0.01, lambda: self.event("LoopingExposuresStopped")
+            )
+        else:
+            self.event("LoopingExposuresStopped")
 
     def _restart(self) -> None:
         self.restarts += 1
@@ -798,6 +806,20 @@ async def test_failed_calibration_fails_the_job(phd2: FakePhd2, tmp_path: Path) 
         assert "calibration failed: star did not move enough" in job(store, job_id)["error"]
         assert guiding(store, "alert")["kind"] == "error"
         await until(lambda: not service.guiding)
+
+
+async def test_guiding_again_right_after_a_stop(phd2: FakePhd2, tmp_path: Path) -> None:
+    # The sequencer stops a guider that lost its star and starts it again at once: the
+    # end of the stopped loop, which PHD2 tells after the end of guiding, is not news
+    # about the new loop (soak test, 2026-11-01: "PHD2 stopped looping").
+    async with applied(phd2, tmp_path) as (service, store, jobs, _, _):
+        await finished(service, jobs, service.guide())
+        assert guiding(store, "app_state") == "Guiding"
+        await service.stop()
+        job_id = service.guide()
+        await finished(service, jobs, job_id)
+        assert job(store, job_id)["state"] == "succeeded", job(store, job_id)
+        assert guiding(store, "app_state") == "Guiding"
 
 
 async def test_no_settle_fails_the_job_but_guiding_goes_on(phd2: FakePhd2, tmp_path: Path) -> None:

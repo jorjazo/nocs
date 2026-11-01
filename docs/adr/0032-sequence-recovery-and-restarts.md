@@ -38,7 +38,10 @@ shape what to do instead:
   does not count; autofocus failing with *no stars* is clouds too.
 - **A lost guide star** shows when PHD2 is not guiding at the end of a frame
   that started guided: the frame does not count, and the next attempt starts
-  guiding again first.
+  guiding again first. (2026-11-01, soak test: the rig had come to fail a frame
+  for any guide frame without the star, which on the simulators threw away one
+  30 s frame in two and could end the night after three; a frame now fails when
+  the star was lost in more than 10 % of its guide frames.)
 - Each kind has a **policy**: retry the step up to `retries` times (`None`:
   as long as the containers' conditions hold), waiting `wait` seconds before
   each retry, then `skip` the step, `skip_target`, `pause` for the user, or

@@ -69,6 +69,10 @@ FOCUS_FACTS = ("position", "hfr", "start_position", "start_hfr", "temperature", 
 """What a sequence's events keep of an autofocus run."""
 COOLING_TOLERANCE = 1.0
 """°C from the target that count as there."""
+LOST_SHARE = 0.1
+"""A guided frame counts unless its star was lost in more than this share of its guide
+frames: one lost now and then (noise, a plane) leaves a long sub unharmed, and failing
+for it threw away every few frames and, three in a row, the night (soak test, 2026-11-01)."""
 WARM_TOLERANCE = 2.0
 WARM_TARGET = 15.0
 """°C to warm to before switching the cooler off, when the ambient is unknown."""
@@ -389,8 +393,16 @@ class RigExecutor:
             target=target.name if target is not None and plan.frame_type == "light" else None,
         )
         guiding = captured.result.get("guiding")
-        if self._guided and isinstance(guiding, dict) and (lost := guiding.get("lost")):
-            raise StepError("guiding", f"the guide star was lost {lost} times during the frame")
+        if self._guided and isinstance(guiding, dict):
+            lost, steps = guiding.get("lost"), guiding.get("steps")
+            if (
+                isinstance(lost, int)
+                and isinstance(steps, int)
+                and lost > LOST_SHARE * (lost + steps)
+            ):
+                raise StepError(
+                    "guiding", f"the guide star was lost in {lost} of {lost + steps} guide frames"
+                )
         frame = captured.result.get("id")
         return FrameResult(
             stars=captured.stars, hfr=captured.hfr, frame=frame if isinstance(frame, int) else None

@@ -81,6 +81,8 @@ class Rig:
         """Frames from this one on never end (nocsd is about to crash)."""
         self.drifts: list[float] = []
         """Arcminutes each pointing check finds the frame off the target."""
+        self.frame_guiding: list[dict[str, Json]] = []
+        """How guiding went during each frame, first to last (none: not guided)."""
 
     # capture
     def camera(self, role: Role) -> Camera:
@@ -116,7 +118,8 @@ class Rig:
             await self.gate.wait()
         await anyio.lowlevel.checkpoint()
         self.calls.append(f"frame {target} {seconds:g}")
-        return Captured({}, 40, 2.1)
+        guiding = self.frame_guiding.pop(0) if self.frame_guiding else None
+        return Captured({"guiding": guiding}, 40, 2.1)
 
     # filters
     async def select_in(self, context: JobContext, filter: int | str) -> Json:
@@ -332,6 +335,23 @@ async def test_a_guided_sequence_dithers_every_n_frames(setup: Any) -> None:
     assert not any(c.startswith("dither") for c in rig.calls)
     events = service_events(setup)
     assert {"skipped": "not guiding"} in [e["data"] for e in events if e["message"] == "dither"]
+
+
+async def test_a_frame_counts_unless_its_guide_star_was_lost_for_long(setup: Any) -> None:
+    service, rig, _, jobs, _ = setup
+    rig.frame_guiding = [
+        {"steps": 140, "lost": 2},  # two guide frames lost in a long sub: it counts
+        {"steps": 90, "lost": 60},  # lost for 40 % of the frame: trailed, taken again
+        {"steps": 150, "lost": 0},
+    ]
+    plan = ExposurePlan(rows=[PlanRow(filter="L", exposure=300, count=2)])
+    imaging = Container(target=M42, children=[Slew(), Guide(on=True), plan])
+    service.put("lost", Sequence(name="lost", targets=Container(children=[imaging])))
+    await jobs.wait(service.start("lost"))
+    assert [c for c in rig.calls if c.startswith("frame")] == ["frame M 42 300"] * 3
+    failed = [e for e in service_events(setup) if e["kind"] == "failed"]
+    assert [e["message"] for e in failed] == ["the guide star was lost in 60 of 150 guide frames"]
+    assert failed[0]["data"]["kind"] == "guiding"
 
 
 async def test_a_target_is_centred_and_checked_every_n_frames(setup: Any) -> None:
