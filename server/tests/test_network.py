@@ -65,8 +65,9 @@ class FakeNetworkManager:
             case ["nmcli", "-f", "NAME,TYPE", "connection", "show"]:
                 return "".join(f"{name}:802-11-wireless\n" for name in self.connections)
             case ["nmcli", "-g", _, "connection", "show", "id", name]:
+                # One value per line, as nmcli 1.54 prints a connection's fields.
                 c = self.connections[name]
-                return f"{c['ssid']}:{c['mode']}\n"
+                return f"{c['ssid']}\n{c['mode']}\n"
             case ["nmcli", "connection", "load", path]:
                 text = Path(path).read_text()  # noqa: ASYNC240 (a fake, in tests)
                 fields = dict(re.findall(r"^(\w+)=(.*)$", text, re.M))

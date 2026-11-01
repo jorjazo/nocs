@@ -412,7 +412,8 @@ class Network:
                 "id",
                 fields[0],
             )
-            values = split_terse(details.strip())
+            # One value per line (escaped as in terse output): the name, then the mode.
+            values = [split_terse(line)[0] for line in details.strip().splitlines() if line]
             if values and (len(values) < 2 or values[1] != "ap"):
                 known[fields[0]] = values[0]
         return known
