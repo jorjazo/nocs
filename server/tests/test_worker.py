@@ -3,7 +3,10 @@
 import asyncio
 import os
 import signal
+import subprocess
+import sys
 import threading
+import time
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -101,6 +104,44 @@ async def test_only_nocsd_stops_the_worker(tmp_path: Path, frame: str) -> None:
     worker.close()
     with pytest.raises(ProcessLookupError):
         os.kill(pid, 0)
+
+
+def running(pid: int) -> bool:
+    """Not a zombie: an orphan's exit is reaped by whoever adopted it."""
+    try:
+        return Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[0] != "Z"
+    except FileNotFoundError:
+        return False
+
+
+def test_the_worker_ends_with_nocsd(tmp_path: Path) -> None:
+    # nocsd killed or crashed never closes the worker: it must not wait for frames forever.
+    script = (
+        "import asyncio, os, signal, sys\n"
+        "from pathlib import Path\n"
+        "from nocs.imaging.worker import ImageWorker\n"
+        "async def main():\n"
+        "    worker = ImageWorker(Path(sys.argv[1]))\n"
+        "    pool = worker._executor()\n"
+        "    print(await asyncio.get_running_loop().run_in_executor(pool, os.getpid), flush=True)\n"
+        "    os.kill(os.getpid(), signal.SIGKILL)\n"
+        "asyncio.run(main())\n"
+    )
+    nocsd = subprocess.Popen(
+        [sys.executable, "-c", script, str(tmp_path)], stdout=subprocess.PIPE, text=True
+    )
+    assert nocsd.stdout is not None
+    pid = int(nocsd.stdout.readline())
+    try:
+        assert nocsd.wait(30) == -signal.SIGKILL
+        deadline = time.monotonic() + 10
+        while running(pid):
+            assert time.monotonic() < deadline, "the worker outlived nocsd"
+            time.sleep(0.1)
+    finally:
+        if running(pid):
+            os.kill(pid, signal.SIGKILL)
+        nocsd.stdout.close()
 
 
 async def test_closing_lets_the_frame_in_hand_finish(tmp_path: Path, frame: str) -> None:
