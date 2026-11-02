@@ -121,6 +121,7 @@ def api(tmp_path_factory: pytest.TempPathFactory) -> Iterator[TestClient]:
                     wait(client, finished(response.json()["job"]))
 
 
+@pytest.mark.slow
 def test_a_two_filter_sequence_focuses_takes_its_frames_and_parks(api: TestClient) -> None:
     if state(api)["mount"]["parked"]:
         assert api.post("/api/mount/unpark").status_code == 204
@@ -185,6 +186,7 @@ def set_property(api: TestClient, device: str, name: str, values: dict[str, Any]
     assert response.status_code == 202, response.text
 
 
+@pytest.mark.slow
 def test_autofocus_follows_the_temperature_and_the_stars(api: TestClient) -> None:
     if state(api)["mount"]["parked"]:
         assert api.post("/api/mount/unpark").status_code == 204
@@ -282,6 +284,7 @@ def orion_plan(name: str, count: int, **sequence: Any) -> dict[str, Any]:
     }
 
 
+@pytest.mark.slow
 def test_frames_under_clouds_are_taken_again(api: TestClient) -> None:
     if state(api)["mount"]["parked"]:
         assert api.post("/api/mount/unpark").status_code == 204
@@ -348,6 +351,7 @@ def report_clock(client: TestClient) -> None:
     assert response.status_code == 200, response.text
 
 
+@pytest.mark.slow
 def test_a_restarted_nocsd_finishes_the_run(restartable: tuple[Settings, dict[str, Any]]) -> None:
     settings, profile = restartable
     with TestClient(create_app(settings)) as client:

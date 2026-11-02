@@ -88,6 +88,12 @@ ISO week (`APT_REFRESH`) with the PPAs' current packages or when `dev/indi`/`dev
 change: a new INDI shows up in CI at the first run of a week. pytest fails a test
 after 10 minutes and CI prints the 30 slowest.
 
+CI runs unit tests (`pytest -m "not indi" -n auto`, no simulators) apart from the
+integration tests, which run one at a time on runners of their own. Integration
+tests marked `slow` (more than ~5 s in CI, or a module whose tests depend on each
+other's state) run only on pushes to `main`, so a pull request's CI takes 2–3
+minutes: mark a new integration test `slow` when CI's durations show it past that.
+
 ## Conventions and decisions to respect
 
 - **pyright strict** and ruff are mandatory; no `Any` leaking from libraries

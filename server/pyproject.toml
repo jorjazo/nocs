@@ -29,6 +29,7 @@ dev = [
     "pytest>=8.3",
     "pytest-asyncio>=0.24",
     "pytest-timeout>=2.3",
+    "pytest-xdist>=3.6",
     "ruff>=0.8",
 ]
 
@@ -64,4 +65,5 @@ timeout = 600
 markers = [
     "indi: integration tests that need an indiserver running the simulators (NOCS_TEST_INDI=host:port)",
     "phd2: integration tests that also need a headless PHD2 (NOCS_TEST_PHD2=host:port)",
+    "slow: integration tests that take more than ~5 s in CI, which runs them only on main",
 ]
