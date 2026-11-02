@@ -124,6 +124,7 @@ def restarted(api: TestClient, name: str) -> float:
     return time.monotonic() - start
 
 
+@pytest.mark.slow
 def test_a_camera_frozen_mid_exposure(api: TestClient, freeze: Callable[[str], None]) -> None:
     job = api.post("/api/cameras/main_camera/expose", json={"exposure": 60}).json()["job"]
     wait(api, lambda s: s["cameras"]["main_camera"]["exposing"])
@@ -151,6 +152,7 @@ def test_a_camera_frozen_mid_exposure(api: TestClient, freeze: Callable[[str], N
     assert state(api)["jobs"][job]["state"] == "succeeded"
 
 
+@pytest.mark.slow
 def test_a_mount_frozen_mid_go_to(api: TestClient, freeze: Callable[[str], None]) -> None:
     response = api.post("/api/clock", json={"utc": datetime.now(UTC).isoformat(), "utc_offset": -3})
     assert response.status_code == 200

@@ -19,7 +19,8 @@ from nocs.api.schemas import AppState
 from nocs.config import Settings
 from nocs.services.indi_bridge import COALESCE
 
-pytestmark = pytest.mark.indi
+# Slow as a whole: the last test checks the runs that the ones before it left.
+pytestmark = [pytest.mark.indi, pytest.mark.slow]
 
 SIMULATORS = json.loads(
     (Path(__file__).parents[2] / "dev" / "profiles" / "simulators.json").read_text()

@@ -159,6 +159,7 @@ def _expose(api: TestClient, data_dir: Path) -> Path:
     return data_dir / "NOCS" / job["result"]["path"]
 
 
+@pytest.mark.slow
 @pytest.mark.indi
 async def test_simulator_frames(api: tuple[TestClient, Path], astap: Astap) -> None:
     client, data_dir = api

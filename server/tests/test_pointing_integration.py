@@ -188,6 +188,7 @@ def api(tmp_path_factory: pytest.TempPathFactory) -> Iterator[TestClient]:
             clear_alignment(client)
 
 
+@pytest.mark.slow
 @pytest.mark.indi
 def test_solve_measures_the_pointing_error_and_syncs(api: TestClient) -> None:
     api.post(
@@ -276,6 +277,7 @@ def center(api: TestClient, **body: Any) -> dict[str, Any]:
     return result
 
 
+@pytest.mark.slow
 @pytest.mark.indi
 @pytest.mark.parametrize("method", ["sync", "offset"])
 def test_center_corrects_the_pointing_error(api: TestClient, method: str) -> None:
@@ -306,6 +308,7 @@ def test_center_corrects_the_pointing_error(api: TestClient, method: str) -> Non
     assert separation(final["ra"], final["dec"], target["ra"], target["dec"]) * 60 <= 1.0
 
 
+@pytest.mark.slow
 @pytest.mark.indi
 def test_solve_the_frame_on_screen(api: TestClient) -> None:
     """Live view's "Solve this frame": the frame behind the preview, without exposing."""

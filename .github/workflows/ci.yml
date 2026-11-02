@@ -16,6 +16,32 @@ concurrency:
 jobs:
   server:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv sync --locked
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run pyright
+      - name: Unit tests
+        run: uv run pytest -m "not indi" -n auto --durations=15
+
+  # Tests against the INDI simulators and PHD2, one at a time on each runner since they
+  # share them. The slow ones (pytest -m slow) run only on pushes to main, on a runner
+  # of their own, so that a pull request's CI takes a few minutes.
+  integration:
+    strategy:
+      fail-fast: false
+      matrix:
+        tests: ${{ fromJSON(github.event_name == 'push' && '["not slow", "slow"]' || '["not slow"]') }}
+    name: integration (${{ matrix.tests }})
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     defaults:
       run:
@@ -38,12 +64,13 @@ jobs:
           files: compose.yaml
           targets: indi,phd2
           load: true
+          # Both runners write the same cache; a write that loses the race is harmless.
           set: |
             *.args.APT_REFRESH=${{ steps.week.outputs.week }}
             indi.cache-from=type=gha,scope=dev-indi
-            indi.cache-to=type=gha,scope=dev-indi,mode=max
+            indi.cache-to=type=gha,scope=dev-indi,mode=max,ignore-error=true
             phd2.cache-from=type=gha,scope=dev-phd2
-            phd2.cache-to=type=gha,scope=dev-phd2,mode=max
+            phd2.cache-to=type=gha,scope=dev-phd2,mode=max,ignore-error=true
       - name: Start INDI simulators and PHD2
         working-directory: .
         run: |
@@ -59,11 +86,8 @@ jobs:
         working-directory: .
         run: dev/astap/install.sh
       - run: uv sync --locked
-      - run: uv run ruff check .
-      - run: uv run ruff format --check .
-      - run: uv run pyright
-      - name: Tests (unit, INDI and PHD2 integration)
-        run: uv run pytest -v --durations=30
+      - name: Tests (INDI and PHD2 integration)
+        run: uv run pytest -v --durations=30 -m "indi and ${{ matrix.tests }}"
         env:
           NOCS_TEST_INDI: 127.0.0.1:7624
           NOCS_TEST_INDI_FIFO: ../dev/.run/fifo
