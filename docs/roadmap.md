@@ -1,25 +1,36 @@
 # NOCS — Roadmap
 
-Status: draft · Last updated: 2026-10-27
+Status: draft · Last updated: 2026-11-02
 
 Planning assumptions: one developer, 5–10 hours per week (~250–500 hours per
 year). Estimates are rough ranges in hours of focused work. Every phase ends
 with something usable on the real rig, so progress is always testable at
 night and never only infrastructure.
 
-| Phase | Name | Estimate | Outcome |
-|---|---|---|---|
-| 0 | Foundations | 40–60 h | Simulated devices visible live in a browser |
-| 1 | UX design | 20–30 h | Approved mockups and design system |
-| 2 | Connect & capture | 60–80 h | Manual imaging from the phone |
-| 3 | Solve & frame | 40–60 h | "Go to M31 and center it" |
-| 4 | Guide & align | 50–70 h | Polar alignment and guided long exposures |
-| 5 | Focus & sequence | 80–120 h | A full unattended night |
-| 6 | Appliance | 50–70 h | Flashable Pi image — **first public release (v0.1)** |
-| 7+ | Beyond v0.1 | — | Robustness, remote access, DSLR, EAA, observatory |
+| Phase | Name | Estimate | Outcome | Status (2026-11-02) |
+|---|---|---|---|---|
+| 0 | Foundations | 40–60 h | Simulated devices visible live in a browser | Done |
+| 1 | UX design | 20–30 h | Approved mockups and design system | Done: every screen follows [ux.md](ux.md) (still marked draft) |
+| 2 | Connect & capture | 60–80 h | Manual imaging from the phone | Implemented, checked on the lab rig; field test pending |
+| 3 | Solve & frame | 40–60 h | "Go to NGC 292 and center it" | Implemented; field test pending |
+| 4 | Guide & align | 50–70 h | Polar alignment and guided long exposures | Implemented, checked in the lab; field test pending |
+| 5 | Focus & sequence | 80–120 h | A full unattended night | Implemented; an 8 h night on the lab Pi and the field test pending |
+| 6 | Appliance | 50–70 h | Flashable Pi image — **first public release (v0.1)** | In progress: the apt repository's hosting, a hardware check of supervision and the release left |
+| 7+ | Beyond v0.1 | — | Robustness, remote access, DSLR, EAA, observatory | Calibration frames implemented; their field test pending |
 
 Phases 0 and 1 can overlap: backend foundations do not depend on the visual
 design, and the UI of phase 2 should not be built before phase 1 ends.
+
+**What stands between `main` and v0.1** (each phase's plan has the details):
+
+1. One clear night through the [field test](v0.1/field-test.md): the exits of
+   phases 2–5 and the sky half of calibration's.
+2. An 8 h night on the lab Pi with the soak test's follow-ups
+   ([spike](spikes/pi5-soak.md)).
+3. The apt repository's domain, bucket, token and signing key, then updating a
+   test Pi from one `testing` build to the next and back (6.10).
+4. ADRs 0025–0030 and 0035 accepted (0025–0037 are all still proposed).
+5. The release itself (6.12, [checklist](v0.1/release.md)).
 
 ---
 
@@ -153,7 +164,9 @@ full night from a phone with no other computer involved.
 
 ## Beyond v0.1 (unordered backlog)
 
-- Robustness: crash recovery of a running sequence, long-run soak tests.
+- Robustness: crash recovery of a running sequence (resuming after a nocsd
+  restart is in v0.1, ADR 0032), long-run soak tests (a first one is in
+  `dev/tools/soak/`, [spike](spikes/pi5-soak.md)).
 - SMB share for desktop access to images.
 - Remote access outside the LAN.
 - Canon DSLR (gphoto) polish.

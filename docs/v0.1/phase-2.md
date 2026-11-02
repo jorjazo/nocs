@@ -1,6 +1,6 @@
 # Phase 2 plan — Connect & capture
 
-Status: in progress · Last updated: 2026-10-31 · Roadmap: [Phase 2](../roadmap.md#phase-2--connect--capture-manual-imaging)
+Status: implemented, waiting for its field test · Last updated: 2026-11-02 · Roadmap: [Phase 2](../roadmap.md#phase-2--connect--capture-manual-imaging)
 
 Goal: replace the laptop for manual imaging sessions, controlled only from a phone.
 
