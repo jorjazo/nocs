@@ -211,8 +211,11 @@ Measured, not changed:
 - After the mirror, the largest WebSocket share is the mount's own state (`mount.ra`,
   `dec`, `ra_j2000`, `dec_j2000` ~4 patches/s, following the telescope's 250 ms poll):
   worth coalescing too if phones on weak Wi-Fi need less.
-- The full simulator suite passed on each stage before the rebase on e0a7bca; after
-  it, ruff, pyright and the web checks passed and CI has the last word.
+- Tests: each stage's own tests and the integration files they touch passed on the
+  simulators, and ruff, pyright and the web checks pass; the last full simulator run
+  was cut short (2 autofocus integration failures while another run likely shared the
+  simulators; that file passes alone). If CI fails there, start with the autofocus
+  tests and the mirror's coalescing (ADR 0037).
 
 ## What limits a night
 
