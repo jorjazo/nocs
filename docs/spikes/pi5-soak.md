@@ -202,6 +202,18 @@ Measured, not changed:
    ~21 % of guide frames at 8″), so the tool sets 14″. PHD2 calibrates in ~4.5 min on
    the simulators.
 
+### Left after the follow-ups (2026-11-02)
+
+- Run the 8 h night on the lab Pi with every fix (Status above), and measure there
+  what the follow-ups changed: the loop's lag while guiding (BLOBs now parsed in a
+  thread), WebSocket bytes per client, and a `systemctl restart nocsd@…` that logs
+  `Finished server process` and leaves no `/dev/shm/sem.mp-*` behind.
+- After the mirror, the largest WebSocket share is the mount's own state (`mount.ra`,
+  `dec`, `ra_j2000`, `dec_j2000` ~4 patches/s, following the telescope's 250 ms poll):
+  worth coalescing too if phones on weak Wi-Fi need less.
+- The full simulator suite passed on each stage before the rebase on e0a7bca; after
+  it, ruff, pyright and the web checks passed and CI has the last word.
+
 ## What limits a night
 
 Memory, CPU and descriptors do not: nothing grows, and nocsd, its worker, PHD2 and the
