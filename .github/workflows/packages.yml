@@ -5,22 +5,15 @@ name: Packages
 # main go to the apt repository's testing suite, tags to stable and testing, with a
 # GitHub release (ADR 0035); without the repository's variable and secrets they stay
 # artifacts.
-# Pushes that change only documentation build nothing; tags always do (GitHub does
-# not apply path filters to them).
+# Not on pull requests, whose CI stays a few minutes long. Pushes that change only
+# documentation build nothing; tags always do (GitHub does not apply path filters
+# to them).
 on:
   push:
     branches: [main]
     tags: ["v*"]
     paths-ignore: [docs/**, "**.md"]
-  pull_request:
-    paths-ignore: [docs/**, "**.md"]
   workflow_dispatch:
-
-# A newer push supersedes a pull request's run; on main and tags every run goes on,
-# since publish rewrites the apt repository's indices.
-concurrency:
-  group: packages-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   deb:

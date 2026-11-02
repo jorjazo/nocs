@@ -81,7 +81,8 @@ packaging/deb/build.sh && packaging/deb/test.sh packaging/out/nocs_*_amd64.deb  
 ```
 
 CI runs all of the above (INDI simulators included) on every push to `main`; the
-packages workflow builds and installs the .deb on amd64 and arm64. Pushes that change
+packages workflow builds and installs the .deb on amd64 and arm64 (on `main` and tags,
+not on pull requests). Pushes that change
 only `docs/` or `*.md` run neither, and a newer push cancels CI's run in progress.
 CI takes the simulators' and PHD2's images from the Actions cache, built again each
 ISO week (`APT_REFRESH`) with the PPAs' current packages or when `dev/indi`/`dev/phd2`
