@@ -150,27 +150,54 @@ Each of the first three ended or would have ended a night; the fixes are on `mai
    end of the stop, and the second reached the next start. A stop from guiding now waits
    for both (the tests' fake PHD2 sends both, as PHD2 does).
 
-Measured, not changed:
+Measured, then changed (2026-11-02, on the simulators: the lab Pi was away):
 
 4. **File operations on the event loop wait for the microSD** while it writes back a
    frame (ext4 `data=ordered`): deleting old previews did (up to 4 s, now in a thread),
    and so does a log line written to a file (up to 1.9 s). journald's socket absorbs it on
-   the appliance, but a `QueueHandler` (records written by a thread) would make it
-   impossible. Also on the loop: decoding the guide camera's BLOBs that NOCS previews
-   from PHD2 (base64 and XML, ~1.7 % of the loop's time in 50–100 ms pieces every 2 s;
-   ADR 0012 wanted BLOBs off the loop).
+   the appliance, but now **log records are written by a thread** (`QueueHandler` and
+   `QueueListener`, `nocs.logs`), uvicorn's access log included. Also on the loop:
+   decoding the guide camera's BLOBs that NOCS previews from PHD2 (base64 and XML,
+   ~1.7 % of the loop's time in 50–100 ms pieces every 2 s). **The INDI client now
+   parses an element over 64 KB in a thread**, decoding base64 in 64 KB slices. Both
+   hold the GIL, so the CPU spent is the same, but the loop waits a few ms at a time:
+   against a fake indiserver sending the simulator's 2.6 MB guide frames, a PC's
+   worst loop lag went from 22–31 ms to 6–11 ms (ADR 0012, dated note).
 
 5. **The WebSocket carries ~24 patches/s, ~19 kB/s per client (~70 MB an hour)**, and
    ~88 % of it is the raw INDI property mirror (`indi.devices`: the Telescope Simulator
    50 operations/s, the guide and main cameras 26 and 20), which only the developer
-   screen (`#/dev`) shows. Harmless on a LAN; worth coalescing (one update per property
-   per second) or sending only to clients that ask, for phones on weak Wi-Fi and for
-   the Pi's JSON encoding with several clients.
-6. **Guide frames do not wear the microSD.** nocsd writes every frame PHD2 takes (one
+   screen (`#/dev`) and the profile editor read. **The mirror is now coalesced**
+   ([ADR 0037](../adr/0037-coalesced-indi-mirror.md)): a property's updates at most
+   once a second (at once when its state changes), only the elements that changed, a
+   number's value without its limits, and 10 driver messages in the state instead of
+   50 (the list is sent whole with each). Chosen over sending the mirror only to
+   clients that ask: no protocol change, and every reader keeps working. With the
+   mount tracking and 1 s frames on the simulators, a client went from 36 patches and
+   22.5 kB/s (87 % the mirror) to 22 patches and 7.1 kB/s (48 %).
+
+6. **nocsd did not stop cleanly** (`sem_unlink` errors on the lab Pi's `nocsd@jorjazo`
+   even after 079bd25). uvicorn stops on SIGTERM, then raises it again under the
+   handler it found: Python's default killed nocsd (status −15) before its exit
+   handlers. Whether the imaging worker's semaphores were unlinked then depended on
+   timing: closing the worker frees them from the pool's threads, and the process
+   could die in between, a semaphore unlinked but not yet unregistered, which the
+   resource tracker then fails to unlink again (`FileNotFoundError`); or not yet
+   unlinked at all (5 left in `/dev/shm` in one of two stops reproduced on a PC; the
+   literal error was not reproduced). With records written by a thread, the
+   shutdown's own log lines were lost too. nocsd's handler now makes it a normal exit
+   (status 0, exit handlers run). And the worker, which ignores SIGTERM to let nocsd
+   stop it, waited forever when nocsd was killed or crashed (it holds its own end of
+   the pool's queue), keeping the resource tracker alive with it: it now exits with
+   its parent. Tests for both.
+
+Measured, not changed:
+
+7. **Guide frames do not wear the microSD.** nocsd writes every frame PHD2 takes (one
    every 2 s, 2.6 MB here) to `incoming/` for its preview and deletes it a second later:
    its `write_bytes` reads ~1 MB/s, but the card saw ~0.1 MB/s while guiding without main
    frames, as the files are gone before writeback.
-7. **Simulator limits, not NOCS's:** the guide simulator's default 3.5″ stars are under
+8. **Simulator limits, not NOCS's:** the guide simulator's default 3.5″ stars are under
    a pixel at the guide scope's 4.1″/px and PHD2 keeps losing them ("low HFD"; still
    ~21 % of guide frames at 8″), so the tool sets 14″. PHD2 calibrates in ~4.5 min on
    the simulators.

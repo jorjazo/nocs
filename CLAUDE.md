@@ -103,8 +103,16 @@ packages workflow builds and installs the .deb on amd64 and arm64.
   for debayer and downscale, star metrics (`sep`) in a worker process, never on
   the event loop. ASTAP downsampling must be chosen from star size, not `-z 0`.
   Frames arrive by `UPLOAD_LOCAL` when indiserver shares the filesystem (a BLOB
-  blocks the event loop ~0.3 s per 26 MP frame on the Pi), are analysed in one
-  spawned worker process, and OpenCV calls an RGGB sensor "BG" (ADR 0012).
+  costs ~0.3 s of the Pi's CPU per 26 MP frame; the client parses large ones in a
+  thread, but under the GIL), are analysed in one spawned worker process, and
+  OpenCV calls an RGGB sensor "BG" (ADR 0012).
+- **Nothing that can wait on the microSD runs on the event loop**: file operations
+  go to a thread, and log records are written by one (`nocs.logs`). uvicorn raises
+  SIGTERM again after its shutdown; nocsd's own handler makes that a normal exit,
+  so the log thread and multiprocessing's exit handlers still run.
+- **The state's INDI mirror** (`indi.devices`) is for people: a property's
+  updates reach it at most once a second (ADR 0037). Services use the device
+  facades; a test reading the mirror right after an action must wait for it.
 - **Python runtime:** nocsd should run on a uv-managed Python (3.12/3.13), not
   the system interpreter: scientific deps lack arm64 wheels for Ubuntu 26.04's
   Python 3.14.
