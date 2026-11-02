@@ -36,8 +36,9 @@ not, are welcome: send the diagnostics bundle (see [troubleshooting](troubleshoo
 - **Raspberry Pi 5** (4 or 8 GB), with an active cooler and a 5 V / 5 A supply. NOCS
   shows the CPU temperature and warns when the supply is too weak, when the CPU slows
   down and when memory or the system disk runs low.
-- **Storage:** the microSD card works; a USB SSD is faster and lasts longer. USB
-  drives formatted FAT, exFAT, NTFS, ext4, btrfs or XFS are mounted when plugged in.
+- **Storage:** the microSD card works; a USB drive for the frames, even a USB 3 stick,
+  is several times faster and keeps the system disk responsive. USB drives formatted
+  FAT, exFAT, NTFS, ext4, btrfs or XFS are mounted when plugged in.
 - **Wi-Fi:** the Pi's own. A USB hub with its own power helps when the camera, the
   guide camera, the focuser, the filter wheel and the mount all hang off the Pi.
 - **USB GPS receivers** that gpsd reads (most NMEA ones, e.g. u-blox) give the box
