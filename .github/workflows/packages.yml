@@ -5,12 +5,22 @@ name: Packages
 # main go to the apt repository's testing suite, tags to stable and testing, with a
 # GitHub release (ADR 0035); without the repository's variable and secrets they stay
 # artifacts.
+# Pushes that change only documentation build nothing; tags always do (GitHub does
+# not apply path filters to them).
 on:
   push:
     branches: [main]
     tags: ["v*"]
+    paths-ignore: [docs/**, "**.md"]
   pull_request:
+    paths-ignore: [docs/**, "**.md"]
   workflow_dispatch:
+
+# A newer push supersedes a pull request's run; on main and tags every run goes on,
+# since publish rewrites the apt repository's indices.
+concurrency:
+  group: packages-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   deb:
@@ -23,6 +33,7 @@ jobs:
           - arch: arm64
             runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
         with:
@@ -53,6 +64,7 @@ jobs:
 
   repository:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
       - name: Publish to a local repository and install from it
@@ -62,6 +74,7 @@ jobs:
     needs: [deb, repository]
     if: github.event_name == 'push' && vars.NOCS_APT_URL != ''
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     # One publish at a time: each rewrites the suites' indices.
     concurrency:
       group: apt-repository

@@ -81,7 +81,12 @@ packaging/deb/build.sh && packaging/deb/test.sh packaging/out/nocs_*_amd64.deb  
 ```
 
 CI runs all of the above (INDI simulators included) on every push to `main`; the
-packages workflow builds and installs the .deb on amd64 and arm64.
+packages workflow builds and installs the .deb on amd64 and arm64. Pushes that change
+only `docs/` or `*.md` run neither, and a newer push cancels CI's run in progress.
+CI takes the simulators' and PHD2's images from the Actions cache, built again each
+ISO week (`APT_REFRESH`) with the PPAs' current packages or when `dev/indi`/`dev/phd2`
+change: a new INDI shows up in CI at the first run of a week. pytest fails a test
+after 10 minutes and CI prints the 30 slowest.
 
 ## Conventions and decisions to respect
 

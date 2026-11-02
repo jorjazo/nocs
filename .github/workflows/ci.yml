@@ -1,13 +1,22 @@
 name: CI
 
+# Pushes that change only documentation run nothing (no build reads docs/ or *.md).
 on:
   push:
     branches: [main]
+    paths-ignore: [docs/**, "**.md"]
   pull_request:
+    paths-ignore: [docs/**, "**.md"]
+
+# A newer push to the same branch or pull request supersedes the run in progress.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   server:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: server
@@ -16,10 +25,29 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
+      # The simulators' and PHD2's images come from the Actions cache, built again
+      # each ISO week (APT_REFRESH) to follow the PPAs, or when their files change.
+      - name: ISO week
+        id: week
+        run: echo "week=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v4
+      - name: Build INDI simulators and PHD2
+        uses: docker/bake-action@v7
+        with:
+          source: ./dev
+          files: compose.yaml
+          targets: indi,phd2
+          load: true
+          set: |
+            *.args.APT_REFRESH=${{ steps.week.outputs.week }}
+            indi.cache-from=type=gha,scope=dev-indi
+            indi.cache-to=type=gha,scope=dev-indi,mode=max
+            phd2.cache-from=type=gha,scope=dev-phd2
+            phd2.cache-to=type=gha,scope=dev-phd2,mode=max
       - name: Start INDI simulators and PHD2
         working-directory: .
         run: |
-          docker compose -f dev/compose.yaml up -d --build indi phd2
+          docker compose -f dev/compose.yaml up -d --no-build indi phd2
           timeout 60 bash -c 'until (echo > /dev/tcp/127.0.0.1/7624) 2>/dev/null; do sleep 1; done'
           timeout 60 bash -c 'until (echo > /dev/tcp/127.0.0.1/4400) 2>/dev/null; do sleep 1; done'
       - name: Cache ASTAP and its D05 star database
@@ -35,7 +63,7 @@ jobs:
       - run: uv run ruff format --check .
       - run: uv run pyright
       - name: Tests (unit, INDI and PHD2 integration)
-        run: uv run pytest -v
+        run: uv run pytest -v --durations=30
         env:
           NOCS_TEST_INDI: 127.0.0.1:7624
           NOCS_TEST_INDI_FIFO: ../dev/.run/fifo
@@ -51,6 +79,7 @@ jobs:
 
   web:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: web

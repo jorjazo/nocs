@@ -6,6 +6,9 @@
 FROM ubuntu:26.04
 
 ARG DEBIAN_FRONTEND=noninteractive
+# CI passes the ISO week (e.g. 2026-W45), so its cached layers are built again each
+# week with the PPA's current packages. Empty otherwise, which changes nothing.
+ARG APT_REFRESH
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends software-properties-common gpg-agent \
