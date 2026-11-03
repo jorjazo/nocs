@@ -508,7 +508,8 @@ export const es: Messages = {
     limits: "Límites de la montura",
     altitudeOn: (lower, upper) => `Altura de ${lower} a ${upper}`,
     altitudeOff: "Límites de altura desactivados",
-    meridian: (flip, limit) => `Límite de meridiano ${limit}${flip ? ", voltea sola" : ""}`,
+    meridian: (flip, stops, limit) =>
+      `Límite de meridiano ${limit}${flip ? ", voltea sola" : stops ? ", ahí deja de seguir" : ""}`,
     noLimits: "El driver no muestra ninguno.",
     locked: "Solo los dispositivos del dueño mueven la montura.",
   },
@@ -1317,6 +1318,8 @@ export const es: Messages = {
       flipped: (side) => `Giro de meridiano hecho: pilar ${side}`,
       flipWaiting: (minutes) => `Giro de meridiano: esperando ${minutes} min al meridiano`,
       flipDue: "Giro de meridiano",
+      mountMeridian: (flips, limit, after) =>
+        `La montura ${flips ? "voltea sola" : "deja de seguir"} ${limit} pasado el meridiano, antes del giro a ${after} min: sube su límite de meridiano`,
       guard: "Pasó el meridiano sin girar: seguimiento detenido",
     },
     hold: {

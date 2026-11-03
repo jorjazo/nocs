@@ -50,6 +50,8 @@ class MeridianLimits:
     """The mount flips by itself when it reaches the limit."""
     limit: float
     """Degrees past the meridian (as the driver defines it)."""
+    stops: bool
+    """The mount stops tracking when it reaches the limit (when it does not flip)."""
 
 
 class PierSide(StrEnum):
@@ -255,13 +257,27 @@ class Mount(Device):
 
     @property
     def meridian_limits(self) -> MeridianLimits | None:
-        """Meridian flip settings (ZWO AM5 and AM7)."""
-        if not (self.has("MERIDIAN_FLIP") and self.has("MERIDIAN_LIMIT")):
+        """What the mount does by itself past the meridian, when its driver says.
+
+        The ZWO AM5 and AM7 flip or not (``MERIDIAN_FLIP``) at ``MERIDIAN_LIMIT.LIMIT``,
+        and then track on or stop (``POST_MERIDIAN_TRACK``); iOptron mounts stop or
+        flip (``MERIDIAN_ACTION``) at ``MERIDIAN_LIMIT.VALUE``.
+        """
+        if not self.has("MERIDIAN_LIMIT"):
             return None
-        return MeridianLimits(
-            self.prop("MERIDIAN_FLIP").switch("INDI_ENABLED"),
-            self.prop("MERIDIAN_LIMIT").number("LIMIT"),
-        )
+        limit = self.prop("MERIDIAN_LIMIT")
+        if self.has("MERIDIAN_FLIP"):
+            flip = self.prop("MERIDIAN_FLIP").switch("INDI_ENABLED")
+            stops = self.has("POST_MERIDIAN_TRACK") and self.prop("POST_MERIDIAN_TRACK").switch(
+                "STOP"
+            )
+            return MeridianLimits(flip, limit.number("LIMIT"), not flip and stops)
+        if self.has("MERIDIAN_ACTION"):
+            action = self.prop("MERIDIAN_ACTION")
+            return MeridianLimits(
+                action.switch("IOP_MB_FLIP"), limit.number("VALUE"), action.switch("IOP_MB_STOP")
+            )
+        return None
 
     # -- commands -----------------------------------------------------------
 

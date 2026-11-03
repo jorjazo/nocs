@@ -202,6 +202,10 @@ export function describeEvent(event: SequenceEvent, t: Messages, locale: string)
     case "trigger": {
       const waiting = /^flip: waiting ([\d.]+) min/.exec(event.message);
       if (waiting) return e.flipWaiting(formatDecimal(Number(waiting[1]), locale, 1));
+      const limit = number("mount_limit");
+      const after = number("flip_after");
+      if (limit !== null && after !== null)
+        return e.mountMeridian(data.mount_flips === true, `${formatPlain(limit, locale)}°`, formatPlain(after, locale));
       if (event.message.startsWith("flip:")) return e.flipDue;
       return e.trigger(event.message.replace(/^autofocus: /, ""));
     }

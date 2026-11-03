@@ -11,7 +11,7 @@ import astropy.coordinates  # pyright: ignore[reportMissingTypeStubs]
 import astropy.time  # pyright: ignore[reportMissingTypeStubs]
 import astropy.units  # pyright: ignore[reportMissingTypeStubs]
 import pytest
-from fakes import FakeClient, driver_info, switch_property
+from fakes import FakeClient, driver_info, number_property, switch_property
 
 from nocs.clock import Clock
 from nocs.devices import (
@@ -21,6 +21,7 @@ from nocs.devices import (
     DeviceInterface,
     Direction,
     Location,
+    MeridianLimits,
     Motion,
     Mount,
 )
@@ -432,6 +433,31 @@ def test_the_am5_names_its_rates_by_index() -> None:
     assert mount.slew_rate_labels == [
         "0.25x", "0.5x", "1x", "2x", "4x", "8x", "20x", "60x", "720x", "1440x"
     ]  # fmt: skip
+
+
+def test_the_am5_tracks_on_past_its_meridian_limit() -> None:
+    client = FakeClient()
+    client.replay("lab-rig-2026-10-30.xml", "ZWO AM5")
+    mount = Mount(client, "ZWO AM5")
+    assert mount.meridian_limits == MeridianLimits(flip=False, limit=15, stops=False)
+    client.define(switch_property("ZWO AM5", "POST_MERIDIAN_TRACK", TRACK=False, STOP=True))
+    assert mount.meridian_limits == MeridianLimits(flip=False, limit=15, stops=True)
+    client.define(
+        switch_property("ZWO AM5", "MERIDIAN_FLIP", INDI_ENABLED=True, INDI_DISABLED=False)
+    )
+    assert mount.meridian_limits == MeridianLimits(flip=True, limit=15, stops=False)
+
+
+def test_an_ioptron_stops_or_flips_at_its_meridian_limit(client: FakeClient) -> None:
+    mount = Mount(client, NAME)
+    assert mount.meridian_limits is None
+    # indi_ioptronv3_telescope's own names (docs/drivers/indi_ioptronv3_telescope.md)
+    client.define(number_property(NAME, "MERIDIAN_LIMIT", VALUE=2))
+    assert mount.meridian_limits is None  # no action: nothing known
+    client.define(switch_property(NAME, "MERIDIAN_ACTION", IOP_MB_STOP=True, IOP_MB_FLIP=False))
+    assert mount.meridian_limits == MeridianLimits(flip=False, limit=2, stops=True)
+    client.define(switch_property(NAME, "MERIDIAN_ACTION", IOP_MB_STOP=False, IOP_MB_FLIP=True))
+    assert mount.meridian_limits == MeridianLimits(flip=True, limit=2, stops=False)
 
 
 async def test_pad_sends_the_rate_at_every_start(client: FakeClient, driver: MotionDriver) -> None:

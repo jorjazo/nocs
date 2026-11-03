@@ -19,7 +19,7 @@ from typing import Protocol
 
 import anyio
 
-from nocs.devices import Coordinates, DeviceError, FrameType
+from nocs.devices import Coordinates, DeviceError, FrameType, MeridianLimits
 from nocs.devices.camera import SensorInfo
 from nocs.equipment import Role
 from nocs.filters.service import FilterWheelNotReadyError
@@ -511,6 +511,17 @@ class RigExecutor:
             await mount.set_tracking(False, job=self._context.id)
         except ResourceBusyError:
             await mount.set_tracking(False)  # paused: the sequence lent the mount
+
+    def mount_meridian(self) -> MeridianLimits | None:
+        found = self._store.get(("mount", "limits", "meridian"))
+        if not isinstance(found, dict):
+            return None
+        flip, limit, stops = found.get("flip"), found.get("limit"), found.get("stops")
+        if not (isinstance(flip, bool) and isinstance(stops, bool)):
+            return None
+        if not isinstance(limit, int | float) or isinstance(limit, bool):
+            return None
+        return MeridianLimits(flip, float(limit), stops)
 
     async def _center(self, action: Center, aim: tuple[float, float]) -> dict[str, Json]:
         """Centre ``aim`` (3.3's centring); how many frames it took and how far it was."""

@@ -322,7 +322,11 @@
           </p>
         {/if}
         {#if mount.limits.meridian}
-          <p class="caption">{t.mount.meridian(mount.limits.meridian.flip, degrees(mount.limits.meridian.limit, 0))}</p>
+          <p class="caption">{t.mount.meridian(
+              mount.limits.meridian.flip,
+              mount.limits.meridian.stops,
+              degrees(mount.limits.meridian.limit, 0),
+            )}</p>
         {/if}
       {:else}
         <p class="caption muted">{t.mount.noLimits}</p>

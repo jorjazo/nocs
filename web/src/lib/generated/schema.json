@@ -5478,11 +5478,16 @@
         "limit": {
           "description": "Degrees past the meridian.",
           "type": "number"
+        },
+        "stops": {
+          "description": "It stops tracking at the limit (when it does not flip).",
+          "type": "boolean"
         }
       },
       "required": [
         "flip",
-        "limit"
+        "limit",
+        "stops"
       ],
       "title": "MeridianLimits",
       "type": "object"
