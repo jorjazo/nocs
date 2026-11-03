@@ -1057,6 +1057,9 @@ export const es: Messages = {
     longitude: "Longitud",
     longitudeHint: "Grados, este positivo (el oeste es negativo).",
     elevation: "Altitud",
+    useGps: "Usar la posición del GPS",
+    gpsPosition: (latitude: string, longitude: string, elevation: string | null) =>
+      `GPS: ${latitude}, ${longitude}${elevation === null ? " (aún sin altitud)" : `, ${elevation}`}`,
     save: "Guardar perfil",
     delete: "Borrar perfil",
     confirmDelete: "Toca otra vez para borrar",

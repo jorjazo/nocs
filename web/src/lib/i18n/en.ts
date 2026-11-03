@@ -1073,6 +1073,9 @@ export const en = {
     longitude: "Longitude",
     longitudeHint: "Degrees, east positive (west is negative).",
     elevation: "Elevation",
+    useGps: "Use the GPS position",
+    gpsPosition: (latitude: string, longitude: string, elevation: string | null) =>
+      `GPS: ${latitude}, ${longitude}${elevation === null ? " (no elevation yet)" : `, ${elevation}`}`,
     save: "Save profile",
     delete: "Delete profile",
     confirmDelete: "Tap again to delete",
