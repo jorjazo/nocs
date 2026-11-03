@@ -12,11 +12,19 @@ repo=$(cd "$(dirname "$0")/../.." && pwd)
 out=${OUT:-$repo/packaging/out}
 mkdir -p "$out"
 
-# Between releases: <pyproject version>~git<commits>.g<commit>, which sorts before
-# the release itself. A tagged release (v<version>) is just <version>.
+# The pyproject version is PEP 440 (0.1.0, 0.1.0rc1); its tag is v0.1.0 or
+# v0.1.0-rc.1, and its package 0.1.0 or 0.1.0~rc1, which sorts before 0.1.0.
+# Between releases: <package version>~git<commits>.g<commit>, which sorts before
+# the release itself. A tagged release is just its package version.
 if [[ -z ${VERSION:-} ]]; then
-    base=$(sed -n 's/^version = "\(.*\)"/\1/p' "$repo/server/pyproject.toml" | head -1)
-    if git -C "$repo" describe --exact-match --tags --match "v$base" >/dev/null 2>&1; then
+    pep440=$(sed -n 's/^version = "\(.*\)"/\1/p' "$repo/server/pyproject.toml" | head -1)
+    [[ $pep440 =~ ^([0-9]+\.[0-9]+\.[0-9]+)(rc([0-9]+))?$ ]] \
+        || { echo "error: version $pep440 is neither X.Y.Z nor X.Y.ZrcN" >&2; exit 1; }
+    base=${BASH_REMATCH[1]} tag=v${BASH_REMATCH[1]}
+    if [[ -n ${BASH_REMATCH[3]} ]]; then
+        base+="~rc${BASH_REMATCH[3]}" tag+="-rc.${BASH_REMATCH[3]}"
+    fi
+    if git -C "$repo" describe --exact-match --tags --match "$tag" >/dev/null 2>&1; then
         VERSION=$base
     else
         VERSION="$base~git$(git -C "$repo" rev-list --count HEAD).g$(git -C "$repo" rev-parse --short=7 HEAD)"
