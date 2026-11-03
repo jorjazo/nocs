@@ -1,19 +1,21 @@
-"""Record what real INDI drivers define, as raw protocol XML, for tests and facades.
+"""Record what real INDI drivers define and answer, for tests and facades (ADR 0038).
 
-Connects twice to indiserver: one connection only listens and saves every
-message (no BLOBs), the other connects the chosen devices so their full
-property set is defined, waits for it to settle, then disconnects the devices it
-connected (leaving the hardware as it was found). The output can be replayed by
-a fake indiserver in tests and read to write device facades.
+A recorder (``nocs.indi.recording``) listens on a connection of its own (no BLOBs),
+which indiserver also sends every client's commands, while this tool's client
+connects the chosen devices so their full property set is defined. Once the
+definitions settle it disconnects the devices it connected (leaving the hardware as
+it was found) and writes a zip: the scrubbed session and a manifest. The output can be
+replayed by a fake indiserver in tests and read to write device facades.
 
 Typical use in the lab, with the devices plugged in and their drivers running:
 
     uv run --project server python dev/tools/indi_record.py \\
         --connect "ZWO CCD ASI2600MC Pro" --connect "Pegasus PPBA" \\
-        -o dev/recordings/zwo-ppba.xml
+        -o dev/recordings/zwo-ppba.zip
 
 Without --connect it records what is defined without connecting anything; with
---all it connects every device on the server.
+--all it connects every device on the server. --device limits the recording to
+some devices (every device by default).
 
 Usage: uv run --project server python dev/tools/indi_record.py [options] -o <file>
 """
@@ -21,39 +23,14 @@ Usage: uv run --project server python dev/tools/indi_record.py [options] -o <fil
 import argparse
 import asyncio
 import contextlib
+import json
 import sys
 import time
 from pathlib import Path
 
 from nocs.devices import Device, DeviceError
 from nocs.indi import IndiClient
-from nocs.indi.protocol import encode_get_properties
-
-
-async def listen(host: str, port: int, out: Path, stop: asyncio.Event) -> int:
-    reader, writer = await asyncio.open_connection(host, port, limit=2**24)
-    writer.write(encode_get_properties())
-    await writer.drain()
-    size = 0
-    with out.open("wb") as f:
-        try:
-            while not stop.is_set():
-                read = asyncio.ensure_future(reader.read(256 * 1024))
-                stopped = asyncio.ensure_future(stop.wait())
-                await asyncio.wait({read, stopped}, return_when=asyncio.FIRST_COMPLETED)
-                stopped.cancel()
-                if not read.done():
-                    read.cancel()
-                    with contextlib.suppress(asyncio.CancelledError):
-                        await read
-                    break
-                if not (data := read.result()):
-                    break
-                f.write(data)
-                size += len(data)
-        finally:
-            writer.close()
-    return size
+from nocs.indi.recording import Recorder
 
 
 async def wait_quiet(client: IndiClient, quiet: float, limit: float) -> None:
@@ -71,8 +48,8 @@ async def wait_quiet(client: IndiClient, quiet: float, limit: float) -> None:
 
 
 async def record(args: argparse.Namespace) -> None:
-    stop = asyncio.Event()
-    listener = asyncio.create_task(listen(args.host, args.port, args.out, stop))
+    recorder = Recorder(args.host, args.port, args.out, devices=args.device or None, note=args.note)
+    await recorder.start()
     connected: list[Device] = []
     async with IndiClient(args.host, args.port) as client:
         await wait_quiet(client, quiet=1.0, limit=10)
@@ -92,14 +69,18 @@ async def record(args: argparse.Namespace) -> None:
         # Drivers keep defining properties for a while after connecting.
         await wait_quiet(client, quiet=args.settle, limit=60)
         await asyncio.sleep(args.extra)
-        stop.set()
-        size = await listener
         for device in connected:
             if not args.keep_connected:
                 with contextlib.suppress(DeviceError):
                     await device.disconnect(timeout=args.timeout)
-        devices = ", ".join(sorted(client.devices)) or "none"
-    print(f"wrote {size} bytes to {args.out} (devices: {devices})", file=sys.stderr)
+    await recorder.stop()
+    devices = ", ".join(recorder.recorded) or "none"
+    scrubbed = json.dumps(dict(recorder.scrubber.counts))
+    print(
+        f"wrote {recorder.messages} messages to {args.out} (devices: {devices}; "
+        f"scrubbed: {scrubbed}; ended: {recorder.reason})",
+        file=sys.stderr,
+    )
 
 
 def main() -> None:
@@ -108,6 +89,10 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=7624)
     parser.add_argument("--connect", action="append", default=[], metavar="DEVICE")
     parser.add_argument("--all", action="store_true", help="connect every device")
+    parser.add_argument(
+        "--device", action="append", default=[], help="record only this device (repeatable)"
+    )
+    parser.add_argument("--note", default="", help="what was done during the recording")
     parser.add_argument("--keep-connected", action="store_true")
     parser.add_argument("--timeout", type=float, default=30, help="per-device connect timeout")
     parser.add_argument("--settle", type=float, default=3, help="quiet time after connecting")

@@ -23,7 +23,7 @@ whole night on the Pi).
 
 ```
 server/   Python package `nocs` (nocsd): indi/ (protocol + async client, driver
-          FIFO + catalog), devices/ (typed facades), equipment/ (profiles,
+          FIFO + catalog, session recordings: ADR 0038), devices/ (typed facades), equipment/ (profiles,
           roles, connect service), imaging/ (capture, preview worker),
           storage/ (destinations, layout, FITS headers, SQLite catalog),
           mount/, focus/, filters/ (services by role; filter names per wheel),
