@@ -118,7 +118,7 @@ To switch it on, the repository needs:
 
 | Kind | Name | What |
 |---|---|---|
-| variable | `NOCS_APT_URL` | the public address, e.g. `https://apt.example.org` |
+| variable | `NOCS_APT_URL` | the public address: `https://apt.nocs.app` |
 | secret | `R2_ENDPOINT` | `https://<account id>.r2.cloudflarestorage.com` |
 | secrets | `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` | the bucket and an R2 token that may write to it |
 | secret | `APT_SIGNING_KEY` | set by `new-key.sh`, which also writes `repo/nocs-archive-keyring.asc` (commit it) |
