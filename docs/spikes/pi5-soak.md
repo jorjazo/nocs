@@ -1,6 +1,6 @@
 # Spike: a whole night on the Raspberry Pi 5 (soak test)
 
-Date: 2026-11-01 · Status: **PC done; Pi 4.6 h + 1.4 h + 0.7 h** (an 8 h night with every fix is pending) · Related:
+Date: 2026-11-01 · Status: **done: PC 2 h; Pi 4.6 h + 1.4 h + 0.7 h, then 8 h with every fix and no failure** (2026-11-03) · Related:
 [Pi 5 performance](pi5-performance.md), [ADR 0012](../adr/0012-image-pipeline.md),
 [ADR 0030](../adr/0030-supervision.md), [ADR 0031](../adr/0031-sequences.md),
 [ADR 0032](../adr/0032-sequence-recovery-and-restarts.md), [ADR 0033](../adr/0033-meridian-flip.md)
@@ -127,8 +127,45 @@ and the soak appends its own records from a thread, so its waits do not read as 
 Every fix in, stopped after 41 minutes when the lab was needed
 ([results/pi5-third](../../dev/tools/soak/results/pi5-third/summary.md)): 49 frames, no
 failure, 54–63 °C, `0x0`. **No window had a probe over 300 ms** (the slowest was 43 ms,
-against 6 windows up to 4.1 s in the previous 1.4 h); patches at most 97 ms late. The
-full 8 h night on the Pi is still to run.
+against 6 windows up to 4.1 s in the previous 1.4 h); patches at most 97 ms late.
+
+### Pi 5, eight hours (every follow-up in)
+
+2026-11-02 19:23 → 2026-11-03 03:25 (−03), `main` at fccce28, on a second Pi 5 8 GB
+flashed for it with `dev/pi/flash.sh` (`nocs-soak`: active cooler, frames on its 32 GB
+microSD, nothing else running), so the lab Pi stayed free. Data:
+[results/pi5-eight-hours](../../dev/tools/soak/results/pi5-eight-hours/summary.md).
+772 frames (96/h; 260 Red, 259 Green, 255 Blue), 257 dithers, 76 pointing checks, 8
+autofocus runs (7 on temperature), the flip at +4.6 min (centred at the first attempt,
+PHD2 calibrated again); **no failure**, the run ended `completed`, parked and warm.
+
+| process | RSS start → end (MB) | max | fds | CPU % mean / p95 |
+|---|---|---|---|---|
+| nocsd | 168 → 202 | 202 | 31–35 | 4.3 / 5.5 |
+| imaging worker | 208 → 183 | 378 (autofocus) | 11–13 | 10.1 / 12.6 |
+| PHD2 | 242 → 241 | 242 | 22 | 4.1 / 4.4 |
+| indiserver | 9 → 9 | 11 | 22–23 | 0.9 / 0.9 |
+| CCD simulator | 75 → 74 | 126 | 5–7 | 4.2 / 8.4 |
+
+- **The event loop no longer stalls**: `/api/health` median 3.7 ms, worst 58.5 ms in 8 h
+  (the first night: 11 windows over 300 ms, up to 1.9 s), while guiding all night with
+  the guide camera's BLOBs parsed in a thread. Patches at most 137 ms late.
+- **WebSocket: 4.2 kB/s per client** (17.5 kB/s on the first night, before the
+  coalesced mirror): 52 connections (14 from scratch), no version gap, 358 314
+  patches; 772 previews (slowest 184 ms) and 77 FITS downloaded, no failure.
+- 46–55 °C, `get_throttled=0x0`, no under-voltage, load ≤ 2.1, 6.8 GB available at
+  least; nothing at WARNING or above in nocsd's log.
+- The only slope: nocsd's resident memory, 158–183 MB in the first hour, then
+  ~180 → ~200 MB over the next seven (~3 MB/h), with its descriptors flat and the
+  worker's memory not growing. Small against 8 GB, but the one number to watch in a
+  longer run.
+- **Restart**: `systemctl restart nocsd@jorjazo` on the lab Pi (on 04ba68d) logged
+  `Finished server process` and the new process its 5 semaphores. Its stop also logged
+  5 `FileNotFoundError`s from `sem_unlink`, but not from nocsd: systemd-logind
+  (`RemoveIPC=yes`, Ubuntu's default) deletes a login user's `/dev/shm` files when their
+  last session ends, so an SSH logout had already unlinked them under the running
+  nocsd. With `loginctl enable-linger jorjazo` they stay, and a restart logs no error.
+  The `.deb` runs nocsd as the system user `nocs`, which `RemoveIPC` leaves alone.
 
 ## What the soak found, and what was fixed
 
@@ -204,10 +241,11 @@ Measured, not changed:
 
 ### Left after the follow-ups (2026-11-02)
 
-- Run the 8 h night on the lab Pi with every fix (Status above), and measure there
-  what the follow-ups changed: the loop's lag while guiding (BLOBs now parsed in a
-  thread), WebSocket bytes per client, and a `systemctl restart nocsd@…` that logs
-  `Finished server process` and leaves no `/dev/shm/sem.mp-*` behind.
+- The 8 h night on the Pi with every fix ran on 2026-11-03 (results above).
+- nocsd's memory grew ~3 MB/h through that night: see whether it levels off in a longer
+  run before looking for a cause.
+- A lab Pi that runs `nocsd@` needs `loginctl enable-linger $USER` (above);
+  `dev/pi`'s setup could do it.
 - After the mirror, the largest WebSocket share is the mount's own state (`mount.ra`,
   `dec`, `ra_j2000`, `dec_j2000` ~4 patches/s, following the telescope's 250 ms poll):
   worth coalescing too if phones on weak Wi-Fi need less.

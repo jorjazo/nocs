@@ -1,6 +1,6 @@
 # NOCS — Roadmap
 
-Status: draft · Last updated: 2026-11-02
+Status: draft · Last updated: 2026-11-03
 
 Planning assumptions: one developer, 5–10 hours per week (~250–500 hours per
 year). Estimates are rough ranges in hours of focused work. Every phase ends
@@ -14,7 +14,7 @@ night and never only infrastructure.
 | 2 | Connect & capture | 60–80 h | Manual imaging from the phone | Implemented, checked on the lab rig; field test pending |
 | 3 | Solve & frame | 40–60 h | "Go to NGC 292 and center it" | Implemented; field test pending |
 | 4 | Guide & align | 50–70 h | Polar alignment and guided long exposures | Implemented, checked in the lab; field test pending |
-| 5 | Focus & sequence | 80–120 h | A full unattended night | Implemented; an 8 h night on the lab Pi and the field test pending |
+| 5 | Focus & sequence | 80–120 h | A full unattended night | Implemented, 8 h simulated night on the Pi passed; field test pending |
 | 6 | Appliance | 50–70 h | Flashable Pi image — **first public release (v0.1)** | In progress: an update round trip on a test Pi, a hardware check of supervision and the release left |
 | 7+ | Beyond v0.1 | — | Robustness, remote access, DSLR, EAA, observatory | Calibration frames implemented; their field test pending |
 
@@ -25,12 +25,10 @@ design, and the UI of phase 2 should not be built before phase 1 ends.
 
 1. One clear night through the [field test](v0.1/field-test.md): the exits of
    phases 2–5 and the sky half of calibration's.
-2. An 8 h night on the lab Pi with the soak test's follow-ups
-   ([spike](spikes/pi5-soak.md)).
-3. Updating a test Pi from one `testing` build to the next and back (6.10); the
+2. Updating a test Pi from one `testing` build to the next and back (6.10); the
    repository is live at `https://apt.nocs.app`.
-4. ADRs 0025–0030 and 0035 accepted (0025–0037 are all still proposed).
-5. The release itself (6.12, [checklist](v0.1/release.md)).
+3. ADRs 0025–0030 and 0035 accepted (0025–0037 are all still proposed).
+4. The release itself (6.12, [checklist](v0.1/release.md)).
 
 ---
 
@@ -165,7 +163,7 @@ full night from a phone with no other computer involved.
 ## Beyond v0.1 (unordered backlog)
 
 - Robustness: crash recovery of a running sequence (resuming after a nocsd
-  restart is in v0.1, ADR 0032), long-run soak tests (a first one is in
+  restart is in v0.1, ADR 0032), longer soak tests (an 8 h night on the Pi passed with
   `dev/tools/soak/`, [spike](spikes/pi5-soak.md)).
 - SMB share for desktop access to images.
 - Remote access outside the LAN.
