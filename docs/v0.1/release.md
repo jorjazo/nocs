@@ -19,7 +19,7 @@ note why: that is a finding, and the release waits for its fix.
   - [ ] the image boots from microSD and from a USB SSD; nocsd answers;
   - [ ] the access point with an iPhone and an Android phone; joining the home
         network and falling back to the access point when it goes;
-  - [ ] first boot with Raspberry Pi Imager's presets (Wi-Fi, host name, SSH key)
+  - [x] first boot with Raspberry Pi Imager's presets (Wi-Fi, host name, SSH key)
         and without them;
   - [ ] restart, shut down, the Pi 5's power button, rename;
   - [ ] a USB drive mounted, written to and ejected;
