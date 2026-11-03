@@ -28,7 +28,7 @@ note why: that is a finding, and the release waits for its fix.
   - [ ] a hung driver (`kill -STOP`) and a hung indiserver are noticed and
         restarted; the power box cycles a camera under a sequence.
 - [ ] The screens and names in the [user guide](../user/README.md) match the app.
-- [ ] `server/pyproject.toml` says `0.1.0rc1`; `packaging/release.sh 0.1.0-rc.1`. The tag's
+- [ ] `server/pyproject.toml` says `0.1.0rc1`; `packaging/release.sh 0.1.0rc1`. The tag's
       packages reach `stable` and its image `images/` on the repository; the
       GitHub release has the notes, the packages, the image's checksum and link.
 - [ ] Someone other than the maintainer follows the [quick start](../user/quick-start.md)

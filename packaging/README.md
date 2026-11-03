@@ -55,21 +55,21 @@ release.
 ## Releases
 
 ```sh
-packaging/release.sh --dry-run 0.2.0-rc.1   # check only
-packaging/release.sh 0.2.0-rc.1             # tag main and push the tag
+packaging/release.sh --dry-run 0.2.0rc1   # check only
+packaging/release.sh 0.2.0rc1             # tag main and push the tag
 ```
 
-A release is `X.Y.Z`; a release candidate `X.Y.0-rc.N`, only before a minor or
-major release (a patch goes straight out). The tag is `v<version>`; Python says it in
-PEP 440 (`0.2.0rc1`) and the packages in Debian's form (`0.2.0~rc1`, which sorts
-before `0.2.0`), and `deb/build.sh` derives the package's from `server/pyproject.toml`.
+A release is `X.Y.Z`; a release candidate `X.Y.0rcN`, only before a minor or major
+release (a patch goes straight out). The tag is `v<version>` and Python says the
+same (PEP 440); the packages say it in Debian's form (`0.2.0~rc1`, which sorts before
+`0.2.0`), which `deb/build.sh` derives from `server/pyproject.toml`.
 Bump `server/pyproject.toml` (then `uv lock`), `nocs.__version__` and
 `web/package.json` in a pull request first. `release.sh` checks the version's form,
 that `main` says it, that the tag and its GitHub release are new and newer than every
 release, and that CI passed on that commit, then tags it and pushes the tag: the
-Packages and Image workflows publish it and make the GitHub release (a `-rc` one as
-a prerelease). Never create the release on GitHub by hand: its tag would be the one
-GitHub's form suggests, not the one the packages' version needs.
+Packages and Image workflows publish it and make the GitHub release (an `rc` one as
+a prerelease). Never create the release on GitHub by hand: the tag is checked here, not
+there, and the workflows make the release.
 
 ## The `nocs-appliance` package
 

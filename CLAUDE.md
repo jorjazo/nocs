@@ -78,7 +78,7 @@ curl -c jar -H 'Content-Type: application/json' -d '{"passphrase": "…", "name"
 
 ```sh
 packaging/deb/build.sh && packaging/deb/test.sh packaging/out/nocs_*_amd64.deb  # .deb, installed with systemd
-packaging/release.sh 0.2.0-rc.1  # the maintainer's: tag main (X.Y.Z or X.Y.0-rc.N) after a version bump PR
+packaging/release.sh 0.2.0rc1  # the maintainer's: tag main (X.Y.Z or X.Y.0rcN) after a version bump PR
 ```
 
 CI runs all of the above (INDI simulators included) on every push to `main`; the
