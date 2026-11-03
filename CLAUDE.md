@@ -18,6 +18,11 @@ whole night on the Pi).
   The same goes for long local test runs.
 - Propose a plan in stages before large changes; record significant decisions as
   a new ADR rather than editing an accepted one.
+- **Backward compatibility does not matter before v1.0.0.** While the maintainer
+  is the only user, profiles, settings, state, the API, files on disk and
+  rollbacks may change freely: no migrations, shims, fallbacks or deprecation
+  paths for older versions. Only from v1.0.0 on does a change that is not
+  backward compatible require a major version release.
 
 ## Layout
 
