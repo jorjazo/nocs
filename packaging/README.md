@@ -36,12 +36,13 @@ What it installs:
 | `/var/lib/nocs` | profiles and `auth.json` (`config/`), catalog, previews, frames; kept on purge |
 | `/run/indi/fifo` | indiserver's driver FIFO |
 
-Installing it by hand on a PC, until the apt repository exists:
+Installing it on a PC from the apt repository is in the
+[user documentation](../docs/user/pc-install.md); a package built here installs by hand:
 
 ```sh
 sudo add-apt-repository ppa:mutlaqja/ppa
 sudo add-apt-repository ppa:pch/phd2
-sudo apt install ./nocs_<version>_amd64.deb indi-3rdparty-drivers phd2 xvfb
+sudo apt install ./packaging/out/nocs_<version>_amd64.deb indi-3rdparty-drivers phd2 xvfb
 # http://<this computer>:8000; logs: journalctl -u nocsd -u nocs-indiserver -u nocs-phd2
 # what nocs-system offers here (as nocs): sudo -u nocs /opt/nocs/venv/bin/nocs-system call hello
 ```

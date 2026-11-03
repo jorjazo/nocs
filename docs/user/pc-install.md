@@ -10,7 +10,17 @@ reboot or rename the computer.
 ```sh
 sudo add-apt-repository ppa:mutlaqja/ppa     # INDI and its drivers
 sudo add-apt-repository ppa:pch/phd2         # PHD2
-sudo apt install ./nocs_<version>_amd64.deb indi-3rdparty-drivers phd2 xvfb
+sudo curl -fsSL -o /usr/share/keyrings/nocs-archive-keyring.asc \
+  https://apt.nocs.app/nocs-archive-keyring.asc
+sudo tee /etc/apt/sources.list.d/nocs.sources <<'EOF'
+Types: deb
+URIs: https://apt.nocs.app
+Suites: stable
+Components: main
+Signed-By: /usr/share/keyrings/nocs-archive-keyring.asc
+EOF
+sudo apt update
+sudo apt install nocs indi-3rdparty-drivers phd2 xvfb
 ```
 
 The package installs nocsd with its own Python in `/opt/nocs`, and runs nocsd,
@@ -18,8 +28,13 @@ indiserver and PHD2 as the system user `nocs`. Open `http://<this computer>:8000
 (or <http://localhost:8000> on the computer itself) and set up as in the
 [quick start](quick-start.md), step 3.
 
-Until the NOCS apt repository exists, the packages come from the project's release
-page (or the Packages workflow's artifacts).
+`stable` has the releases. `testing` has every build of the development branch
+and may break: write `Suites: testing` instead to follow it. Until v0.1 is
+released, only `testing` has packages. Do not install `nocs-appliance` on a PC:
+it turns the computer into the Pi's appliance (its network, firewall and port 80).
+
+Updates come with the computer's own `sudo apt upgrade`. The package keeps the
+repository's key up to date in `/usr/share/keyrings/` when it changes.
 
 ## Plate solving
 
