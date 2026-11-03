@@ -3205,6 +3205,10 @@ export interface DeviceConfig {
    */
   driver: string;
   /**
+   * The INDI catalog's model chosen for this driver (iOptron GEM45 of indi_ioptronv3_telescope), only shown.
+   */
+  model?: string | null;
+  /**
    * Power role only: what each output (dc:1, dew:2, variable:1…) is called and feeds.
    */
   outputs?: {

@@ -1030,6 +1030,8 @@ export const es: Messages = {
     remove: "Quitar",
     driver: "Driver",
     chooseDriver: "Elige un driver",
+    filterDrivers: "Buscar un driver",
+    filterPlaceholder: "Modelo o marca, p. ej. AM5",
     otherDrivers: "Otros drivers",
     deviceName: "Nombre del dispositivo",
     deviceHint: "Déjalo vacío salvo que el driver tenga varios dispositivos.",

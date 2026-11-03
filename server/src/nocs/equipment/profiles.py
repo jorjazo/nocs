@@ -70,6 +70,13 @@ class OutputConfig(ProfileModel):
 
 class DeviceConfig(ProfileModel):
     driver: DriverName = Field(description="INDI driver executable, e.g. indi_asi_ccd.")
+    model: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=80,
+        description="The INDI catalog's model chosen for this driver (iOptron GEM45 of "
+        "indi_ioptronv3_telescope), only shown.",
+    )
     device: str | None = Field(
         default=None,
         min_length=1,

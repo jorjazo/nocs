@@ -1047,6 +1047,8 @@ export const en = {
     remove: "Remove",
     driver: "Driver",
     chooseDriver: "Choose a driver",
+    filterDrivers: "Find a driver",
+    filterPlaceholder: "Model or maker, e.g. AM5",
     otherDrivers: "Other drivers",
     deviceName: "Device name",
     deviceHint: "Leave it empty unless the driver has several devices.",
