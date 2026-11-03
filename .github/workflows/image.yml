@@ -82,7 +82,7 @@ jobs:
           python3 packaging/repo/publish.py image --keep 2 "$image" "$image.sha256" \
             packaging/out/*.manifest.txt
           prerelease=()
-          [[ $GITHUB_REF_NAME == *-* ]] && prerelease=(--prerelease)
+          [[ $GITHUB_REF_NAME == *rc* ]] && prerelease=(--prerelease)
           gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes "${prerelease[@]}" \
             || true  # the Packages workflow may have made it first
           gh release upload "$GITHUB_REF_NAME" --clobber "$image.sha256" packaging/out/*.manifest.txt
