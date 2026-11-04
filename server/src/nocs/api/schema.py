@@ -87,6 +87,7 @@ from nocs.api.schemas import (
     TemperatureRecord,
     TemplateRequest,
     TrackingRequest,
+    WifiNetwork,
 )
 from nocs.calibration.flats import FlatPlan
 from nocs.equipment import Profile
@@ -168,6 +169,7 @@ MODELS: list[tuple[type[BaseModel], Mode]] = [
     (JobStarted, "serialization"),
     (Driver, "serialization"),
     (SerialPortInfo, "serialization"),
+    (WifiNetwork, "serialization"),
     (CatalogObject, "serialization"),
     (CatalogMatch, "serialization"),
     (CatalogSource, "serialization"),
