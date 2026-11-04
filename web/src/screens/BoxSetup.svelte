@@ -7,6 +7,7 @@
   import Icon from "../components/Icon.svelte";
   import TextField from "../components/TextField.svelte";
   import Toggle from "../components/Toggle.svelte";
+  import WifiPicker from "../components/WifiPicker.svelte";
   import { setUpNetwork } from "../lib/api";
   import { errorText } from "../lib/errors";
   import { i18n } from "../lib/i18n";
@@ -23,6 +24,7 @@
   let joining = $state(false);
   let ssid = $state("");
   let wifiPassword = $state("");
+  let openNetwork = $state(false);
   let busy = $state(false);
   let error = $state("");
   let passwordError = $state("");
@@ -35,7 +37,7 @@
       passwordError = t.boxSetup.passwordShort;
       return;
     }
-    const join = joining && ssid.trim() ? { ssid: ssid.trim(), password: wifiPassword || null } : null;
+    const join = joining && ssid.trim() ? { ssid: ssid.trim(), password: openNetwork ? null : wifiPassword || null } : null;
     busy = true;
     try {
       await setUpNetwork({ country: country.trim().toUpperCase(), password, join });
@@ -92,8 +94,10 @@
         checked={joining}
         onchange={(on) => (joining = on)} />
       {#if joining}
-        <TextField label={t.boxSetup.ssid} bind:value={ssid} maxlength={32} />
-        <TextField label={t.boxSetup.wifiPassword} type="password" autocomplete="off" bind:value={wifiPassword} maxlength={63} />
+        <WifiPicker label={t.boxSetup.ssid} bind:value={ssid} bind:open={openNetwork} />
+        {#if !openNetwork}
+          <TextField label={t.boxSetup.wifiPassword} type="password" autocomplete="off" bind:value={wifiPassword} maxlength={63} />
+        {/if}
       {/if}
 
       <p class="body note">

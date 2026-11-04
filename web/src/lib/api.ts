@@ -70,6 +70,7 @@ import type {
   CalibrationSequenceRequest,
   FlatPlan,
   FlatWindows,
+  WifiNetwork,
 } from "./types";
 
 export class ApiError extends Error {
@@ -205,6 +206,11 @@ export function joinNetwork(ssid: string, password: string | null): Promise<void
 // maybe a network to join. Accepted at once (202); the access point then restarts.
 export function setUpNetwork(body: NetworkSetupRequest): Promise<void> {
   return request("POST", "/api/system/network/setup", body);
+}
+
+// Scans now, a few seconds, strongest first; the access point keeps its clients.
+export function scanNetworks(): Promise<WifiNetwork[]> {
+  return request("POST", "/api/system/network/scan");
 }
 
 export function forgetNetwork(ssid: string): Promise<void> {

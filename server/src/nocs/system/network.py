@@ -29,7 +29,7 @@ import time
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Literal
+from typing import Literal, cast
 
 import anyio
 import anyio.to_thread
@@ -51,6 +51,8 @@ AP_ADDRESS = "10.42.0.1"
 DEFAULT_PASSWORD = "nocsnocs"
 """The access point's password until the first run changes it (printed in the quick start)."""
 COUNTRY_ANYWHERE = "00"
+SCAN_WAIT = 20
+"""Seconds NetworkManager gets for a scan the owner asked for."""
 
 type Pin = Literal["auto", "ap", "station"]
 
@@ -147,6 +149,27 @@ def split_terse(line: str) -> list[str]:
     return fields
 
 
+def in_range(output: str, exclude: str | None = None) -> list[Message]:
+    """``nmcli -t -f SSID,SIGNAL,SECURITY device wifi list``: one entry per network
+    name, its strongest signal (0 to 100), strongest first. Hidden networks (no name)
+    and ``exclude`` (the box's own access point) are left out."""
+    networks: dict[str, Message] = {}
+    for line in output.splitlines():
+        fields = split_terse(line)
+        if len(fields) < 3 or not fields[0] or fields[0] == exclude:
+            continue
+        ssid, signal, security = fields[0], fields[1], fields[2].strip()
+        strength = int(signal) if signal.isdigit() else 0
+        seen = networks.get(ssid)
+        if seen is None or strength > cast(int, seen["signal"]):
+            networks[ssid] = {
+                "ssid": ssid,
+                "signal": strength,
+                "secured": security not in ("", "--"),
+            }
+    return sorted(networks.values(), key=lambda n: (-cast(int, n["signal"]), str(n["ssid"])))
+
+
 def keyfile(name: str, ssid: str, password: str | None, *, ap: bool, interface: str) -> str:
     lines = [
         "[connection]",
@@ -220,6 +243,31 @@ class Network:
         self._timers.pending_join = (ssid, password)
         self._timers.wake.set()
         return {"accepted": True}
+
+    async def scan(self, args: Message) -> Message:
+        """The networks in range, strongest first: scanned now, only when asked (never
+        periodically), which an access point allows without dropping its clients.
+        While a join is pending, the last scan's results."""
+        if args:
+            raise HelperError("invalid", "a scan takes no arguments")
+        if not (await self._device()).exists:
+            return {"networks": []}
+        rescan = "no" if self._timers.pending_join else "yes"
+        output = await _nmcli(
+            "--wait",
+            str(SCAN_WAIT),
+            "-t",
+            "-f",
+            "SSID,SIGNAL,SECURITY",
+            "device",
+            "wifi",
+            "list",
+            "ifname",
+            self._interface,
+            "--rescan",
+            rescan,
+        )
+        return {"networks": in_range(output, exclude=self._ap_ssid())}
 
     async def forget(self, args: Message) -> Message:
         ssid = check_ssid(args.get("ssid"))

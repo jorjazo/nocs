@@ -4661,3 +4661,20 @@ export interface TrackingRequest {
   mode?: string | null;
   on?: boolean | null;
 }
+/**
+ * A Wi-Fi network in range (ADR 0028).
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "WifiNetwork".
+ */
+export interface WifiNetwork {
+  /**
+   * False for an open network.
+   */
+  secured: boolean;
+  /**
+   * Strongest signal heard, 0 to 100.
+   */
+  signal: number;
+  ssid: string;
+}

@@ -197,6 +197,17 @@ export const es: Messages = {
     doneTitle: "Guardado",
     continue: "Continuar",
   },
+  wifi: {
+    scanning: "Buscando redes…",
+    choose: "Elige una red",
+    other: "Otra…",
+    otherName: "Escribe su nombre",
+    otherHint: "También para una red oculta.",
+    rescan: "Buscar de nuevo",
+    open: "abierta",
+    none: "No hay redes a la vista: escribe su nombre.",
+    scanFailed: (error: string) => `No se pudo buscar redes (${error}): escribe su nombre.`,
+  },
   network: {
     title: "Red",
     ap: (ssid: string) => `Punto de acceso ${ssid}`,

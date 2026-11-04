@@ -162,6 +162,7 @@ export type {
   UnmountedDrive,
   UpdatesState,
   WeatherState,
+  WifiNetwork,
 } from "./generated/api";
 
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };

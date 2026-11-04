@@ -10557,6 +10557,32 @@
       },
       "title": "WhileAbove",
       "type": "object"
+    },
+    "WifiNetwork": {
+      "additionalProperties": false,
+      "description": "A Wi-Fi network in range (ADR 0028).",
+      "properties": {
+        "secured": {
+          "description": "False for an open network.",
+          "type": "boolean"
+        },
+        "signal": {
+          "description": "Strongest signal heard, 0 to 100.",
+          "maximum": 100,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "ssid": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "ssid",
+        "signal",
+        "secured"
+      ],
+      "title": "WifiNetwork",
+      "type": "object"
     }
   },
   "title": "NOCS API"

@@ -212,6 +212,17 @@ export const en = {
     doneTitle: "Saved",
     continue: "Continue",
   },
+  wifi: {
+    scanning: "Looking for networks…",
+    choose: "Choose a network",
+    other: "Other…",
+    otherName: "Type its name",
+    otherHint: "Also for a hidden network.",
+    rescan: "Look again",
+    open: "open",
+    none: "No network in range: type its name.",
+    scanFailed: (error: string) => `Could not look for networks (${error}): type its name.`,
+  },
   network: {
     title: "Network",
     ap: (ssid: string) => `Access point ${ssid}`,

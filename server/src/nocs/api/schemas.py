@@ -1228,6 +1228,16 @@ class NetworkJoinRequest(BaseModel):
     password: str | None = Field(default=None, description="None for an open network.")
 
 
+class WifiNetwork(BaseModel):
+    """A Wi-Fi network in range (ADR 0028)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    ssid: str
+    signal: int = Field(ge=0, le=100, description="Strongest signal heard, 0 to 100.")
+    secured: bool = Field(description="False for an open network.")
+
+
 class NetworkForgetRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

@@ -8,6 +8,7 @@
   import DeviceRow from "../components/DeviceRow.svelte";
   import SegmentedControl from "../components/SegmentedControl.svelte";
   import TextField from "../components/TextField.svelte";
+  import WifiPicker from "../components/WifiPicker.svelte";
   import { forgetNetwork, joinNetwork, setAccessPoint, setNetworkMode } from "../lib/api";
   import { auth } from "../lib/auth.svelte";
   import { errorText } from "../lib/errors";
@@ -50,11 +51,12 @@
 
   let ssid = $state("");
   let password = $state("");
+  let openNetwork = $state(false);
 
   async function join(event: SubmitEvent): Promise<void> {
     event.preventDefault();
     const name = ssid.trim();
-    if (await act("join", () => joinNetwork(name, password || null), t.network.joinStarted(name))) {
+    if (await act("join", () => joinNetwork(name, openNetwork ? null : password || null), t.network.joinStarted(name))) {
       password = "";
     }
   }
@@ -130,16 +132,18 @@
 
       <h3 class="label muted subsection">{t.network.join}</h3>
       <form class="form" onsubmit={join}>
-        <TextField label={t.network.ssid} bind:value={ssid} required maxlength={32} />
-        <TextField
-          label={t.network.password}
-          hint={t.network.passwordHint}
-          type="password"
-          autocomplete="off"
-          bind:value={password}
-          maxlength={63} />
+        <WifiPicker label={t.network.ssid} bind:value={ssid} bind:open={openNetwork} />
+        {#if !openNetwork}
+          <TextField
+            label={t.network.password}
+            hint={t.network.passwordHint}
+            type="password"
+            autocomplete="off"
+            bind:value={password}
+            maxlength={63} />
+        {/if}
         {#if ssid.trim()}<p class="caption muted">{t.network.joinHint(ssid.trim(), hostname)}</p>{/if}
-        <div><Button variant="primary" type="submit" busy={busy === "join"}>{t.network.joinButton}</Button></div>
+        <div><Button variant="primary" type="submit" busy={busy === "join"} disabled={!ssid.trim()}>{t.network.joinButton}</Button></div>
       </form>
 
       <h3 class="label muted subsection">{t.network.accessPoint}</h3>
