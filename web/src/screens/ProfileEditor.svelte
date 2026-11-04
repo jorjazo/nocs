@@ -12,7 +12,7 @@
   import Toggle from "../components/Toggle.svelte";
   import ScreenHeader from "../components/ScreenHeader.svelte";
   import TextField from "../components/TextField.svelte";
-  import { deleteProfile, getProfile, listDrivers, listSerialPorts, putProfile } from "../lib/api";
+  import { deleteProfile, getProfile, listDriverDevices, listDrivers, listSerialPorts, putProfile } from "../lib/api";
   import { auth } from "../lib/auth.svelte";
   import { choiceFor, driverChoices, matches, type DriverChoice } from "../lib/drivers";
   import { ROLE_ICONS, ROLES } from "../lib/equipment";
@@ -150,7 +150,44 @@
 
   function choose(draft: DeviceDraft, key: string): void {
     const choice = choices.find((c) => c.key === key);
-    if (choice) [draft.driver, draft.model] = [choice.driver, choice.model];
+    if (!choice) return;
+    if (choice.driver !== draft.driver) draft.device = "";
+    [draft.driver, draft.model] = [choice.driver, choice.model];
+  }
+
+  // -- Devices -----------------------------------------------------------------------
+
+  // The devices each role's driver defines for it, asked of the driver (started for
+  // the question when it does not run): a list to choose from when there are several.
+  // `names` is null while asking, and when the driver could not be asked.
+  type Listing = { driver: string; names: string[] | null; failed: boolean };
+  let listings = $state<Partial<Record<Role, Listing>>>({});
+
+  $effect(() => {
+    if (!auth.owner) return;
+    for (const role of ROLES) {
+      const driver = devices[role]?.driver;
+      // Only catalog drivers can be asked.
+      if (!driver || !choices.some((c) => c.driver === driver)) continue;
+      if (untrack(() => listings[role]?.driver) === driver) continue;
+      listings[role] = { driver, names: null, failed: false };
+      const settle = (names: string[] | null) => {
+        if (listings[role]?.driver === driver) listings[role] = { driver, names, failed: names === null };
+      };
+      listDriverDevices(driver, role).then(settle, () => settle(null));
+    }
+  });
+
+  function listingFor(role: Role, draft: DeviceDraft): Listing | null {
+    const listing = listings[role];
+    return listing?.driver === draft.driver ? listing : null;
+  }
+
+  // A list when there is a choice to make, or a saved device the driver does not
+  // define now (a camera unplugged).
+  function deviceChoices(names: string[], device: string): string[] | null {
+    if (names.length > 1 || (device && !names.includes(device))) return names;
+    return null;
   }
 
   // Devices the driver defines right now, from the live INDI state.
@@ -169,7 +206,10 @@
   const problem = $derived.by(() => {
     if (!name.trim()) return t.editor.needName;
     for (const role of ROLES) {
-      if (devices[role] && !devices[role].driver) return t.editor.needDriver(t.roles[role]);
+      const draft = devices[role];
+      if (draft && !draft.driver) return t.editor.needDriver(t.roles[role]);
+      const names = draft ? listingFor(role, draft)?.names : null;
+      if (draft && names && names.length > 1 && !draft.device) return t.editor.needDevice(t.roles[role]);
     }
     return "";
   });
@@ -301,6 +341,8 @@
             </div>
             {#if draft}
               {@const names = draft.driver ? running(draft.driver) : []}
+              {@const listing = listingFor(role, draft)}
+              {@const listed = listing?.names ? deviceChoices(listing.names, draft.device) : null}
               <div class="role-fields">
                 <TextField label={t.editor.filterDrivers} bind:value={draft.filter} placeholder={t.editor.filterPlaceholder} />
                 <label class="select">
@@ -320,15 +362,37 @@
                     {/each}
                   </select>
                 </label>
-                <TextField
-                  label={t.editor.deviceName}
-                  bind:value={draft.device}
-                  placeholder={names[0] ?? ""}
-                  list="{role}-devices"
-                  hint={names.length > 0 ? t.editor.running(names.join(", ")) : t.editor.deviceHint} />
-                <datalist id="{role}-devices">
-                  {#each names as device (device)}<option value={device}></option>{/each}
-                </datalist>
+                {#if listed}
+                  <label class="select">
+                    <span class="label muted">{t.editor.deviceName}</span>
+                    <select bind:value={draft.device}>
+                      <option value="" disabled>{t.editor.chooseDevice}</option>
+                      {#if draft.device && !listed.includes(draft.device)}
+                        <option value={draft.device}>{draft.device} ({t.editor.unplugged})</option>
+                      {/if}
+                      {#each listed as device (device)}<option value={device}>{device}</option>{/each}
+                    </select>
+                    <span class="caption muted">{t.editor.severalDevices}</span>
+                  </label>
+                {:else if listing?.names?.length === 1}
+                  <p class="caption muted">{t.editor.theDevice(listing.names[0] ?? "")}</p>
+                {:else if listing && !listing.failed && listing.names === null}
+                  <p class="caption muted">{t.editor.askingDriver}</p>
+                {:else}
+                  <TextField
+                    label={t.editor.deviceName}
+                    bind:value={draft.device}
+                    placeholder={names[0] ?? ""}
+                    list="{role}-devices"
+                    hint={listing?.names?.length === 0
+                      ? t.editor.noDevices
+                      : names.length > 0
+                        ? t.editor.running(names.join(", "))
+                        : t.editor.deviceHint} />
+                  <datalist id="{role}-devices">
+                    {#each names as device (device)}<option value={device}></option>{/each}
+                  </datalist>
+                {/if}
                 <label class="select">
                   <span class="label muted">{t.editor.port}</span>
                   <select bind:value={draft.port}>

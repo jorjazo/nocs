@@ -1048,6 +1048,12 @@ export const es: Messages = {
     deviceName: "Nombre del dispositivo",
     deviceHint: "Déjalo vacío salvo que el driver tenga varios dispositivos.",
     running: (names) => `Funcionando ahora: ${names}`,
+    chooseDevice: "Elige un dispositivo",
+    severalDevices: "El driver tiene varios dispositivos: elige el de este rol.",
+    theDevice: (name) => `Dispositivo: ${name}`,
+    askingDriver: "Preguntando al driver por sus dispositivos…",
+    noDevices: "El driver no define ningún dispositivo ahora: ¿está enchufado? Puedes escribir su nombre.",
+    needDevice: (role) => `Elige el dispositivo de ${role.toLowerCase()}.`,
     port: "Puerto serie",
     noPort: "Sin indicar",
     portHint:
