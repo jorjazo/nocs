@@ -247,6 +247,12 @@ export function listDrivers(): Promise<Driver[]> {
   return request("GET", "/api/indi/drivers");
 }
 
+// The devices a driver defines that can play the role; one that does not run is
+// started for the question and stopped after.
+export function listDriverDevices(driver: string, role: Role): Promise<string[]> {
+  return request("GET", `/api/indi/drivers/${encodeURIComponent(driver)}/devices?role=${role}`);
+}
+
 export function listSerialPorts(): Promise<SerialPortInfo[]> {
   return request("GET", "/api/system/serial-ports");
 }

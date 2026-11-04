@@ -108,7 +108,7 @@ from nocs.imaging import (
 )
 from nocs.imaging.capture import DitherPlan, UploadDirs
 from nocs.imaging.worker import ImageWorker
-from nocs.indi.drivers import DriverFifo, load_catalog
+from nocs.indi.drivers import DriverControlError, DriverFifo, load_catalog
 from nocs.jobs import JobManager, ResourceBusyError
 from nocs.mount.service import MountNotReadyError, MountService
 from nocs.pointing import CenteringService, PointingService, SavedFrames
@@ -843,6 +843,23 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
     async def drivers() -> list[Driver]:  # pyright: ignore[reportUnusedFunction]
         catalog = await anyio.to_thread.run_sync(load_catalog, settings.indi_drivers_dir)
         return [Driver(**asdict(entry)) for entry in catalog]
+
+    @app.get("/api/indi/drivers/{driver}/devices")
+    async def list_driver_devices(driver: str, role: Role) -> list[str]:  # pyright: ignore[reportUnusedFunction]
+        """The devices a catalog driver defines that can play ``role`` (a ZWO camera
+        driver: one per camera plugged in); a driver that does not run is started for
+        the question and stopped after. Empty when it defines none in time."""
+        catalog = await anyio.to_thread.run_sync(load_catalog, settings.indi_drivers_dir)
+        if not any(entry.driver == driver for entry in catalog):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, f"{driver} is not in the INDI catalog")
+        try:
+            return await equipment().list_devices(driver, role)
+        except ConnectionError as e:
+            raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(e)) from e
+        except DriverControlError as e:
+            raise HTTPException(status.HTTP_409_CONFLICT, str(e)) from e
+        except TimeoutError:
+            return []
 
     @app.get("/api/system/serial-ports")
     async def ports() -> list[SerialPortInfo]:  # pyright: ignore[reportUnusedFunction]
