@@ -76,7 +76,7 @@ def system_router(system: Callable[[], SystemService]) -> APIRouter:
         with _system_errors():
             await system().network(
                 "network.access_point",
-                {"country": request.country.upper(), "password": request.password},
+                {"country": request.country, "password": request.password},
             )
             if request.join is not None:
                 args: dict[str, object] = {"ssid": request.join.ssid}

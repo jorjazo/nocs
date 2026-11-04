@@ -162,6 +162,7 @@ export type {
   UnmountedDrive,
   UpdatesState,
   WeatherState,
+  WifiCountry,
   WifiNetwork,
 } from "./generated/api";
 

@@ -6,15 +6,17 @@
   import Chip from "../components/Chip.svelte";
   import ConfirmButton from "../components/ConfirmButton.svelte";
   import DeviceRow from "../components/DeviceRow.svelte";
+  import CountrySelect from "../components/CountrySelect.svelte";
   import SegmentedControl from "../components/SegmentedControl.svelte";
   import TextField from "../components/TextField.svelte";
   import WifiPicker from "../components/WifiPicker.svelte";
   import { forgetNetwork, joinNetwork, setAccessPoint, setNetworkMode } from "../lib/api";
   import { auth } from "../lib/auth.svelte";
+  import { isCountry } from "../lib/countries";
   import { errorText } from "../lib/errors";
   import { i18n } from "../lib/i18n";
   import { live } from "../lib/live.svelte";
-  import type { NetworkState } from "../lib/types";
+  import type { AccessPointRequest, NetworkState } from "../lib/types";
 
   const t = $derived(i18n.t);
   const network = $derived(live.app.network ?? null);
@@ -75,12 +77,10 @@
   async function saveAccessPoint(event: SubmitEvent): Promise<void> {
     event.preventDefault();
     if (!network) return;
-    const body: { ssid?: string; password?: string; country?: string } = {};
+    const body: AccessPointRequest = {};
     if (apName.trim() && apName.trim() !== network.ap_ssid) body.ssid = apName.trim();
     if (apPassword) body.password = apPassword;
-    if (country.trim() && country.trim().toUpperCase() !== network.country) {
-      body.country = country.trim().toUpperCase();
-    }
+    if (isCountry(country) && country !== network.country) body.country = country;
     if (Object.keys(body).length === 0) return;
     if (await act("ap", () => setAccessPoint(body), t.network.saved)) apPassword = "";
   }
@@ -157,7 +157,7 @@
           bind:value={apPassword}
           minlength={8}
           maxlength={63} />
-        <TextField label={t.network.country} hint={t.network.countryHint} bind:value={country} maxlength={2} />
+        <CountrySelect label={t.network.country} hint={t.network.countryHint} bind:value={country} />
         <div><Button type="submit" busy={busy === "ap"}>{t.network.save}</Button></div>
       </form>
 

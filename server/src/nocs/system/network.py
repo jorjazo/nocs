@@ -51,6 +51,18 @@ AP_ADDRESS = "10.42.0.1"
 DEFAULT_PASSWORD = "nocsnocs"
 """The access point's password until the first run changes it (printed in the quick start)."""
 COUNTRY_ANYWHERE = "00"
+_REGDB = (
+    "AD AE AF AI AL AM AN AR AS AT AU AW AZ BA BB BD BE BF BG BH BL BM BN BO BR BS BT BW "
+    "BY BZ CA CF CH CI CL CN CO CR CU CX CY CZ DE DK DM DO DZ EC EE EG ES ET FI FM FO FR "
+    "GB GD GE GF GH GI GL GP GR GT GU GY HK HN HR HT HU ID IE IL IM IN IR IS IT JM JO JP "
+    "KE KH KN KP KR KW KY KZ LB LC LI LK LS LT LU LV MA MC MD ME MF MH MK MN MO MP MQ MR "
+    "MT MU MV MW MX MY NA NG NI NL NO NP NZ OM PA PE PF PG PH PK PL PM PR PT PW PY QA RE "
+    "RO RS RU RW SA SE SG SI SK SM SN SR SV SX SY TC TD TG TH TN TR TT TW TZ UA UG US UY "
+    "UZ VA VC VE VI VN VU WF WS YE YT ZA ZW "
+)
+COUNTRIES = frozenset(_REGDB.split())
+"""The countries of the kernel's regulatory database (wireless-regdb 2026.05.30 in Ubuntu
+26.04): ``iw reg set`` leaves the radio on the world domain for any other."""
 SCAN_WAIT = 20
 """Seconds NetworkManager gets for a scan the owner asked for."""
 
@@ -103,8 +115,6 @@ class _Timers:
 
 # -- validation -------------------------------------------------------------------
 
-_COUNTRY = re.compile(r"[A-Z]{2}")
-
 
 def check_ssid(ssid: object) -> str:
     if not isinstance(ssid, str) or not 1 <= len(ssid.encode()) <= 32:
@@ -123,8 +133,8 @@ def check_password(password: object) -> str:
 
 
 def check_country(country: object) -> str:
-    if not isinstance(country, str) or not (_COUNTRY.fullmatch(country) or country == "00"):
-        raise HelperError("invalid", "a country is two letters (ISO 3166), e.g. CL")
+    if not isinstance(country, str) or (country != COUNTRY_ANYWHERE and country not in COUNTRIES):
+        raise HelperError("invalid", "a country is two letters (ISO 3166) the radio knows, e.g. CL")
     return country
 
 

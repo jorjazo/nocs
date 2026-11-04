@@ -2,6 +2,8 @@
 // default password, and kept up after saving so that its instructions stay on
 // screen until the user moves on.
 
+import { isCountry } from "./countries";
+
 export type SetupDone = { ssid: string | null; accessPoint: string; host: string };
 
 class BoxSetup {
@@ -11,12 +13,12 @@ class BoxSetup {
 export const boxSetup = new BoxSetup();
 
 // The country of the browser's languages (es-CL → CL), to start the form with. A
-// region that is not a country (es-419, Latin America) is skipped.
+// region that is not a country the radio knows (es-419, Latin America) is skipped.
 export function guessCountry(): string {
   for (const language of [...(navigator.languages ?? []), navigator.language]) {
     try {
       const region = new Intl.Locale(language).maximize().region ?? "";
-      if (/^[A-Z]{2}$/.test(region)) return region;
+      if (isCountry(region)) return region;
     } catch {
       // not a language tag: try the next one
     }

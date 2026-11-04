@@ -5,10 +5,19 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    BeforeValidator,
+    ConfigDict,
+    Field,
+    WithJsonSchema,
+    model_validator,
+)
 
 from nocs.equipment import Role, Site
 from nocs.state import Patch
+from nocs.system.network import COUNTRIES
 from nocs.targets import TargetType
 from nocs.targets.plan import PlannedTarget
 
@@ -1228,6 +1237,25 @@ class NetworkJoinRequest(BaseModel):
     password: str | None = Field(default=None, description="None for an open network.")
 
 
+def _upper(value: object) -> object:
+    return value.upper() if isinstance(value, str) else value
+
+
+def _known_country(value: str) -> str:
+    if value not in COUNTRIES:
+        raise ValueError("a country is two letters (ISO 3166) the radio knows, e.g. CL")
+    return value
+
+
+type WifiCountry = Annotated[
+    str,
+    BeforeValidator(_upper),
+    AfterValidator(_known_country),
+    WithJsonSchema({"type": "string", "enum": sorted(COUNTRIES)}),
+]
+"""A country of the kernel's regulatory database, whose channels the radio uses (ADR 0028)."""
+
+
 class WifiNetwork(BaseModel):
     """A Wi-Fi network in range (ADR 0028)."""
 
@@ -1252,7 +1280,7 @@ class AccessPointRequest(BaseModel):
 
     ssid: str | None = None
     password: str | None = Field(default=None, description="8 to 63 characters.")
-    country: str | None = Field(default=None, description="Two letters, ISO 3166 (e.g. CL).")
+    country: WifiCountry | None = None
 
 
 class NetworkSetupRequest(BaseModel):
@@ -1262,7 +1290,7 @@ class NetworkSetupRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    country: str = Field(description="Two letters, ISO 3166 (e.g. CL).")
+    country: WifiCountry
     password: str = Field(description="The access point's new password, 8 to 63 characters.")
     join: NetworkJoinRequest | None = None
 

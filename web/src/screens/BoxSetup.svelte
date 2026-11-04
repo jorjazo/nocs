@@ -4,11 +4,13 @@
   // anything else, while the access point keeps its default password.
   import Banner from "../components/Banner.svelte";
   import Button from "../components/Button.svelte";
+  import CountrySelect from "../components/CountrySelect.svelte";
   import Icon from "../components/Icon.svelte";
   import TextField from "../components/TextField.svelte";
   import Toggle from "../components/Toggle.svelte";
   import WifiPicker from "../components/WifiPicker.svelte";
   import { setUpNetwork } from "../lib/api";
+  import { isCountry } from "../lib/countries";
   import { errorText } from "../lib/errors";
   import { i18n } from "../lib/i18n";
   import { live } from "../lib/live.svelte";
@@ -37,10 +39,11 @@
       passwordError = t.boxSetup.passwordShort;
       return;
     }
+    if (!isCountry(country)) return;
     const join = joining && ssid.trim() ? { ssid: ssid.trim(), password: openNetwork ? null : wifiPassword || null } : null;
     busy = true;
     try {
-      await setUpNetwork({ country: country.trim().toUpperCase(), password, join });
+      await setUpNetwork({ country, password, join });
       boxSetup.done = { ssid: join?.ssid ?? null, accessPoint: ap, host };
       password = wifiPassword = "";
     } catch (e) {
@@ -76,7 +79,7 @@
         <p class="body">{t.boxSetup.body(ap)}</p>
       </div>
 
-      <TextField label={t.boxSetup.country} hint={t.boxSetup.countryHint} bind:value={country} required maxlength={2} />
+      <CountrySelect label={t.boxSetup.country} hint={t.boxSetup.countryHint} bind:value={country} />
       <TextField
         label={t.boxSetup.password}
         hint={t.boxSetup.passwordHint}
@@ -107,7 +110,7 @@
       {#if error}<Banner icon="alert" tone="error">{error}</Banner>{/if}
 
       <div class="actions">
-        <Button variant="primary" type="submit" wide {busy} disabled={country.trim().length !== 2}>
+        <Button variant="primary" type="submit" wide {busy} disabled={!isCountry(country)}>
           {t.boxSetup.submit}
         </Button>
       </div>

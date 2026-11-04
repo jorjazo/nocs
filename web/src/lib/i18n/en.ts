@@ -196,7 +196,7 @@ export const en = {
     body: (ap: string) =>
       `Before anything else, give the access point ${ap} a password of your own: until you do, anyone nearby can join it with the one printed in the quick start.`,
     country: "Country",
-    countryHint: "Two letters, e.g. CL: the radio uses the channels allowed there.",
+    countryHint: "Where the box is: the radio uses the channels allowed there.",
     password: "New access point password",
     passwordHint: "8 to 63 characters, letters, digits and symbols.",
     passwordShort: "At least 8 characters.",
@@ -213,6 +213,7 @@ export const en = {
     continue: "Continue",
   },
   wifi: {
+    chooseCountry: "Choose a country",
     scanning: "Looking for networks…",
     choose: "Choose a network",
     other: "Other…",
@@ -250,7 +251,7 @@ export const en = {
     apPassword: "New password",
     apPasswordHint: "8 to 63 characters. Phones on the access point must join it again.",
     country: "Country",
-    countryHint: "Two letters, e.g. CL: the channels the radio may use.",
+    countryHint: "Where the box is: the channels the radio may use.",
     save: "Save",
     saved: "Saved.",
     mode: "Mode",

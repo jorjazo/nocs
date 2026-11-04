@@ -353,7 +353,8 @@ def test_names_passwords_and_countries() -> None:
         with pytest.raises(HelperError):
             check_password(bad)
     assert check_country("CL") == "CL"
-    for bad in ("cl", "CHL", "", None):
+    assert check_country("00") == "00"  # the world domain, before the first run
+    for bad in ("cl", "CHL", "", None, "XX", "EU", ["CL"]):
         with pytest.raises(HelperError):
             check_country(bad)
 
@@ -400,6 +401,11 @@ def test_the_api_publishes_and_joins(nm: FakeNetworkManager, paths: Paths, tmp_p
             response = client.put("/api/system/network/access-point", json={"password": "short"})
             assert response.status_code == 422
             assert "8 to 63" in response.json()["detail"]
+            response = client.post(
+                "/api/system/network/setup", json={"country": "XX", "password": "dark-skies-1"}
+            )
+            assert response.status_code == 422
+            assert "the radio knows" in response.text
             response = client.post(
                 "/api/system/network/setup", json={"country": "cl", "password": "dark-skies-1"}
             )
