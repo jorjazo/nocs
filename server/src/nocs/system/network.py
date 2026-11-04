@@ -48,7 +48,7 @@ JOIN_DELAY = 2.0
 """Seconds before joining, so that the reply reaches the phone on the access point."""
 AP_ID = "nocs-ap"
 AP_ADDRESS = "10.42.0.1"
-DEFAULT_PASSWORD = "nocs-setup"
+DEFAULT_PASSWORD = "nocsnocs"
 """The access point's password until the first run changes it (printed in the quick start)."""
 COUNTRY_ANYWHERE = "00"
 
