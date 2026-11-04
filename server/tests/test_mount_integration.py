@@ -278,8 +278,15 @@ def test_park_home_and_unpark(api: TestClient) -> None:
         status = ws.receive_json()
         assert status["latched"]
         assert "parked" in status["message"]
+    # The site and the time go again after an unpark (the iOptron driver drops them
+    # while parked): the mount's clock is set anew.
+    api.post("/api/clock", json={"utc": datetime.now(UTC).isoformat(), "utc_offset": -3})
+    wait(api, lambda s: s["mount"]["time_sent"], timeout=5)
+    before = mount(api)["time"]
+    time.sleep(1.1)
     assert api.post("/api/mount/unpark").status_code == 204
     assert not mount(api)["parked"]
+    wait(api, lambda s: s["mount"]["time"] != before, timeout=5)
     response = api.post("/api/mount/home")
     assert response.status_code == 202
     job = response.json()["job"]

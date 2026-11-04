@@ -13,7 +13,7 @@ import anyio.lowlevel
 import pytest
 from pydantic import ValidationError
 
-from nocs.devices import Location
+from nocs.devices import Location, MeridianLimits
 from nocs.sequence import (
     Checkpoint,
     CheckpointFile,
@@ -76,6 +76,8 @@ class Rig:
         self.errors: dict[str, list[StepError]] = {}
         """Failures to raise, in turn, for an action kind or ``frame``."""
         self.slept = 0.0
+        self.meridian: MeridianLimits | None = None
+        """What the mount does by itself past the meridian."""
 
     async def sleep(self, seconds: float) -> None:
         self.slept += seconds
@@ -129,6 +131,9 @@ class Rig:
 
     def focuser_temperature(self) -> float | None:
         return self.temperature
+
+    def mount_meridian(self) -> MeridianLimits | None:
+        return self.meridian
 
     async def recover(self, error: StepError, attempt: int) -> str | None:
         if error.role is None:
@@ -851,6 +856,41 @@ async def test_a_target_west_of_the_meridian_never_flips() -> None:
     sequence = flipping(before_the_meridian(-30), row("L", 10, exposure=300))
     assert await at_site(sequence, rig).run() is Outcome.COMPLETED
     assert "flip" not in rig.calls
+
+
+@pytest.mark.parametrize(
+    ("meridian", "warned"),
+    [
+        (MeridianLimits(flip=False, limit=0, stops=True), True),  # an iOptron's default
+        (MeridianLimits(flip=True, limit=1, stops=False), True),
+        (MeridianLimits(flip=False, limit=3, stops=True), False),  # 12 min > 5 min
+        (MeridianLimits(flip=False, limit=0, stops=False), False),  # it tracks on
+        (None, False),
+    ],
+)
+async def test_a_mount_that_acts_before_the_flip_point_is_reported(
+    meridian: MeridianLimits | None, warned: bool
+) -> None:
+    rig = Rig()
+    rig.meridian = meridian
+    events: list[Event] = []
+    sequence = flipping(before_the_meridian(30), row("L", 2))
+    assert await at_site(sequence, rig, events).run() is Outcome.COMPLETED
+    found = [e for e in events if "mount_limit" in e.data]
+    assert len(found) == (1 if warned else 0)
+    if warned:
+        assert found[0].kind is EventKind.TRIGGER
+        assert found[0].data["flip_after"] == 5
+        assert "before the flip 5 min past it" in found[0].message
+
+
+async def test_a_target_west_of_the_meridian_warns_of_nothing() -> None:
+    rig = Rig()
+    rig.meridian = MeridianLimits(flip=False, limit=0, stops=True)
+    events: list[Event] = []
+    sequence = flipping(before_the_meridian(-30), row("L", 2))
+    assert await at_site(sequence, rig, events).run() is Outcome.COMPLETED
+    assert not [e for e in events if "mount_limit" in e.data]
 
 
 async def test_a_flip_that_fails_twice_ends_the_session() -> None:

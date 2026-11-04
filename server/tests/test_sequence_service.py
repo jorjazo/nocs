@@ -764,3 +764,18 @@ async def test_a_step_that_fails_while_a_device_is_unresponsive_blames_it(setup:
     assert (failed.value.kind, failed.value.role) == ("device", "main_camera")
     assert str(failed.value) == "no solution (the main_camera is not answering)"
     assert await executor.recover(failed.value, 1) == "restarted the main_camera's driver"
+
+
+async def test_the_rig_reads_the_mounts_meridian_limits_from_the_state(setup: Any) -> None:
+    _, rig, _, jobs, _ = setup
+    from nocs.devices import MeridianLimits
+    from nocs.sequence import rig as rig_module
+
+    store = StateStore()
+    executor = rig_module.RigExecutor(JobContext(jobs, "job"), jobs, store, rig.parts())
+    assert executor.mount_meridian() is None
+    store.set(("mount",), {"limits": {"altitude": None, "meridian": None}})
+    assert executor.mount_meridian() is None
+    meridian: Json = {"flip": False, "limit": 0, "stops": True}
+    store.set(("mount", "limits", "meridian"), meridian)
+    assert executor.mount_meridian() == MeridianLimits(flip=False, limit=0.0, stops=True)

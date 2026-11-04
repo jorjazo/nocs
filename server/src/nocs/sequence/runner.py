@@ -28,6 +28,7 @@ from typing import Protocol
 import anyio
 from pydantic import AwareDatetime, Field, ValidationError
 
+from nocs.devices import MeridianLimits
 from nocs.equipment.profiles import write_atomic
 from nocs.sequence import sky
 from nocs.sequence.model import (
@@ -124,6 +125,10 @@ class Executor(Protocol):
 
     async def stop_tracking(self) -> None:
         """The meridian guard: the mount must not track into its pier (ADR 0033)."""
+        ...
+
+    def mount_meridian(self) -> MeridianLimits | None:
+        """What the mount does by itself past the meridian, when its driver says."""
         ...
 
     async def recover(self, error: StepError, attempt: int) -> str | None:
@@ -546,6 +551,7 @@ class Runner:
         if isinstance(action, Center | Slew | Flip):
             self._checkpoint.since_recenter = 0  # pointed afresh
             self._pointed_at(target)
+            self._check_mount_meridian(here)
         self._event(EventKind.ACTION, action.kind, here, data)
         await self._save()
         return True
@@ -748,6 +754,29 @@ class Runner:
         checkpoint.pointed_ha = sky.hour_angle(place, target.ra, target.dec, self._now())
         checkpoint.pointed = target
         self._guarded = False
+
+    def _check_mount_meridian(self, path: PathKey) -> None:
+        """Warn when the mount, pointed east of the meridian, would stop tracking or flip
+        by itself before the latest flip point (an iOptron set to stop at 0°)."""
+        ha = self._checkpoint.pointed_ha
+        after = max((t.after for t in self._flip_triggers()), default=None)
+        mount = self._executor.mount_meridian()
+        if ha is None or ha >= 0 or after is None or mount is None:
+            return
+        if not (mount.flip or mount.stops) or mount.limit * 4 > after:
+            return  # the sidereal sky turns 1° in 4 minutes
+        does = "flips by itself" if mount.flip else "stops tracking"
+        message = (
+            f"flip: the mount {does} {mount.limit:g}° past the meridian, before the flip "
+            f"{after:g} min past it: set its meridian limit above {after / 4:.1f}°"
+        )
+        log.warning("sequence %s: %s", self._sequence.name, message)
+        self._event(
+            EventKind.TRIGGER,
+            message,
+            path,
+            {"mount_limit": mount.limit, "mount_flips": mount.flip, "flip_after": after},
+        )
 
     async def _guard(self) -> None:
         """Stop tracking a target well past its flip point with no flip under way, paused
