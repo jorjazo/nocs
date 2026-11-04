@@ -2686,6 +2686,20 @@
           "$ref": "#/$defs/DriverName",
           "description": "INDI driver executable, e.g. indi_asi_ccd."
         },
+        "model": {
+          "anyOf": [
+            {
+              "maxLength": 80,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The INDI catalog's model chosen for this driver (iOptron GEM45 of indi_ioptronv3_telescope), only shown."
+        },
         "outputs": {
           "anyOf": [
             {

@@ -14,6 +14,7 @@
   import TextField from "../components/TextField.svelte";
   import { deleteProfile, getProfile, listDrivers, listSerialPorts, putProfile } from "../lib/api";
   import { auth } from "../lib/auth.svelte";
+  import { choiceFor, driverChoices, matches, type DriverChoice } from "../lib/drivers";
   import { ROLE_ICONS, ROLES } from "../lib/equipment";
   import { errorText } from "../lib/errors";
   import { i18n } from "../lib/i18n";
@@ -38,7 +39,8 @@
     weather: ["Weather", "Auxiliary"],
   };
 
-  type DeviceDraft = { driver: string; device: string; port: string };
+  // The model is the catalog's, kept so that the editor shows the one chosen.
+  type DeviceDraft = { driver: string; model: string | null; device: string; port: string; filter: string };
   type OpticsDraft = { focal_length: number | null; aperture: number | null; reducer: number | null };
 
   function opticsDraft(optics: Optics | null | undefined): OpticsDraft {
@@ -92,7 +94,13 @@
         devices = Object.fromEntries(
           Object.entries(profile.devices ?? {}).map(([role, config]) => [
             role,
-            { driver: config.driver, device: config.device ?? "", port: config.port ?? "" },
+            {
+              driver: config.driver,
+              model: config.model ?? null,
+              device: config.device ?? "",
+              port: config.port ?? "",
+              filter: "",
+            },
           ]),
         );
         imaging = opticsDraft(profile.imaging);
@@ -109,27 +117,23 @@
 
   // -- Drivers -----------------------------------------------------------------------
 
-  // One option per executable: a driver serves many models (all ZWO cameras).
-  type Choice = { driver: string; text: string; group: string };
-  const choices = $derived.by((): Choice[] => {
-    const seen = new Map<string, Choice>();
-    for (const entry of drivers) {
-      if (!seen.has(entry.driver)) {
-        seen.set(entry.driver, { driver: entry.driver, text: `${entry.name} (${entry.driver})`, group: entry.group });
-      }
-    }
-    return [...seen.values()].sort((a, b) => a.text.localeCompare(b.text));
-  });
+  const choices = $derived(driverChoices(drivers));
 
-  function groupsFor(role: Role, current: string): { label: string; choices: Choice[] }[] {
+  // The role's groups first, then the rest; only what the filter matches, and
+  // always the current choice (also a driver installed by hand).
+  function groupsFor(role: Role, draft: DeviceDraft): { label: string; choices: DriverChoice[] }[] {
+    const current = choiceFor(choices, draft.driver, draft.model);
+    const shown = choices.filter((c) => c.key === current?.key || matches(c, draft.filter));
     const wanted = ROLE_GROUPS[role];
-    const groups = wanted.map((group) => ({ label: group, choices: choices.filter((c) => c.group === group) }));
-    const others = choices.filter((c) => !wanted.includes(c.group));
-    // A driver missing from the catalog (installed by hand) can still be kept.
-    if (current && !choices.some((c) => c.driver === current)) {
-      others.unshift({ driver: current, text: current, group: "" });
-    }
-    return [...groups.filter((g) => g.choices.length > 0), { label: t.editor.otherDrivers, choices: others }];
+    const groups = wanted.map((group) => ({ label: group, choices: shown.filter((c) => c.group === group) }));
+    const others = shown.filter((c) => !wanted.includes(c.group));
+    if (current && !choices.some((c) => c.key === current.key)) others.unshift(current);
+    return [...groups, { label: t.editor.otherDrivers, choices: others }].filter((g) => g.choices.length > 0);
+  }
+
+  function choose(draft: DeviceDraft, key: string): void {
+    const choice = choices.find((c) => c.key === key);
+    if (choice) [draft.driver, draft.model] = [choice.driver, choice.model];
   }
 
   // Devices the driver defines right now, from the live INDI state.
@@ -171,6 +175,7 @@
         const draft = devices[role];
         if (!draft) return [];
         const config: DeviceConfig = { ...original?.devices?.[role], driver: draft.driver };
+        config.model = choiceFor(choices, draft.driver, draft.model)?.model ?? null;
         config.device = draft.device.trim() || null;
         config.port = draft.port || null;
         return [[role, config]];
@@ -272,7 +277,7 @@
               {#if draft}
                 <Button variant="text" onclick={() => delete devices[role]}>{t.editor.remove}</Button>
               {:else}
-                <Button variant="text" onclick={() => (devices[role] = { driver: "", device: "", port: "" })}>
+                <Button variant="text" onclick={() => (devices[role] = { driver: "", model: null, device: "", port: "", filter: "" })}>
                   <Icon name="plus" size={20} />{t.editor.add(t.roles[role])}
                 </Button>
               {/if}
@@ -280,14 +285,19 @@
             {#if draft}
               {@const names = draft.driver ? running(draft.driver) : []}
               <div class="role-fields">
+                <TextField label={t.editor.filterDrivers} bind:value={draft.filter} placeholder={t.editor.filterPlaceholder} />
                 <label class="select">
                   <span class="label muted">{t.editor.driver}</span>
-                  <select bind:value={draft.driver}>
+                  <select
+                    bind:value={
+                      () => choiceFor(choices, draft.driver, draft.model)?.key ?? "",
+                      (key) => choose(draft, key)
+                    }>
                     <option value="" disabled>{t.editor.chooseDriver}</option>
-                    {#each groupsFor(role, draft.driver) as group (group.label)}
+                    {#each groupsFor(role, draft) as group (group.label)}
                       <optgroup label={group.label}>
-                        {#each group.choices as choice (choice.driver)}
-                          <option value={choice.driver}>{choice.text}</option>
+                        {#each group.choices as choice (choice.key)}
+                          <option value={choice.key}>{choice.text}</option>
                         {/each}
                       </optgroup>
                     {/each}
