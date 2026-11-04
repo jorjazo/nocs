@@ -56,6 +56,8 @@ DRIVER_STOP_TIMEOUT = 10.0
 """How long a driver may take to define its devices."""
 DISCONNECT_TIMEOUT = 10.0
 SETTLE_QUIET = 0.5
+LIST_TIMEOUT = 10.0
+"""How long a driver started only to list its devices may take to define one."""
 SETTLE_MAX = 5.0
 
 
@@ -168,6 +170,8 @@ class EquipmentService:
         self._listeners: list[Callable[[], None]] = []
         self._restarting: set[str] = set()
         """Devices whose driver is being restarted: their going away is expected."""
+        self._listing: set[str] = set()
+        """Drivers started only to list their devices, stopped after unless a connect needs them."""
 
         with store.transaction():
             self._publish_profiles()
@@ -311,6 +315,37 @@ class EquipmentService:
         if failed:
             raise DriverRestartError(f"{driver} restarted, but not ready: {', '.join(failed)}")
 
+    async def list_devices(self, driver: str, role: Role) -> list[str]:
+        """The devices ``driver`` defines that can play ``role``, for the profile editor.
+
+        A driver that does not run is started for the question and stopped after (unless
+        a profile connecting meanwhile needs it); drivers define their devices before
+        they connect. USB drivers define only the devices plugged in.
+        """
+        client = self._client
+        if client is None:
+            raise ConnectionError("not connected to indiserver")
+        config = DeviceConfig(driver=driver)
+        if driver_devices(client, driver) or driver in self._listing:
+            await client.wait_for(lambda c: bool(driver_devices(c, driver)), LIST_TIMEOUT)
+            return candidates(client, role, config)
+        if self._fifo is None:
+            raise DriverControlError(f"driver {driver} is not running and indiserver has no FIFO")
+        self._fifo.start(driver)
+        self._listing.add(driver)
+        try:
+            await client.wait_for(lambda c: bool(driver_devices(c, driver)), LIST_TIMEOUT)
+            # A driver with several devices (all ZWO cameras) defines them one after another.
+            await anyio.sleep(SETTLE_QUIET)
+            return candidates(client, role, config)
+        finally:
+            self._listing.discard(driver)
+            if driver not in self._started:
+                try:
+                    self._fifo.stop(driver)
+                except DriverControlError as e:
+                    log.warning("cannot stop driver %s: %s", driver, e)
+
     async def close(self) -> None:
         """Stop working on the server's shutdown. Devices and drivers stay as they are."""
         self._unwatch()
@@ -406,6 +441,10 @@ class EquipmentService:
             roles_by_driver[config.driver].append(role)
         pending: list[Role] = []
         for driver, roles in roles_by_driver.items():
+            if driver in self._listing:  # started to list its devices: now it stays
+                self._started.add(driver)
+                pending += roles
+                continue
             running = driver_devices(client, driver) or any(
                 candidates(client, role, profile.devices[role]) for role in roles
             )
