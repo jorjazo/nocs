@@ -17,6 +17,7 @@
   import { choiceFor, driverChoices, matches, type DriverChoice } from "../lib/drivers";
   import { ROLE_ICONS, ROLES } from "../lib/equipment";
   import { errorText } from "../lib/errors";
+  import { formatDecimal, formatPlain } from "../lib/format";
   import { i18n } from "../lib/i18n";
   import { live } from "../lib/live.svelte";
   import { href, router } from "../lib/router.svelte";
@@ -66,6 +67,22 @@
   let latitude = $state<number | null>(null);
   let longitude = $state<number | null>(null);
   let elevation = $state<number | null>(null);
+  // A USB GPS with a fix offers its position (ADR 0029); the fields show it once
+  // they are made again.
+  const gps = $derived.by(() => {
+    const gps = live.app.gps;
+    return gps?.connected && gps.latitude !== null && gps.longitude !== null
+      ? { latitude: gps.latitude, longitude: gps.longitude, elevation: gps.elevation }
+      : null;
+  });
+  let siteFills = $state(0);
+
+  function useGps(): void {
+    if (!gps) return;
+    [latitude, longitude] = [gps.latitude, gps.longitude];
+    if (gps.elevation !== null) elevation = gps.elevation;
+    siteFills += 1;
+  }
   // Every number field reports whether its text is valid.
   const NUMBERS = [
     ...["imaging", "guiding"].flatMap((train) => ["focal", "aperture", "reducer"].map((field) => `${train}-${field}`)),
@@ -376,31 +393,46 @@
       <legend class="heading">{t.editor.site}</legend>
       <p class="caption muted">{t.editor.siteHint}</p>
       <TextField label={t.editor.siteName} bind:value={siteName} maxlength={80} />
-      <div class="grid">
-        <NumberField
-          label={t.editor.latitude}
-          bind:value={latitude}
-          bind:valid={validity.latitude}
-          min={-90}
-          max={90}
-          unit="°"
-          hint={t.editor.latitudeHint} />
-        <NumberField
-          label={t.editor.longitude}
-          bind:value={longitude}
-          bind:valid={validity.longitude}
-          min={-180}
-          max={180}
-          unit="°"
-          hint={t.editor.longitudeHint} />
-        <NumberField
-          label={t.editor.elevation}
-          bind:value={elevation}
-          bind:valid={validity.elevation}
-          min={-500}
-          max={9000}
-          unit="m" />
-      </div>
+      {#if gps}
+        {@const locale = i18n.locale}
+        <div class="gps">
+          <Button onclick={useGps}>{t.editor.useGps}</Button>
+          <span class="caption muted">
+            {t.editor.gpsPosition(
+              `${formatDecimal(gps.latitude, locale, 4)}°`,
+              `${formatDecimal(gps.longitude, locale, 4)}°`,
+              gps.elevation === null ? null : `${formatPlain(gps.elevation, locale)} m`,
+            )}
+          </span>
+        </div>
+      {/if}
+      {#key siteFills}
+        <div class="grid">
+          <NumberField
+            label={t.editor.latitude}
+            bind:value={latitude}
+            bind:valid={validity.latitude}
+            min={-90}
+            max={90}
+            unit="°"
+            hint={t.editor.latitudeHint} />
+          <NumberField
+            label={t.editor.longitude}
+            bind:value={longitude}
+            bind:valid={validity.longitude}
+            min={-180}
+            max={180}
+            unit="°"
+            hint={t.editor.longitudeHint} />
+          <NumberField
+            label={t.editor.elevation}
+            bind:value={elevation}
+            bind:valid={validity.elevation}
+            min={-500}
+            max={9000}
+            unit="m" />
+        </div>
+      {/key}
     </fieldset>
 
     {#if auth.owner}
@@ -515,6 +547,12 @@
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
     gap: var(--space-3);
+  }
+  .gps {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2) var(--space-3);
   }
   .actions {
     display: flex;
