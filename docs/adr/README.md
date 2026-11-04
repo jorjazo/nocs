@@ -43,5 +43,6 @@ that supersedes the old one.
 | [0035](0035-apt-repository-and-release-publishing.md) | Apt repository, signing and release publishing | Proposed |
 | [0036](0036-calibration-frames.md) | Calibration frames: flats wizard, darks and bias, and their library | Proposed |
 | [0037](0037-coalesced-indi-mirror.md) | The state's INDI mirror is coalesced to one update a second per property | Proposed |
+| [0038](0038-recording-indi-sessions.md) | Recording INDI sessions of hardware NOCS has not been tested with | Proposed |
 
 Template: Context → Decision → Consequences.
