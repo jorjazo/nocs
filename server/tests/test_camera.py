@@ -6,7 +6,8 @@ from collections.abc import Mapping
 import pytest
 from fakes import FakeClient, number_property, switch_property
 
-from nocs.devices import Camera, DeviceError
+from nocs.devices import Camera, DeviceError, DeviceUnresponsive
+from nocs.devices import base as devices_base
 from nocs.devices.camera import Region
 from nocs.indi import Permission, Property, PropertyState, PropertyType
 from nocs.indi.properties import BlobElement, NumberElement, TextElement
@@ -175,6 +176,24 @@ async def test_cancelled_exposure_is_aborted() -> None:
     with pytest.raises(asyncio.CancelledError):
         await task
     assert client.sent[-1] == ("Cam", "CCD_ABORT_EXPOSURE", {"ABORT": True})
+
+
+async def test_a_camera_that_hangs_mid_exposure_is_noticed_before_its_end(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(devices_base, "SILENCE", 0.05)
+    monkeypatch.setattr(devices_base, "PROBE_TIMEOUT", 0.05)
+    client = camera_client()
+
+    def respond(device: str, name: str, values: Mapping[str, str | float | bool]) -> None:
+        if name == "CCD_EXPOSURE":
+            client.update("Cam", "CCD_EXPOSURE", PropertyState.BUSY, {"CCD_EXPOSURE_VALUE": "60"})
+            client.answering = False  # and then nothing more
+
+    client.responder = respond
+    camera = Camera(client, "Cam", images=camera_client())
+    with pytest.raises(DeviceUnresponsive, match="Cam is not answering"):
+        await asyncio.wait_for(camera.expose(60), 1)
 
 
 async def test_driver_saves_the_image_itself() -> None:

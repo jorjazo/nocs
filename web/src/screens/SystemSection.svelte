@@ -13,7 +13,6 @@
     restartService,
     runUpdate,
     setHostname,
-    useGpsSite,
   } from "../lib/api";
   import { auth } from "../lib/auth.svelte";
   import { errorText } from "../lib/errors";
@@ -68,12 +67,12 @@
 
   // -- Actions --------------------------------------------------------------------
 
-  type Action = "rename" | "restart" | "shutDown" | "gps" | "indiserver" | "phd2" | "check" | "install" | "rollback";
+  type Action = "rename" | "restart" | "shutDown" | "indiserver" | "phd2" | "check" | "install" | "rollback";
   let busy = $state<Action | null>(null);
   let error = $state("");
   // A restart or shut down refused because something runs: offer to force it.
   let refused = $state<Action | null>(null);
-  let done = $state<"restarting" | "shuttingDown" | "gpsUsed" | "restartedIndi" | "restartedPhd2" | null>(
+  let done = $state<"restarting" | "shuttingDown" | "restartedIndi" | "restartedPhd2" | null>(
     null,
   );
 
@@ -125,10 +124,6 @@
     await act(task, () => runUpdate(task, force));
   }
 
-  async function useGps(): Promise<void> {
-    if (await act("gps", async () => void (await useGpsSite()))) done = "gpsUsed";
-  }
-
   async function shutDown(force = false): Promise<void> {
     if (await act("shutDown", () => powerOff(force))) done = "shuttingDown";
   }
@@ -154,13 +149,6 @@
           </div>
         {/each}
       </dl>
-    {/if}
-
-    {#if gps?.site_differs && auth.owner}
-      <div class="gps">
-        <span class="muted">{t.system.gpsUseHint}</span>
-        <Button busy={busy === "gps"} onclick={useGps}>{t.system.gpsUse}</Button>
-      </div>
     {/if}
 
     <div class="name">
@@ -336,12 +324,6 @@
   }
   .low {
     color: var(--error);
-  }
-  .gps {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--space-2);
   }
   .name {
     display: flex;

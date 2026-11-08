@@ -168,9 +168,10 @@ and lets a crash be contained and restarted.
   framing and guiding.
 - **Device roles:** a device can serve one role in a profile (main camera,
   guide camera, mount, focuser, filter wheel, power box, weather sensor…).
-- **Site:** latitude, longitude, elevation, horizon (later).
-
 Profiles are stored server-side, exportable as files.
+
+- **Site:** latitude, longitude, elevation and horizon. Sites belong to the box,
+  not to profiles: it keeps a list of saved sites and one active site (ADR 0038).
 
 ## 6. Client–server protocol
 

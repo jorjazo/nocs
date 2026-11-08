@@ -1,4 +1,4 @@
-"""The SMB share of the frames for desktop computers (ADR 0037).
+"""The SMB share of the frames for desktop computers (ADR 0039).
 
 Samba's ``smbd`` runs as ``nocs-share.service`` on a configuration this module
 writes, and ``wsdd`` as ``nocs-wsdd.service`` so that Windows finds the box; both
@@ -38,7 +38,7 @@ FRAMES = "NOCS"
 """The folder below each destination that holds the frames (ADR 0013)."""
 LOGIN = "nocs"
 """The published login, user and password alike: it protects nothing, and is there
-for Windows 11, which refuses guests (ADR 0037)."""
+for Windows 11, which refuses guests (ADR 0039)."""
 MAX_NAME = 32
 _UUID = re.compile(r"[A-Za-z0-9-]{1,64}")
 _UNSAFE = re.compile(r"[^A-Za-z0-9 _.-]+")
@@ -100,7 +100,7 @@ def smb_conf(shared: list[Folder], paths: SharePaths, owner: str) -> str:
     printers, logs to the journal, every share read-only for guests and ``nocs``."""
     run = paths.runtime
     lines = [
-        "# Written by nocs-system (ADR 0037) whenever the share or the drives change:",
+        "# Written by nocs-system (ADR 0039) whenever the share or the drives change:",
         "# changes made here are lost.",
         "[global]",
         "server role = standalone server",

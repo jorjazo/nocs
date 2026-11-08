@@ -27,6 +27,7 @@ from nocs.system.network import (
     check_country,
     check_password,
     check_ssid,
+    in_range,
     split_terse,
     station_id,
 )
@@ -46,6 +47,9 @@ class FakeNetworkManager:
         self.reachable: dict[str, str | None] = {}
         """Networks in range, with their passwords."""
         self.clients = 0
+        self.scan = ""
+        """``device wifi list`` with SSID, SIGNAL and SECURITY, in terse output."""
+        self.exists = True
         self.country: str | None = None
         self.calls: list[tuple[str, ...]] = []
 
@@ -61,7 +65,8 @@ class FakeNetworkManager:
         command = [a for a in argv if a not in ("-t",)]
         match command:
             case ["nmcli", "-f", "DEVICE,TYPE,STATE,CONNECTION", "device", "status"]:
-                return f"wlan0:wifi:{self.state}:{self.active or ''}\neth0:ethernet:unavailable:\n"
+                wifi = f"wlan0:wifi:{self.state}:{self.active or ''}\n" if self.exists else ""
+                return f"{wifi}eth0:ethernet:unavailable:\n"
             case ["nmcli", "-f", "NAME,TYPE", "connection", "show"]:
                 return "".join(f"{name}:802-11-wireless\n" for name in self.connections)
             case ["nmcli", "-g", _, "connection", "show", "id", name]:
@@ -96,6 +101,21 @@ class FakeNetworkManager:
                 return ""
             case ["nmcli", "-f", "SSID", "device", "wifi", "list", "--rescan", "yes"]:
                 return "".join(f"{ssid}\n" for ssid in self.reachable)
+            case [
+                "nmcli",
+                "--wait",
+                _,
+                "-f",
+                "SSID,SIGNAL,SECURITY",
+                "device",
+                "wifi",
+                "list",
+                "ifname",
+                "wlan0",
+                "--rescan",
+                _,
+            ]:
+                return self.scan
             case ["iw", "dev", "wlan0", "station", "dump"]:
                 return "".join(
                     f"Station 00:11:22:33:44:{i:02x} (on wlan0)\n" for i in range(self.clients)
@@ -287,6 +307,39 @@ async def test_forget(nm: FakeNetworkManager, paths: Paths, clock: Clock) -> Non
     assert (await network.status({}))["known"] == ["Office"]
 
 
+def test_networks_in_range() -> None:
+    output = "\n".join(
+        [
+            "Home:48:WPA2",
+            "Home:81:WPA2",  # a second access point of the same network
+            r"Café\:2:81:WPA1 WPA2",
+            "::WPA2",  # hidden
+            "Plaza:30:",  # open
+            "NOCS-C3D4:99:WPA2",
+        ]
+    )
+    assert in_range(output, exclude="NOCS-C3D4") == [
+        {"ssid": "Café:2", "signal": 81, "secured": True},
+        {"ssid": "Home", "signal": 81, "secured": True},
+        {"ssid": "Plaza", "signal": 30, "secured": False},
+    ]
+
+
+async def test_scan_when_asked(nm: FakeNetworkManager, paths: Paths, clock: Clock) -> None:
+    nm.scan = "Home:70:WPA2\nNOCS-C3D4:99:WPA2\n"
+    network = make(paths, clock)
+    assert await network.scan({}) == {"networks": [{"ssid": "Home", "signal": 70, "secured": True}]}
+    assert nm.calls[-1][-2:] == ("--rescan", "yes")
+    # While the box is about to leave for a network, the last results, no new scan.
+    await network.join({"ssid": "Home", "password": "home-secret"})
+    await network.scan({})
+    assert nm.calls[-1][-2:] == ("--rescan", "no")
+    with pytest.raises(HelperError):
+        await network.scan({"band": "5"})
+    nm.exists = False
+    assert await network.scan({}) == {"networks": []}
+
+
 @pytest.mark.parametrize("ssid", ["", "x" * 33, "a;b", "a\\b", "line\nbreak", 7])
 def test_bad_network_names(ssid: object) -> None:
     with pytest.raises(HelperError):
@@ -300,7 +353,8 @@ def test_names_passwords_and_countries() -> None:
         with pytest.raises(HelperError):
             check_password(bad)
     assert check_country("CL") == "CL"
-    for bad in ("cl", "CHL", "", None):
+    assert check_country("00") == "00"  # the world domain, before the first run
+    for bad in ("cl", "CHL", "", None, "XX", "EU", ["CL"]):
         with pytest.raises(HelperError):
             check_country(bad)
 
@@ -348,8 +402,20 @@ def test_the_api_publishes_and_joins(nm: FakeNetworkManager, paths: Paths, tmp_p
             assert response.status_code == 422
             assert "8 to 63" in response.json()["detail"]
             response = client.post(
+                "/api/system/network/setup", json={"country": "XX", "password": "dark-skies-1"}
+            )
+            assert response.status_code == 422
+            assert "the radio knows" in response.text
+            response = client.post(
                 "/api/system/network/setup", json={"country": "cl", "password": "dark-skies-1"}
             )
             assert response.status_code == 202, response.text
             network = client.get("/api/state").json()["state"]["network"]
             assert (network["ap_default_password"], network["country"]) == (False, "CL")
+            nm.scan = "Home:64:WPA2\nPlaza:20:\n"
+            response = client.post("/api/system/network/scan")
+            assert response.status_code == 200, response.text
+            assert response.json() == [
+                {"ssid": "Home", "signal": 64, "secured": True},
+                {"ssid": "Plaza", "signal": 20, "secured": False},
+            ]

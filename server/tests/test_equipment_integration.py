@@ -113,3 +113,30 @@ def test_driver_catalog(indi_address: tuple[str, int], indi_fifo: Path) -> None:
         pair_owner(api)
         drivers = {d["driver"] for d in api.get("/api/indi/drivers").json()}
     assert {"indi_simulator_ccd", "indi_lx200am5", "indi_pegasus_ppba"} <= drivers
+
+
+def test_list_a_drivers_devices(indi_address: tuple[str, int], indi_fifo: Path) -> None:
+    host, port = indi_address
+    settings = Settings(
+        indi_host=host,
+        indi_port=port,
+        indi_fifo=indi_fifo,
+        indi_drivers_dir=indi_fifo.parent / "drivers",
+    )
+    with TestClient(create_app(settings)) as api:
+        pair_owner(api)
+        wait(api, lambda s: "CCD Simulator" in s["indi"]["devices"])
+        # Preloaded: listed as it runs.
+        ccd = api.get(
+            "/api/indi/drivers/indi_simulator_ccd/devices", params={"role": "main_camera"}
+        )
+        assert ccd.json() == ["CCD Simulator"]
+        # Not running: started for the question, then stopped.
+        url = "/api/indi/drivers/indi_simulator_weather/devices"
+        assert api.get(url, params={"role": "weather"}).json() == ["Weather Simulator"]
+        assert api.get(url, params={"role": "mount"}).json() == []
+        wait(api, lambda s: "Weather Simulator" not in s["indi"]["devices"], timeout=15)
+        assert (
+            api.get("/api/indi/drivers/indi_nothing/devices", params={"role": "mount"}).status_code
+            == 404
+        )

@@ -18,7 +18,7 @@ if [ "$1" = "configure" ] || [ "$1" = "abort-upgrade" ] || [ "$1" = "abort-decon
 fi
 
 # Samba's own services stay off: NOCS runs smbd as nocs-share.service, only while the
-# owner has the share on (ADR 0037). systemctl mask works without systemd running.
+# owner has the share on (ADR 0039). systemctl mask works without systemd running.
 systemctl mask smbd.service nmbd.service samba-ad-dc.service >/dev/null 2>&1 || true
 
 if [ "$1" = "configure" ] && [ -z "$2" ]; then

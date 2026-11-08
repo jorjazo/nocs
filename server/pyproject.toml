@@ -1,6 +1,6 @@
 [project]
 name = "nocs"
-version = "0.0.1"
+version = "0.1.0rc2"
 description = "NOCS core daemon (nocsd): web-first control of astrophotography rigs over INDI"
 license = "AGPL-3.0-or-later"
 requires-python = ">=3.12,<3.14"  # sep has no arm64 wheels for 3.14 yet
@@ -28,6 +28,8 @@ dev = [
     "pyright>=1.1.390",
     "pytest>=8.3",
     "pytest-asyncio>=0.24",
+    "pytest-timeout>=2.3",
+    "pytest-xdist>=3.6",
     "ruff>=0.8",
 ]
 
@@ -57,7 +59,11 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
 filterwarnings = ["ignore:Using `httpx` with `starlette.testclient`"]
+# A hung test fails on its own instead of holding CI for the job's timeout; the
+# slowest one (guiding calibration against the simulators) takes ~3 minutes.
+timeout = 600
 markers = [
     "indi: integration tests that need an indiserver running the simulators (NOCS_TEST_INDI=host:port)",
     "phd2: integration tests that also need a headless PHD2 (NOCS_TEST_PHD2=host:port)",
+    "slow: integration tests that take more than ~5 s in CI, which runs them only on main",
 ]
