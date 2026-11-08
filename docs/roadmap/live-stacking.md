@@ -1,6 +1,6 @@
 # Live stacking plan — EAA
 
-Status: decided, implementation starting · Last updated: 2026-11-01 · Roadmap: after [v1.0](v1.0.md), not part of it · Decision: [ADR 0039](../adr/0039-live-stacking.md)
+Status: decided, implementation starting · Last updated: 2026-11-01 · Roadmap: after [v1.0](v1.0.md), not part of it · Decision: [ADR 0040](../adr/0040-live-stacking.md)
 
 Goal: as the main camera's light frames come in, NOCS registers each one on the
 first, adds it to a running stack and shows the growing stack on the phone, so a
@@ -42,7 +42,7 @@ sub is gone from the stack; with darks and flats in the library they are applied
 | S1 | Registration | `nocs.stacking.register`: brightest stars from `sep` (positions, flux), triangle invariants from each star's nearest neighbours, matched by nearest invariant, votes → `cv2.estimateAffinePartial2D` (RANSAC, similarity); acceptance rules (inliers, scale ≈ 1, no reflection) | Unit tests on synthetic star fields: shifts, rotations (0–180°), 10 % false stars, 30 % missing stars, a mirrored field refused, too few stars refused; transform within 0.05 px and 0.01° | Implemented: 18 tests; ~5 ms per frame with 50 stars |
 | S2 | Stack core | `nocs.stacking.stack` (in the worker): load, superpixel debayer (RGGB is OpenCV's "BG", so the same pattern table) or mono, stars on the stack's own resolution, register on the reference, `warpAffine`, online kappa-sigma (Welford) by strips, frame quality gate, render (stretch, JPEG), save (FITS float32); `ImageWorker.stack_*` calls; worker-side state | Unit tests with synthetic Bayer frames of known shift and rotation: noise falls as 1/√N, a satellite trail in one frame is rejected, channel order right on an RGGB frame, the gate drops a cloudy frame; `dev/bench/stack_bench.py` per-frame cost | Implemented: 21 tests plus one through the real worker; bench below |
 | S3 | Calibration | Masters for the stack from the library's matches: median dark (or bias), flat minus its bias or dark flat, normalised per Bayer channel; built in the worker in strips, cached under `<data>/masters/`; cosmetic hot-pixel removal when there is no dark | Unit tests with a synthetic catalog and frames (a hot pixel and a vignetted flat corrected); cache reused; bench of building a master from 20 frames | Implemented: `nocs.stacking.masters` (16 tests with `calibrate`); a dark master of ten 26 MP frames in 5.5 s and 280 MB on the VM |
-| S4 | Service and API | `LiveStackService`: on/off, hook on main-camera lights from `_finish` (background, newest frame wins), new stack on a change of target, filter, exposure, gain, binning or size, or after 3 frames that do not register; state `stack`; `POST /api/stack` (on/off), `/api/stack/reset`, `/api/stack/save`, `PUT /api/stack/look`; schemas + TS types; worker death handled | Unit tests with a fake worker; API tests; simulators: a series with mount nudges between frames (GSC stars) stacks every frame and reports the shifts | Implemented: `nocs.stacking.service`, `api/stacking.py`, the capture hook; 22 tests with a fake worker and the API; `test_stacking_integration.py` against the simulators (CI runs it; not run in the cloud session, whose network blocks the INDI PPA) |
+| S4 | Service and API | `LiveStackService`: on/off, hook on main-camera lights from `_finish` (background, newest frame wins), new stack on a change of target, filter, exposure, gain, binning or size, or after 3 frames that do not register; state `stack`; `PUT /api/stack` (on/off), `/api/stack/reset`, `/api/stack/save`, `PUT /api/stack/look`; schemas + TS types; worker death handled | Unit tests with a fake worker; API tests; simulators: a series with mount nudges between frames (GSC stars) stacks every frame and reports the shifts | Implemented: `nocs.stacking.service`, `api/stacking.py`, the capture hook; 22 tests with a fake worker and the API; `test_stacking_integration.py` against the simulators (CI runs it; not run in the cloud session, whose network blocks the INDI PPA) |
 | S5 | Web UI | Live view: *Stack* toggle, the stack in the viewer (switch to the last sub), frames / rejected / total time, *New stack*, *Save*, look sheet (background, strength, saturation); Session monitor shows the stack while a sequence stacks; en/es; `docs/ux.md` | `pnpm check`, `pnpm test`; browser against the simulators, phone and wide, Night mode; an observer sees it | Implemented: Live view card, look sheet, Stack/Frame choice in Live view and the Session monitor; checked in a browser (phone and wide, Dusk and Night, en and es) on nocsd with a stack of synthetic frames rendered by the worker, not on the simulators (blocked here); the monitor and the observer view not looked at |
 | S6 | Saving | Stack as FITS (float32, RGB cube) + JPEG in `<night>/Stack/<target>/`, catalogued as `stack` (catalog v7; ignored by the calibration library), at the end of a stack and on demand; listed under the night and in its zip; WCS from a solve of the reference when ASTAP is available | Unit tests (catalog migration, layout); API test; the saved FITS opens in Siril/astropy with the right orientation and WCS | Planned |
 | S7 | Lab and field | Bench on the lab Pi; a soak night with stacking on (memory, worker time, event loop); field test checklist item (EAA on a galaxy, dithers and a flip) | Lab Pi; field test | Planned |
@@ -54,7 +54,7 @@ without changing the API. Each stage is a PR to `main` that passes CI.
 ## Decisions
 
 Each was open with a recommendation; on 2026-11-01 the maintainer accepted every
-recommendation below (D1–D10), and ADR 0039 records them.
+recommendation below (D1–D10), and ADR 0040 records them.
 
 ### D1. Registration: how to find each frame's transform
 
@@ -84,6 +84,10 @@ may solve the reference once for the saved FITS's WCS (S6).
   optical train; the triangle invariants match it but the similarity fit does
   not, so it fails registration with a clear reason ("mirrored: did the train
   change?"). Not handled further.
+- Each channel of a superpixel image is warped with its own place in the Bayer
+  cell (red and blue in opposite corners, green at the centre): with one warp for
+  all three, a frame turned by a meridian flip put red and blue half a pixel off
+  the green, in opposite directions (colour fringes; review of PR #3).
 - Frames are warped to the reference's geometry (the first accepted frame);
   pixels a dither or flip leaves uncovered are NaN and simply count fewer frames.
   The stack's edges are cropped to where at least half the frames cover, at render.
@@ -109,9 +113,9 @@ resolution up to 16 MP, 2×2 binned above (a 26 MP mono sensor also stacks at
 |---|---|---|
 | Running mean (sum + count) | 1 accumulator | No |
 | Kappa-sigma over a window of the last N frames | N frames (N = 10: ~0.8 GB at half resolution) | Within the window; a full re-stack per frame |
-| **Online kappa-sigma (Welford): per pixel mean, M2, count; a new value further than k·σ from the mean is not added** | 3 accumulators (~0.2 GB) | Yes, from the ~5th frame on |
+| **Online kappa-sigma (Welford): per pixel mean, M2, count; a new value further than k·σ from the mean is not added** | 3 accumulators (~0.2 GB) | Yes, from the 8th frame on |
 
-**Recommendation: online kappa-sigma**, k = 3, rejection from the 5th frame
+**Recommendation: online kappa-sigma**, k = 3, rejection from the 8th frame
 (before, a plain mean), per channel, processed in strips of ~32 rows so it stays
 in cache: ~0.1 s per 6.5 MP RGB frame on this x86 against ~0.5 s for whole-array
 numpy (measured, see the budget below). Plus a **frame gate**: a frame is left
@@ -119,7 +123,17 @@ out (and counted as rejected, with its reason) when it does not register, has
 fewer than half the stack's median star count, or an HFR above 1.5× the stack's
 median (clouds, wind, a lost guide star).
 
-A satellite in one of the first 4 frames survives (no σ yet); acceptable for
+Every frame is first **matched to the reference**: its sky level per channel
+(median) is replaced by the reference's, and its brightness scaled by the median
+flux ratio of the stars registration paired (between ×1/3 and ×3: haze, altitude).
+Without it a sky that brightens by more than ~3σ (the Moon rising, light pollution
+as the target sinks) was rejected at nearly every pixel and the stack stopped
+growing while it reported frames accepted (review of PR #3). The rejection judges
+a value against the pixel's sample deviation (M2 / (n − 1)) but never less than
+the frame's own sky noise (MAD): spreads from a few values, which rejected values
+never widen, rejected ~5 % of good data when rejection started at the 5th frame.
+
+A satellite in one of the first 7 frames survives (no σ yet); acceptable for
 EAA, and it fades as 1/N. Exposures stay equal within a stack (D8), so no
 weighting by exposure; weighting by noise is left for later.
 
@@ -135,13 +149,22 @@ twenty. **Recommendation:**
   files so no more than one strip of each is in memory; the flat minus its
   bias/dark, normalised per Bayer channel (so the flat's tint does not change
   the colour). Masters are stored at the stack's resolution (superpixel), cached
-  as FITS under `<data>/masters/<hash of the frame ids>.fits` and reused across
-  stacks and nights; they are internal (not in the catalog, not offered).
+  as FITS under `<data>/masters/`, named by a hash of their frame ids, the Bayer
+  pattern, the reduction and (for a flat) the master subtracted from it, written
+  with fsync and checked whole before reuse, and reused across stacks and nights;
+  they are internal (not in the catalog, not offered).
+- A flat is used only when the lights have their own darks or bias too: dividing
+  light that still holds its pedestal inverted the vignetting by ~19 % (review of
+  PR #27).
 - Calibration happens after superpixel: exact for darks and bias (linear), and
   near exact for flats (vignetting and dust are smooth at 2 px).
-- **No dark:** a cosmetic correction instead: per channel, pixels more than
-  ~8σ above the median of their 3×3 neighbours are replaced by it (hot pixels
-  walk across an undithered stack otherwise).
+- **No dark** (none, or only a bias): a cosmetic correction instead: per channel,
+  pixels more than ~8σ above the median of their 3×3 neighbours, and above the
+  local sky (a 5×5 median) more than 3× their brightest neighbour, are replaced by
+  that median (hot pixels walk across an undithered stack otherwise). On a colour
+  image the other channels must stay near their sky too: in a superpixel, red and
+  blue are one photosite in four, and a sharp star centred on one looked hot in its
+  own channel (review of PR #27); a star lifts every channel, a hot photosite one.
 - The first frame waits for its masters (tens of seconds once, from the
   microSD); frames meanwhile are dropped as for a busy pipeline.
 

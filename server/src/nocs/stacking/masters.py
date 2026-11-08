@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import os
 import tempfile
+import warnings
 from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
@@ -56,7 +57,12 @@ LEAST_FLAT = 0.05
 HOT_SIGMA = 8.0
 """How far above its neighbours' median, in noise sigmas, a hot pixel stands."""
 HOT_CONTRAST = 3.0
-"""How many times further above the sky than its brightest neighbour."""
+"""How many times further above the local sky than its brightest neighbour."""
+OTHERS_SIGMA = 3.0
+OTHERS_FRACTION = 0.05
+"""On a colour image, the other channels of a hot pixel stay near their sky: within
+``OTHERS_SIGMA`` sigmas, or this fraction of the pixel's own excess (in sigmas) for a
+very hot one, whose neighbours' noise can reach a few sigmas. A star lifts them all."""
 CACHED = 4
 """Masters held in memory in the worker; the least recently used goes first."""
 
@@ -81,7 +87,9 @@ class Calibration:
     flat: str | None = None
     """Flat master, divided."""
     cosmetic: bool = True
-    """Remove hot pixels when there is no dark."""
+    """Remove hot pixels when there is no dark (a bias does not remove them)."""
+    bias: bool = False
+    """The subtracted master is a bias, not a dark: hot pixels stay in the frame."""
 
 
 _loaded: OrderedDict[str, Image] = OrderedDict()
@@ -102,7 +110,10 @@ def build(
     """
     target = Path(path)
     if target.is_file():
-        return Master(path, kind, int(_header(path).get("NFRAMES", 0)))
+        frames_in = _valid(target)
+        if frames_in is not None:
+            return Master(path, kind, frames_in)
+        target.unlink()  # cut short (a power cut while it was written): build it again
     if not frames:
         raise MasterError(f"no frames for a {kind} master")
     offset = load(subtract) if subtract is not None else None
@@ -149,7 +160,7 @@ def forget() -> None:
 
 def apply(image: Image, calibration: Calibration) -> int:
     """Calibrate a frame at the stack's resolution in place; returns the hot pixels
-    the cosmetic pass removed (0 with a dark)."""
+    the cosmetic pass removed (0 with a dark, which removes them itself)."""
     if calibration.dark is not None:
         dark = load(calibration.dark)
         _check(image, dark, "dark")
@@ -158,30 +169,52 @@ def apply(image: Image, calibration: Calibration) -> int:
         flat = load(calibration.flat)
         _check(image, flat, "flat")
         image /= flat
-    if calibration.dark is None and calibration.cosmetic:
+    if calibration.cosmetic and (calibration.dark is None or calibration.bias):
         return cosmetic(image)
     return 0
 
 
 def cosmetic(image: Image) -> int:
-    """Replace hot pixels by the median of their neighbours, per channel, in place."""
+    """Replace hot pixels by the median of their neighbours, per channel, in place.
+
+    A hot pixel stands far above its 3x3 neighbourhood and, above the local sky (a 5x5
+    median, which follows vignetting), several times above its brightest neighbour.
+    On a colour (superpixel) image it must also stand alone across channels: a hot
+    photosite is one colour, while a star's light reaches every channel. Red and blue
+    are one photosite in four, so a sharp star centred on one stands out of its own
+    channel's neighbourhood like a hot pixel; only the other channels tell them apart.
+    """
     ring = np.ones((3, 3), dtype=np.uint8)
     ring[1, 1] = 0
-    found = 0
-    for c in range(image.shape[2]):
+    channels = image.shape[2]
+    excesses: list[Image] = []
+    medians: list[Image] = []
+    alone: list[NDArray[np.bool_]] = []
+    for c in range(channels):
         channel = np.ascontiguousarray(image[..., c])
         median = np.asarray(cv2.medianBlur(channel, 3), dtype=np.float32)
+        sky = np.asarray(cv2.medianBlur(channel, 5), dtype=np.float32)
         brightest = np.asarray(cv2.dilate(channel, ring), dtype=np.float32)
         excess = channel - median
         sample = excess[::4, ::4]
-        sigma = float(np.median(np.abs(sample - np.median(sample)))) * 1.4826
-        background = np.float32(np.median(channel[::4, ::4]))
-        hot = (excess > HOT_SIGMA * max(sigma, 1e-3)) & (
-            channel - background > HOT_CONTRAST * (brightest - background)
+        sigma = max(float(np.median(np.abs(sample - np.median(sample)))) * 1.4826, 1e-3)
+        alone.append(
+            (excess > HOT_SIGMA * sigma) & (channel - sky > HOT_CONTRAST * (brightest - sky))
         )
+        # How far each pixel stands above the local sky, in that channel's noise.
+        excesses.append((channel - sky) / np.float32(sigma))
+        medians.append(median)
+    found = 0
+    for c in range(channels):
+        hot = alone[c]
+        allowed = np.maximum(np.float32(OTHERS_SIGMA), np.float32(OTHERS_FRACTION) * excesses[c])
+        for o in range(channels):
+            if o != c:
+                hot &= excesses[o] < allowed
         count = int(np.count_nonzero(hot))
         if count:
-            channel[hot] = median[hot]
+            channel = np.ascontiguousarray(image[..., c])
+            channel[hot] = medians[c][hot]
             image[..., c] = channel
             found += count
     return found
@@ -270,9 +303,22 @@ def _check(image: Image, master: Image, kind: str) -> None:
         raise MasterError(f"the {kind} master is {master.shape}, the frame {image.shape}")
 
 
-def _header(path: str) -> dict[str, Any]:
-    with _fits.open(path, memmap=True) as hdul:
-        return dict(hdul[0].header)
+def _valid(path: Path) -> int | None:
+    """The frames in a master file, or None if it is not a whole master."""
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")  # "may have been truncated": that is the check
+            with _fits.open(path, memmap=False) as hdul:
+                header = hdul[0].header
+                frames = int(header.get("NFRAMES", 0))
+                shape = tuple(int(header.get(f"NAXIS{i}", 0)) for i in (1, 2, 3))
+                expected = 4 * shape[0] * shape[1] * shape[2] if all(shape) else 0
+                size = int(hdul.fileinfo(0)["datLoc"]) + expected
+    except (OSError, ValueError, TypeError, IndexError):
+        return None
+    if frames <= 0 or not expected or path.stat().st_size < int(size):
+        return None
+    return frames
 
 
 def _write(target: Path, master: Image, kind: Kind, frames: int) -> None:
@@ -285,7 +331,16 @@ def _write(target: Path, master: Image, kind: Kind, frames: int) -> None:
     os.close(fd)
     try:
         hdu.writeto(tmp, overwrite=True)
+        # On disk before its name: renaming to a new name does not make ext4 flush it,
+        # and a power cut would leave a short master that looks whole.
+        with open(tmp, "rb") as f:
+            os.fsync(f.fileno())
         os.replace(tmp, target)
+        directory = os.open(target.parent, os.O_RDONLY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
     except BaseException:
         Path(tmp).unlink(missing_ok=True)
         raise

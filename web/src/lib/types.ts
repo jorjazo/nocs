@@ -141,6 +141,8 @@ export type {
   SessionReport,
   SessionSummary,
   SetPropertyRequest,
+  ShareRequest,
+  ShareState,
   ShutdownRequest,
   Site,
   SiteCreated,

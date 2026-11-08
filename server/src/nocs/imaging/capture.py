@@ -469,11 +469,18 @@ class CaptureService:
                 shot = await self.take(context, role, seconds, frame_type, f"frame {count}: ")
                 # Analysis overlaps the next exposure; a frame still waiting for the
                 # worker when the next one arrives is skipped.
-                self._background(self._preview(role, shot, discard=True))
+                self._background(self._loop_frame(role, shot))
 
         job_id = self._jobs.start("loop", [role.value], run)
         self._set_exposure(role, seconds)
         return job_id
+
+    async def _loop_frame(self, role: Role, shot: Shot) -> None:
+        """A loop's frame: its preview, then the live stack (EAA's usual way to take
+        frames: nothing saved, ADR 0040)."""
+        analysis = await self._preview(role, shot, discard=True)
+        if analysis is not None:
+            await self._stack(role, shot, analysis, None, None, owned=True)
 
     async def take(
         self,

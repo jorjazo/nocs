@@ -1,4 +1,4 @@
-"""Registration of a frame on a reference by its stars (ADR 0037).
+"""Registration of a frame on a reference by its stars (ADR 0040).
 
 Stars come from ``sep``; the brightest of each frame form triangles with their
 nearest neighbours, and triangles are compared by the ratios of their sides, which
@@ -31,6 +31,8 @@ STARS = 50
 """Brightest stars used to register a frame."""
 NEIGHBOURS = 5
 """Each star makes triangles with this many of its nearest stars."""
+SATURATED = 0.98
+"""Stars whose peak reaches this fraction of the image's maximum count as saturated."""
 EDGE = 8
 """Pixels from the border inside which stars are ignored (cut off, unreliable)."""
 SHORTEST_SIDE = 4.0
@@ -122,6 +124,9 @@ class Registration:
     """Star pairs the final fit used."""
     rms: float
     """Residual of those pairs, pixels."""
+    flux_ratio: float | None = None
+    """Median of the reference's flux over the frame's, for the paired stars: how much
+    dimmer the frame is (haze, altitude); None when unknown."""
 
 
 def find_stars(image: NDArray[np.float32], most: int = STARS) -> Stars:
@@ -140,6 +145,12 @@ def find_stars(image: NDArray[np.float32], most: int = STARS) -> Stars:
     height, width = data.shape
     keep = (x >= EDGE) & (x < width - EDGE) & (y >= EDGE) & (y < height - EDGE)
     keep &= np.isfinite(flux) & (flux > 0)
+    # Saturated stars have flat tops: poor centroids and fluxes that no longer scale.
+    xpeak = np.clip(np.asarray(objects["xpeak"], dtype=np.intp), 0, width - 1)
+    ypeak = np.clip(np.asarray(objects["ypeak"], dtype=np.intp), 0, height - 1)
+    finite = data[np.isfinite(data)]
+    if finite.size:
+        keep &= data[ypeak, xpeak] < SATURATED * float(finite.max())
     order = np.argsort(-flux[keep])[:most]
     x, y, flux, a = x[keep][order], y[keep][order], flux[keep][order], a[keep][order]
     if x.size == 0:
@@ -204,20 +215,26 @@ def _register(frame: Stars, reference: Stars) -> Registration:
     # Refine on every star the model pairs, not only the voted ones; twice, as the
     # first refinement may pair a few more.
     count, rms = 0, math.inf
+    ratio: float | None = None
     for _ in range(2):
-        source, target = _pair_by_position(frame, reference, transform)
-        if len(source) < MIN_INLIERS:
+        frame_index, reference_index = _pair_by_position(frame, reference, transform)
+        if len(frame_index) < MIN_INLIERS:
             break
+        source, target = frame.points()[frame_index], reference.points()[reference_index]
         transform = _fit(source, target)
         residual = transform.apply(source) - target
         count, rms = len(source), float(np.sqrt(np.mean(np.sum(residual**2, axis=1))))
+        fluxes = frame.flux[frame_index]
+        usable = fluxes > 0
+        if np.count_nonzero(usable) >= MIN_INLIERS:
+            ratio = float(np.median(reference.flux[reference_index][usable] / fluxes[usable]))
     if count < MIN_INLIERS:
         raise RegistrationError(f"too few stars in common ({count})")
     if abs(transform.scale - 1) > SCALE_TOLERANCE:
         raise RegistrationError(f"the scale changed (x{transform.scale:.4f})")
     if rms > MAX_RMS:
         raise RegistrationError(f"stars do not line up ({rms:.2f} px)")
-    return Registration(transform, count, round(rms, 3))
+    return Registration(transform, count, round(rms, 3), ratio)
 
 
 def _triangles(stars: Stars) -> tuple[NDArray[np.intp], Floats]:
@@ -278,9 +295,9 @@ def _candidate_pairs(frame: Stars, reference: Stars) -> NDArray[np.intp]:
 
 def _pair_by_position(
     frame: Stars, reference: Stars, transform: Transform
-) -> tuple[Floats, Floats]:
-    """Frame stars whose transformed position falls within ``PAIR_PIXELS`` of exactly
-    one reference star nearest to it, and that star."""
+) -> tuple[NDArray[np.intp], NDArray[np.intp]]:
+    """Indices of frame stars whose transformed position falls within ``PAIR_PIXELS`` of
+    exactly one reference star nearest to it, and of that star."""
     moved = transform.apply(frame.points())
     target = reference.points()
     distance = np.hypot(
@@ -296,7 +313,7 @@ def _pair_by_position(
             chosen[j] = int(i)
     frame_index = np.array(list(chosen.values()), dtype=np.intp)
     reference_index = np.array(list(chosen.keys()), dtype=np.intp)
-    return frame.points()[frame_index], target[reference_index]
+    return frame_index, reference_index
 
 
 def _fit(source: Floats, target: Floats) -> Transform:

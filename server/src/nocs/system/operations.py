@@ -21,6 +21,8 @@ import anyio.to_thread
 
 from nocs.system.network import Network
 from nocs.system.protocol import HelperError, Message, validate_hostname
+from nocs.system.share import UNITS as SHARE_UNITS
+from nocs.system.share import Share
 from nocs.system.updates import Updates
 
 log = logging.getLogger("nocs.system")
@@ -40,6 +42,8 @@ class Context:
     """The Wi-Fi's actor, where the network group is on (ADR 0028)."""
     updates: Updates | None = None
     """The updates' actor, where the update group is on (ADR 0025)."""
+    share: Share | None = None
+    """The SMB share, where the share group is on (ADR 0039)."""
 
 
 type Operation = Callable[[Context, Message], Awaitable[Message]]
@@ -81,6 +85,11 @@ async def set_hostname(context: Context, args: Message) -> Message:
     name = validate_hostname(name)
     await run("hostnamectl", "set-hostname", name)
     await anyio.to_thread.run_sync(update_hosts, context.hosts, name)
+    if context.share is not None:  # smbd and wsdd announce the name they started with
+        try:
+            await run("systemctl", "try-restart", *SHARE_UNITS)
+        except HelperError as e:
+            log.warning("share: %s", e)
     return {"name": name}
 
 
@@ -140,6 +149,8 @@ async def mount(context: Context, args: Message) -> Message:
     await run(*argv, device, str(where))
     if fs not in OWNED:
         await anyio.to_thread.run_sync(_own_frames_folder, where, context.owner)
+    if context.share is not None:
+        await _refresh_share(context.share)
     return {"mount_point": str(where)}
 
 
@@ -155,6 +166,8 @@ async def eject(context: Context, args: Message) -> Message:
     source = (await run("findmnt", "--noheadings", "--output", "SOURCE", str(where))).strip()
     if not source:
         raise HelperError("invalid", f"nothing is mounted at {mount_point}")
+    if context.share is not None:  # smbd would keep the drive busy
+        await _refresh_share(context.share, without=where)
     await run("systemd-umount", str(where))
     powered_off = False
     disk = (await run("lsblk", "--noheadings", "--nodeps", "--output", "PKNAME", source)).strip()
@@ -167,6 +180,15 @@ async def eject(context: Context, args: Message) -> Message:
             except HelperError as e:
                 log.info("cannot power off /dev/%s: %s", disk, e)
     return {"powered_off": powered_off}
+
+
+async def _refresh_share(share: Share, *, without: Path | None = None) -> None:
+    """A drive mounted or about to be ejected changes what is shared; a failure there
+    must not fail the mount or the eject."""
+    try:
+        await share.refresh({}, without=without)
+    except HelperError as e:
+        log.warning("share: %s", e)
 
 
 async def _lsblk(device: str, *columns: str) -> dict[str, object]:
@@ -306,6 +328,27 @@ async def update_rollback(context: Context, args: Message) -> Message:
     return await _updates(context).rollback(args)
 
 
+# -- share (ADR 0039) ----------------------------------------------------------
+
+
+def _share(context: Context) -> Share:
+    if context.share is None:
+        raise HelperError("disabled", "the SMB share is not NOCS's to run here")
+    return context.share
+
+
+async def share_status(context: Context, args: Message) -> Message:
+    return await _share(context).status(args)
+
+
+async def share_enable(context: Context, args: Message) -> Message:
+    return await _share(context).enable(args)
+
+
+async def share_refresh(context: Context, args: Message) -> Message:
+    return await _share(context).refresh(args)
+
+
 OPERATIONS: dict[str, Operation] = {
     "power.reboot": reboot,
     "power.poweroff": power_off,
@@ -324,4 +367,7 @@ OPERATIONS: dict[str, Operation] = {
     "update.check": update_check,
     "update.install": update_install,
     "update.rollback": update_rollback,
+    "share.status": share_status,
+    "share.enable": share_enable,
+    "share.refresh": share_refresh,
 }
