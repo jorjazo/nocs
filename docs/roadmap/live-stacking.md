@@ -1,6 +1,6 @@
 # Live stacking plan — EAA
 
-Status: decided, implementation starting · Last updated: 2026-11-01 · Roadmap: [Beyond v0.1](../roadmap.md#beyond-v01-unordered-backlog) · Decision: [ADR 0037](../adr/0037-live-stacking.md)
+Status: decided, implementation starting · Last updated: 2026-11-01 · Roadmap: after [v1.0](v1.0.md), not part of it · Decision: [ADR 0039](../adr/0039-live-stacking.md)
 
 Goal: as the main camera's light frames come in, NOCS registers each one on the
 first, adds it to a running stack and shows the growing stack on the phone, so a
@@ -54,7 +54,7 @@ without changing the API. Each stage is a PR to `main` that passes CI.
 ## Decisions
 
 Each was open with a recommendation; on 2026-11-01 the maintainer accepted every
-recommendation below (D1–D10), and ADR 0037 records them.
+recommendation below (D1–D10), and ADR 0039 records them.
 
 ### D1. Registration: how to find each frame's transform
 

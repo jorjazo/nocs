@@ -5,11 +5,14 @@ name: Packages
 # main go to the apt repository's testing suite, tags to stable and testing, with a
 # GitHub release (ADR 0035); without the repository's variable and secrets they stay
 # artifacts.
+# Not on pull requests, whose CI stays a few minutes long. Pushes that change only
+# documentation build nothing; tags always do (GitHub does not apply path filters
+# to them).
 on:
   push:
     branches: [main]
     tags: ["v*"]
-  pull_request:
+    paths-ignore: [docs/**, "**.md"]
   workflow_dispatch:
 
 jobs:
@@ -23,6 +26,7 @@ jobs:
           - arch: arm64
             runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
         with:
@@ -53,6 +57,7 @@ jobs:
 
   repository:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
       - name: Publish to a local repository and install from it
@@ -62,6 +67,7 @@ jobs:
     needs: [deb, repository]
     if: github.event_name == 'push' && vars.NOCS_APT_URL != ''
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     # One publish at a time: each rewrites the suites' indices.
     concurrency:
       group: apt-repository
@@ -92,7 +98,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           prerelease=()
-          [[ $GITHUB_REF_NAME == *-* ]] && prerelease=(--prerelease)
+          [[ $GITHUB_REF_NAME == *rc* ]] && prerelease=(--prerelease)
           gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes "${prerelease[@]}" \
             || true  # the Image workflow may have made it first
           gh release upload "$GITHUB_REF_NAME" --clobber debs/nocs-amd64/*.deb debs/nocs-arm64/nocs_*_arm64.deb

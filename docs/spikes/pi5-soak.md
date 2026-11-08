@@ -1,6 +1,6 @@
 # Spike: a whole night on the Raspberry Pi 5 (soak test)
 
-Date: 2026-11-01 · Status: **PC done; Pi 4.6 h + 1.4 h + 0.7 h** (an 8 h night with every fix is pending) · Related:
+Date: 2026-11-01 · Status: **done: PC 2 h; Pi 4.6 h + 1.4 h + 0.7 h, then 8 h with every fix and no failure** (2026-11-03) · Related:
 [Pi 5 performance](pi5-performance.md), [ADR 0012](../adr/0012-image-pipeline.md),
 [ADR 0030](../adr/0030-supervision.md), [ADR 0031](../adr/0031-sequences.md),
 [ADR 0032](../adr/0032-sequence-recovery-and-restarts.md), [ADR 0033](../adr/0033-meridian-flip.md)
@@ -127,8 +127,45 @@ and the soak appends its own records from a thread, so its waits do not read as 
 Every fix in, stopped after 41 minutes when the lab was needed
 ([results/pi5-third](../../dev/tools/soak/results/pi5-third/summary.md)): 49 frames, no
 failure, 54–63 °C, `0x0`. **No window had a probe over 300 ms** (the slowest was 43 ms,
-against 6 windows up to 4.1 s in the previous 1.4 h); patches at most 97 ms late. The
-full 8 h night on the Pi is still to run.
+against 6 windows up to 4.1 s in the previous 1.4 h); patches at most 97 ms late.
+
+### Pi 5, eight hours (every follow-up in)
+
+2026-11-02 19:23 → 2026-11-03 03:25 (−03), `main` at fccce28, on a second Pi 5 8 GB
+flashed for it with `dev/pi/flash.sh` (`nocs-soak`: active cooler, frames on its 32 GB
+microSD, nothing else running), so the lab Pi stayed free. Data:
+[results/pi5-eight-hours](../../dev/tools/soak/results/pi5-eight-hours/summary.md).
+772 frames (96/h; 260 Red, 259 Green, 255 Blue), 257 dithers, 76 pointing checks, 8
+autofocus runs (7 on temperature), the flip at +4.6 min (centred at the first attempt,
+PHD2 calibrated again); **no failure**, the run ended `completed`, parked and warm.
+
+| process | RSS start → end (MB) | max | fds | CPU % mean / p95 |
+|---|---|---|---|---|
+| nocsd | 168 → 202 | 202 | 31–35 | 4.3 / 5.5 |
+| imaging worker | 208 → 183 | 378 (autofocus) | 11–13 | 10.1 / 12.6 |
+| PHD2 | 242 → 241 | 242 | 22 | 4.1 / 4.4 |
+| indiserver | 9 → 9 | 11 | 22–23 | 0.9 / 0.9 |
+| CCD simulator | 75 → 74 | 126 | 5–7 | 4.2 / 8.4 |
+
+- **The event loop no longer stalls**: `/api/health` median 3.7 ms, worst 58.5 ms in 8 h
+  (the first night: 11 windows over 300 ms, up to 1.9 s), while guiding all night with
+  the guide camera's BLOBs parsed in a thread. Patches at most 137 ms late.
+- **WebSocket: 4.2 kB/s per client** (17.5 kB/s on the first night, before the
+  coalesced mirror): 52 connections (14 from scratch), no version gap, 358 314
+  patches; 772 previews (slowest 184 ms) and 77 FITS downloaded, no failure.
+- 46–55 °C, `get_throttled=0x0`, no under-voltage, load ≤ 2.1, 6.8 GB available at
+  least; nothing at WARNING or above in nocsd's log.
+- The only slope: nocsd's resident memory, 158–183 MB in the first hour, then
+  ~180 → ~200 MB over the next seven (~3 MB/h), with its descriptors flat and the
+  worker's memory not growing. Small against 8 GB, but the one number to watch in a
+  longer run.
+- **Restart**: `systemctl restart nocsd@jorjazo` on the lab Pi (on 04ba68d) logged
+  `Finished server process` and the new process its 5 semaphores. Its stop also logged
+  5 `FileNotFoundError`s from `sem_unlink`, but not from nocsd: systemd-logind
+  (`RemoveIPC=yes`, Ubuntu's default) deletes a login user's `/dev/shm` files when their
+  last session ends, so an SSH logout had already unlinked them under the running
+  nocsd. With `loginctl enable-linger jorjazo` they stay, and a restart logs no error.
+  The `.deb` runs nocsd as the system user `nocs`, which `RemoveIPC` leaves alone.
 
 ## What the soak found, and what was fixed
 
@@ -150,30 +187,73 @@ Each of the first three ended or would have ended a night; the fixes are on `mai
    end of the stop, and the second reached the next start. A stop from guiding now waits
    for both (the tests' fake PHD2 sends both, as PHD2 does).
 
-Measured, not changed:
+Measured, then changed (2026-11-02, on the simulators: the lab Pi was away):
 
 4. **File operations on the event loop wait for the microSD** while it writes back a
    frame (ext4 `data=ordered`): deleting old previews did (up to 4 s, now in a thread),
    and so does a log line written to a file (up to 1.9 s). journald's socket absorbs it on
-   the appliance, but a `QueueHandler` (records written by a thread) would make it
-   impossible. Also on the loop: decoding the guide camera's BLOBs that NOCS previews
-   from PHD2 (base64 and XML, ~1.7 % of the loop's time in 50–100 ms pieces every 2 s;
-   ADR 0012 wanted BLOBs off the loop).
+   the appliance, but now **log records are written by a thread** (`QueueHandler` and
+   `QueueListener`, `nocs.logs`), uvicorn's access log included. Also on the loop:
+   decoding the guide camera's BLOBs that NOCS previews from PHD2 (base64 and XML,
+   ~1.7 % of the loop's time in 50–100 ms pieces every 2 s). **The INDI client now
+   parses an element over 64 KB in a thread**, decoding base64 in 64 KB slices. Both
+   hold the GIL, so the CPU spent is the same, but the loop waits a few ms at a time:
+   against a fake indiserver sending the simulator's 2.6 MB guide frames, a PC's
+   worst loop lag went from 22–31 ms to 6–11 ms (ADR 0012, dated note).
 
 5. **The WebSocket carries ~24 patches/s, ~19 kB/s per client (~70 MB an hour)**, and
    ~88 % of it is the raw INDI property mirror (`indi.devices`: the Telescope Simulator
    50 operations/s, the guide and main cameras 26 and 20), which only the developer
-   screen (`#/dev`) shows. Harmless on a LAN; worth coalescing (one update per property
-   per second) or sending only to clients that ask, for phones on weak Wi-Fi and for
-   the Pi's JSON encoding with several clients.
-6. **Guide frames do not wear the microSD.** nocsd writes every frame PHD2 takes (one
+   screen (`#/dev`) and the profile editor read. **The mirror is now coalesced**
+   ([ADR 0037](../adr/0037-coalesced-indi-mirror.md)): a property's updates at most
+   once a second (at once when its state changes), only the elements that changed, a
+   number's value without its limits, and 10 driver messages in the state instead of
+   50 (the list is sent whole with each). Chosen over sending the mirror only to
+   clients that ask: no protocol change, and every reader keeps working. With the
+   mount tracking and 1 s frames on the simulators, a client went from 36 patches and
+   22.5 kB/s (87 % the mirror) to 22 patches and 7.1 kB/s (48 %).
+
+6. **nocsd did not stop cleanly** (`sem_unlink` errors on the lab Pi's `nocsd@jorjazo`
+   even after 079bd25). uvicorn stops on SIGTERM, then raises it again under the
+   handler it found: Python's default killed nocsd (status −15) before its exit
+   handlers. Whether the imaging worker's semaphores were unlinked then depended on
+   timing: closing the worker frees them from the pool's threads, and the process
+   could die in between, a semaphore unlinked but not yet unregistered, which the
+   resource tracker then fails to unlink again (`FileNotFoundError`); or not yet
+   unlinked at all (5 left in `/dev/shm` in one of two stops reproduced on a PC; the
+   literal error was not reproduced). With records written by a thread, the
+   shutdown's own log lines were lost too. nocsd's handler now makes it a normal exit
+   (status 0, exit handlers run). And the worker, which ignores SIGTERM to let nocsd
+   stop it, waited forever when nocsd was killed or crashed (it holds its own end of
+   the pool's queue), keeping the resource tracker alive with it: it now exits with
+   its parent. Tests for both.
+
+Measured, not changed:
+
+7. **Guide frames do not wear the microSD.** nocsd writes every frame PHD2 takes (one
    every 2 s, 2.6 MB here) to `incoming/` for its preview and deletes it a second later:
    its `write_bytes` reads ~1 MB/s, but the card saw ~0.1 MB/s while guiding without main
    frames, as the files are gone before writeback.
-7. **Simulator limits, not NOCS's:** the guide simulator's default 3.5″ stars are under
+8. **Simulator limits, not NOCS's:** the guide simulator's default 3.5″ stars are under
    a pixel at the guide scope's 4.1″/px and PHD2 keeps losing them ("low HFD"; still
    ~21 % of guide frames at 8″), so the tool sets 14″. PHD2 calibrates in ~4.5 min on
    the simulators.
+
+### Left after the follow-ups (2026-11-02)
+
+- The 8 h night on the Pi with every fix ran on 2026-11-03 (results above).
+- nocsd's memory grew ~3 MB/h through that night: see whether it levels off in a longer
+  run before looking for a cause.
+- A lab Pi that runs `nocsd@` needs `loginctl enable-linger $USER` (above);
+  `dev/pi`'s setup could do it.
+- After the mirror, the largest WebSocket share is the mount's own state (`mount.ra`,
+  `dec`, `ra_j2000`, `dec_j2000` ~4 patches/s, following the telescope's 250 ms poll):
+  worth coalescing too if phones on weak Wi-Fi need less.
+- Tests: each stage's own tests and the integration files they touch passed on the
+  simulators, and ruff, pyright and the web checks pass; the last full simulator run
+  was cut short (2 autofocus integration failures while another run likely shared the
+  simulators; that file passes alone). If CI fails there, start with the autofocus
+  tests and the mirror's coalescing (ADR 0037).
 
 ## What limits a night
 

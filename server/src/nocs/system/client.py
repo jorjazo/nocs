@@ -9,13 +9,16 @@ from anyio.streams.buffered import BufferedByteReceiveStream
 
 from nocs.system.protocol import MAX_LINE, SOCKET, HelperError, Message, decode, encode
 
+TIMEOUT = 10.0
+"""Seconds nocs-system gets to answer, unless the call says otherwise."""
+
 
 class HelperUnavailableError(Exception):
     """nocs-system is not running, or does not answer this user."""
 
 
 async def call(
-    op: str, args: Message | None = None, *, socket: Path = SOCKET, timeout: float = 10.0
+    op: str, args: Message | None = None, *, socket: Path = SOCKET, timeout: float = TIMEOUT
 ) -> Message:
     """Perform ``op``; its result, or ``HelperError`` with the reason it was refused."""
     try:

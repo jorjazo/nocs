@@ -6,12 +6,14 @@ State layout under ``("equipment",)``::
     active:     id of the selected profile, or None
     connection: disconnected | connecting | connected | disconnecting
     error:      why the profile cannot be connected right now, or None
-    devices:    {<role>: {driver, device, status, error}}
+    devices:    {<role>: {driver, device, status, error, unresponsive_since}}
 
 Connecting starts the drivers that are not running yet, waits for each device,
 sets its serial port, connects it and waits until its facade is ready. Roles
 connect independently: one failing device leaves the others usable, and
-connecting the same profile again retries the ones that failed.
+connecting the same profile again retries the ones that failed. A ready device that
+stops answering a command (``nocs.devices.on_unresponsive``) makes its roles
+``unresponsive`` until it sends anything again or its driver restarts (ADR 0030).
 """
 
 from __future__ import annotations
@@ -20,6 +22,7 @@ import asyncio
 import logging
 from collections import defaultdict
 from collections.abc import Callable, Coroutine
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any, Protocol
 
@@ -35,9 +38,10 @@ from nocs.devices import (
     Mount,
     PowerBox,
     WeatherSensor,
+    on_unresponsive,
 )
-from nocs.devices.base import device_interfaces
-from nocs.equipment.profiles import DeviceConfig, Profile, ProfileError, ProfileStore, Role, Site
+from nocs.devices.base import device_interfaces, event_device
+from nocs.equipment.profiles import DeviceConfig, Profile, ProfileStore, Role
 from nocs.indi import IndiClient, IndiEvent, PropertyDeleted, PropertyUpdated, TextElement
 from nocs.indi.drivers import DriverControlError, DriverFifo
 from nocs.state import Json, Path, StateStore
@@ -52,6 +56,8 @@ DRIVER_STOP_TIMEOUT = 10.0
 """How long a driver may take to define its devices."""
 DISCONNECT_TIMEOUT = 10.0
 SETTLE_QUIET = 0.5
+LIST_TIMEOUT = 10.0
+"""How long a driver started only to list its devices may take to define one."""
 SETTLE_MAX = 5.0
 
 
@@ -69,6 +75,8 @@ class DeviceStatus(StrEnum):
     READY = "ready"
     ERROR = "error"
     DISCONNECTED = "disconnected"
+    UNRESPONSIVE = "unresponsive"
+    """Connected, but it stopped answering (ADR 0030): restart its driver."""
 
 
 ROLE_INTERFACE: dict[Role, DeviceInterface] = {
@@ -162,6 +170,8 @@ class EquipmentService:
         self._listeners: list[Callable[[], None]] = []
         self._restarting: set[str] = set()
         """Devices whose driver is being restarted: their going away is expected."""
+        self._listing: set[str] = set()
+        """Drivers started only to list their devices, stopped after unless a connect needs them."""
 
         with store.transaction():
             self._publish_profiles()
@@ -207,17 +217,6 @@ class EquipmentService:
         """Create or replace a profile. Changes to the connected one apply on next connect."""
         self._profiles.put(profile_id, profile)
         self._publish_profiles()
-
-    def set_site(self, site: Site) -> None:
-        """Change the active profile's site, at once even while it is connected: unlike its
-        devices, nothing needs reconnecting (a site from a GPS, ADR 0029)."""
-        if self._profile_id is None or self._profile is None:
-            raise ProfileError("no profile is selected")
-        profile = self._profile.model_copy(update={"site": site})
-        self._profiles.put(self._profile_id, profile)
-        self._profile = profile
-        self._publish_profiles()
-        self._notify()
 
     def delete_profile(self, profile_id: str) -> bool:
         if profile_id == self._profile_id:
@@ -304,6 +303,37 @@ class EquipmentService:
         failed = [r.value for r in roles if self._status.get(r) is not DeviceStatus.READY]
         if failed:
             raise DriverRestartError(f"{driver} restarted, but not ready: {', '.join(failed)}")
+
+    async def list_devices(self, driver: str, role: Role) -> list[str]:
+        """The devices ``driver`` defines that can play ``role``, for the profile editor.
+
+        A driver that does not run is started for the question and stopped after (unless
+        a profile connecting meanwhile needs it); drivers define their devices before
+        they connect. USB drivers define only the devices plugged in.
+        """
+        client = self._client
+        if client is None:
+            raise ConnectionError("not connected to indiserver")
+        config = DeviceConfig(driver=driver)
+        if driver_devices(client, driver) or driver in self._listing:
+            await client.wait_for(lambda c: bool(driver_devices(c, driver)), LIST_TIMEOUT)
+            return candidates(client, role, config)
+        if self._fifo is None:
+            raise DriverControlError(f"driver {driver} is not running and indiserver has no FIFO")
+        self._fifo.start(driver)
+        self._listing.add(driver)
+        try:
+            await client.wait_for(lambda c: bool(driver_devices(c, driver)), LIST_TIMEOUT)
+            # A driver with several devices (all ZWO cameras) defines them one after another.
+            await anyio.sleep(SETTLE_QUIET)
+            return candidates(client, role, config)
+        finally:
+            self._listing.discard(driver)
+            if driver not in self._started:
+                try:
+                    self._fifo.stop(driver)
+                except DriverControlError as e:
+                    log.warning("cannot stop driver %s: %s", driver, e)
 
     async def close(self) -> None:
         """Stop working on the server's shutdown. Devices and drivers stay as they are."""
@@ -400,6 +430,10 @@ class EquipmentService:
             roles_by_driver[config.driver].append(role)
         pending: list[Role] = []
         for driver, roles in roles_by_driver.items():
+            if driver in self._listing:  # started to list its devices: now it stays
+                self._started.add(driver)
+                pending += roles
+                continue
             running = driver_devices(client, driver) or any(
                 candidates(client, role, profile.devices[role]) for role in roles
             )
@@ -513,14 +547,27 @@ class EquipmentService:
                 self._publish_connection(Connection.CONNECTING, "lost connection to indiserver")
                 self._publish_roles(DeviceStatus.WAITING)
             return
-        self._remove_listener = client.add_listener(self._on_event)
+        remove_events = client.add_listener(self._on_event)
+        remove_unresponsive = on_unresponsive(client, self._on_unresponsive)
+
+        def remove() -> None:
+            remove_events()
+            remove_unresponsive()
+
+        self._remove_listener = remove
         if self._connection in (Connection.CONNECTING, Connection.CONNECTED):
             self._spawn(self._connect())
 
     def _on_event(self, event: IndiEvent) -> None:
-        """Notice devices that go away or are disconnected outside NOCS."""
+        """Notice devices that go away, are disconnected outside NOCS, or answer again."""
         if self._connection is not Connection.CONNECTED:
             return
+        device = None if isinstance(event, PropertyDeleted) else event_device(event)
+        if device is not None:
+            for role in self._roles_of(device):
+                if self._status.get(role) is DeviceStatus.UNRESPONSIVE:
+                    log.info("%s answers again", device)
+                    self._publish_role(role, status=DeviceStatus.READY)
         match event:
             case PropertyDeleted(device=device, name=None) if device not in self._restarting:
                 for role in self._roles_of(device):
@@ -533,6 +580,13 @@ class EquipmentService:
                         self._publish_role(role, status=DeviceStatus.DISCONNECTED)
             case _:
                 pass
+
+    def _on_unresponsive(self, device: str, reason: str) -> None:
+        if self._connection is not Connection.CONNECTED or device in self._restarting:
+            return
+        for role in self._roles_of(device):
+            if self._status.get(role) is DeviceStatus.READY:
+                self._publish_role(role, status=DeviceStatus.UNRESPONSIVE, error=reason)
 
     def _roles_of(self, device: str) -> list[Role]:
         return [role for role, name in self._resolved.items() if name == device]
@@ -580,6 +634,7 @@ class EquipmentService:
                     "device": self._resolved.get(role, config.device),
                     "status": status.value,
                     "error": None,
+                    "unresponsive_since": None,
                 }
         self._store.set((*ROOT, "devices"), roles)
         self._notify()
@@ -598,5 +653,11 @@ class EquipmentService:
                 self._store.set((*path, "device"), device)
             self._store.set((*path, "status"), status.value)
             self._store.set((*path, "error"), error)
+            since = (
+                datetime.now(UTC).isoformat(timespec="seconds")
+                if status is DeviceStatus.UNRESPONSIVE
+                else None
+            )
+            self._store.set((*path, "unresponsive_since"), since)
         self._status[role] = status
         self._notify()

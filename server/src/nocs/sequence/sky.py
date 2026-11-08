@@ -10,8 +10,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from nocs.devices import Location
-from nocs.equipment import HorizonPoint
 from nocs.mount.coords import j2000_to_jnow, sidereal_time
+from nocs.sites import HorizonPoint
 from nocs.sky import Darkness, horizon_altitude, night, tonight
 from nocs.sky.almanac import TWILIGHTS
 from nocs.sky.ephemeris import refraction, sky

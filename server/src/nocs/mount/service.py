@@ -12,7 +12,8 @@ motion. Manual motion goes through slew pads (``nocs.mount.pad``).
 Whenever the mount becomes ready, NOCS sends it the site and then the time (as
 soon as a client has reported its clock): the lab's ZWO AM7 refuses every go to
 after power-on until it gets them, and the site its driver shows is only the
-driver's saved configuration (ADR 0015). Go to waits for both.
+driver's saved configuration (ADR 0015). Go to waits for both. The site is the box's
+active one (ADR 0038), sent again whenever it changes.
 """
 
 from __future__ import annotations
@@ -28,10 +29,10 @@ import anyio
 
 from nocs.clock import Clock
 from nocs.devices import Coordinates, DeviceError, Location, Mount
-from nocs.equipment import EquipmentService, Role, Site
+from nocs.equipment import EquipmentService, Role
 from nocs.equipment.service import IndiConnection
 from nocs.indi import IndiClient, IndiEvent, PropertyDefined, PropertyUpdated
-from nocs.jobs import JobContext, JobManager
+from nocs.jobs import JobContext, JobManager, ResourceBusyError
 from nocs.mount.coords import (
     horizontal_to_jnow,
     j2000_to_jnow,
@@ -39,6 +40,7 @@ from nocs.mount.coords import (
     jnow_to_j2000,
 )
 from nocs.mount.pad import Pad
+from nocs.sites import Site, SiteService
 from nocs.state import Json, Path, StateStore
 
 log = logging.getLogger(__name__)
@@ -48,7 +50,7 @@ RESOURCE = Role.MOUNT.value
 HORIZON = 0.0
 """Lowest altitude a go to may aim at without ``force``, degrees."""
 SITE_TOLERANCE = 0.1
-"""Degrees the mount's site may differ from the profile's before NOCS says so."""
+"""Degrees the mount's site may differ from the active site before NOCS says so."""
 PROPERTY_WAIT = 10.0
 """Seconds to wait for a property drivers define just after the mount is ready."""
 SETTLE_TIMEOUT = 300.0
@@ -138,11 +140,13 @@ class MountService:
         equipment: EquipmentService,
         bridge: IndiConnection,
         clock: Clock,
+        sites: SiteService,
     ) -> None:
         self._store = store
         self._jobs = jobs
         self._equipment = equipment
         self._clock = clock
+        self._sites = sites
         self._client: IndiClient | None = bridge.client
         self._remove_listener = lambda: None
         self._device: str | None = None
@@ -161,6 +165,7 @@ class MountService:
         self._unwatch_bridge = bridge.watch(self._on_client)
         self._unwatch_equipment = equipment.add_listener(self._refresh)
         self._unwatch_clock = clock.add_listener(self._on_clock)
+        self._unwatch_sites = sites.add_listener(self._on_site)
         self._on_client(bridge.client)
 
     # -- commands ---------------------------------------------------------
@@ -257,7 +262,7 @@ class MountService:
         return self.mount().coordinates
 
     def site(self) -> Location | None:
-        """Where the rig is: the profile's site, or else the mount's."""
+        """Where the rig is: the active site, or else the mount's."""
         return self._site()
 
     async def sync(
@@ -394,6 +399,7 @@ class MountService:
         self._unwatch_bridge()
         self._unwatch_equipment()
         self._unwatch_clock()
+        self._unwatch_sites()
         self._remove_listener()
         for pad in list(self._pads):
             await pad.stop("nocsd is stopping")
@@ -419,12 +425,12 @@ class MountService:
     # -- internals: commands ------------------------------------------------
 
     async def _send_site(self, location: Location | None = None) -> None:
-        """Send ``location``, or the profile's site, or else what the driver has saved."""
+        """Send ``location``, or the active site, or else what the driver has saved."""
         mount = self.mount()
         if await self._defined(mount, "GEOGRAPHIC_COORD"):
             location = location or self._site()
             if location is None:
-                raise PointingError("the site is unknown: set it in the profile")
+                raise PointingError("the site is unknown: choose the site")
             await mount.set_location(location)
         else:
             log.info("%s has no site to set", mount.name)
@@ -442,7 +448,7 @@ class MountService:
     def _require_site_and_time(self) -> None:
         if not self._site_sent:
             raise PointingError(
-                "the mount has not received the site yet: set it in the profile, or connect again"
+                "the mount has not received the site yet: choose the site, or connect again"
             )
         if not self._time_sent:
             raise PointingError(
@@ -506,10 +512,10 @@ class MountService:
             )
 
     def _site(self) -> Location | None:
-        """Where the rig is: the profile's site, or else the mount's."""
-        profile = self._equipment.active_profile
-        if profile is not None and profile.site is not None:
-            return _location(profile.site)
+        """Where the rig is: the active site, or else the mount's."""
+        location = self._sites.location()
+        if location is not None:
+            return location
         if self._device is None or self._client is None:
             return None
         return Mount(self._client, self._device).location
@@ -528,7 +534,7 @@ class MountService:
         """Follow the mount role as the equipment connects and disconnects."""
         name = self._equipment.ready_device(Role.MOUNT) if self._client is not None else None
         if name == self._device:
-            self._publish()  # the profile (site) may have changed
+            self._publish()
             return
         self._device = name
         self._published = None
@@ -554,6 +560,22 @@ class MountService:
                 except (DeviceError, ConnectionError) as e2:
                     log.critical("%s may still be moving: %s", mount.name, e2)
         await self._send_site_and_time()
+
+    def _on_site(self) -> None:
+        """The active site changed: the mount gets it. While someone moves it at a pad (a
+        job holding it cannot happen: the sites refuse then), it gets none, and go to waits
+        until it gets one (``PUT /api/mount/site``, or when it next becomes ready)."""
+        self._publish()
+        if self._device is not None:
+            self._background(self._resend_site())
+
+    async def _resend_site(self) -> None:
+        try:
+            await self.send_site()
+        except (ResourceBusyError, MountNotReadyError, PointingError, DeviceError) as e:
+            log.info("the mount keeps its site for now: %s", e)
+            self._site_sent = False
+            self._publish()
 
     def _on_clock(self) -> None:
         self._publish()
@@ -666,12 +688,11 @@ class MountService:
         }
 
     def _site_check(self, mount_site: Location | None) -> str:
-        profile = self._equipment.active_profile
-        if profile is None or profile.site is None:
-            return "no_profile_site"
+        site = self._sites.active
+        if site is None:
+            return "no_site"
         if mount_site is None:
             return "unknown"
-        site = profile.site
         longitude = abs((site.longitude - mount_site.longitude + 180) % 360 - 180)
         if abs(site.latitude - mount_site.latitude) > SITE_TOLERANCE or (
             longitude > SITE_TOLERANCE

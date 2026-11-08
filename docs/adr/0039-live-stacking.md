@@ -1,6 +1,6 @@
-# 0037. Live stacking (EAA)
+# 0039. Live stacking (EAA)
 
-Date: 2026-11-01 · Status: Proposed · Plan: [beyond/live-stacking.md](../beyond/live-stacking.md)
+Date: 2026-11-01 · Status: Proposed · Plan: [roadmap/live-stacking.md](../roadmap/live-stacking.md)
 
 ## Context
 
@@ -31,7 +31,7 @@ running stack. NOCS already has the pieces around it, but not the stacking:
 
 ## Decision
 
-The options weighed for each point are in [the plan](../beyond/live-stacking.md#decisions).
+The options weighed for each point are in [the plan](../roadmap/live-stacking.md#decisions).
 
 - **Registration by star triangles.** The 40–60 brightest unsaturated stars from
   `sep`, triangles with each star's nearest neighbours, matched by their side

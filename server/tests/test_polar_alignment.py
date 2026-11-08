@@ -16,11 +16,12 @@ from nocs.align.polar import angles, pole, turn, vector
 from nocs.align.service import PolarAlignmentService, PolarOptions
 from nocs.api.schemas import JobInfo, PolarAlignmentState
 from nocs.devices import Coordinates, Location
-from nocs.equipment import HorizonPoint, Role
+from nocs.equipment import Role
 from nocs.jobs import JobContext, JobManager, ResourceBusyError
 from nocs.mount.coords import jnow_to_j2000, sidereal_time
 from nocs.mount.service import Frame, PointingError
 from nocs.pointing.solve import FrameSolve, SolveOptions
+from nocs.sites import HorizonPoint
 from nocs.solving import Failure, SolveError, SolveResult
 from nocs.solving.solution import Solution, Wcs
 from nocs.state import StateStore

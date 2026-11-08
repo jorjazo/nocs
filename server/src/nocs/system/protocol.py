@@ -29,6 +29,7 @@ GROUPS: dict[str, str] = {
     "network.status": "network",
     "network.join": "network",
     "network.forget": "network",
+    "network.scan": "network",
     "network.access_point": "network",
     "network.mode": "network",
     "update.status": "update",

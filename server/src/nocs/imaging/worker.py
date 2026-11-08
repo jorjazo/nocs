@@ -9,6 +9,9 @@ Only nocsd stops the worker: it ignores SIGINT and SIGTERM, which a terminal's
 Ctrl-C and systemd send to the whole process group, and ``close`` lets it finish
 the frame in hand and exit before nocsd does. Killed under the server's feet, it
 left tracebacks and multiprocessing's semaphores half cleaned up at every stop.
+Nor does it outlive nocsd: killed or crashed, nocsd never closes it, and the worker
+would wait for frames forever (it holds its own end of the pool's queue), keeping
+multiprocessing's resource tracker alive and systemd's stop waiting on both.
 """
 
 from __future__ import annotations
@@ -17,20 +20,28 @@ import asyncio
 import functools
 import logging
 import multiprocessing
+import os
 import re
 import signal
 import threading
+import time
 import uuid
 from collections import defaultdict, deque
 from collections.abc import Callable
 from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures.process import BrokenProcessPool
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from nocs.imaging import pipeline
 from nocs.imaging.pipeline import FrameAnalysis, StarMetrics
+
+# The module, not its names: nocs.stacking.stack imports nocs.imaging.pipeline, whose
+# package imports this module, so its names may not exist yet when this runs.
 from nocs.stacking import stack
-from nocs.stacking.stack import Added, Look, Rendered
+
+if TYPE_CHECKING:
+    from nocs.stacking.stack import Added, Look, Rendered
 
 log = logging.getLogger(__name__)
 
@@ -237,7 +248,7 @@ class ImageWorker:
             self._pool = ProcessPoolExecutor(
                 max_workers=1,
                 mp_context=multiprocessing.get_context("spawn"),
-                initializer=_ignore_stop_signals,
+                initializer=_in_worker,
             )
         return self._pool
 
@@ -256,7 +267,14 @@ def _unlink(paths: list[Path]) -> None:
         path.unlink(missing_ok=True)
 
 
-def _ignore_stop_signals() -> None:
-    """In the worker: leave stopping to nocsd (see the module's docstring)."""
+def _in_worker() -> None:
+    """In the worker: leave stopping to nocsd, but end with it (see the module's docstring)."""
     signal.signal(signal.SIGINT, signal.SIG_IGN)
     signal.signal(signal.SIGTERM, signal.SIG_IGN)
+    threading.Thread(target=_end_with, args=(os.getppid(),), daemon=True).start()
+
+
+def _end_with(parent: int) -> None:
+    while os.getppid() == parent:
+        time.sleep(1)
+    os._exit(0)

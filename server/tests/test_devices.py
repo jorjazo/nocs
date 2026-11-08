@@ -4,17 +4,20 @@ import asyncio
 from collections.abc import Mapping
 
 import pytest
-from fakes import FakeClient, driver_info, number_property
+from fakes import FakeClient, driver_info, number_property, switch_property
 
 from nocs.devices import (
     Camera,
     Device,
     DeviceError,
     DeviceInterface,
+    DeviceUnresponsive,
     FilterWheel,
     Focuser,
     device_interfaces,
+    on_unresponsive,
 )
+from nocs.devices import base as devices_base
 from nocs.indi import Property, PropertyState, PropertyType
 from nocs.indi.properties import SwitchElement, TextElement
 
@@ -69,6 +72,57 @@ async def test_command_ignores_ok_that_does_not_reach_target(client: FakeClient)
     client.responder = respond
     with pytest.raises(DeviceError, match="no response"):
         await focuser.move_to(200, timeout=0.05)
+
+
+@pytest.fixture
+def quick_probes(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(devices_base, "SILENCE", 0.05)
+    monkeypatch.setattr(devices_base, "PROBE_TIMEOUT", 0.05)
+
+
+@pytest.mark.usefixtures("quick_probes")
+async def test_a_silent_device_that_answers_its_probe_keeps_its_command(
+    client: FakeClient,
+) -> None:
+    """A quiet device is not a hung one (ADR 0030)."""
+    focuser = Focuser(client, "Focuser")
+    client.responder = lambda device, name, _: asyncio.get_running_loop().call_later(
+        0.3, client.update, device, name, PropertyState.OK, {"FOCUS_ABSOLUTE_POSITION": "200"}
+    )
+    await focuser.move_to(200, timeout=1)
+    assert focuser.position == 200
+
+
+@pytest.mark.usefixtures("quick_probes")
+async def test_a_silent_device_that_does_not_answer_is_unresponsive(client: FakeClient) -> None:
+    reported: list[tuple[str, str]] = []
+    on_unresponsive(client, lambda device, reason: reported.append((device, reason)))
+    client.answering = False
+    focuser = Focuser(client, "Focuser")
+    loop = asyncio.get_running_loop()
+    start = loop.time()
+    with pytest.raises(DeviceUnresponsive, match=r"Focuser is not answering \(silent for 0 s\)"):
+        await focuser.move_to(200, timeout=10)
+    assert loop.time() - start < 1  # long before the deadline
+    assert reported == [("Focuser", "Focuser is not answering (silent for 0 s)")]
+
+
+@pytest.mark.usefixtures("quick_probes")
+async def test_a_missed_deadline_is_probed_too(client: FakeClient) -> None:
+    def chatter(device: str, name: str, values: Mapping[str, str | float | bool]) -> None:
+        # Busy and talking, but it never gets there.
+        loop = asyncio.get_running_loop()
+        for i in range(10):
+            loop.call_later(0.02 * i, client.update, device, name, PropertyState.BUSY)
+
+    client.responder = chatter
+    focuser = Focuser(client, "Focuser")
+    with pytest.raises(DeviceError, match=r"no response within 0\.1 s") as answered:
+        await focuser.move_to(200, timeout=0.1)
+    assert not isinstance(answered.value, DeviceUnresponsive)
+    client.answering = False
+    with pytest.raises(DeviceUnresponsive, match=r"not answering \(.*no response within 0.1 s\)"):
+        await focuser.move_to(200, timeout=0.1)
 
 
 async def test_alert_takes_its_reason_from_the_drivers_messages(client: FakeClient) -> None:
@@ -158,6 +212,22 @@ async def test_camera_waits_for_sensor_size(client: FakeClient) -> None:
 async def test_connect_unknown_device_fails_fast(client: FakeClient) -> None:
     with pytest.raises(DeviceError, match="not found"):
         await Focuser(client, "Nope").connect(timeout=0.05)
+
+
+@pytest.mark.usefixtures("quick_probes")
+async def test_a_slow_connection_is_not_probed(client: FakeClient) -> None:
+    """Drivers connect on their main thread: silent, and deaf to probes, until done."""
+    client.define(switch_property("Focuser", "CONNECTION", CONNECT=False, DISCONNECT=True))
+    client.answering = False
+
+    def respond(device: str, name: str, values: Mapping[str, str | float | bool]) -> None:
+        connected = {"CONNECT": "On", "DISCONNECT": "Off"}
+        asyncio.get_running_loop().call_later(
+            0.3, client.update, device, name, PropertyState.OK, connected
+        )
+
+    client.responder = respond
+    await Focuser(client, "Focuser").connect(timeout=1)
 
 
 def test_nameless_properties_are_ignored(client: FakeClient) -> None:

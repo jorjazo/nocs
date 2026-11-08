@@ -16,6 +16,7 @@ import pytest
 from astropy.io import fits  # pyright: ignore[reportMissingTypeStubs]
 from fastapi.testclient import TestClient
 from owner import pair_owner
+from sites import use_site
 
 from nocs.api import create_app
 from nocs.api.schemas import AppState
@@ -97,10 +98,11 @@ def api(
         indi_upload_dir=Path(DRIVER_UPLOADS) if transfer else None,
         indi_upload_dir_local=transfer,
     )
-    profile = {**SIMULATORS, "devices": dict(SIMULATORS["devices"]), "site": SITE}
+    profile = {**SIMULATORS, "devices": dict(SIMULATORS["devices"])}
     profile["devices"].pop("weather")  # needs the FIFO; not relevant here
     with TestClient(create_app(settings)) as client:
         pair_owner(client)
+        use_site(client, SITE)
         # Never a drive that happens to be mounted on the test machine.
         response = client.put("/api/storage/destination", json={"destination": "internal"})
         assert response.status_code == 204, response.text
@@ -131,13 +133,19 @@ def test_camera_state(api: TestClient) -> None:
     assert main["can_cool"] is True
     assert current["cameras"]["guide_camera"]["device"] == "Guide Simulator"
 
-    # Connecting pointed the camera at the rig's devices and optics (FITS headers).
-    properties = current["indi"]["devices"]["CCD Simulator"]["properties"]
-    snooped = {k: e["value"] for k, e in properties["ACTIVE_DEVICES"]["elements"].items()}
-    assert snooped["ACTIVE_TELESCOPE"] == "Telescope Simulator"
-    assert snooped["ACTIVE_FOCUSER"] == "Focuser Simulator"
-    assert snooped["ACTIVE_FILTER"] == "Filter Simulator"
-    assert properties["SCOPE_INFO"]["elements"]["FOCAL_LENGTH"]["value"] == 250
+    # Connecting pointed the camera at the rig's devices and optics (FITS headers); the
+    # mirror shows a property's last update of a burst up to a second late (ADR 0037).
+    def pointed(s: dict[str, Any]) -> bool:
+        properties = s["indi"]["devices"]["CCD Simulator"]["properties"]
+        snooped = {k: e["value"] for k, e in properties["ACTIVE_DEVICES"]["elements"].items()}
+        return (
+            snooped["ACTIVE_TELESCOPE"] == "Telescope Simulator"
+            and snooped["ACTIVE_FOCUSER"] == "Focuser Simulator"
+            and snooped["ACTIVE_FILTER"] == "Filter Simulator"
+            and properties["SCOPE_INFO"]["elements"]["FOCAL_LENGTH"]["value"] == 250
+        )
+
+    wait(api, pointed, timeout=5)
 
 
 def test_settings(api: TestClient) -> None:
@@ -333,7 +341,7 @@ def test_guide_camera_frames_are_blobs(api: TestClient, transfer: Path | None) -
         return len(seen) >= 2
 
     wait(api, new_previews)
-    assert upload_mode(state(api)) == "UPLOAD_CLIENT"
+    wait(api, lambda s: upload_mode(s) == "UPLOAD_CLIENT", timeout=5)
     assert api.post(f"/api/jobs/{job_id}/cancel").status_code == 202
     wait(api, finished(job_id))
     preview = camera(api, "guide_camera")["preview"]

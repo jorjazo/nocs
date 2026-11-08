@@ -7,7 +7,8 @@ from pathlib import Path
 import pytest
 from fakes import FakeClient, driver_info, number_property, switch_property
 
-from nocs.devices import DeviceInterface
+from nocs.devices import DeviceInterface, DeviceUnresponsive, Focuser
+from nocs.devices import base as devices_base
 from nocs.equipment import (
     DeviceConfig,
     DriverRestartError,
@@ -19,7 +20,7 @@ from nocs.equipment import (
 )
 from nocs.equipment import service as service_module
 from nocs.indi import IndiClient, PropertyState
-from nocs.indi.drivers import DriverFifo
+from nocs.indi.drivers import DriverControlError, DriverFifo
 from nocs.state import Json, StateStore
 
 FOCUSER_DRIVER = "indi_fake_focus"
@@ -447,6 +448,59 @@ async def test_restarts_a_roles_driver_and_connects_it_again(
     assert fifo.commands[2:] == []
 
 
+async def test_a_device_that_stops_answering_is_unresponsive_until_restarted(
+    make_service: Factory, store: StateStore, server: Server, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A probe unanswered marks the roles unresponsive; a restart makes them ready (ADR 0030)."""
+    monkeypatch.setattr(devices_base, "SILENCE", 0.05)
+    monkeypatch.setattr(devices_base, "PROBE_TIMEOUT", 0.05)
+    loop = asyncio.get_running_loop()
+    fifo = FakeFifo(
+        lambda driver: loop.call_soon(server.run, driver),
+        lambda driver: loop.call_soon(server.client.delete, Server.DEVICES[driver][0]),
+    )
+    server.run(FOCUSER_DRIVER)
+    server.run(POWER_DRIVER)
+    service = make_service(fifo)
+    service.connect("rig")
+    await connected(store)
+
+    server.client.answering = False
+    with pytest.raises(DeviceUnresponsive):
+        await Focuser(server.client, "Focuser").move_to(20, timeout=10)
+    assert statuses(store) == {"focuser": "unresponsive", "weather": "ready"}
+    focuser = equipment(store, "devices", "focuser")
+    assert isinstance(focuser, dict)
+    assert focuser["error"] == "Focuser is not answering (silent for 0 s)"
+    assert isinstance(focuser["unresponsive_since"], str)
+    assert service.ready_device(Role.FOCUSER) is None
+
+    server.client.answering = True
+    await service.restart_driver(Role.FOCUSER)
+    assert statuses(store) == {"focuser": "ready", "weather": "ready"}
+    assert equipment(store, "devices", "focuser", "unresponsive_since") is None
+
+
+async def test_an_unresponsive_device_that_answers_again_is_ready(
+    make_service: Factory, store: StateStore, server: Server, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(devices_base, "SILENCE", 0.05)
+    monkeypatch.setattr(devices_base, "PROBE_TIMEOUT", 0.05)
+    server.run(FOCUSER_DRIVER)
+    server.run(POWER_DRIVER)
+    service = make_service(None)
+    service.connect("rig")
+    await connected(store)
+    server.client.answering = False
+    with pytest.raises(DeviceUnresponsive):
+        await Focuser(server.client, "Focuser").move_to(20, timeout=10)
+    assert statuses(store)["focuser"] == "unresponsive"
+    # Its driver was only stopped for a while (SIGCONT): it talks again.
+    server.client.update("Focuser", "ABS_FOCUS_POSITION", PropertyState.OK)
+    assert statuses(store)["focuser"] == "ready"
+    assert service.ready_device(Role.FOCUSER) == "Focuser"
+
+
 async def test_a_driver_that_does_not_stop_is_reported(
     make_service: Factory, store: StateStore, server: Server, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -466,3 +520,64 @@ async def test_restarting_needs_a_connected_profile(make_service: Factory, fifo:
     service = make_service(fifo)
     with pytest.raises(DriverRestartError, match="not connected"):
         await service.restart_driver(Role.FOCUSER)
+
+
+async def test_lists_a_drivers_devices_starting_it_for_the_question(
+    make_service: Factory, server: Server
+) -> None:
+    fifo = FakeFifo(
+        lambda driver: asyncio.get_running_loop().call_soon(server.run, driver),
+        lambda driver: server.client.delete("Power"),
+    )
+    service = make_service(fifo)
+    assert await service.list_devices(POWER_DRIVER, Role.WEATHER) == ["Power"]
+    assert fifo.commands == [("start", POWER_DRIVER), ("stop", POWER_DRIVER)]
+    # Only the devices that can play the role.
+    fifo.commands.clear()
+    assert await service.list_devices(POWER_DRIVER, Role.FOCUSER) == []
+    assert fifo.commands == [("start", POWER_DRIVER), ("stop", POWER_DRIVER)]
+
+
+async def test_lists_a_running_drivers_devices_and_leaves_it_running(
+    make_service: Factory, server: Server, fifo: FakeFifo
+) -> None:
+    server.run(POWER_DRIVER)
+    server.client.define(driver_info("Power 2", DeviceInterface.WEATHER, POWER_DRIVER))
+    service = make_service(fifo)
+    assert await service.list_devices(POWER_DRIVER, Role.WEATHER) == ["Power", "Power 2"]
+    assert fifo.commands == []
+
+
+async def test_a_driver_that_defines_nothing_is_stopped_after_listing(
+    make_service: Factory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(service_module, "LIST_TIMEOUT", 0.05)
+    fifo = FakeFifo(lambda driver: None)  # no camera plugged in
+    service = make_service(fifo)
+    with pytest.raises(TimeoutError):
+        await service.list_devices(POWER_DRIVER, Role.WEATHER)
+    assert fifo.commands == [("start", POWER_DRIVER), ("stop", POWER_DRIVER)]
+    with pytest.raises(DriverControlError):
+        await make_service(None).list_devices(POWER_DRIVER, Role.WEATHER)
+
+
+async def test_a_profile_connecting_while_listing_keeps_the_driver(
+    make_service: Factory, store: StateStore, server: Server
+) -> None:
+    server.run(FOCUSER_DRIVER)
+    # The driver defines its device once the profile is past starting its drivers.
+    fifo = FakeFifo(lambda driver: None, lambda driver: server.client.delete("Power"))
+    service = make_service(fifo)
+    async with asyncio.TaskGroup() as tg:
+        listing = tg.create_task(service.list_devices(POWER_DRIVER, Role.WEATHER))
+        await asyncio.sleep(0.01)
+        service.connect("rig")
+        await asyncio.sleep(0.3)
+        server.run(POWER_DRIVER)
+    assert listing.result() == ["Power"]
+    await connected(store)
+    assert statuses(store) == {"focuser": "ready", "weather": "ready"}
+    assert fifo.commands == [("start", POWER_DRIVER)]  # started once, not stopped
+    service.disconnect()
+    await until(store, lambda: equipment(store, "connection") == "disconnected")
+    assert fifo.commands == [("start", POWER_DRIVER), ("stop", POWER_DRIVER)]
