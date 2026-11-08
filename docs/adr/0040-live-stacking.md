@@ -1,4 +1,4 @@
-# 0039. Live stacking (EAA)
+# 0040. Live stacking (EAA)
 
 Date: 2026-11-01 · Status: Proposed · Plan: [roadmap/live-stacking.md](../roadmap/live-stacking.md)
 

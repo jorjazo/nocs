@@ -1,4 +1,4 @@
-"""Registration of a frame on a reference by its stars (ADR 0039).
+"""Registration of a frame on a reference by its stars (ADR 0040).
 
 Stars come from ``sep``; the brightest of each frame form triangles with their
 nearest neighbours, and triangles are compared by the ratios of their sides, which

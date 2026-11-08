@@ -36,8 +36,14 @@ GROUPS: dict[str, str] = {
     "update.check": "update",
     "update.install": "update",
     "update.rollback": "update",
+    "share.status": "share",
+    "share.enable": "share",
+    "share.refresh": "share",
 }
 """Every operation nocs-system knows, with the group that enables it."""
+
+SECRETS = frozenset({"password"})
+"""Arguments never written to a log: the journal reaches the diagnostics bundle."""
 
 type ErrorCode = Literal["invalid", "unknown", "disabled", "failed"]
 type Message = dict[str, object]
@@ -63,6 +69,18 @@ def validate_hostname(name: str) -> str:
             " with a hyphen",
         )
     return name
+
+
+def redact(args: Message) -> Message:
+    """``args`` with every secret replaced by ``***``, nested objects included."""
+    return {
+        key: "***"
+        if key in SECRETS
+        else redact(cast(Message, value))
+        if isinstance(value, dict)
+        else value
+        for key, value in args.items()
+    }
 
 
 def encode(message: Message) -> bytes:

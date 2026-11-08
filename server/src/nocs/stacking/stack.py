@@ -1,4 +1,4 @@
-"""The live stack, held by the imaging worker process (ADR 0039).
+"""The live stack, held by the imaging worker process (ADR 0040).
 
 Each frame is reduced to the stack's resolution (a colour frame by superpixel: one
 RGB pixel per Bayer cell; a mono frame as it is, or 2x2 binned when large), its
