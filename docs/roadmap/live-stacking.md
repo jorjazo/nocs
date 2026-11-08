@@ -282,7 +282,14 @@ The stack costs about as much as the preview the worker already makes, so
 ~1.1–1.5 s on the Pi; stack arrays 187 MB, peak RSS of a process doing both 850 MB
 (the preview's full-resolution debayer included; a first measure of 1.13 GB counted
 the parent's peak, as `ru_maxrss` survives exec). A dark master from ten frames:
-5.5 s, 280 MB peak (S3). The stars and the stretch in the render are
+5.5 s, 280 MB peak (S3).
+
+**After the review's fixes** (matching each frame to the reference, a warp per
+channel for turned frames, corners filled with sky), same VM and bench, half the
+frames turned by a flip: stack 1.48 s per frame (was 1.18); warp 207 ms median
+(a turned frame warps each channel on its own, ~110 ms; a dithered one does not,
+~20 ms; both include the match to the reference, ~60 ms), render 466 ms, peak
+804 MB. The stars and the stretch in the render are
 the largest steps: a lookup table for the stretch is the first saving to try if
 the Pi needs one.
 
