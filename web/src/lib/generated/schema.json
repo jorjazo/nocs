@@ -10094,6 +10094,17 @@
           "description": "Lights of the main camera are stacked as they arrive.",
           "type": "boolean"
         },
+        "save_error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Why the latest stack to end could not be saved; None after a save."
+        },
         "saved": {
           "anyOf": [
             {
@@ -10134,7 +10145,8 @@
         "current",
         "stacks",
         "saving",
-        "saved"
+        "saved",
+        "save_error"
       ],
       "title": "StackState",
       "type": "object"

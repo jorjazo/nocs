@@ -2367,6 +2367,10 @@ export interface StackState {
    */
   on: boolean;
   /**
+   * Why the latest stack to end could not be saved; None after a save.
+   */
+  save_error: string | null;
+  /**
    * The latest stack saved; None: none yet.
    */
   saved: StackSavedState | null;

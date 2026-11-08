@@ -28,6 +28,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import errno
+import functools
 import logging
 import os
 import shutil
@@ -192,6 +193,10 @@ class LiveStackService:
         self._new = False
         self._saving = False
         self._saved: dict[str, Json] | None = None
+        self._save_error: str | None = None
+        self._closed = False
+        self._worker_lock = anyio.Lock()
+        """Held while the worker adds a frame or saves: a stack saved is what it counts."""
         self._tasks: set[asyncio.Task[None]] = set()
         self._publish()
 
@@ -232,7 +237,9 @@ class LiveStackService:
         self._publish()
 
     async def close(self) -> None:
-        """nocsd is stopping: save the stacks worth keeping while the worker still holds them."""
+        """nocsd is stopping: save the stacks worth keeping while the worker still holds
+        them; frames offered from now on are ignored."""
+        self._closed = True
         await self._drop_all()
 
     async def reset(self) -> None:
@@ -243,7 +250,7 @@ class LiveStackService:
     async def offer(self, frame: Offered) -> None:
         """A new light; returns at once. ``frame.owned``: the caller deletes the file
         soon, so a link to it is taken here (in a thread: ext4 can stall on the Pi)."""
-        if not self.on:
+        if not self.on or self._closed:
             return
         if frame.owned:
             try:
@@ -326,16 +333,20 @@ class LiveStackService:
         self._status, self._message, self._error = "stacking", None, None
         self._publish()
         try:
-            added = await self._worker.stack_add(
-                stack.id,
-                str(frame.path),
-                frame.bayer,
-                new=not stack.created,
-                stars=frame.stars,
-                hfr=frame.hfr,
-                look=_look(self.settings.look),
-                calibration=stack.calibration,
-            )
+            async with self._worker_lock:
+                added = await self._worker.stack_add(
+                    stack.id,
+                    str(frame.path),
+                    frame.bayer,
+                    new=not stack.created,
+                    stars=frame.stars,
+                    hfr=frame.hfr,
+                    look=_look(self.settings.look),
+                    calibration=stack.calibration,
+                )
+                stack.created = True
+                if added.accepted:
+                    stack.exposure += frame.exposure
         except StackLostError:
             if not retry:
                 raise
@@ -343,7 +354,6 @@ class LiveStackService:
             stack = await self._start(frame, stack.key, stack.width, stack.height)
             await self._add(stack, frame, retry=False)
             return
-        stack.created = True
         if self._stacks.get(stack.key) is not stack:
             # Ended (New stack, switched off) while the worker added the frame: the
             # worker holds it still, and only this call knows.
@@ -353,7 +363,6 @@ class LiveStackService:
         stack.last = _outcome(added, frame)
         if added.accepted:
             stack.misses = 0
-            stack.exposure += frame.exposure
             stack.newest = frame.taken
             if frame.frame_id is not None:
                 stack.ids.append(frame.frame_id)
@@ -481,85 +490,121 @@ class LiveStackService:
         return str(target), len(files)
 
     async def save(self) -> SavedFrame:
-        """Save the current stack now; it goes on stacking. Raises
-        ``NothingToSaveError`` without one; ``StorageError`` when it cannot be saved."""
+        """Save the current stack now; it goes on stacking. Raises ``NothingToSaveError``
+        without one (or when the worker lost it); ``StorageError`` when storage refuses."""
         stack = self._current
         if stack is None or not stack.created or stack.frames == 0:
             raise NothingToSaveError("there is no stack to save")
+        try:
+            saved = await self._save(stack, only_new=False)
+        except StackLostError:
+            self._lost(stack)
+            self._publish()
+            raise NothingToSaveError("the stack was lost (the imaging worker restarted)") from None
+        assert saved is not None
+        return saved
+
+    async def _save(self, stack: LiveStack, *, only_new: bool) -> SavedFrame | None:
+        """The stack as a FITS and a JPEG, through storage: ``<night>/Stack/<target>/``.
+
+        ``only_new``: only if it has frames enough and new ones since its last save (a
+        stack that ends). Saves and frames take turns in the worker, so what is saved
+        is exactly what the stack counts, and a save while another runs waits for it.
+        """
+        frame = stack.offered
         self._saving = True
         self._publish()
         try:
-            return await self._save(stack)
+            async with self._worker_lock:
+                if only_new and not (
+                    stack.created and stack.frames >= SAVE_FROM and stack.frames > stack.saved_at
+                ):
+                    return None
+                frames, exposure = stack.frames, round(stack.exposure, 3)
+                await anyio.to_thread.run_sync(
+                    functools.partial(self._links.mkdir, parents=True, exist_ok=True)
+                )
+                fits_path = self._links / f"{uuid.uuid4().hex}.fits"
+                jpeg_path = fits_path.with_suffix(".jpg")
+                first = stack.started - timedelta(seconds=frame.exposure)
+                header: dict[str, str | int | float | bool | None] = {
+                    "IMAGETYP": "Live stack",
+                    # A mean of frames: as bright as one of them, so EXPTIME is one's.
+                    "EXPTIME": frame.exposure,
+                    "LIVETIME": exposure,  # seconds of exposure in the stack
+                    "DATE-OBS": first.astimezone(UTC)
+                    .replace(tzinfo=None)
+                    .isoformat(timespec="seconds"),
+                    "INSTRUME": frame.camera,
+                    "FILTER": frame.filter,
+                    "GAIN": frame.gain,
+                    "OFFSET": frame.offset,
+                    "XBINNING": frame.binning,
+                    "YBINNING": frame.binning,
+                    "CCD-TEMP": frame.temperature,
+                    "CALSTAT": _calstat(stack.calibration),
+                }
+                try:
+                    await self._worker.stack_save(
+                        stack.id, str(fits_path), str(jpeg_path), _look(self.settings.look), header
+                    )
+                except BaseException:
+                    await anyio.to_thread.run_sync(_remove, [fits_path, jpeg_path])
+                    raise
+                previous, stack.saved_at = stack.saved_at, frames  # no second save of these
+            try:
+                facts = FrameFacts(
+                    source=fits_path,
+                    frame_type="stack",
+                    exposure=exposure,
+                    arrived=stack.newest or frame.taken,
+                    camera=frame.camera,
+                    gain=frame.gain,
+                    offset=frame.offset,
+                    binning=frame.binning,
+                    temperature=frame.temperature,
+                    cooler_target=None,
+                    filter=frame.filter,
+                    profile=None,
+                    site=frame.site,
+                    optics=None,
+                    target=frame.target,
+                )
+                saved = await anyio.to_thread.run_sync(self._library().save, facts)
+            except BaseException:
+                stack.saved_at = previous
+                await anyio.to_thread.run_sync(_remove, [fits_path, jpeg_path])
+                raise
+            try:
+                await anyio.to_thread.run_sync(
+                    shutil.move, jpeg_path, saved.path.with_suffix(".jpg")
+                )
+            except OSError as e:  # the FITS is saved and catalogued: that is the stack
+                log.warning("live stack: its picture was not kept: %s", e)
+                await anyio.to_thread.run_sync(_remove, [jpeg_path])
+            self._save_error = None
+            self._saved = {
+                "frame_id": saved.id,
+                "path": str(saved.relative),
+                "frames": frames,
+                "exposure": exposure,
+                "target": frame.target,
+                "time": datetime.now(UTC).isoformat(timespec="seconds"),
+            }
+            log.info("live stack saved: %s (%d frames)", saved.relative, frames)
+            return saved
         finally:
             self._saving = False
             self._publish()
 
-    async def _save(self, stack: LiveStack) -> SavedFrame:
-        """The stack as a FITS and a JPEG, through storage: ``<night>/Stack/<target>/``."""
-        frame = stack.offered
-        self._links.mkdir(parents=True, exist_ok=True)
-        fits_path = self._links / f"{uuid.uuid4().hex}.fits"
-        jpeg_path = fits_path.with_suffix(".jpg")
-        first = stack.started - timedelta(seconds=frame.exposure)
-        header: dict[str, str | int | float | bool | None] = {
-            "IMAGETYP": "Live stack",
-            "EXPTIME": round(stack.exposure, 3),
-            "SUBEXP": frame.exposure,
-            "DATE-OBS": first.astimezone(UTC).replace(tzinfo=None).isoformat(timespec="seconds"),
-            "INSTRUME": frame.camera,
-            "FILTER": frame.filter,
-            "GAIN": frame.gain,
-            "OFFSET": frame.offset,
-            "XBINNING": frame.binning,
-            "YBINNING": frame.binning,
-            "CCD-TEMP": frame.temperature,
-            "CALSTAT": _calstat(stack.calibration),
-        }
-        try:
-            await self._worker.stack_save(
-                stack.id, str(fits_path), str(jpeg_path), _look(self.settings.look), header
-            )
-            facts = FrameFacts(
-                source=fits_path,
-                frame_type="stack",
-                exposure=round(stack.exposure, 3),
-                arrived=stack.newest or frame.taken,
-                camera=frame.camera,
-                gain=frame.gain,
-                offset=frame.offset,
-                binning=frame.binning,
-                temperature=frame.temperature,
-                cooler_target=None,
-                filter=frame.filter,
-                profile=None,
-                site=frame.site,
-                optics=None,
-                target=frame.target,
-            )
-            saved = await anyio.to_thread.run_sync(self._library().save, facts)
-            await anyio.to_thread.run_sync(shutil.move, jpeg_path, saved.path.with_suffix(".jpg"))
-        finally:
-            await anyio.to_thread.run_sync(_remove, [fits_path, jpeg_path])
-        stack.saved_at = stack.frames
-        self._saved = {
-            "frame_id": saved.id,
-            "path": str(saved.relative),
-            "frames": stack.frames,
-            "exposure": round(stack.exposure, 3),
-            "target": frame.target,
-            "time": datetime.now(UTC).isoformat(timespec="seconds"),
-        }
-        log.info("live stack saved: %s (%d frames)", saved.relative, stack.frames)
-        return saved
-
     async def _end(self, stack: LiveStack) -> None:
         """Save a stack worth keeping, then forget it (and free the worker's memory)."""
-        if stack.created and stack.frames >= SAVE_FROM and stack.frames > stack.saved_at:
+        if stack.created:
             try:
-                await self._save(stack)
+                await self._save(stack, only_new=True)
             except Exception as e:  # a full or missing drive: the stack is lost, not the night
                 log.warning("live stack: could not save it: %s", e)
-                self._error = f"the stack could not be saved: {e}"
+                self._save_error = f"the stack could not be saved: {e}"
         self._stacks.pop(stack.key, None)
         if self._current is stack:
             self._current = None
@@ -683,6 +728,7 @@ class LiveStackService:
                 "stacks": len(self._stacks),
                 "saving": self._saving,
                 "saved": self._saved,
+                "save_error": self._save_error,
             },
         )
 

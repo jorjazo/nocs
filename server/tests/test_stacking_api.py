@@ -53,3 +53,19 @@ def test_a_new_stack(client: TestClient) -> None:
 def test_observers_cannot_change_it() -> None:
     with TestClient(create_app(Settings(indi_host="127.0.0.1", indi_port=9))) as client:
         assert client.put("/api/stack", json={"on": True}).status_code == 401
+
+
+def test_saving_without_a_stack_is_refused(client: TestClient) -> None:
+    response = client.post("/api/stack/save")
+    assert response.status_code == 409
+    assert "no stack" in response.json()["detail"]
+
+
+def test_the_picture_of_a_frame_that_is_not_there(client: TestClient) -> None:
+    assert client.get("/api/frames/123456/image").status_code == 404
+
+
+def test_observers_cannot_save_or_see_saved_pictures() -> None:
+    with TestClient(create_app(Settings(indi_host="127.0.0.1", indi_port=9))) as client:
+        assert client.post("/api/stack/save").status_code == 401
+        assert client.get("/api/frames/1/image").status_code == 401

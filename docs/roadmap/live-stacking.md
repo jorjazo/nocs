@@ -229,13 +229,21 @@ unsaved loop frames the stacker takes over deleting the file.
 ### D9. Saving the stack
 
 **Recommendation:** saved automatically when a stack ends (new stack, switch off,
-end of sequence) with ≥ 2 frames, and on demand: a FITS (float32, linear,
-`NAXIS3 = 3` for colour, headers: frames, total exposure, the reference's
+another setup, nocsd stopping; not the end of a sequence, which does not end a
+stack) with ≥ 2 frames, and on demand: a FITS (float32, linear,
+`NAXIS3 = 3` for colour, headers: frames, `EXPTIME` of one frame (a mean is as
+bright as one) and `LIVETIME` the total, the reference's
 pointing, filter, camera, calibration used, NOCS version; WCS when the reference
 is solved) and a stretched full-size JPEG, in `<night>/Stack/<target>/`,
 catalogued as frame type `stack` (no migration: the frame type is free text) so the night's list and zip
 include them; the calibration library ignores them. ~78 MB per colour stack on
 the drive.
+
+Saves and frames take turns in the worker (a lock in the service): a save holds
+exactly the frames the stack counts, a stack is never saved twice for the same
+frames, and a failed save is kept in `save_error` until the next one succeeds.
+nocsd saves its stacks first when it stops. The night's total time and frame count
+leave stacks out, as they are made of its lights (review of PR #30).
 
 ### D10. Pi 5 budget and benchmark
 

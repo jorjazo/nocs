@@ -1466,6 +1466,7 @@ export const es: Messages = {
     },
     save: "Guardar",
     saved: (path: string) => `Guardado como ${path}; los apilados también se guardan al terminar.`,
+    saveFailed: "El último apilado no se pudo guardar: ¿el disco está lleno o desconectado?",
     newStack: "Nuevo apilado",
     look: "Aspecto",
     lookTitle: "Cómo se ve el apilado",

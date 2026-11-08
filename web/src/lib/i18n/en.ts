@@ -1483,6 +1483,7 @@ export const en = {
     },
     save: "Save",
     saved: (path: string) => `Saved as ${path}; stacks are also saved when they end.`,
+    saveFailed: "The last stack could not be saved: is the drive full or unplugged?",
     newStack: "New stack",
     look: "Look",
     lookTitle: "How the stack looks",

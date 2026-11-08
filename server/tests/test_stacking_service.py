@@ -51,6 +51,7 @@ class FakeWorker:
     seen: list[bool] = field(default_factory=list[bool])
     """For each call, whether the file was there when the worker read it."""
     gate: asyncio.Event | None = None
+    save_gate: asyncio.Event | None = None
     saves: list[tuple[str, dict[str, str | int | float | bool | None]]] = field(
         default_factory=list[tuple[str, dict[str, str | int | float | bool | None]]]
     )
@@ -112,6 +113,8 @@ class FakeWorker:
         header: dict[str, str | int | float | bool | None],
     ) -> Rendered:
         self.saves.append((stack_id, header))
+        if self.save_gate is not None:
+            await self.save_gate.wait()
         await asyncio.to_thread(Path(fits_path).write_bytes, b"fits")
         await asyncio.to_thread(Path(jpeg_path).write_bytes, b"jpeg")
         return Rendered(jpeg_path, 3124, 2088)
@@ -432,8 +435,8 @@ async def test_a_stack_is_saved_when_it_ends(rig: Rig, tmp_path: Path) -> None:
     assert facts.exposure == 900.0
     assert facts.target == "NGC 253"
     _, header = rig.worker.saves[0]
-    assert header["EXPTIME"] == 900.0
-    assert header["SUBEXP"] == 300.0
+    assert header["EXPTIME"] == 300.0  # a mean: as bright as one frame
+    assert header["LIVETIME"] == 900.0
     assert header["IMAGETYP"] == "Live stack"
     assert header["CALSTAT"] == "none"
     assert header["DATE-OBS"] == "2026-10-31T22:56:00"  # the first frame's start
@@ -475,8 +478,8 @@ async def test_a_stack_that_cannot_be_saved_is_reported(rig: Rig) -> None:
         await offer(rig, rig.frame())
     await rig.service.reset()
     state = rig.state()
-    assert state.error is not None
-    assert "could not be saved" in state.error
+    assert state.save_error is not None
+    assert "could not be saved" in state.save_error
     assert not list((rig.tmp / "data" / "stacking").glob("*"))
 
 
@@ -614,3 +617,35 @@ async def test_a_master_that_fails_is_reported_as_such(tmp_path: Path) -> None:
     assert state.building is None  # done
     # While each was built, the state said which.
     assert [(b.kind, b.frames) for b in seen] == [("dark", 2), ("bias", 2), ("flat", 2)]
+
+
+async def test_a_failed_save_stays_reported_while_stacking_goes_on(rig: Rig) -> None:
+    rig.library.full = True
+    for _ in range(2):
+        await offer(rig, rig.frame())
+    await offer(rig, rig.frame(exposure=60.0))  # another setup: the first stack ends
+    state = rig.state()
+    assert state.save_error is not None
+    assert state.status == "stacking"
+
+
+async def test_saves_and_frames_take_turns(rig: Rig) -> None:
+    for _ in range(2):
+        await offer(rig, rig.frame())
+    rig.worker.save_gate = asyncio.Event()
+    saving = asyncio.create_task(rig.service.save())
+    await asyncio.sleep(0.01)  # the save is in the worker
+    await rig.service.offer(rig.frame())  # a frame arrives meanwhile: it waits its turn
+    ending = asyncio.create_task(rig.service.reset())  # and New stack is tapped
+    await asyncio.sleep(0.01)
+    assert len(rig.worker.calls) == 2
+    rig.worker.save_gate.set()
+    saved = await saving
+    await ending
+    await rig.service.idle()
+    # The save held the two frames it counted; New stack, after it, saved nothing more
+    # (no frame came in between), and the waiting frame started the next stack.
+    assert saved.id == 1001
+    assert len(rig.library.saved) == 1
+    assert rig.library.saved[0].exposure == 600.0
+    assert rig.worker.calls[-1].new

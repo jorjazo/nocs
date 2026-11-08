@@ -1087,6 +1087,9 @@ class StackState(StateModel):
     stacks: int = Field(description="Stacks held (a mono camera keeps one per filter).")
     saving: bool = Field(description="Saving a stack now.")
     saved: StackSavedState | None = Field(description="The latest stack saved; None: none yet.")
+    save_error: str | None = Field(
+        description="Why the latest stack to end could not be saved; None after a save."
+    )
 
 
 class AppState(StateModel):

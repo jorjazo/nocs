@@ -98,8 +98,8 @@
     {#if stack.saved}
       <p class="caption muted notes">{t.stack.saved(stack.saved.path)}</p>
     {/if}
-    {#if stack.error && stack.status !== "failed"}
-      <p class="caption warning" role="status">{stack.error}</p>
+    {#if stack.save_error}
+      <p class="caption warning" role="status">{t.stack.saveFailed}</p>
     {/if}
 
     <div class="buttons">

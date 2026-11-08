@@ -173,11 +173,12 @@ async def test_a_stack_is_saved_as_a_frame_of_the_night(
         header = hdul[0].header
         assert data.shape == (3, HEIGHT // 2, WIDTH // 2)
         assert header["NCOMBINE"] == 3
-        assert header["EXPTIME"] == 90.0
+        assert header["EXPTIME"] == 30.0
+        assert header["LIVETIME"] == 90.0
         assert header["OBJECT"] == "NGC 253"
         assert header["IMAGETYP"] == "Live stack"
         assert header["DATE-OBS"] == "2026-10-31T01:00:00"
         assert header["SITELAT"] == SITE.latitude
-    # The calibration library never takes it for a light or a calibration frame.
+    # Never listed as a light (the calibration library and the session report read lights).
     lights = await asyncio.to_thread(storage.frames, FrameFilter(frame_type="light"))
     assert lights == []
