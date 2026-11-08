@@ -32,7 +32,10 @@ import numpy as np
 from astropy.io import fits  # pyright: ignore[reportMissingTypeStubs]
 from numpy.typing import NDArray
 
-from nocs.imaging.pipeline import PREVIEW_WIDTH, Mono16, apply_mtf, load, mtf_parameters, write_jpeg
+from nocs.imaging.pipeline import PREVIEW_WIDTH, apply_mtf, load, mtf_parameters, write_jpeg
+from nocs.stacking import masters
+from nocs.stacking.masters import Calibration
+from nocs.stacking.reduce import FrameError, binned, luminance, to_stack_image
 from nocs.stacking.register import (
     Registration,
     RegistrationError,
@@ -44,6 +47,8 @@ from nocs.stacking.register import (
 
 _fits: Any = fits  # untyped library; see nocs.imaging.pipeline
 
+__all__ = ["FrameError", "luminance", "to_stack_image"]
+
 KAPPA = 3.0
 """A value further than this many standard deviations from a pixel's mean is not added."""
 REJECT_FROM = 5
@@ -52,8 +57,6 @@ LEAST_SPREAD = 2.0
 """ADU: the rejection threshold never goes below this (pixels that hardly vary)."""
 STRIP_ROWS = 32
 """Rows updated at a time, so the arrays of a strip stay in the CPU's cache."""
-MONO_FULL_PIXELS = 16_000_000
-"""Mono frames larger than this stack 2x2 binned."""
 GATE_FROM = 3
 """Accepted frames before the quality gate compares a frame with them."""
 GATE_STARS = 0.5
@@ -67,22 +70,9 @@ MAX_STACKS = 4
 
 type Image = NDArray[np.float32]
 
-# Where each colour sits in a 2x2 Bayer cell (row, column), by the FITS pattern.
-_CELLS: dict[str, tuple[tuple[int, int], tuple[int, int], tuple[int, int], tuple[int, int]]] = {
-    #        R        G1       G2       B
-    "RGGB": ((0, 0), (0, 1), (1, 0), (1, 1)),
-    "BGGR": ((1, 1), (0, 1), (1, 0), (0, 0)),
-    "GRBG": ((0, 1), (0, 0), (1, 1), (1, 0)),
-    "GBRG": ((1, 0), (0, 0), (1, 1), (0, 1)),
-}
-
 
 class StackLostError(Exception):
     """The worker does not hold the stack asked for (it was restarted, or dropped it)."""
-
-
-class FrameError(Exception):
-    """A frame that cannot go into this stack at all (another size or kind of camera)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,6 +116,8 @@ class Added:
     """Stars paired with the reference."""
     rms: float | None = None
     clipped: float | None = None
+    hot_pixels: int | None = None
+    """Hot pixels the cosmetic pass removed from the frame (no dark)."""
     """Fraction of the frame's values the kappa-sigma rejection left out."""
     preview: Rendered | None = None
     seconds: float = 0.0
@@ -148,6 +140,7 @@ class Stack:
         self.rejected = 0
         self.star_counts: list[int] = []
         self.hfrs: list[float] = []
+        self.calibration = Calibration(cosmetic=False)
 
     @property
     def shape(self) -> tuple[int, ...] | None:
@@ -210,12 +203,15 @@ def add_frame(
     hfr: float | None = None,
     preview_path: str | None = None,
     look: Look | None = None,
+    calibration: Calibration | None = None,
     width: int = PREVIEW_WIDTH,
 ) -> Added:
     """Offer a frame to stack ``stack_id`` (``new``: start it with this frame) and, if
     it went in and ``preview_path`` is given, render the stack there.
 
-    ``stars`` and ``hfr`` are the frame's metrics from its preview, for the gate.
+    ``stars`` and ``hfr`` are the frame's metrics from its preview, for the gate;
+    ``calibration``, with ``new``, what every frame of the stack gets (masters must
+    have been built).
     """
     start = time.perf_counter()
     if new:
@@ -223,6 +219,8 @@ def add_frame(
         while len(_stacks) >= MAX_STACKS:
             del _stacks[next(iter(_stacks))]
         _stacks[stack_id] = Stack()
+        if calibration is not None:
+            _stacks[stack_id].calibration = calibration
     stack = _get(stack_id)
     steps: dict[str, float] = {}
 
@@ -246,12 +244,15 @@ def add_frame(
     pattern = (header_bayer or bayer or "").upper() or None
     t = time.perf_counter()
     image = to_stack_image(data, pattern)
-    binned = pattern is None and data.size > MONO_FULL_PIXELS
+    is_binned = binned(data.size, pattern)
     del data
     steps["reduce"] = _since(t)
+    t = time.perf_counter()
+    hot = masters.apply(image, stack.calibration)
+    steps["calibrate"] = _since(t)
 
     if stack.reference is None:
-        stack.pattern, stack.bottom_up, stack.binned = pattern, bottom_up, binned
+        stack.pattern, stack.bottom_up, stack.binned = pattern, bottom_up, is_binned
     elif pattern != stack.pattern or bottom_up != stack.bottom_up or image.shape != stack.shape:
         raise FrameError("the frame does not match the stack (camera, size or Bayer pattern)")
 
@@ -306,6 +307,7 @@ def add_frame(
         stars=registration.stars,
         rms=registration.rms,
         clipped=round(clipped, 5),
+        hot_pixels=hot if stack.calibration.dark is None and stack.calibration.cosmetic else None,
         preview=preview,
         seconds=round(time.perf_counter() - start, 3),
         steps=steps,
@@ -363,33 +365,6 @@ def drop(stack_id: str) -> None:
 
 def drop_all() -> None:
     _stacks.clear()
-
-
-def to_stack_image(data: Mono16, pattern: str | None) -> Image:
-    """A frame at the stack's resolution: superpixel BGR for a Bayer pattern; mono as it
-    is, or 2x2 binned (mean) above ``MONO_FULL_PIXELS``."""
-    if pattern is not None:
-        try:
-            r, g1, g2, b = _CELLS[pattern]
-        except KeyError:
-            raise FrameError(f"unsupported Bayer pattern {pattern}") from None
-        h, w = data.shape[0] // 2 * 2, data.shape[1] // 2 * 2
-        cells = data[:h, :w]
-        out = np.empty((h // 2, w // 2, 3), dtype=np.float32)
-        out[..., 0] = cells[b[0] :: 2, b[1] :: 2]
-        np.add(cells[g1[0] :: 2, g1[1] :: 2], cells[g2[0] :: 2, g2[1] :: 2], out=out[..., 1])
-        out[..., 1] *= np.float32(0.5)
-        out[..., 2] = cells[r[0] :: 2, r[1] :: 2]
-        return out
-    if data.size > MONO_FULL_PIXELS:
-        h, w = data.shape[0] // 2 * 2, data.shape[1] // 2 * 2
-        binned = data[:h, :w].reshape(h // 2, 2, w // 2, 2).sum(axis=(1, 3), dtype=np.float32)
-        return (binned * np.float32(0.25))[..., np.newaxis]
-    return data.astype(np.float32)[..., np.newaxis]
-
-
-def luminance(image: Image) -> Image:
-    return image[..., 0] if image.shape[2] == 1 else image.mean(axis=2, dtype=np.float32)
 
 
 def warp(image: Image, transform: Transform) -> Image:

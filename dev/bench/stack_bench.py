@@ -35,14 +35,23 @@ import numpy as np
 from astropy.io import fits  # pyright: ignore[reportMissingTypeStubs]
 
 from nocs.imaging import pipeline
-from nocs.stacking import stack
+from nocs.stacking import masters, stack
 from nocs.stacking.register import Transform
 
 _fits: Any = fits
 
 WIDTH, HEIGHT = 6248, 4176
 STARS = 4000
-STEPS = ("load", "reduce", "stars", "register", "warp", "accumulate", "render")
+STEPS = ("load", "reduce", "calibrate", "stars", "register", "warp", "accumulate", "render")
+
+
+def peak_rss_mb() -> int:
+    """This process's peak resident memory. Not ``ru_maxrss``: on Linux it survives
+    exec, so a spawned worker would report the parent's peak (making the frames)."""
+    for line in Path("/proc/self/status").read_text().splitlines():
+        if line.startswith("VmHWM:"):
+            return round(int(line.split()[1]) / 1024)
+    return round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024)
 
 
 def synthetic(directory: Path, count: int, seed: int = 1) -> list[Path]:
@@ -134,9 +143,19 @@ def run(paths: list[Path], previews: Path) -> dict[str, Any]:
         "stack_ms": round(statistics.median(totals) * 1000, 1) if totals else None,
         "preview_ms": round(statistics.median(preview_times) * 1000, 1),
         "stack_arrays_mb": round(arrays / 2**20),
-        # ru_maxrss is in KiB on Linux; this process does nothing but stack and preview.
-        "peak_rss_mb": round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024),
+        "peak_rss_mb": peak_rss_mb(),
         "outcomes": outcomes,
+    }
+
+
+def master(paths: list[Path], out: Path) -> dict[str, Any]:
+    """Build a dark master from the frames (as the worker would from the library's)."""
+    start = time.perf_counter()
+    masters.build(str(out), "dark", [str(p) for p in paths], None)
+    return {
+        "frames": len(paths),
+        "seconds": round(time.perf_counter() - start, 2),
+        "peak_rss_mb": peak_rss_mb(),
     }
 
 
@@ -159,6 +178,9 @@ def main() -> None:
         context = multiprocessing.get_context("spawn")
         with ProcessPoolExecutor(max_workers=1, mp_context=context) as pool:
             results = pool.submit(run, paths, work).result()
+        print(f"building a master from {len(paths)} frames (in another fresh process)")
+        with ProcessPoolExecutor(max_workers=1, mp_context=context) as pool:
+            results["master"] = pool.submit(master, paths, work / "master.fits").result()
     print()
     print(
         f"{results['host']} ({results['machine']}), {results['frames']} frames, "
@@ -173,6 +195,10 @@ def main() -> None:
     print(
         f"stack arrays: {results['stack_arrays_mb']} MB; "
         f"peak RSS of this process: {results['peak_rss_mb']} MB"
+    )
+    m = results["master"]
+    print(
+        f"dark master from {m['frames']} frames: {m['seconds']} s, peak RSS {m['peak_rss_mb']} MB"
     )
     if args.json is not None:
         args.json.write_text(json.dumps(results, indent=2) + "\n")
