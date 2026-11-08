@@ -21,7 +21,8 @@ from astropy.io import fits  # pyright: ignore[reportMissingTypeStubs]
 from test_storage_layout import write_fits
 from test_volumes import SD, FakeSystem, device_of
 
-from nocs.equipment import Optics, Site
+from nocs.equipment import Optics
+from nocs.sites import Site
 from nocs.state import StateStore
 from nocs.storage import FrameFacts, FrameFilter, FrameUnavailableError, StorageError
 from nocs.storage import service as storage_service

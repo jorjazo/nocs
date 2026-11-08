@@ -19,12 +19,14 @@ import pytest
 from fastapi.testclient import TestClient
 from owner import pair_owner
 from simfocus import APERTURE, FOCAL_LENGTH, FOCUSER, ORION
+from sites import use_site
 
 from nocs.api import create_app
 from nocs.api.schemas import AppState
 from nocs.config import Settings
 from nocs.devices import Location
 from nocs.mount.coords import horizontal_to_jnow, jnow_to_j2000
+from nocs.sites import Site, SiteFile, SiteStore
 
 pytestmark = pytest.mark.indi
 
@@ -79,10 +81,12 @@ def api(tmp_path_factory: pytest.TempPathFactory) -> Iterator[TestClient]:
             "aperture": APERTURE,
             "autofocus": {"step": 4000, "exposure": 1},
         },
-        "site": {"name": "Sim", "latitude": LATITUDE, "longitude": longitude_for_orion(now)},
     }
     with TestClient(create_app(settings)) as client:
         pair_owner(client)
+        use_site(
+            client, {"name": "Sim", "latitude": LATITUDE, "longitude": longitude_for_orion(now)}
+        )
         assert client.put("/api/profiles/sequence", json=profile).status_code == 204
         response = client.post("/api/equipment/connect", json={"profile": "sequence"})
         assert response.status_code == 202, response.text
@@ -121,6 +125,7 @@ def api(tmp_path_factory: pytest.TempPathFactory) -> Iterator[TestClient]:
                     wait(client, finished(response.json()["job"]))
 
 
+@pytest.mark.slow
 def test_a_two_filter_sequence_focuses_takes_its_frames_and_parks(api: TestClient) -> None:
     if state(api)["mount"]["parked"]:
         assert api.post("/api/mount/unpark").status_code == 204
@@ -185,6 +190,7 @@ def set_property(api: TestClient, device: str, name: str, values: dict[str, Any]
     assert response.status_code == 202, response.text
 
 
+@pytest.mark.slow
 def test_autofocus_follows_the_temperature_and_the_stars(api: TestClient) -> None:
     if state(api)["mount"]["parked"]:
         assert api.post("/api/mount/unpark").status_code == 204
@@ -282,6 +288,7 @@ def orion_plan(name: str, count: int, **sequence: Any) -> dict[str, Any]:
     }
 
 
+@pytest.mark.slow
 def test_frames_under_clouds_are_taken_again(api: TestClient) -> None:
     if state(api)["mount"]["parked"]:
         assert api.post("/api/mount/unpark").status_code == 204
@@ -328,12 +335,9 @@ def restartable(tmp_path: Path) -> tuple[Settings, dict[str, Any]]:
         **SIMULATORS,
         "devices": {k: v for k, v in SIMULATORS["devices"].items() if k in roles},
         "imaging": {"focal_length": FOCAL_LENGTH, "aperture": APERTURE},
-        "site": {
-            "name": "Sim",
-            "latitude": LATITUDE,
-            "longitude": longitude_for_orion(datetime.now(UTC)),
-        },
     }
+    site = Site(name="Sim", latitude=LATITUDE, longitude=longitude_for_orion(datetime.now(UTC)))
+    SiteStore(settings.config_dir).save(SiteFile(active="sim", sites={"sim": site}))
     return settings, profile
 
 
@@ -348,6 +352,7 @@ def report_clock(client: TestClient) -> None:
     assert response.status_code == 200, response.text
 
 
+@pytest.mark.slow
 def test_a_restarted_nocsd_finishes_the_run(restartable: tuple[Settings, dict[str, Any]]) -> None:
     settings, profile = restartable
     with TestClient(create_app(settings)) as client:

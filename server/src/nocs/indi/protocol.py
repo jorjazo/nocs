@@ -60,6 +60,8 @@ class DefineProperty:
 class ElementValue:
     text: str
     attrs: Mapping[str, str]
+    data: bytes | None = None
+    """A BLOB's content, decoded while parsing (its ``text`` is then empty)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -181,11 +183,15 @@ def _parse_set(elem: ET.Element, prop_type: PropertyType) -> SetProperty:
         timeout=_opt_float(a.get("timeout")),
         timestamp=a.get("timestamp"),
         message=a.get("message"),
-        values={
-            child.attrib["name"]: ElementValue(child.text or "", dict(child.attrib))
-            for child in elem
-        },
+        values={child.attrib["name"]: _element_value(child, prop_type) for child in elem},
     )
+
+
+def _element_value(child: ET.Element, prop_type: PropertyType) -> ElementValue:
+    attrs = dict(child.attrib)
+    if prop_type is PropertyType.BLOB:
+        return ElementValue("", attrs, decode_blob(child.text or "", attrs.get("format", "")))
+    return ElementValue(child.text or "", attrs)
 
 
 def parse_element(elem: ET.Element) -> IndiMessage | None:
@@ -210,8 +216,18 @@ def parse_element(elem: ET.Element) -> IndiMessage | None:
     return None
 
 
+_DECODE_SLICE = 64 * 1024
+"""Base64 characters decoded per call (a multiple of 4). Each call holds the GIL, so
+in a thread that decodes a BLOB the event loop gets its turn between slices."""
+
+
 def decode_blob(text: str, fmt: str) -> bytes:
-    data = base64.b64decode("".join(text.split()))
+    text = text.strip()
+    if any(space in text for space in " \t\r\n"):
+        text = "".join(text.split())
+    data = b"".join(
+        base64.b64decode(text[i : i + _DECODE_SLICE]) for i in range(0, len(text), _DECODE_SLICE)
+    )
     if fmt.endswith(".z"):
         data = zlib.decompress(data)
     return data
@@ -248,19 +264,29 @@ def apply_set(prop: Property, msg: SetProperty) -> list[str]:
             case BlobElement():
                 element.format = update.attrs.get("format", "")
                 element.size = int(update.attrs.get("size", "0"))
-                element.data = decode_blob(update.text, element.format)
+                element.data = (
+                    update.data
+                    if update.data is not None
+                    else decode_blob(update.text, element.format)
+                )
         changed.append(name)
     return changed
 
 
 class StreamParser:
-    """Incremental parser for the server-to-client INDI stream."""
+    """Incremental parser for the server-to-client INDI stream.
+
+    ``feed`` also decodes BLOBs, so it can take a while: a caller on the event loop
+    runs it in a thread once ``unfinished`` says a large element is coming.
+    """
 
     def __init__(self) -> None:
         self._parser: ET.XMLPullParser[ET.Element] = ET.XMLPullParser(events=("start", "end"))
         self._parser.feed(b"<indi>")
         self._root: ET.Element | None = None
         self._depth = 0
+        self.unfinished = 0
+        """Bytes fed since a top-level element began that has not ended yet (roughly)."""
 
     def feed(self, data: bytes) -> list[IndiMessage]:
         try:
@@ -283,6 +309,7 @@ class StreamParser:
                 if (msg := parse_element(elem)) is not None:
                     messages.append(msg)
                 self._root.remove(elem)
+        self.unfinished = self.unfinished + len(data) if self._depth > 1 else 0
         return messages
 
 

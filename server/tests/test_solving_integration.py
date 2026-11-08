@@ -20,6 +20,7 @@ import pytest
 from astropy.io import fits  # pyright: ignore[reportMissingTypeStubs]
 from fastapi.testclient import TestClient
 from owner import pair_owner
+from sites import use_site
 
 from nocs.api import create_app
 from nocs.config import Settings
@@ -122,9 +123,10 @@ def api(tmp_path_factory: pytest.TempPathFactory) -> Iterator[tuple[TestClient, 
         data_dir=data_dir,
     )
     devices = {k: v for k, v in SIMULATORS["devices"].items() if k in {"main_camera", "mount"}}
-    profile = {**SIMULATORS, "devices": devices, "site": SITE}
+    profile = {**SIMULATORS, "devices": devices}
     with TestClient(create_app(settings)) as client:
         pair_owner(client)
+        use_site(client, SITE)
         response = client.put("/api/storage/destination", json={"destination": "internal"})
         assert response.status_code == 204, response.text
         assert client.put("/api/profiles/solve", json=profile).status_code == 204
@@ -159,6 +161,7 @@ def _expose(api: TestClient, data_dir: Path) -> Path:
     return data_dir / "NOCS" / job["result"]["path"]
 
 
+@pytest.mark.slow
 @pytest.mark.indi
 async def test_simulator_frames(api: tuple[TestClient, Path], astap: Astap) -> None:
     client, data_dir = api

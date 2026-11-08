@@ -21,7 +21,7 @@ from owner import pair_owner
 from nocs.api import create_app
 from nocs.config import Settings
 from nocs.devices import Location
-from nocs.equipment import HorizonPoint, Profile, ProfileStore, Site
+from nocs.sites import HorizonPoint, Site, SiteFile, SiteStore
 from nocs.sky import Target, horizon_altitude, night, tonight, visibility
 from nocs.sky.almanac import TWILIGHTS
 from nocs.sky.ephemeris import illumination, pressure, refraction, sky
@@ -276,10 +276,9 @@ def test_site_horizon_is_sorted_and_checked() -> None:
         HorizonPoint(azimuth=360, altitude=0)
 
 
-def test_the_example_profile_has_a_hill() -> None:
-    path = Path(__file__).parents[2] / "dev" / "profiles" / "simulators.json"
-    site = Profile.model_validate_json(path.read_text()).site
-    assert site is not None
+def test_the_example_site_has_a_hill() -> None:
+    path = Path(__file__).parents[2] / "dev" / "sites.json"
+    site = SiteFile.model_validate_json(path.read_text()).sites["diaguitas"]
     assert site.horizon is not None
     assert horizon_altitude(site.horizon, np.array([0.0]))[0] == 30
 
@@ -289,10 +288,8 @@ def test_the_example_profile_has_a_hill() -> None:
 
 @pytest.fixture
 def client(config_dir: Path) -> Iterator[TestClient]:
-    profiles = ProfileStore(config_dir)
     site = Site(name="Lab", latitude=-30.03, longitude=-70.67, elevation=700, horizon=HILL)
-    profiles.put("lab", Profile(name="Lab", site=site))
-    profiles.active = "lab"
+    SiteStore(config_dir).save(SiteFile(active="lab", sites={"lab": site}))
     with TestClient(create_app(Settings(indi_host="127.0.0.1", indi_port=9))) as client:
         pair_owner(client)
         yield client
@@ -360,9 +357,8 @@ def test_visibility_refuses_bad_requests(client: TestClient, params: dict[str, s
 
 
 def test_sky_needs_a_site(config_dir: Path) -> None:
-    profiles = ProfileStore(config_dir)
-    profiles.put("bare", Profile(name="Bare"))
-    profiles.active = "bare"
+    site = Site(name="Away", latitude=-30.03, longitude=-70.67)
+    SiteStore(config_dir).save(SiteFile(sites={"away": site}))
     with TestClient(create_app(Settings(indi_host="127.0.0.1", indi_port=9))) as client:
         pair_owner(client)
         assert client.get("/api/sky/tonight").status_code == 409

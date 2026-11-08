@@ -1,8 +1,8 @@
 <script lang="ts">
   // Profile editor (ADR 0011): which device plays each role (driver from the
   // rig's INDI catalog, optional device name, serial port by its stable name),
-  // the optics of both trains and the site. Filter names are not here: they
-  // belong to each physical wheel (ADR 0016).
+  // and the optics of both trains. Filter names are not here: they belong to each
+  // physical wheel (ADR 0016), nor is the site, which belongs to the box (ADR 0038).
   import { untrack } from "svelte";
   import Banner from "../components/Banner.svelte";
   import Button from "../components/Button.svelte";
@@ -12,8 +12,9 @@
   import Toggle from "../components/Toggle.svelte";
   import ScreenHeader from "../components/ScreenHeader.svelte";
   import TextField from "../components/TextField.svelte";
-  import { deleteProfile, getProfile, listDrivers, listSerialPorts, putProfile } from "../lib/api";
+  import { deleteProfile, getProfile, listDriverDevices, listDrivers, listSerialPorts, putProfile } from "../lib/api";
   import { auth } from "../lib/auth.svelte";
+  import { choiceFor, driverChoices, matches, type DriverChoice } from "../lib/drivers";
   import { ROLE_ICONS, ROLES } from "../lib/equipment";
   import { errorText } from "../lib/errors";
   import { i18n } from "../lib/i18n";
@@ -38,7 +39,8 @@
     weather: ["Weather", "Auxiliary"],
   };
 
-  type DeviceDraft = { driver: string; device: string; port: string };
+  // The model is the catalog's, kept so that the editor shows the one chosen.
+  type DeviceDraft = { driver: string; model: string | null; device: string; port: string; filter: string };
   type OpticsDraft = { focal_length: number | null; aperture: number | null; reducer: number | null };
 
   function opticsDraft(optics: Optics | null | undefined): OpticsDraft {
@@ -60,17 +62,10 @@
   let guiding = $state<OpticsDraft>(opticsDraft(null));
   // An off-axis guider or a camera's own guide sensor: guiding uses the imaging optics.
   let throughImaging = $state(false);
-  let siteName = $state("");
-  let latitude = $state<number | null>(null);
-  let longitude = $state<number | null>(null);
-  let elevation = $state<number | null>(null);
   // Every number field reports whether its text is valid.
-  const NUMBERS = [
-    ...["imaging", "guiding"].flatMap((train) => ["focal", "aperture", "reducer"].map((field) => `${train}-${field}`)),
-    "latitude",
-    "longitude",
-    "elevation",
-  ];
+  const NUMBERS = ["imaging", "guiding"].flatMap((train) =>
+    ["focal", "aperture", "reducer"].map((field) => `${train}-${field}`),
+  );
   let validity = $state<Record<string, boolean>>(Object.fromEntries(NUMBERS.map((key) => [key, true])));
 
   let drivers = $state<Driver[]>([]);
@@ -92,16 +87,18 @@
         devices = Object.fromEntries(
           Object.entries(profile.devices ?? {}).map(([role, config]) => [
             role,
-            { driver: config.driver, device: config.device ?? "", port: config.port ?? "" },
+            {
+              driver: config.driver,
+              model: config.model ?? null,
+              device: config.device ?? "",
+              port: config.port ?? "",
+              filter: "",
+            },
           ]),
         );
         imaging = opticsDraft(profile.imaging);
         guiding = opticsDraft(profile.guiding);
         throughImaging = profile.guiding_through_imaging ?? false;
-        siteName = profile.site?.name ?? "";
-        latitude = profile.site?.latitude ?? null;
-        longitude = profile.site?.longitude ?? null;
-        elevation = profile.site?.elevation ?? null;
         loaded = true;
       })
       .catch((e: unknown) => (loadError = errorText(e, t)));
@@ -109,27 +106,60 @@
 
   // -- Drivers -----------------------------------------------------------------------
 
-  // One option per executable: a driver serves many models (all ZWO cameras).
-  type Choice = { driver: string; text: string; group: string };
-  const choices = $derived.by((): Choice[] => {
-    const seen = new Map<string, Choice>();
-    for (const entry of drivers) {
-      if (!seen.has(entry.driver)) {
-        seen.set(entry.driver, { driver: entry.driver, text: `${entry.name} (${entry.driver})`, group: entry.group });
-      }
+  const choices = $derived(driverChoices(drivers));
+
+  // The role's groups first, then the rest; only what the filter matches, and
+  // always the current choice (also a driver installed by hand).
+  function groupsFor(role: Role, draft: DeviceDraft): { label: string; choices: DriverChoice[] }[] {
+    const current = choiceFor(choices, draft.driver, draft.model);
+    const shown = choices.filter((c) => c.key === current?.key || matches(c, draft.filter));
+    const wanted = ROLE_GROUPS[role];
+    const groups = wanted.map((group) => ({ label: group, choices: shown.filter((c) => c.group === group) }));
+    const others = shown.filter((c) => !wanted.includes(c.group));
+    if (current && !choices.some((c) => c.key === current.key)) others.unshift(current);
+    return [...groups, { label: t.editor.otherDrivers, choices: others }].filter((g) => g.choices.length > 0);
+  }
+
+  function choose(draft: DeviceDraft, key: string): void {
+    const choice = choices.find((c) => c.key === key);
+    if (!choice) return;
+    if (choice.driver !== draft.driver) draft.device = "";
+    [draft.driver, draft.model] = [choice.driver, choice.model];
+  }
+
+  // -- Devices -----------------------------------------------------------------------
+
+  // The devices each role's driver defines for it, asked of the driver (started for
+  // the question when it does not run): a list to choose from when there are several.
+  // `names` is null while asking, and when the driver could not be asked.
+  type Listing = { driver: string; names: string[] | null; failed: boolean };
+  let listings = $state<Partial<Record<Role, Listing>>>({});
+
+  $effect(() => {
+    if (!auth.owner) return;
+    for (const role of ROLES) {
+      const driver = devices[role]?.driver;
+      // Only catalog drivers can be asked.
+      if (!driver || !choices.some((c) => c.driver === driver)) continue;
+      if (untrack(() => listings[role]?.driver) === driver) continue;
+      listings[role] = { driver, names: null, failed: false };
+      const settle = (names: string[] | null) => {
+        if (listings[role]?.driver === driver) listings[role] = { driver, names, failed: names === null };
+      };
+      listDriverDevices(driver, role).then(settle, () => settle(null));
     }
-    return [...seen.values()].sort((a, b) => a.text.localeCompare(b.text));
   });
 
-  function groupsFor(role: Role, current: string): { label: string; choices: Choice[] }[] {
-    const wanted = ROLE_GROUPS[role];
-    const groups = wanted.map((group) => ({ label: group, choices: choices.filter((c) => c.group === group) }));
-    const others = choices.filter((c) => !wanted.includes(c.group));
-    // A driver missing from the catalog (installed by hand) can still be kept.
-    if (current && !choices.some((c) => c.driver === current)) {
-      others.unshift({ driver: current, text: current, group: "" });
-    }
-    return [...groups.filter((g) => g.choices.length > 0), { label: t.editor.otherDrivers, choices: others }];
+  function listingFor(role: Role, draft: DeviceDraft): Listing | null {
+    const listing = listings[role];
+    return listing?.driver === draft.driver ? listing : null;
+  }
+
+  // A list when there is a choice to make, or a saved device the driver does not
+  // define now (a camera unplugged).
+  function deviceChoices(names: string[], device: string): string[] | null {
+    if (names.length > 1 || (device && !names.includes(device))) return names;
+    return null;
   }
 
   // Devices the driver defines right now, from the live INDI state.
@@ -148,7 +178,10 @@
   const problem = $derived.by(() => {
     if (!name.trim()) return t.editor.needName;
     for (const role of ROLES) {
-      if (devices[role] && !devices[role].driver) return t.editor.needDriver(t.roles[role]);
+      const draft = devices[role];
+      if (draft && !draft.driver) return t.editor.needDriver(t.roles[role]);
+      const names = draft ? listingFor(role, draft)?.names : null;
+      if (draft && names && names.length > 1 && !draft.device) return t.editor.needDevice(t.roles[role]);
     }
     return "";
   });
@@ -171,6 +204,7 @@
         const draft = devices[role];
         if (!draft) return [];
         const config: DeviceConfig = { ...original?.devices?.[role], driver: draft.driver };
+        config.model = choiceFor(choices, draft.driver, draft.model)?.model ?? null;
         config.device = draft.device.trim() || null;
         config.port = draft.port || null;
         return [[role, config]];
@@ -183,16 +217,6 @@
       imaging: optics(imaging, original?.imaging),
       guiding: optics(guiding, original?.guiding),
       guiding_through_imaging: throughImaging,
-      site:
-        latitude !== null && longitude !== null
-          ? {
-              ...original?.site, // keeps the horizon profile, not edited here yet
-              name: siteName.trim(),
-              latitude,
-              longitude,
-              elevation: elevation ?? 0,
-            }
-          : null,
     };
   }
 
@@ -272,36 +296,65 @@
               {#if draft}
                 <Button variant="text" onclick={() => delete devices[role]}>{t.editor.remove}</Button>
               {:else}
-                <Button variant="text" onclick={() => (devices[role] = { driver: "", device: "", port: "" })}>
+                <Button variant="text" onclick={() => (devices[role] = { driver: "", model: null, device: "", port: "", filter: "" })}>
                   <Icon name="plus" size={20} />{t.editor.add(t.roles[role])}
                 </Button>
               {/if}
             </div>
             {#if draft}
               {@const names = draft.driver ? running(draft.driver) : []}
+              {@const listing = listingFor(role, draft)}
+              {@const listed = listing?.names ? deviceChoices(listing.names, draft.device) : null}
               <div class="role-fields">
+                <TextField label={t.editor.filterDrivers} bind:value={draft.filter} placeholder={t.editor.filterPlaceholder} />
                 <label class="select">
                   <span class="label muted">{t.editor.driver}</span>
-                  <select bind:value={draft.driver}>
+                  <select
+                    bind:value={
+                      () => choiceFor(choices, draft.driver, draft.model)?.key ?? "",
+                      (key) => choose(draft, key)
+                    }>
                     <option value="" disabled>{t.editor.chooseDriver}</option>
-                    {#each groupsFor(role, draft.driver) as group (group.label)}
+                    {#each groupsFor(role, draft) as group (group.label)}
                       <optgroup label={group.label}>
-                        {#each group.choices as choice (choice.driver)}
-                          <option value={choice.driver}>{choice.text}</option>
+                        {#each group.choices as choice (choice.key)}
+                          <option value={choice.key}>{choice.text}</option>
                         {/each}
                       </optgroup>
                     {/each}
                   </select>
                 </label>
-                <TextField
-                  label={t.editor.deviceName}
-                  bind:value={draft.device}
-                  placeholder={names[0] ?? ""}
-                  list="{role}-devices"
-                  hint={names.length > 0 ? t.editor.running(names.join(", ")) : t.editor.deviceHint} />
-                <datalist id="{role}-devices">
-                  {#each names as device (device)}<option value={device}></option>{/each}
-                </datalist>
+                {#if listed}
+                  <label class="select">
+                    <span class="label muted">{t.editor.deviceName}</span>
+                    <select bind:value={draft.device}>
+                      <option value="" disabled>{t.editor.chooseDevice}</option>
+                      {#if draft.device && !listed.includes(draft.device)}
+                        <option value={draft.device}>{draft.device} ({t.editor.unplugged})</option>
+                      {/if}
+                      {#each listed as device (device)}<option value={device}>{device}</option>{/each}
+                    </select>
+                    <span class="caption muted">{t.editor.severalDevices}</span>
+                  </label>
+                {:else if listing?.names?.length === 1}
+                  <p class="caption muted">{t.editor.theDevice(listing.names[0] ?? "")}</p>
+                {:else if listing && !listing.failed && listing.names === null}
+                  <p class="caption muted">{t.editor.askingDriver}</p>
+                {:else}
+                  <TextField
+                    label={t.editor.deviceName}
+                    bind:value={draft.device}
+                    placeholder={names[0] ?? ""}
+                    list="{role}-devices"
+                    hint={listing?.names?.length === 0
+                      ? t.editor.noDevices
+                      : names.length > 0
+                        ? t.editor.running(names.join(", "))
+                        : t.editor.deviceHint} />
+                  <datalist id="{role}-devices">
+                    {#each names as device (device)}<option value={device}></option>{/each}
+                  </datalist>
+                {/if}
                 <label class="select">
                   <span class="label muted">{t.editor.port}</span>
                   <select bind:value={draft.port}>
@@ -360,37 +413,6 @@
         hint={t.editor.throughImagingHint}
         checked={throughImaging}
         onchange={(value) => (throughImaging = value)} />
-    </fieldset>
-
-    <fieldset class="section" disabled={!auth.owner}>
-      <legend class="heading">{t.editor.site}</legend>
-      <p class="caption muted">{t.editor.siteHint}</p>
-      <TextField label={t.editor.siteName} bind:value={siteName} maxlength={80} />
-      <div class="grid">
-        <NumberField
-          label={t.editor.latitude}
-          bind:value={latitude}
-          bind:valid={validity.latitude}
-          min={-90}
-          max={90}
-          unit="°"
-          hint={t.editor.latitudeHint} />
-        <NumberField
-          label={t.editor.longitude}
-          bind:value={longitude}
-          bind:valid={validity.longitude}
-          min={-180}
-          max={180}
-          unit="°"
-          hint={t.editor.longitudeHint} />
-        <NumberField
-          label={t.editor.elevation}
-          bind:value={elevation}
-          bind:valid={validity.elevation}
-          min={-500}
-          max={9000}
-          unit="m" />
-      </div>
     </fieldset>
 
     {#if auth.owner}

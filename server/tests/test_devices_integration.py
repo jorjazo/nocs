@@ -71,6 +71,7 @@ async def test_camera_dark_exposure(client: IndiClient) -> None:
     await camera.set_frame_type(FrameType.LIGHT)
 
 
+@pytest.mark.slow
 async def test_mount_goto_and_tracking(client: IndiClient) -> None:
     mount = Mount(client, "Telescope Simulator")
     await mount.connect()

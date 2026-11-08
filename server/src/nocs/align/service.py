@@ -57,11 +57,12 @@ from nocs.align.polar import (
     vector,
 )
 from nocs.devices import Coordinates, Location
-from nocs.equipment import HorizonPoint, Role
+from nocs.equipment import Role
 from nocs.jobs import JobContext, JobManager
 from nocs.mount.coords import sidereal_time
 from nocs.mount.service import Frame, PointingError
 from nocs.pointing.solve import FrameSolve, SolveOptions
+from nocs.sites import HorizonPoint
 from nocs.solving import Failure, SolveError
 from nocs.state import Json, Path, StateStore
 
@@ -269,7 +270,7 @@ class PolarAlignmentService:
         and the side the RA axis turns to. Raises ``PointingError`` or ``ValueError``."""
         site = self._mount.site()
         if site is None:
-            raise PointingError("the site is unknown: set it in the profile")
+            raise PointingError("the site is unknown: choose the site")
         start = self._mount.position_jnow()
         if abs(start.dec) > MAX_POLE_DEC:
             raise ValueError(

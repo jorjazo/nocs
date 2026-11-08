@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Rig's file sharing, where nocs-system runs it (the appliance, ADR 0037): the
+  // Rig's file sharing, where nocs-system runs it (the appliance, ADR 0039): the
   // read-only SMB share of the frames, its switch, how to open it from a computer,
   // the folders shared and the computers connected.
   import Banner from "../components/Banner.svelte";

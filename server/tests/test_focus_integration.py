@@ -67,6 +67,7 @@ def worker(tmp_path: Path) -> Iterator[ImageWorker]:
     worker.close()
 
 
+@pytest.mark.slow
 async def test_the_simulated_stars_follow_the_focuser(
     client: IndiClient, camera: Camera, worker: ImageWorker, tmp_path: Path
 ) -> None:

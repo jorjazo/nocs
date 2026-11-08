@@ -13,7 +13,7 @@ from datetime import date, timedelta
 import numpy as np
 
 from nocs.devices import Location
-from nocs.equipment import HorizonPoint
+from nocs.sites import HorizonPoint
 from nocs.sky import Target, night, visibility
 
 SITE = Location(-30.03, -70.67, 700)

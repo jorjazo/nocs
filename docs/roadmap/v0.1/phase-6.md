@@ -1,0 +1,162 @@
+# Phase 6 plan — Appliance
+
+Status: in progress (6.1–6.8 and 6.11 done; 6.9 done but for a camera unplugged on the rig; 6.10 waits for a test Pi; 6.12 started early with `v0.1.0rc1`, its findings fixed for `rc2`; ADRs proposed, open points decided) · Last updated: 2026-11-03 · Roadmap: [Phase 6](../v0.1.md#phase-6--appliance)
+
+Goal: anyone flashes an image onto a Raspberry Pi 5 and runs a full night from a
+phone, with no other computer involved. PC users install the same software from
+`.deb` packages.
+
+**Exit:** **v0.1 public release.** A fresh Pi 5 flashed with the image runs a full
+night from a phone with no other computer involved.
+
+Phases 3–5 are still being built while this one starts. The stages that only add
+packaging, the system helper and new state come first; the ones that need every
+other phase (supervision of a running sequence, the final image, the release)
+come last. Stages that change a Pi's network or services are tested on a Pi that
+no other session is using: the lab Pi stays as it is.
+
+## Stages
+
+| # | Stage | Contents | Check | Estimate | Status |
+|---|---|---|---|---|---|
+| 6.0 | Decisions | This plan; ADRs 0025–0030, 0035 | Review | 4–5 h | Proposed; hosting, keys, 6.9b and the test Pi decided 2026-10-31 |
+| 6.1 | The `nocs` package | `.deb` with its own Python (uv, python-build-standalone) in `/opt/nocs`, the web app, units for nocsd, indiserver and PHD2 run as the system user `nocs`, `/etc/nocs`, `/var/lib/nocs`; built in CI for amd64 and arm64 ([ADR 0025](../../adr/0025-packaging-and-updates.md)) | Installs on a clean Ubuntu 26.04 container; nocsd answers and connects to indiserver | 8–10 h | Implemented: `packaging/deb/`, checked with systemd in a container on amd64 (116 MB package, 478 MB installed); arm64 in CI |
+| 6.2 | Raspberry Pi image | The official Ubuntu image changed in a chroot on an arm64 runner: INDI and PHD2 from their PPAs, `nocs`, ASTAP with D50, NetworkManager; smoke test in `systemd-nspawn` ([ADR 0026](../../adr/0026-raspberry-pi-image.md)) | Boots on a Pi 5 from microSD and from a USB SSD; nocsd reachable | 10–14 h | Implemented: `packaging/image/` and the Image workflow; the image builds and passes its smoke test in CI. **Booted on the lab Pi 5 from a spare microSD** (2026-11-01, build 0.0.1~git93.g2247563, 2.43 GB as `.img.xz`): with Imager-style presets (SSH key, home Wi-Fi, host name) it joined the Wi-Fi and announced `_http._tcp` within two minutes; every service active, the firewall open on 22 and 80 only, both watchdogs at 30 s, NTP, ASTAP with D50; pairing, health, an update check and the diagnostics bundle over the API; restart (back in 34 s) and power off from the app. Found: `network.status` read the network's name as `name\nmode` (nmcli prints one value per line; fixed); the presets' Wi-Fi country does not apply under NetworkManager (the first run sets it). Left: booting from a USB SSD, the first boot without presets |
+| 6.3 | nocs-system | The privileged helper: Unix socket, peer credentials, a closed list of operations, nocsd's client; reboot, power off (and the Pi 5's power button), host name ([ADR 0027](../../adr/0027-nocs-system.md)) | Unit tests with fake tools; reboot from the app on a test Pi | 5–7 h | Implemented: `nocs.system` (helper, client, `nocs-system call`), `system` state, `POST /api/system/reboot` and `/poweroff` (refused while a job runs unless forced), `PUT /api/system/hostname`; packaged and checked in the container. Buttons come with the System screen (6.4); reboot, power off and the Pi 5's button are still to check on a test Pi |
+| 6.4 | Health and diagnostics | nocsd reads temperatures, under-voltage, throttling, memory and the system disk without privileges; `system` state; "This computer" on the Rig screen; a diagnostics bundle (logs, versions) to download | Simulated `/sys`; the lab Pi read-only | 5–7 h | Implemented: `system.health` every 5 s, rounded (CPU temperature, fan, under-voltage and when it was last seen, throttling from cpufreq, memory, system disk, warnings); `GET /api/system/diagnostics`; "This computer" on Rig with restart, shut down and rename. Checked in a browser against fake tools; on the Pi when the image exists |
+| 6.5 | Storage manager | USB drives mounted when plugged in, ejected from the app after a sync; eject refused while a frame is being written | A USB drive on a test Pi | 5–6 h | Implemented: `storage.mount` / `storage.eject` in nocs-system (`systemd-mount` at `/media/nocs/<UUID>`, owned by `nocs` on FAT/exFAT/NTFS, then `udisksctl power-off`); nocsd mounts drives as they are plugged in, lists the ones it cannot mount with the reason, does not mount an ejected one again while it stays plugged in, and refuses to eject while a frame is being saved to it (and while a job runs, unless forced); USB drives with Eject on Rig. Checked with fake tools and a fake `/sys`; a real drive waits for a test Pi |
+| 6.6 | Network | Access point `NOCS-xxxx`, joining a network from the app with a fallback, Ethernet, country, firewall closing indiserver and PHD2 to the network, nocsd on port 80, SSH off by default ([ADR 0028](../../adr/0028-networking.md)) | Phones (iOS, Android) on the access point and on home Wi-Fi; the fallback when the network goes | 12–16 h | Implemented: `nocs.system.network` (one actor: the access point `NOCS-xxxx` with DNS for `<host>.local`, joining with test-and-revert, the fallback, pinned modes, country) and its `network.*` operations; `network` state and API; the image on NetworkManager with nftables (only 22, 80, mDNS, DHCP, DNS from outside), nocsd on port 80 and SSH by key only; Network on Rig. Checked against a simulated NetworkManager and in a browser; phones on a real access point wait for a test Pi |
+| 6.7 | First boot | Presets from Raspberry Pi Imager (cloud-init) or a file on the boot partition; first run asks for the access point's password, the country, the name, time and site, storage and home Wi-Fi; `_http._tcp` over mDNS | Fresh image to first frame from a phone | 6–8 h | Implemented: after pairing, the owner sets the access point's country and own password, and may join a home network, before anything else (`POST /api/system/network/setup`; the access point restarts after the reply); Raspberry Pi Imager's presets (Wi-Fi, host name, SSH key) through cloud-init; `_http._tcp` over avahi. Checked in a browser; the whole first boot on a Pi waits for a test Pi |
+| 6.8 | Time and site | chrony sets the system clock from NTP, a USB GPS (gpsd) or the client; the GPS site is offered to the profile ([ADR 0029](../../adr/0029-system-time-and-site.md)) | Pi without network or RTC battery; a USB GPS | 6–8 h | Implemented: `time.set` in nocs-system; nocsd reads the clock's source (`chronyc -c sources`, else timedatectl) into `clock.source` and sets the clock from a client's report when nothing keeps it and no job runs; gpsd's fix in `gps`, `POST /api/gps/site` for the active profile and the mount; the image has gpsd (USB autodetect) and chrony reading it, and enables every operation of nocs-system (`/etc/nocs/system.conf.d/appliance.conf`). Checked with fake tools and a fake gpsd; a real GPS waits for a test Pi. nocsd remembers, across its restarts, that a client's time set the clock this boot (the boot's id in `/var/lib/nocs/clock-set-from-client`), so the time stays known and a sequence can resume (phase 5.12) |
+| 6.9 | Supervision | Spike (a frozen driver and indiserver); detection of hung indiserver, drivers and PHD2; recovery ladder; nocsd's systemd watchdog; the hardware watchdog ([ADR 0030](../../adr/0030-supervision.md)) | Simulators frozen with `SIGSTOP`; a camera unplugged mid-exposure | 8–10 h | Partly implemented: the spike (in ADR 0030); indiserver pinged every 10 s and, hung, restarted through nocs-system (`services.restart`, also from the app) and reconnected; nocsd under systemd's watchdog (`Type=notify`, 30 s); the hardware watchdog on in the image. 6.9b: `EquipmentService.restart_driver` (stop and start through the FIFO, wait for its devices to go, connect every role on it again; a driver NOCS found running keeps running after a disconnect) and `PowerService.power_cycle` (the output whose `feeds` names the role off 5 s, back as it was, then the driver; never the mount or an output that feeds it); the runner asks the rig to recover before each `device` retry, first a driver restart, then a power cycle, as `recovery` events, and cooling is asked again after the camera's driver restarts; `POST /api/equipment/roles/{role}/restart` and `/power-cycle`, offered on Rig under a device that dropped out. Checked on the simulators: a driver frozen with `SIGSTOP` is killed by indiserver and back, ready, in 0.5 s. 6.9c (below): devices that stop answering are noticed by their commands (15 s of silence or a missed deadline, then an unanswered probe), shown `unresponsive` on Rig with restart and power cycle, and blamed for the step a sequence was on, so it restarts that driver at once; on the simulators a camera frozen mid-exposure and a mount frozen mid-go-to are noticed in ~25 s (6 s with the test's shorter thresholds), restarted from the API and ready again. Left: a camera unplugged mid-exposure on the rig, and USB reset after v0.1 |
+| 6.10 | Updates | Signed apt repository with `stable` and `testing`; update from the app only when asked and never during a job; OS updates downloaded, not installed by themselves; rollback to the previous version | Update a test Pi from one build to the next and back | 8–10 h | In part: nocs-system's `update` group (check with apt; install and roll back in a transient `nocs-update` unit, so that restarting nocs-system and nocsd does not kill apt; the previous NOCS reinstalled from apt's cache), `updates` state, the API (installing refused while a job runs, unless forced) and Updates on Rig; unattended-upgrades only downloads and needrestart only lists (6.2). `nocs-appliance` (configuration only: network, firewall as `nocs-firewall.service`, port 80, nocs-system's operations, the GPS, the watchdog), so a flashed Pi gets fixes to them by updating; the image installs it and a rollback puts it back too. The repository's tools ([ADR 0035](../../adr/0035-apt-repository-and-release-publishing.md)): `packaging/repo/publish.py` (suites from their own indices, pruning, signing; images), `new-key.sh`, and the Packages and Image workflows publishing to R2 and to GitHub releases; checked against a local repository that apt on Ubuntu 26.04 installs from. Live at `https://apt.nocs.app` (R2 bucket and domain managed with Terraform outside this repository) since 2026-11-02: `testing` gets every push to `main`, and apt on a clean Ubuntu 26.04 verifies it and installs `nocs` with INDI and PHD2 from their PPAs; the PC instructions use it. Left: updating a test Pi from one `testing` build to the next and back |
+| 6.11 | User documentation | Quick start, supported hardware (tested, and anything INDI supports), troubleshooting, PC install | Someone else follows the quick start | 6–8 h | Written: `docs/user/` (quick start, supported hardware, troubleshooting, PC install). Screens and names to check against the release; someone else following it waits for the release candidate |
+| 6.12 | Release | Licenses of what the image redistributes; ADRs 0025–0030 and 0035 accepted; `v0.1.0rc1` (package `0.1.0~rc1`) published to `stable`; the hardware checks left from 6.2–6.8 on the lab Pi booted from a spare SSD; a night from a freshly flashed Pi with only a phone ([checklist](release.md)); v0.1 | Exit criterion | 4–6 h + a night | Started early (2026-11-03): the version is `0.1.0rc1`, its tag `v0.1.0rc1`, and `packaging/deb/build.sh` turns it into the package `0.1.0~rc1`; the release candidate is tagged to take a freshly flashed image to a clear night before phases 3–5's field tests and 6.10, whose findings may need an `rc2`. A first try, a release made on GitHub's form with the tag `v0.1.0rc1` while the tag was to be `v0.1.0-rc.1`, built `0.1.0~rc1~git158` packages, and its image could not write to the release (the Image workflow lacked `contents: write`); it was deleted, and `packaging/release.sh` now checks the version and makes the tag. The first boot of `rc1` without presets (2026-11-03): pairing, the access point's country and password, the phone back on it, a new profile. Findings from testing `rc1` [below](#612-findings-from-v010rc1), all for `rc2` |
+
+Total **87–115 h**, above the roadmap's 50–70 h. Not in v0.1 unless decided
+otherwise: HTTPS on the LAN (a local certificate authority, 8–10 h), which would
+bring geolocation, offline installation and wake lock (ADR 0014).
+
+Order: 6.0 → 6.1 → 6.3 → 6.4 → 6.2 → 6.5 → 6.8 → 6.6 → 6.7 → 6.10 → 6.9 →
+6.11 → 6.12.
+
+- **Can start now** without touching what phases 3–5 change: 6.0–6.4. They add
+  `packaging/`, `nocs.system` and new state (a small change to `api/schemas.py`).
+- **Need a Pi of their own:** the boot test of 6.2, and 6.5–6.8. Switching the lab
+  Pi's Wi-Fi to an access point would cut every session's SSH.
+- **Wait for other phases:** the recovery half of 6.9 (it acts through the phase 5
+  sequencer's recovery policies, and PHD2 must reconnect after indiserver restarts),
+  the final image and 6.12 (after the field tests of phases 3–5).
+
+### 6.9c: unresponsive devices
+
+Implemented 2026-11-01. What ADR 0030 calls detection of hung drivers, by command
+deadlines. Measured on the simulators (INDI 2.2.5): every simulator sends an update at least every 0.25 s while
+it exposes or slews, and a driver answers a `getProperties` for its `CONNECTION` in
+under 2 ms; the focuser simulator moves in 0.3 s.
+
+1. **Facades** (`nocs.devices`): each command already has a deadline (the exposure
+   plus 60 s, 120 s for a focuser move, 300 s for a go to, 60 s for a filter change,
+   30 s otherwise). A device that stays silent for 15 s while a command of its waits,
+   or misses the deadline, is probed: asked for its `CONNECTION` again, it must define
+   it within 10 s. Unanswered, the command fails at once as `DeviceUnresponsive` and
+   listeners on that connection hear of it; answered, a missed deadline fails as
+   before. A hung camera is noticed ~25 s after it froze, whatever the exposure.
+   Connecting and disconnecting are not probed for silence: drivers do both on
+   their main thread and answer nothing until they are done.
+2. **State:** the roles of that device become `unresponsive`, with the reason and
+   when it was noticed (`equipment.devices.<role>.unresponsive_since`); it counts as
+   not ready, and anything the device sends again (a driver that comes back by itself)
+   makes it ready again, as does a driver restart. Schema and TS types.
+3. **Rig:** an unresponsive role shows as such, with the restart and power-cycle
+   actions it already offers for a device that dropped out (en, es).
+4. **Sequences:** a step that fails while a role is unresponsive is a `device` failure
+   of that role, whichever step it was (a centring's exposure, an autofocus's move), so
+   the runner restarts that driver at once instead of skipping the target or waiting
+   for the deadline.
+5. **Checks:** unit tests with a fake device that goes silent; on the simulators, a
+   camera frozen with `SIGSTOP` mid-exposure and a mount frozen mid-go-to are noticed,
+   restarted from the API and ready again (`NOCS_TEST_INDI_CONTAINER` names the
+   container whose drivers the test may freeze).
+
+Not done: ADR 0030's automatic driver restart outside a sequence (the owner restarts
+from Rig; a sequence restarts on its own), and showing PHD2 as unresponsive in the
+state (its JSON-RPC calls already fail after 15 s). The thresholds are constants in
+`nocs.devices.base` (`SILENCE`, `PROBE_TIMEOUT`), to become settings once real nights
+say how they should be tuned. Checked in a browser on the simulators (en, es): a frozen
+camera shows "Not answering" / "No responde" with the time it was noticed, and Restart
+driver brings it back online.
+
+### 6.12: findings from `v0.1.0rc1`
+
+The maintainer's reports while testing the release candidate. `v0.1.0rc1` stays as it
+was tagged: every fix below goes into `main`, and `rc2` is tagged when they are in.
+
+| Date | Where | Finding | Decision |
+|---|---|---|---|
+| 2026-11-03 | First boot | The access point's first password, `nocs-setup`, is awkward to type on a phone | `rc2`: `nocsnocs` (WPA2 needs 8 characters) ([#18](https://github.com/jorjazo/nocs/pull/18)) |
+| 2026-11-03 | First boot | Joining a network means typing its name; the networks in range should be offered, with "Other…" for one that is not listed (or hidden) | `rc2`: the networks seen when the form opens, a button to look again, and "Other…". Scanning works with the access point up: on a Pi 5 (brcmfmac, nocs-soak) wpa_supplicant's scan with its access point enabled found the networks on 2.4 and 5 GHz and the access point stayed up; NetworkManager allows explicit scans in access point mode, only its periodic ones are off. An Android phone (Xiaomi 14T Pro) on that access point, fetching from the Pi every 0.25 s, stayed joined through eight scans 15 s apart: its round trips went from ~0.1 s to up to 0.8 s for a few seconds after each; 7 of ~700 fetches failed, and once the Pi heard nothing for 6 s. Scans only when asked, then, never periodic: when the form opens and when the button is pressed, also in the rig screen's network section ([#22](https://github.com/jorjazo/nocs/pull/22)). At the first boot of `rc2` on a Pi 5 (2026-11-04), the box setup listed the networks in range with NetworkManager's access point up |
+| 2026-11-03 | New profile | The driver list shows each driver's executable (`CRUX TitanTCS (indi_crux_mount)`), and one option per executable hides models: iOptron's nine mounts are all `iOptronV3` | `rc2`: one option per model of the INDI catalog (284 options instead of 213; a ZWO camera is still one, `ZWO CCD`), without the executable, and a field that filters them; the profile keeps the model chosen (`model`; an older NOCS cannot read such a profile, which does not matter before v1.0) ([#19](https://github.com/jorjazo/nocs/pull/19)) |
+| 2026-11-03 | New profile | "Device name" is a free text field, needed only for a driver with several devices (the ASI2600MC Duo's guide sensor makes `indi_asi_ccd` define two cameras) and offered only when the driver already runs | `rc2`: the editor asks the driver for its devices (starting it if it does not run, stopping it after), and the field becomes a list of them when there are several, hidden otherwise; also when editing a profile ([#21](https://github.com/jorjazo/nocs/pull/21), merged into #19's branch too late; on `main` by [#23](https://github.com/jorjazo/nocs/pull/23)) |
+| 2026-11-03 | New profile | The site must be typed even when the box has a USB GPS | `rc2`: a button that fills the site from the GPS's fix. The phone's position needs HTTPS (a secure context), out of v0.1 ([#20](https://github.com/jorjazo/nocs/pull/20)) |
+| 2026-11-03 | First boot | (Found while testing the above.) A browser whose first language is `es-419` (Spanish for Latin America) starts the form with the country `419`, not a country, and Save stays disabled without saying why | `rc2`: the first of the browser's languages whose region is a country (`es-419`, `es-CL` → `CL`), and the country is chosen from a list instead of typed: the 181 countries of the kernel's regulatory database (wireless-regdb, the same in Ubuntu 26.04 on nocs-soak), by their names in the app's language; `iw reg set` silently leaves the radio on the world domain for any other code, so nocs-system refuses them ([#22](https://github.com/jorjazo/nocs/pull/22)) |
+| 2026-11-04 | New profile | The site is part of the profile, while it belongs to where the box is; places should be saved, to choose one | [ADR 0038](../../adr/0038-saved-sites.md) (proposed): a list of saved sites and one active site per box, profiles without a site, and a GPS fix within 500 m of a saved site offers that one (else a new one). Rig lists the sites and edits them, and the mount follows the active one |
+
+## Decisions taken for this phase
+
+- One package for PCs and the Pi, `nocs`; a second one, `nocs-appliance`, turns a
+  box into the appliance (network, firewall, port 80, first boot) and is never
+  installed on a PC by default (ADR 0025).
+- indiserver, PHD2 and nocsd all run as the system user `nocs`, which writes the
+  driver FIFO and reads the frames drivers save (ADR 0011, ADR 0012).
+- nocsd reads everything it can without privileges; nocs-system only performs a
+  closed list of privileged operations (ADR 0027).
+- Nothing restarts behind a session: no unattended installs, no automatic service
+  restarts after library upgrades, no network switch while a phone is on the
+  access point.
+- Decided 2026-10-31 by the maintainer:
+  - **Hosting:** Cloudflare R2 behind a domain of the maintainer's, for the apt
+    repository and the image; GitHub Releases carries notes, checksums and the
+    link (ADR 0035).
+  - **Signing key:** only in CI, rotated by shipping a new keyring in the package.
+  - **Suites:** `testing` from every push to `main` (last 5 builds), `stable` from
+    tags (last 3); no channel switch in the app in v0.1.
+  - **6.9b:** driver restart and power cycling through the power box in v0.1, USB
+    reset after it (ADR 0030).
+  - **Test Pi:** a spare SSD or microSD for the lab Pi, booted in agreed windows,
+    for the hardware checks and the release's field test; the lab's own card stays
+    as it is.
+  - Out of v0.1: HTTPS on the LAN, a channel switch in the app, listing NOCS in
+    Raspberry Pi Imager.
+
+## Open questions
+
+None left.
+
+## Measured
+
+On the lab Pi (Ubuntu 26.04.1, kernel 7.0 raspi), read without changing anything:
+
+- The network is netplan with **systemd-networkd**; NetworkManager is not installed
+  (1.54 is in the archive). wlan0 is its only link.
+- The Wi-Fi (brcmfmac) supports access point mode; an access point and a station
+  at once only on one channel (`#channels <= 1`).
+- `/dev/watchdog0` exists (`dtparam=watchdog=on`); the RTC (`rpi-rtc`) keeps time
+  only with a battery; hwmon has `cpu_thermal`, `rpi_volt` (under-voltage) and
+  `pwmfan`. `vcgencmd` cannot open `/dev/vcio`.
+- chrony (`rtcsync`, `makestep 1 3`), avahi, udisks2 and snapd are installed, and
+  **unattended-upgrades** with `apt-daily-upgrade.timer` are on.
+- `config.txt` has `[tryboot] os_prefix=new/`: Ubuntu's own trial boot for kernel
+  updates.
+- Sizes: the official image is 1.53 GB as `.img.xz`; D50 takes 874 MB installed and
+  barely compresses; `indi-3rdparty-libs` 208 MB; nocsd's environment 316 MB with
+  its development tools.
+
+The first image built by CI (`ubuntu-24.04-arm`, 14 minutes in all):
+
+- The root filesystem holds 4.5 GB once INDI, PHD2, NOCS and D50 are in (2.8 GB in
+  Ubuntu's image), so the build grows it by 3 GB; it is 7.1 GB raw before the first
+  boot grows it to the card.
+- Compressed with `xz -6`: **3.3 GB**.
+- ASTAP and D50 downloaded from SourceForge in 23 s with the resume-on-a-new-
+  connection trick, and are cached for later builds.

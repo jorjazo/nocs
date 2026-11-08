@@ -1,6 +1,6 @@
 # Spike: performance on the Raspberry Pi 5
 
-Date: 2026-10-30 · Status: **done on microSD** (USB SSD comparison pending) · Related:
+Date: 2026-10-30 · Status: **done on microSD**; microSD vs a USB drive measured 2026-11-02 (a USB SSD still untested) · Related:
 [design §7 and §16](../design.md), [PHD2 spike](phd2-headless.md)
 
 ## Questions
@@ -147,7 +147,9 @@ the solved scale (3.102″/px) matches the optics exactly.
 
 Still open: microSD vs USB SSD for frame storage (load time is the only stage
 it affects: 140–160 ms per frame on microSD), and USB bandwidth with real
-cameras attached.
+cameras attached. The storage half is answered below for a USB 3 stick
+([microSD vs a USB drive](#follow-up-microsd-vs-a-usb-drive-2026-11-02)): writes and
+the system disk's stalls, more than the load time, are what a drive changes.
 
 ## Follow-up: image transfer modes with a real camera (2026-10-30)
 
@@ -190,3 +192,38 @@ and the imaging worker (ADR 0012), 26 MP color frames, 1 s exposures:
 - The worker is now the largest part of the latency; a superpixel debayer for the
   preview (half resolution, no full-size color image) is the obvious next saving.
 
+## Follow-up: microSD vs a USB drive (2026-11-02)
+
+[`dev/bench/storage_bench.py`](../../dev/bench/storage_bench.py) on the lab Pi 5 (the
+same 32 GB microSD, ext4, as the OS disk) against a SanDisk 3.2 Gen1 USB stick of
+233 GB as it came, FAT32, on a USB 3 port (5 Gb/s, `uas`); nocsd idle. 26 MP frames
+(52.2 MB) written with an fsync each, 20 per drive; reads with a cold page cache; small
+writes are 4 KiB appends with an fsync every ~20 ms, the catalog's and the log's kind.
+Raw results: [results/pi5-storage](../../dev/bench/results/pi5-storage/storage.jsonl).
+
+| | microSD | USB stick |
+|---|---|---|
+| write a frame | **27 MB/s**: 1.9 s (max 2.2 s) | **127 MB/s**: 0.37 s (max 0.5 s) |
+| read a frame, cold | 94 MB/s: 0.55 s | 270 MB/s: 0.19 s |
+| small write + fsync, idle | median 7 ms, max 41 ms | median 6 ms, max 32 ms |
+| small write on the microSD while frames are written to the microSD | **median 825 ms, max 2.2 s** | |
+| small write on the microSD while frames are written to the stick | median 6 ms, max 107 ms | |
+
+- **Frames on the microSD stall the system disk.** While a frame is flushed, every
+  other fsync on the microSD (the SQLite catalog, the log thread, PHD2's and the
+  drivers' own files) waits for it, up to ~2 s; the test wrote frames back to back,
+  so a night sees one such stall per frame, not a constant one. nocsd's event loop
+  does not wait (file operations go to threads), but whatever is behind them does.
+  With frames on the stick the microSD's small writes are as fast as when idle.
+- **1.9 s per frame on the microSD** limits nothing at 30 s subs or longer; short
+  exposures (flats, focus loops saving frames, EAA) would feel it first. The stick
+  writes 4.7× and reads 2.9× faster.
+- **Space:** 233 GB holds ~4800 frames against the ~230 the lab card's 13 GB do (the
+  [soak test](pi5-soak.md)'s limit of a night).
+- FAT32 holds a frame easily (its limit is 4 GB per file); exFAT, ext4 and a USB SSD
+  are not measured. The read figure is what re-solving saved frames and downloads
+  pay; a fresh frame's preview reads it from the page cache.
+
+**Conclusion:** any USB 3 drive is worth recommending for frames, not only an SSD:
+it keeps the system disk free of the frames' flushes, as well as being faster and
+larger. The microSD stays a supported destination (ADR 0013).

@@ -1,5 +1,5 @@
 """Reboot, power off, rename and network the box through nocs-system (ADR 0027,
-ADR 0028), share its frames (ADR 0037); diagnostics."""
+ADR 0028), share its frames (ADR 0039); diagnostics."""
 
 from __future__ import annotations
 
@@ -18,6 +18,7 @@ from nocs.api.schemas import (
     NetworkSetupRequest,
     ShareRequest,
     ShutdownRequest,
+    WifiNetwork,
 )
 from nocs.services.system import OperationUnavailableError, SystemBusyError, SystemService
 from nocs.system.client import HelperUnavailableError
@@ -76,7 +77,7 @@ def system_router(system: Callable[[], SystemService]) -> APIRouter:
         with _system_errors():
             await system().network(
                 "network.access_point",
-                {"country": request.country.upper(), "password": request.password},
+                {"country": request.country, "password": request.password},
             )
             if request.join is not None:
                 args: dict[str, object] = {"ssid": request.join.ssid}
@@ -84,6 +85,14 @@ def system_router(system: Callable[[], SystemService]) -> APIRouter:
                     args["password"] = request.join.password
                 await system().network("network.join", args)
         return Response(status_code=status.HTTP_202_ACCEPTED)
+
+    @router.post("/network/scan")
+    async def network_scan() -> list[WifiNetwork]:  # pyright: ignore[reportUnusedFunction]
+        """Scan for the Wi-Fi networks in range now, strongest first; the access point
+        keeps its clients. Only when the owner asks: a few seconds."""
+        with _system_errors():
+            networks = await system().scan_networks()
+        return [WifiNetwork.model_validate(n) for n in networks]
 
     @router.post("/network/forget", status_code=status.HTTP_204_NO_CONTENT)
     async def network_forget(request: NetworkForgetRequest) -> Response:  # pyright: ignore[reportUnusedFunction]
@@ -106,7 +115,7 @@ def system_router(system: Callable[[], SystemService]) -> APIRouter:
             await system().network("network.mode", {"pin": request.pin})
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
-    # -- SMB share (ADR 0037) ----------------------------------------------------
+    # -- SMB share (ADR 0039) ----------------------------------------------------
 
     @router.put("/share", status_code=status.HTTP_204_NO_CONTENT)
     async def share(request: ShareRequest) -> Response:  # pyright: ignore[reportUnusedFunction]

@@ -139,7 +139,7 @@ class SequenceService:
         if sequence is None:
             raise KeyError(sequence_id)
         if needs_site(sequence) and self._place() is None:
-            raise ValueError("this sequence asks about the sky: set the site in the profile")
+            raise ValueError("this sequence asks about the sky: choose the site")
         self._parts().capture.camera(Role.MAIN_CAMERA)  # refused now, not in the job
         return self._start(sequence_id, sequence, None)
 

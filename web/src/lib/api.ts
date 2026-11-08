@@ -3,6 +3,7 @@
 
 import type {
   AccessPointRequest,
+  ActiveSiteRequest,
   Almanac,
   AuthStatus,
   AutofocusRequest,
@@ -29,6 +30,7 @@ import type {
   FrameTypeName,
   FocuserBacklashRequest,
   FocuserMoveRequest,
+  GpsSiteRequest,
   GuideRequest,
   GuideSteps,
   HorizontalGoto,
@@ -59,6 +61,7 @@ import type {
   ShareRequest,
   ShutdownRequest,
   Site,
+  SiteCreated,
   SkyChart,
   SkyVisibility,
   SolvedFrames,
@@ -71,6 +74,7 @@ import type {
   CalibrationSequenceRequest,
   FlatPlan,
   FlatWindows,
+  WifiNetwork,
 } from "./types";
 
 export class ApiError extends Error {
@@ -192,9 +196,31 @@ export function setHostname(name: string): Promise<void> {
   return request("PUT", "/api/system/hostname", { name } satisfies HostnameRequest);
 }
 
-// The GPS's position becomes the active profile's site, and the mount's (ADR 0029).
-export function useGpsSite(): Promise<Site> {
-  return request("POST", "/api/gps/site");
+// -- Sites (ADR 0038) -------------------------------------------------------------
+
+// A new saved site; returns its id.
+export async function addSite(site: Site): Promise<string> {
+  return (await request<SiteCreated>("POST", "/api/sites", site)).id;
+}
+
+// The active site only while no job holds the mount (409).
+export function putSite(id: string, site: Site): Promise<void> {
+  return request("PUT", `/api/sites/${encodeURIComponent(id)}`, site);
+}
+
+export function deleteSite(id: string): Promise<void> {
+  return request("DELETE", `/api/sites/${encodeURIComponent(id)}`);
+}
+
+// Refused (409) while a job holds the mount; the mount follows.
+export function activateSite(id: string | null): Promise<void> {
+  return request("PUT", "/api/sites/active", { id } satisfies ActiveSiteRequest);
+}
+
+// The saved site the GPS is at becomes the active one, or else its position is
+// saved as a new site (named `name`) and made active; returns the site's id.
+export async function useGpsSite(name = ""): Promise<string> {
+  return (await request<SiteCreated>("POST", "/api/gps/site", { name } satisfies GpsSiteRequest)).id;
 }
 
 // The box leaves its access point to join in a moment (202): the phone must follow it.
@@ -206,6 +232,11 @@ export function joinNetwork(ssid: string, password: string | null): Promise<void
 // maybe a network to join. Accepted at once (202); the access point then restarts.
 export function setUpNetwork(body: NetworkSetupRequest): Promise<void> {
   return request("POST", "/api/system/network/setup", body);
+}
+
+// Scans now, a few seconds, strongest first; the access point keeps its clients.
+export function scanNetworks(): Promise<WifiNetwork[]> {
+  return request("POST", "/api/system/network/scan");
 }
 
 export function forgetNetwork(ssid: string): Promise<void> {
@@ -221,7 +252,7 @@ export function setNetworkMode(pin: NetworkModeRequest["pin"]): Promise<void> {
   return request("PUT", "/api/system/network/mode", { pin } satisfies NetworkModeRequest);
 }
 
-// The read-only SMB share of the frames (ADR 0037): on or off, at any time.
+// The read-only SMB share of the frames (ADR 0039): on or off, at any time.
 export function setShare(on: boolean): Promise<void> {
   return request("PUT", "/api/system/share", { on } satisfies ShareRequest);
 }
@@ -251,6 +282,12 @@ export function deleteProfile(id: string): Promise<void> {
 
 export function listDrivers(): Promise<Driver[]> {
   return request("GET", "/api/indi/drivers");
+}
+
+// The devices a driver defines that can play the role; one that does not run is
+// started for the question and stopped after.
+export function listDriverDevices(driver: string, role: Role): Promise<string[]> {
+  return request("GET", `/api/indi/drivers/${encodeURIComponent(driver)}/devices?role=${role}`);
 }
 
 export function listSerialPorts(): Promise<SerialPortInfo[]> {
@@ -451,7 +488,7 @@ export function sendMountTime(): Promise<void> {
   return request("POST", "/api/mount/time");
 }
 
-// Without a site, the active profile's.
+// Without a site, the active one.
 export function sendMountSite(body: MountSiteRequest = {}): Promise<void> {
   return request("PUT", "/api/mount/site", body);
 }
@@ -555,7 +592,7 @@ export function getTargetSources(): Promise<CatalogSource[]> {
 
 // -- Tonight's sky and target (stages 3.5, 3.6) ------------------------------------------
 
-// The night the server's clock is in, at the active profile's site.
+// The night the server's clock is in, at the active site.
 export function getTonight(): Promise<Almanac> {
   return request("GET", "/api/sky/tonight");
 }

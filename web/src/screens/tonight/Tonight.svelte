@@ -20,7 +20,7 @@
   import { href, router, type Route } from "../../lib/router.svelte";
   import { nearest, phase } from "../../lib/sky/night";
   import { separation } from "../../lib/sky/projection";
-  import { tonight } from "../../lib/tonight.svelte";
+  import { siteKey, tonight } from "../../lib/tonight.svelte";
   import { formatAngle } from "../polar/angle";
   import type { TargetVisibility } from "../../lib/types";
 
@@ -28,19 +28,20 @@
   const locale = $derived(i18n.locale);
   const equipment = $derived(live.app.equipment ?? null);
   const profile = $derived(equipment?.active ?? null);
+  const site = $derived(siteKey(live.app.sites));
   const weather = $derived(live.app.weather ?? null);
   const almanac = $derived(tonight.almanac);
   const planned = $derived(live.app.plan?.target ?? null);
 
   $effect(() => {
-    void tonight.load(profile);
+    void tonight.load(site);
   });
 
   let now = $state(Date.now());
   $effect(() => {
     const timer = setInterval(() => {
       now = Date.now();
-      void tonight.load(profile);
+      void tonight.load(site);
     }, 60_000);
     return () => clearInterval(timer);
   });
@@ -212,13 +213,13 @@
         </p>
       {/if}
     {:else if tonight.missingSite}
-      <p class="muted">{profile ? t.tonight.noSite : t.tonight.noProfile}</p>
+      <p class="muted">{t.tonight.noSite}</p>
       {#if auth.owner}
         <div><Button onclick={() => router.go({ screen: "rig" })}>{t.tonight.openRig}</Button></div>
       {/if}
     {:else if tonight.error}
       <p class="muted">{errorText(tonight.error, t)}</p>
-      <div><Button onclick={() => tonight.load(profile, true)}>{t.tonight.retry}</Button></div>
+      <div><Button onclick={() => tonight.load(site, true)}>{t.tonight.retry}</Button></div>
     {:else}
       <p class="muted" role="status">{t.tonight.loading}</p>
     {/if}

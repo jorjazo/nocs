@@ -17,7 +17,7 @@ Navigation follows the night, not the device tree.
 | **Live** | Manual imaging: preview, exposure settings, loop, save | Live view |
 | **Plan** | Choose a target and build what to do with it | Target (search + framing) · Sequence |
 | **Session** | Watch and control what the server is running | Session monitor |
-| **Rig** | Equipment profile, optical trains, devices | Rig · device details |
+| **Rig** | Equipment profile, optical trains, the site, devices | Rig · device details |
 
 - Phone: bottom tab bar. Tablet / desktop: left navigation rail.
 - Guided flows (first run, polar alignment, autofocus) open full screen with a
@@ -34,7 +34,7 @@ Navigation follows the night, not the device tree.
 |---|---|
 | First run | Create owner passphrase, pair this device, take time and location from the phone. Shows the hotspot name. |
 | Tonight | Astronomical night window, environment from the power box sensor, setup checklist. |
-| Rig | Imaging and guiding trains with derived FOV and pixel scale; device list with status. |
+| Rig | Imaging and guiding trains with derived FOV and pixel scale; the saved sites and the active one; device list with status. |
 | Polar alignment | Target view with the axis error, per-axis readouts with plain-language direction ("Raise", "Turn west"). |
 | Autofocus | Live V-curve with fit, best position / HFR / stars / temperature, cancel restores the previous position. |
 | Framing | Target search, sky view with camera frame and rotation, altitude tonight, "Go and center". |
@@ -204,8 +204,16 @@ Focuser, filter wheel and profile editor (stage 2.8):
 - The profile editor (Rig → Edit profile / New profile, `#/rig/profile/<id>`)
   edits one role per row: driver from the rig's INDI catalog (the role's own
   catalog groups first), device name with the devices that driver runs now as
-  suggestions, serial port from `/dev/serial/by-id/`; then both trains' optics
-  and the site. Changes to a connected profile apply when it is next connected.
+  suggestions, serial port from `/dev/serial/by-id/`; then both trains' optics.
+  Changes to a connected profile apply when it is next connected.
+- The site belongs to the box, not to a profile (ADR 0038). Rig lists the saved
+  sites under the trains, each with its position, the active one marked and the
+  others with "Use"; the owner opens one to edit it (`#/rig/site/<id>`: name,
+  latitude, longitude and elevation, filled from a USB GPS's fix with one button;
+  delete) or adds one (`#/rig/site/new`), made active as it is saved unless the
+  owner turns that off. A GPS with a 3D fix offers, under the list, the saved site
+  within 500 m when it is not the active one, or else to save its position as a
+  new site. The server refuses another active site while a job holds the mount.
 
 Guiding (stage 4.6):
 
@@ -328,7 +336,7 @@ Tonight and Plan (stage 3.6):
   black, a line at now, the Moon's time up under it) with sunset, the dark
   window and sunrise under it; the dark window's length (or how dark it gets when
   it never gets fully dark) and the Moon's phase, light and rise and set. Without
-  a site in the active profile it says so and leads to Rig.
+  an active site it says so and leads to Rig.
 - Tonight's target, when one is chosen, shows its altitude now and how long it
   is above 30° in the dark, and opens its page. The get-ready checklist lists
   Connect, Focus (with a focuser), Frame the target and Guide (with a guide
@@ -469,7 +477,7 @@ Appliance (phase 6):
 - Rig gains "This computer" (health, name, restart, shut down, INDI and PHD2
   restarts, diagnostics) and "Network" (where the box is, known networks, joining
   one, the access point, the mode); USB drives with Eject sit under Storage.
-- Rig's "File sharing" (ADR 0037), below Network, where nocs-system runs the share: a
+- Rig's "File sharing" (ADR 0039), below Network, where nocs-system runs the share: a
   switch ("Share frames with computers", saying it is read-only and open to anyone on
   the network); while on, a chip with the computers connected, how to open it from
   Windows (`\\<name>.local\Internal`), a Mac and Linux (`smb://<name>.local`) as

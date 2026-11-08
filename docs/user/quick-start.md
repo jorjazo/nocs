@@ -34,7 +34,7 @@ minutes. Without a known network, the Pi then starts its own Wi-Fi:
 
 | Network | `NOCS-xxxx` (the last four characters of the Pi's serial number) |
 |---|---|
-| Password | `nocs-setup` (you change it in a moment) |
+| Password | `nocsnocs` (you change it in a moment) |
 | Address | <http://nocs.local>, or <http://10.42.0.1> |
 
 Join it from your phone. The phone will warn that this network has no internet:

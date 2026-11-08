@@ -26,6 +26,7 @@
   import TargetDetail from "./screens/plan/TargetDetail.svelte";
   import ProfileEditor from "./screens/ProfileEditor.svelte";
   import Rig from "./screens/Rig.svelte";
+  import SiteEditor from "./screens/SiteEditor.svelte";
   import Report from "./screens/session/Report.svelte";
   import Session from "./screens/session/Session.svelte";
   import Tonight from "./screens/tonight/Tonight.svelte";
@@ -149,6 +150,8 @@
       {#key router.route.id}<TargetDetail id={router.route.id} />{/key}
     {:else if router.route.screen === "profile"}
       {#key router.route.id}<ProfileEditor id={router.route.id} />{/key}
+    {:else if router.route.screen === "site"}
+      {#key router.route.id}<SiteEditor id={router.route.id} />{/key}
     {/if}
   </main>
 {/if}
