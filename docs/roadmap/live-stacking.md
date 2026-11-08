@@ -84,6 +84,10 @@ may solve the reference once for the saved FITS's WCS (S6).
   optical train; the triangle invariants match it but the similarity fit does
   not, so it fails registration with a clear reason ("mirrored: did the train
   change?"). Not handled further.
+- Each channel of a superpixel image is warped with its own place in the Bayer
+  cell (red and blue in opposite corners, green at the centre): with one warp for
+  all three, a frame turned by a meridian flip put red and blue half a pixel off
+  the green, in opposite directions (colour fringes; review of PR #3).
 - Frames are warped to the reference's geometry (the first accepted frame);
   pixels a dither or flip leaves uncovered are NaN and simply count fewer frames.
   The stack's edges are cropped to where at least half the frames cover, at render.
@@ -109,9 +113,9 @@ resolution up to 16 MP, 2×2 binned above (a 26 MP mono sensor also stacks at
 |---|---|---|
 | Running mean (sum + count) | 1 accumulator | No |
 | Kappa-sigma over a window of the last N frames | N frames (N = 10: ~0.8 GB at half resolution) | Within the window; a full re-stack per frame |
-| **Online kappa-sigma (Welford): per pixel mean, M2, count; a new value further than k·σ from the mean is not added** | 3 accumulators (~0.2 GB) | Yes, from the ~5th frame on |
+| **Online kappa-sigma (Welford): per pixel mean, M2, count; a new value further than k·σ from the mean is not added** | 3 accumulators (~0.2 GB) | Yes, from the 8th frame on |
 
-**Recommendation: online kappa-sigma**, k = 3, rejection from the 5th frame
+**Recommendation: online kappa-sigma**, k = 3, rejection from the 8th frame
 (before, a plain mean), per channel, processed in strips of ~32 rows so it stays
 in cache: ~0.1 s per 6.5 MP RGB frame on this x86 against ~0.5 s for whole-array
 numpy (measured, see the budget below). Plus a **frame gate**: a frame is left
@@ -119,7 +123,17 @@ out (and counted as rejected, with its reason) when it does not register, has
 fewer than half the stack's median star count, or an HFR above 1.5× the stack's
 median (clouds, wind, a lost guide star).
 
-A satellite in one of the first 4 frames survives (no σ yet); acceptable for
+Every frame is first **matched to the reference**: its sky level per channel
+(median) is replaced by the reference's, and its brightness scaled by the median
+flux ratio of the stars registration paired (between ×1/3 and ×3: haze, altitude).
+Without it a sky that brightens by more than ~3σ (the Moon rising, light pollution
+as the target sinks) was rejected at nearly every pixel and the stack stopped
+growing while it reported frames accepted (review of PR #3). The rejection judges
+a value against the pixel's sample deviation (M2 / (n − 1)) but never less than
+the frame's own sky noise (MAD): spreads from a few values, which rejected values
+never widen, rejected ~5 % of good data when rejection started at the 5th frame.
+
+A satellite in one of the first 7 frames survives (no σ yet); acceptable for
 EAA, and it fades as 1/N. Exposures stay equal within a stack (D8), so no
 weighting by exposure; weighting by noise is left for later.
 
