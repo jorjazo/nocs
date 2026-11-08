@@ -3,7 +3,7 @@
 How NOCS is packaged for PCs and for the Raspberry Pi image
 ([ADR 0025](../docs/adr/0025-packaging-and-updates.md),
 [ADR 0026](../docs/adr/0026-raspberry-pi-image.md)). Plan and status:
-[phase 6](../docs/v0.1/phase-6.md).
+[phase 6](../docs/roadmap/v0.1/phase-6.md).
 
 ## The `nocs` package
 

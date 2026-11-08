@@ -9,8 +9,8 @@ note why: that is a finding, and the release waits for its fix.
 
 - [ ] Phases 3–5 have passed their own field tests, and `main` has at least the
       sequence builder and the session monitor (5.13, 5.14). CI is green.
-- [ ] The apt repository works ([ADR 0035](../adr/0035-apt-repository-and-release-publishing.md)):
-      `testing` installs on a clean Ubuntu 26.04 PC with the [PC install](../user/pc-install.md)
+- [ ] The apt repository works ([ADR 0035](../../adr/0035-apt-repository-and-release-publishing.md)):
+      `testing` installs on a clean Ubuntu 26.04 PC with the [PC install](../../user/pc-install.md)
       steps, and a test Pi updates from one `testing` build to the next and back.
 - [ ] The licenses of everything the image redistributes are listed in the user
       documentation, with ASTAP's acknowledgements.
@@ -27,12 +27,12 @@ note why: that is a finding, and the release waits for its fix.
         USB GPS;
   - [ ] a hung driver (`kill -STOP`) and a hung indiserver are noticed and
         restarted; the power box cycles a camera under a sequence.
-- [ ] The screens and names in the [user guide](../user/README.md) match the app.
+- [ ] The screens and names in the [user guide](../../user/README.md) match the app.
 - [ ] `server/pyproject.toml` says the candidate's version, `0.1.0rc2` after `rc1`'s
       [findings](phase-6.md#612-findings-from-v010rc1); `packaging/release.sh 0.1.0rc2`. The tag's
       packages reach `stable` and its image `images/` on the repository; the
       GitHub release has the notes, the packages, the image's checksum and link.
-- [ ] Someone other than the maintainer follows the [quick start](../user/quick-start.md)
+- [ ] Someone other than the maintainer follows the [quick start](../../user/quick-start.md)
       from the release candidate's image.
 
 ## Field test: a night from a freshly flashed Pi

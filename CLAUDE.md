@@ -1,7 +1,7 @@
 # NOCS — notes for Claude
 
 NOCS is a web-first control system for astrophotography rigs on top of INDI.
-Read [docs/design.md](docs/design.md), [docs/roadmap.md](docs/roadmap.md) and the
+Read [docs/design.md](docs/design.md), [docs/roadmap/](docs/roadmap/) and the
 [ADRs](docs/adr/) before planning work; [docs/ux.md](docs/ux.md) for UI work;
 [docs/spikes/](docs/spikes/) for measured facts (PHD2 headless, Pi 5 performance, a
 whole night on the Pi).
@@ -52,7 +52,8 @@ dev/      compose.yaml (INDI simulators + GSC catalog + driver FIFO in dev/.run,
           tools/ (indi_record, phd2_record, fake_ppba; soak/: a long simulated night),
           bench/, spikes/, pi/ (lab Pi flashing and setup)
 packaging/ deb/ (the nocs .deb: build.sh, test.sh), image/ (the Pi 5 image, arm64 only; ADR 0025, 0026)
-docs/     design, roadmap, ux, adr/, spikes/
+docs/     design, ux, roadmap/ (v0.1.md with its phase plans in v0.1/; v1.0.md),
+          adr/, spikes/, user/
 ```
 
 ## Commands
