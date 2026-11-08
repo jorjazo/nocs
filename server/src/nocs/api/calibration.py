@@ -39,7 +39,7 @@ def calibration_router(
 
     @router.get("/flats/window")
     async def flat_windows() -> FlatWindows:  # pyright: ignore[reportUnusedFunction]
-        """When the twilight sky makes flats, at the profile's site."""
+        """When the twilight sky makes flats, at the active site."""
         try:
             sun, found = await anyio.to_thread.run_sync(flats().windows)
         except FlatsError as e:

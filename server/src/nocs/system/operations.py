@@ -42,7 +42,7 @@ class Context:
     updates: Updates | None = None
     """The updates' actor, where the update group is on (ADR 0025)."""
     share: Share | None = None
-    """The SMB share, where the share group is on (ADR 0037)."""
+    """The SMB share, where the share group is on (ADR 0039)."""
 
 
 type Operation = Callable[[Context, Message], Awaitable[Message]]
@@ -285,6 +285,10 @@ async def network_forget(context: Context, args: Message) -> Message:
     return await _network(context).forget(args)
 
 
+async def network_scan(context: Context, args: Message) -> Message:
+    return await _network(context).scan(args)
+
+
 async def network_access_point(context: Context, args: Message) -> Message:
     return await _network(context).access_point(args)
 
@@ -318,7 +322,7 @@ async def update_rollback(context: Context, args: Message) -> Message:
     return await _updates(context).rollback(args)
 
 
-# -- share (ADR 0037) ----------------------------------------------------------
+# -- share (ADR 0039) ----------------------------------------------------------
 
 
 def _share(context: Context) -> Share:
@@ -350,6 +354,7 @@ OPERATIONS: dict[str, Operation] = {
     "network.status": network_status,
     "network.join": network_join,
     "network.forget": network_forget,
+    "network.scan": network_scan,
     "network.access_point": network_access_point,
     "network.mode": network_mode,
     "update.status": update_status,

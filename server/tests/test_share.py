@@ -1,4 +1,4 @@
-"""nocs-system's SMB share (ADR 0037), with fake tools on the PATH."""
+"""nocs-system's SMB share (ADR 0039), with fake tools on the PATH."""
 
 import json
 import os

@@ -457,13 +457,10 @@ class Night:
                 "aperture": 150,
                 "autofocus": {"step": 4000, "exposure": 2},
             },
-            "site": {
-                "name": "Soak",
-                "latitude": LATITUDE,
-                "longitude": longitude,
-                "elevation": 700,
-            },
         }
+        site = {"name": "Soak", "latitude": LATITUDE, "longitude": longitude, "elevation": 700}
+        created = await self.call("POST", "/api/sites", ok=(201,), json=site)
+        await self.call("PUT", "/api/sites/active", ok=(204,), json={"id": created["id"]})
         await self.call("PUT", "/api/profiles/soak", ok=(204,), json=profile)
         await self.call("POST", "/api/equipment/connect", ok=(202,), json={"profile": "soak"})
         current = await self.wait_for(

@@ -1,4 +1,4 @@
-# 0037. An SMB share of the frames for desktop computers
+# 0039. An SMB share of the frames for desktop computers
 
 Date: 2026-11-01 · Status: Proposed
 
@@ -8,7 +8,7 @@ Frames leave the box today one at a time or as a night's zip, downloaded through
 the web app (ADR 0013), or on a USB drive carried to a PC. At home, a desktop PC
 should open them as a network folder: stacking programs read them in place, file
 managers copy them at the network's speed. The design leaves it for later (§8); the
-plan is [beyond/smb.md](../beyond/smb.md). Facts that shape the decision:
+plan is [roadmap/v1.0/smb.md](../roadmap/v1.0/smb.md). Facts that shape the decision:
 
 - Windows 11 (24H2) refuses guest logons to SMB shares and requires signing, which a
   guest session cannot do, until the PC's administrator changes both; Windows 10 Home

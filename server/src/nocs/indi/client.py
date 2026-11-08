@@ -35,6 +35,9 @@ log = logging.getLogger(__name__)
 
 DEFAULT_PORT = 7624
 _READ_SIZE = 256 * 1024
+_THREAD_BYTES = 64 * 1024
+"""Elements this large (BLOBs: the guide camera's frames, 3.5 MB of base64 each) are
+parsed and decoded in a thread, off the event loop (ADR 0012)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -220,7 +223,11 @@ class IndiClient:
         reason = "connection closed by server"
         try:
             while data := await self._reader.read(_READ_SIZE):
-                for message in parser.feed(data):
+                if parser.unfinished + len(data) >= _THREAD_BYTES:
+                    messages = await asyncio.to_thread(parser.feed, data)
+                else:
+                    messages = parser.feed(data)
+                for message in messages:
                     self._handle(message)
         except (ConnectionError, OSError) as e:
             reason = f"connection error: {e}"

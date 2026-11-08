@@ -87,6 +87,7 @@ def api(tmp_path_factory: pytest.TempPathFactory) -> Iterator[TestClient]:
             client.post("/api/cameras/main_camera/settings", json={"binning": 1})
 
 
+@pytest.mark.slow
 def test_darks_and_bias_for_a_night(api: TestClient) -> None:
     response = api.post(
         "/api/cameras/main_camera/expose", json={"exposure": 0.5, "frame_type": "light", "count": 2}
@@ -129,6 +130,7 @@ def test_darks_and_bias_for_a_night(api: TestClient) -> None:
     assert types == {"light", "dark", "bias"}
 
 
+@pytest.mark.slow
 def test_panel_flats(api: TestClient) -> None:
     """The CCD simulator's flats are uniform and grow with the exposure, like a panel."""
     wheel = state(api)["filter_wheel"]

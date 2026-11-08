@@ -125,8 +125,8 @@
         return t.mount.siteSame;
       case "different":
         return t.mount.siteDifferent;
-      case "no_profile_site":
-        return t.mount.noProfileSite;
+      case "no_site":
+        return t.mount.noSite;
       default:
         return t.mount.siteUnknown;
     }
@@ -303,7 +303,7 @@
       </dl>
       {#if owner}
         <div class="buttons">
-          {#if mount.site_check !== "no_profile_site"}
+          {#if mount.site_check !== "no_site"}
             <Button busy={busy === "site"} disabled={!!job} onclick={() => void run("site", () => sendMountSite())}>{t.mount.sendSite}</Button>
           {/if}
           <Button busy={busy === "time"} onclick={() => void run("time", sendMountTime)}>{t.mount.sendTime}</Button>

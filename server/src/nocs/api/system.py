@@ -17,6 +17,7 @@ from nocs.api.schemas import (
     NetworkModeRequest,
     NetworkSetupRequest,
     ShutdownRequest,
+    WifiNetwork,
 )
 from nocs.services.system import OperationUnavailableError, SystemBusyError, SystemService
 from nocs.system.client import HelperUnavailableError
@@ -75,7 +76,7 @@ def system_router(system: Callable[[], SystemService]) -> APIRouter:
         with _system_errors():
             await system().network(
                 "network.access_point",
-                {"country": request.country.upper(), "password": request.password},
+                {"country": request.country, "password": request.password},
             )
             if request.join is not None:
                 args: dict[str, object] = {"ssid": request.join.ssid}
@@ -83,6 +84,14 @@ def system_router(system: Callable[[], SystemService]) -> APIRouter:
                     args["password"] = request.join.password
                 await system().network("network.join", args)
         return Response(status_code=status.HTTP_202_ACCEPTED)
+
+    @router.post("/network/scan")
+    async def network_scan() -> list[WifiNetwork]:  # pyright: ignore[reportUnusedFunction]
+        """Scan for the Wi-Fi networks in range now, strongest first; the access point
+        keeps its clients. Only when the owner asks: a few seconds."""
+        with _system_errors():
+            networks = await system().scan_networks()
+        return [WifiNetwork.model_validate(n) for n in networks]
 
     @router.post("/network/forget", status_code=status.HTTP_204_NO_CONTENT)
     async def network_forget(request: NetworkForgetRequest) -> Response:  # pyright: ignore[reportUnusedFunction]

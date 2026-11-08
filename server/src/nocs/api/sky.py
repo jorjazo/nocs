@@ -1,4 +1,4 @@
-"""Tonight's sky at the active profile's site: the almanac and targets' visibility."""
+"""Tonight's sky at the active site: the almanac and targets' visibility."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ from nocs.api.schemas import (
 )
 from nocs.clock import Clock
 from nocs.devices import Location
-from nocs.equipment import Site
+from nocs.sites import Site
 from nocs.sky import (
     Floats,
     Interval,
@@ -46,9 +46,7 @@ def sky_router(
     async def night_at(day: date | None) -> tuple[Site, Night]:
         where = site()
         if where is None:
-            raise HTTPException(
-                status.HTTP_409_CONFLICT, "the active profile has no site: set it in the profile"
-            )
+            raise HTTPException(status.HTTP_409_CONFLICT, "no site is active: choose the site")
         location = Location(where.latitude, where.longitude, where.elevation)
         day = day or tonight(location, clock().now())
         return where, await anyio.to_thread.run_sync(night, location, day)

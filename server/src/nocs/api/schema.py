@@ -12,6 +12,7 @@ from pydantic.json_schema import models_json_schema
 
 from nocs.api.schemas import (
     AccessPointRequest,
+    ActiveSiteRequest,
     Almanac,
     AppState,
     AuthStatus,
@@ -43,6 +44,7 @@ from nocs.api.schemas import (
     FocuserBacklashRequest,
     FocuserMoveRequest,
     FrameRecord,
+    GpsSiteRequest,
     GuideRequest,
     GuideSteps,
     GuidingExposureRequest,
@@ -77,6 +79,7 @@ from nocs.api.schemas import (
     SessionSummary,
     SetPropertyRequest,
     ShutdownRequest,
+    SiteCreated,
     SkyChart,
     SkyVisibility,
     SnapshotMessage,
@@ -87,11 +90,13 @@ from nocs.api.schemas import (
     TemperatureRecord,
     TemplateRequest,
     TrackingRequest,
+    WifiNetwork,
 )
 from nocs.calibration.flats import FlatPlan
 from nocs.equipment import Profile
 from nocs.sequence import Sequence
 from nocs.sequence.model import Template
+from nocs.sites import Site
 
 type Mode = Literal["validation", "serialization"]
 
@@ -120,6 +125,10 @@ MODELS: list[tuple[type[BaseModel], Mode]] = [
     (OutputRequest, "validation"),
     (AutoDewRequest, "validation"),
     (MountSiteRequest, "validation"),
+    (Site, "validation"),
+    (ActiveSiteRequest, "validation"),
+    (SiteCreated, "serialization"),
+    (GpsSiteRequest, "validation"),
     (ClockRequest, "validation"),
     (FocuserMoveRequest, "validation"),
     (FilterSelectRequest, "validation"),
@@ -168,6 +177,7 @@ MODELS: list[tuple[type[BaseModel], Mode]] = [
     (JobStarted, "serialization"),
     (Driver, "serialization"),
     (SerialPortInfo, "serialization"),
+    (WifiNetwork, "serialization"),
     (CatalogObject, "serialization"),
     (CatalogMatch, "serialization"),
     (CatalogSource, "serialization"),
