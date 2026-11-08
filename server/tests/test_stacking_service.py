@@ -183,6 +183,7 @@ class Rig:
 @pytest.fixture
 async def rig(tmp_path: Path):
     rig = Rig(tmp_path)
+    await rig.service.start()
     await rig.service.set_on(True)
     task = asyncio.create_task(rig.service.run())
     yield rig
@@ -208,11 +209,11 @@ async def test_the_switch_persists(tmp_path: Path) -> None:
     rig = Rig(tmp_path)
     await rig.service.set_on(True)
     await rig.service.set_look(StackLook(background=0.3))
-    again = Rig.__new__(Rig)
-    again.store = StateStore()
     service = LiveStackService(
-        again.store, rig.worker, lambda: rig.library, tmp_path / "config", tmp_path / "data"
+        StateStore(), rig.worker, lambda: rig.library, tmp_path / "config", tmp_path / "data"
     )
+    assert not service.on  # until started: the settings are read off the event loop
+    await service.start()
     assert service.on
     assert service.settings.look.background == 0.3
 
@@ -384,3 +385,100 @@ async def test_without_calibration_frames_the_stack_is_cosmetic(rig: Rig) -> Non
     assert state.current is not None
     assert state.current.calibration.cosmetic
     assert state.current.calibration.notes == ["no darks or bias", "no flats"]
+
+
+async def test_new_stack_while_its_masters_are_built(tmp_path: Path) -> None:
+    darks = [row("dark") for _ in range(2)]
+    rig = Rig(tmp_path, darks)
+    await rig.service.set_on(True)
+    building = asyncio.Event()
+    release = asyncio.Event()
+    build = rig.worker.build_master
+
+    async def slow(*args: Any, **kwargs: Any) -> Master:
+        building.set()
+        await release.wait()
+        return await build(*args, **kwargs)
+
+    rig.worker.build_master = slow  # type: ignore[method-assign]
+    task = asyncio.create_task(rig.service.run())
+    try:
+        await rig.service.offer(rig.frame())
+        await building.wait()
+        await rig.service.reset()  # while the dark master is built
+        release.set()
+        await rig.service.idle()
+        state = rig.state()
+        # The frame went with its stack, quietly: no failure, nothing in the worker.
+        assert state.status != "failed"
+        assert state.error is None
+        assert rig.worker.calls == []
+        await offer(rig, rig.frame())
+        assert rig.worker.calls[-1].new
+    finally:
+        task.cancel()
+
+
+async def test_a_stack_ended_while_its_first_frame_is_added_is_dropped(rig: Rig) -> None:
+    rig.worker.gate = asyncio.Event()
+    await rig.service.offer(rig.frame())
+    await asyncio.sleep(0.01)  # the frame is in the worker
+    await rig.service.reset()
+    rig.worker.gate.set()
+    await rig.service.idle()
+    # The worker would otherwise hold a stack nobody knows of (~200 MB at 26 MP).
+    assert rig.worker.frames == {}
+    assert rig.worker.dropped == [rig.worker.calls[0].stack_id]
+
+
+async def test_a_frame_that_cannot_be_deleted_does_not_stop_stacking(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def refuse(self: Path, missing_ok: bool = False) -> None:
+        raise PermissionError("read-only")
+
+    monkeypatch.setattr(Path, "unlink", refuse)
+    await offer(rig, rig.frame(owned=True))
+    monkeypatch.undo()
+    await offer(rig, rig.frame(owned=True))
+    assert len(rig.worker.calls) == 2
+
+
+async def test_links_left_behind_are_deleted_at_start(tmp_path: Path) -> None:
+    links = tmp_path / "data" / "stacking"
+    links.mkdir(parents=True)
+    (links / "old.fits").write_bytes(b"x")
+    rig = Rig(tmp_path)
+    await rig.service.start()
+    assert list(links.iterdir()) == []
+
+
+async def test_switching_on_again_clears_a_failure(rig: Rig) -> None:
+    rig.worker.lose = True
+    rig.worker.refuse = []
+
+    async def broken(*args: Any, **kwargs: Any) -> Added:
+        raise RuntimeError("the worker broke")
+
+    rig.worker.stack_add = broken  # type: ignore[method-assign]
+    await offer(rig, rig.frame())
+    assert rig.state().status == "failed"
+    await rig.service.set_on(False)
+    await rig.service.set_on(True)
+    state = rig.state()
+    assert (state.status, state.error) == ("idle", None)
+
+
+async def test_bias_only_calibration_says_so(tmp_path: Path) -> None:
+    bias = [row("bias", exposure=0.001) for _ in range(2)]
+    rig = Rig(tmp_path, bias)
+    await rig.service.set_on(True)
+    task = asyncio.create_task(rig.service.run())
+    try:
+        await offer(rig, rig.frame())
+    finally:
+        task.cancel()
+    calibration = rig.worker.calls[0].calibration
+    assert calibration is not None
+    assert calibration.bias
+    assert calibration.cosmetic
