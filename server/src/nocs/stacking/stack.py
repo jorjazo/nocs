@@ -433,7 +433,11 @@ def warp(
     off the green, the opposite way each."""
     height, width, channels = image.shape
     matrix = transform.matrix()
-    if offsets is None or not any(dx or dy for dx, dy in offsets):
+    linear = matrix[:, :2]
+    # The correction is (A - I)·d: nothing for a dither or drift, half a pixel for a
+    # flip. Below a hundredth of a pixel one warp of all channels does (5x faster).
+    shifts = [linear @ np.array(d) - np.array(d) for d in offsets or []]
+    if not shifts or max(float(np.abs(v).max()) for v in shifts) < 0.01:
         moved = cv2.warpAffine(
             image,
             matrix,
@@ -443,29 +447,34 @@ def warp(
             borderValue=(math.nan, math.nan, math.nan, math.nan),
         )
         return np.asarray(moved, dtype=np.float32).reshape(height, width, channels)
-    out = np.empty_like(image)
-    linear = matrix[:, :2]
-    for c, (dx, dy) in enumerate(offsets):
+    planes = cv2.split(image)
+    warped: list[Image] = []
+    for c, shift in enumerate(shifts):
         # A channel sample at q is the sky at q + d: it goes to T(q + d) - d.
-        d = np.array([dx, dy])
         shifted = matrix.copy()
-        shifted[:, 2] += linear @ d - d
-        out[..., c] = cv2.warpAffine(
-            np.ascontiguousarray(image[..., c]),
-            shifted,
-            (width, height),
-            flags=cv2.INTER_LINEAR,
-            borderMode=cv2.BORDER_CONSTANT,
-            borderValue=math.nan,
+        shifted[:, 2] += shift
+        warped.append(
+            np.asarray(
+                cv2.warpAffine(
+                    planes[c],
+                    shifted,
+                    (width, height),
+                    flags=cv2.INTER_LINEAR,
+                    borderMode=cv2.BORDER_CONSTANT,
+                    borderValue=math.nan,
+                ),
+                dtype=np.float32,
+            )
         )
-    return out
+    return np.asarray(cv2.merge(warped), dtype=np.float32).reshape(height, width, channels)
 
 
 def sky(image: Image) -> tuple[NDArray[np.float32], NDArray[np.float32]]:
-    """The sky level (median) and noise (MAD as sigma) of each channel, from a sample."""
-    sample = image[::4, ::4].reshape(-1, image.shape[2])
-    level = np.nanmedian(sample, axis=0)
-    noise = np.nanmedian(np.abs(sample - level), axis=0) * 1.4826
+    """The sky level (median) and noise (MAD as sigma) of each channel, from a sample
+    (a frame before warping has no NaN: plain medians, several times faster)."""
+    sample = image[::8, ::8].reshape(-1, image.shape[2])
+    level = np.median(sample, axis=0)
+    noise = np.median(np.abs(sample - level), axis=0) * 1.4826
     return level.astype(np.float32), noise.astype(np.float32)
 
 
@@ -491,8 +500,9 @@ def _render(stack: Stack, path: str, look: Look, width: int) -> Rendered:
     inside = covered[box]
     if not inside.all():
         # The corners a turned frame leaves uncovered show as sky, not black, and do not
-        # pull the stretch's statistics down.
-        level = np.median(crop[inside], axis=0).astype(np.float32)
+        # pull the stretch's statistics down (the level from a sample: a full median of a
+        # 26 MP stack took half a second).
+        level = np.median(crop[::4, ::4][inside[::4, ::4]], axis=0).astype(np.float32)
         crop = np.where(inside[..., np.newaxis], crop, level)
     height, across = crop.shape[:2]
     if across > width:
