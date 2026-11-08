@@ -69,7 +69,10 @@ that `main` says it, that the tag and its GitHub release are new and newer than 
 release, and that CI passed on that commit, then tags it and pushes the tag: the
 Packages and Image workflows publish it and make the GitHub release (an `rc` one as
 a prerelease). Never create the release on GitHub by hand: the tag is checked here, not
-there, and the workflows make the release.
+there, and the workflows make the release. Its notes are GitHub's generated ones
+since the last release that was not a candidate
+([`repo/notes-start-tag.sh`](repo/notes-start-tag.sh)): `v0.2.0` lists everything
+since `v0.1.0`, not only what changed after `v0.2.0rc1`.
 
 ## The `nocs-appliance` package
 
