@@ -56,13 +56,6 @@
   const role = $derived(available.includes(capture.role) ? capture.role : (available[0] ?? "main_camera"));
   const camera = $derived(cameras[role] ?? null);
   const preview = $derived(camera?.preview ?? null);
-  // The live stack replaces the frame in the viewer while it has one, unless this
-  // device chose to watch the frames (ADR 0039).
-  const stack = $derived(live.app.stack ?? null);
-  const stacked = $derived(
-    role === "main_camera" && stack?.on && stackView.view === "stack" ? (stack.current ?? null) : null,
-  );
-  const shown = $derived(stacked?.preview ?? preview);
   const owner = $derived(auth.owner);
   // While PHD2 has the guide camera, it is PHD2's: its frames show here (ADR 0023).
   const inUse = $derived(camera?.used_by === "phd2");
@@ -212,6 +205,17 @@
   // Framing: the pad sits with the actions and the preview stays in sight above,
   // with its centre marked, so a star can be watched while it moves.
   const framing = $derived(showPad && mount !== null);
+  // The live stack replaces the frame in the viewer while it has one, unless this
+  // device chose to watch the frames (ADR 0040).
+  const stack = $derived(live.app.stack ?? null);
+  // While framing with the pad, the newest frame shows whatever the choice: the stack
+  // cannot show where the mount points now.
+  const stacked = $derived(
+    role === "main_camera" && stack?.on && stackView.view === "stack" && !framing
+      ? (stack.current ?? null)
+      : null,
+  );
+  const shown = $derived(stacked?.preview ?? preview);
   const padReason = $derived.by((): string | null => {
     if (!owner) return t.mount.locked;
     if (mount?.parked) return t.mount.padParked;
@@ -271,7 +275,7 @@
         url={shown?.url ?? null}
         width={shown?.width ?? 0}
         height={shown?.height ?? 0}
-        label={t.live.previewLabel(camera.device)}
+        label={stacked?.preview ? t.stack.previewLabel(camera.device) : t.live.previewLabel(camera.device)}
         reticle={framing}>
         {#snippet empty()}
           <div class="nopreview">

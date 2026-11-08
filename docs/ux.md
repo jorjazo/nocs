@@ -457,13 +457,14 @@ Calibration frames (ADR 0036):
 - *Download with calibration* is the night's zip with the matching frames of other
   nights added.
 
-Live stacking (ADR 0039, after v1.0):
+Live stacking (ADR 0040, after v1.0):
 
 - Live view's main camera gets a *Stack frames as they arrive* switch under the
   histogram; it is the server's, so every client shows the same, and it covers
   sequences too. Off, it explains what it does in one line.
 - On, a *Stack · Frame* choice (kept per device) says what the viewer shows; the
-  stack replaces the frame and its histogram, and the bottom pills say *Stack*, its
+  stack replaces the frame and its histogram (but not while framing with the mount's
+  pad: the newest frame shows where the mount points), and the bottom pills say *Stack*, its
   frames and its total exposure. The Session monitor offers the same choice above
   its latest frame.
 - Below: frames, total time, frames left out and frames that arrived while the
@@ -476,8 +477,10 @@ Live stacking (ADR 0039, after v1.0):
   the switch off, another setup) with two frames or more, and *Save* keeps it as it is
   now; the card then says where. The night's frames list a saved stack with a link
   to its picture beside the FITS. The look is a sheet of preset steps, not sliders (sky,
-  black point, colour, and keeping the camera's colour balance), applied as each
-  is tapped: the server re-renders the stack at once for every client.
+  black point, color, and keeping the camera's color balance), applied as each
+  is tapped: the server re-renders the stack at once for every client. The sheet keeps
+  its own copy while it is open (a second tap must not undo the first before the
+  server answers), and shows its own errors.
 - Observers see the stack and its numbers (an outreach night); the switch and the
   buttons are disabled for them.
 
@@ -501,3 +504,10 @@ Appliance (phase 6):
 - Rig gains "This computer" (health, name, restart, shut down, INDI and PHD2
   restarts, diagnostics) and "Network" (where the box is, known networks, joining
   one, the access point, the mode); USB drives with Eject sit under Storage.
+- Rig's "File sharing" (ADR 0039), below Network, where nocs-system runs the share: a
+  switch ("Share frames with computers", saying it is read-only and open to anyone on
+  the network); while on, a chip with the computers connected, how to open it from
+  Windows (`\\<name>.local\Internal`), a Mac and Linux (`smb://<name>.local`) as
+  selectable text (no clipboard over plain HTTP), the `nocs` / `nocs` login for
+  Windows 11, the shared folders (Internal, then each USB drive by label) and a note
+  that copying can slow saving on the microSD. On but not running shows a warning.

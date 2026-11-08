@@ -143,7 +143,7 @@ class ImageWorker:
         look: Look,
         calibration: Calibration | None = None,
     ) -> Added:
-        """Offer a frame to the live stack ``stack_id`` held by the worker (ADR 0037) and,
+        """Offer a frame to the live stack ``stack_id`` held by the worker (ADR 0040) and,
         when it goes in, render the stack as a new preview under the key ``stack``.
 
         Raises ``StackLostError`` when the worker does not hold that stack (it was

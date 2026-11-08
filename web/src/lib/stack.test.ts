@@ -37,8 +37,10 @@ function stack(dark: boolean, flat: boolean, cosmetic: boolean): CurrentStack {
       notes: [],
       dark_kind: dark ? "dark" : null,
       dark_frames: dark ? 20 : 0,
+      dark_failed: false,
       flat_frames: flat ? 15 : 0,
       flats_unused: false,
+      flat_failed: false,
     },
     last: LAST,
     preview: null,
@@ -81,4 +83,7 @@ test("the calibration's parts", () => {
   bias.calibration = { ...bias.calibration, dark_kind: "bias", dark_frames: 12, flats_unused: true };
   assert.deepEqual(parts(bias), [{ kind: "bias", count: 12 }, { kind: "flatsUnused" }]);
   assert.deepEqual(parts(stack(false, false, true)), [{ kind: "noDarks" }, { kind: "noFlats" }]);
+  const failed = stack(false, false, true);
+  failed.calibration = { ...failed.calibration, dark_failed: true, flat_failed: true };
+  assert.deepEqual(parts(failed), [{ kind: "darksFailed" }, { kind: "flatsFailed" }]);
 });

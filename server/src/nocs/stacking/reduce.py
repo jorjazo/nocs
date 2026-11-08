@@ -1,4 +1,4 @@
-"""Frames reduced to the live stack's resolution (ADR 0039).
+"""Frames reduced to the live stack's resolution (ADR 0040).
 
 A colour frame becomes one RGB pixel per Bayer cell (superpixel), in OpenCV's
 channel order (BGR); a mono frame stays whole, or is 2x2 binned when large.
@@ -22,7 +22,7 @@ MONO_FULL_PIXELS = 16_000_000
 """Mono frames larger than this stack 2x2 binned."""
 
 # Where each colour sits in a 2x2 Bayer cell (row, column), by the FITS pattern.
-_CELLS: dict[str, tuple[tuple[int, int], tuple[int, int], tuple[int, int], tuple[int, int]]] = {
+CELLS: dict[str, tuple[tuple[int, int], tuple[int, int], tuple[int, int], tuple[int, int]]] = {
     #        R        G1       G2       B
     "RGGB": ((0, 0), (0, 1), (1, 0), (1, 1)),
     "BGGR": ((1, 1), (0, 1), (1, 0), (0, 0)),
@@ -45,7 +45,7 @@ def to_stack_image(data: Mono16, pattern: str | None) -> Image:
     is, or 2x2 binned (mean) above ``MONO_FULL_PIXELS``."""
     if pattern is not None:
         try:
-            r, g1, g2, b = _CELLS[pattern]
+            r, g1, g2, b = CELLS[pattern]
         except KeyError:
             raise FrameError(f"unsupported Bayer pattern {pattern}") from None
         h, w = data.shape[0] // 2 * 2, data.shape[1] // 2 * 2

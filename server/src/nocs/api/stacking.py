@@ -1,14 +1,16 @@
-"""Live stacking (ADR 0039): the switch, a new stack, the look, saving; ``stack`` shows it."""
+"""Live stacking (ADR 0040): the switch, a new stack, the look, saving; ``stack`` shows it."""
 
 from __future__ import annotations
 
 from collections.abc import Callable
+from concurrent.futures.process import BrokenProcessPool
 
 import anyio
 from fastapi import APIRouter, HTTPException, Response, status
 from fastapi.responses import FileResponse
 
 from nocs.api.schemas import StackSaved, StackSwitchRequest
+from nocs.imaging.worker import WorkerClosedError
 from nocs.stacking.service import LiveStackService, NothingToSaveError
 from nocs.stacking.settings import StackLook
 from nocs.storage import FrameUnavailableError, StorageError, StorageService
@@ -47,6 +49,10 @@ def stacking_router(
             raise HTTPException(status.HTTP_409_CONFLICT, str(e)) from e
         except StorageError as e:
             raise HTTPException(status.HTTP_507_INSUFFICIENT_STORAGE, str(e)) from e
+        except (BrokenProcessPool, WorkerClosedError) as e:
+            raise HTTPException(
+                status.HTTP_503_SERVICE_UNAVAILABLE, "the imaging worker is not available"
+            ) from e
         return StackSaved(id=saved.id, path=str(saved.relative), url=f"/api/frames/{saved.id}/file")
 
     @router.get("/frames/{frame_id}/image")
@@ -61,6 +67,9 @@ def stacking_router(
         jpeg = path.with_suffix(".jpg")
         if row.frame_type != "stack" or not await anyio.Path(jpeg).is_file():
             raise HTTPException(status.HTTP_404_NOT_FOUND, "no image for this frame")
-        return FileResponse(jpeg, media_type="image/jpeg", filename=jpeg.name)
+        # Shown in the browser (the night's frames open it in a tab), not downloaded.
+        return FileResponse(
+            jpeg, media_type="image/jpeg", filename=jpeg.name, content_disposition_type="inline"
+        )
 
     return router

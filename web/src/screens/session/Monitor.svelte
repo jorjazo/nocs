@@ -29,7 +29,7 @@
   const events = $derived(live.app.sequence?.events ?? []);
   const camera = $derived(live.app.cameras?.main_camera ?? null);
   const preview = $derived(camera?.preview ?? null);
-  // While live stacking runs, the stack can take the latest frame's place (ADR 0039).
+  // While live stacking runs, the stack can take the latest frame's place (ADR 0040).
   const stack = $derived(live.app.stack?.on ? (live.app.stack.current ?? null) : null);
   const stacked = $derived(stack?.preview && stackView.view === "stack" ? stack : null);
   const guiding = $derived(live.app.guiding ?? null);

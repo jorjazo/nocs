@@ -51,6 +51,7 @@ class FakeWorker:
     seen: list[bool] = field(default_factory=list[bool])
     """For each call, whether the file was there when the worker read it."""
     gate: asyncio.Event | None = None
+    save_gate: asyncio.Event | None = None
     saves: list[tuple[str, dict[str, str | int | float | bool | None]]] = field(
         default_factory=list[tuple[str, dict[str, str | int | float | bool | None]]]
     )
@@ -112,6 +113,8 @@ class FakeWorker:
         header: dict[str, str | int | float | bool | None],
     ) -> Rendered:
         self.saves.append((stack_id, header))
+        if self.save_gate is not None:
+            await self.save_gate.wait()
         await asyncio.to_thread(Path(fits_path).write_bytes, b"fits")
         await asyncio.to_thread(Path(jpeg_path).write_bytes, b"jpeg")
         return Rendered(jpeg_path, 3124, 2088)
@@ -212,6 +215,7 @@ class Rig:
 @pytest.fixture
 async def rig(tmp_path: Path):
     rig = Rig(tmp_path)
+    await rig.service.start()
     await rig.service.set_on(True)
     task = asyncio.create_task(rig.service.run())
     yield rig
@@ -237,11 +241,11 @@ async def test_the_switch_persists(tmp_path: Path) -> None:
     rig = Rig(tmp_path)
     await rig.service.set_on(True)
     await rig.service.set_look(StackLook(background=0.3))
-    again = Rig.__new__(Rig)
-    again.store = StateStore()
     service = LiveStackService(
-        again.store, rig.worker, lambda: rig.library, tmp_path / "config", tmp_path / "data"
+        StateStore(), rig.worker, lambda: rig.library, tmp_path / "config", tmp_path / "data"
     )
+    assert not service.on  # until started: the settings are read off the event loop
+    await service.start()
     assert service.on
     assert service.settings.look.background == 0.3
 
@@ -431,8 +435,8 @@ async def test_a_stack_is_saved_when_it_ends(rig: Rig, tmp_path: Path) -> None:
     assert facts.exposure == 900.0
     assert facts.target == "NGC 253"
     _, header = rig.worker.saves[0]
-    assert header["EXPTIME"] == 900.0
-    assert header["SUBEXP"] == 300.0
+    assert header["EXPTIME"] == 300.0  # a mean: as bright as one frame
+    assert header["LIVETIME"] == 900.0
     assert header["IMAGETYP"] == "Live stack"
     assert header["CALSTAT"] == "none"
     assert header["DATE-OBS"] == "2026-10-31T22:56:00"  # the first frame's start
@@ -474,8 +478,8 @@ async def test_a_stack_that_cannot_be_saved_is_reported(rig: Rig) -> None:
         await offer(rig, rig.frame())
     await rig.service.reset()
     state = rig.state()
-    assert state.error is not None
-    assert "could not be saved" in state.error
+    assert state.save_error is not None
+    assert "could not be saved" in state.save_error
     assert not list((rig.tmp / "data" / "stacking").glob("*"))
 
 
@@ -485,3 +489,163 @@ async def test_stopping_nocsd_saves_the_stacks(rig: Rig) -> None:
     await rig.service.close()
     assert len(rig.library.saved) == 1
     assert rig.state().on  # the switch stays as it was for the next start
+
+
+async def test_new_stack_while_its_masters_are_built(tmp_path: Path) -> None:
+    darks = [row("dark") for _ in range(2)]
+    rig = Rig(tmp_path, darks)
+    await rig.service.set_on(True)
+    building = asyncio.Event()
+    release = asyncio.Event()
+    build = rig.worker.build_master
+
+    async def slow(*args: Any, **kwargs: Any) -> Master:
+        building.set()
+        await release.wait()
+        return await build(*args, **kwargs)
+
+    rig.worker.build_master = slow  # type: ignore[method-assign]
+    task = asyncio.create_task(rig.service.run())
+    try:
+        await rig.service.offer(rig.frame())
+        await building.wait()
+        await rig.service.reset()  # while the dark master is built
+        release.set()
+        await rig.service.idle()
+        state = rig.state()
+        # The frame went with its stack, quietly: no failure, nothing in the worker.
+        assert state.status != "failed"
+        assert state.error is None
+        assert rig.worker.calls == []
+        await offer(rig, rig.frame())
+        assert rig.worker.calls[-1].new
+    finally:
+        task.cancel()
+
+
+async def test_a_stack_ended_while_its_first_frame_is_added_is_dropped(rig: Rig) -> None:
+    rig.worker.gate = asyncio.Event()
+    await rig.service.offer(rig.frame())
+    await asyncio.sleep(0.01)  # the frame is in the worker
+    await rig.service.reset()
+    rig.worker.gate.set()
+    await rig.service.idle()
+    # The worker would otherwise hold a stack nobody knows of (~200 MB at 26 MP).
+    assert rig.worker.frames == {}
+    assert rig.worker.dropped == [rig.worker.calls[0].stack_id]
+
+
+async def test_a_frame_that_cannot_be_deleted_does_not_stop_stacking(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def refuse(self: Path, missing_ok: bool = False) -> None:
+        raise PermissionError("read-only")
+
+    monkeypatch.setattr(Path, "unlink", refuse)
+    await offer(rig, rig.frame(owned=True))
+    monkeypatch.undo()
+    await offer(rig, rig.frame(owned=True))
+    assert len(rig.worker.calls) == 2
+
+
+async def test_links_left_behind_are_deleted_at_start(tmp_path: Path) -> None:
+    links = tmp_path / "data" / "stacking"
+    links.mkdir(parents=True)
+    (links / "old.fits").write_bytes(b"x")
+    rig = Rig(tmp_path)
+    await rig.service.start()
+    assert list(links.iterdir()) == []
+
+
+async def test_switching_on_again_clears_a_failure(rig: Rig) -> None:
+    rig.worker.lose = True
+    rig.worker.refuse = []
+
+    async def broken(*args: Any, **kwargs: Any) -> Added:
+        raise RuntimeError("the worker broke")
+
+    rig.worker.stack_add = broken  # type: ignore[method-assign]
+    await offer(rig, rig.frame())
+    assert rig.state().status == "failed"
+    await rig.service.set_on(False)
+    await rig.service.set_on(True)
+    state = rig.state()
+    assert (state.status, state.error) == ("idle", None)
+
+
+async def test_bias_only_calibration_says_so(tmp_path: Path) -> None:
+    bias = [row("bias", exposure=0.001) for _ in range(2)]
+    rig = Rig(tmp_path, bias)
+    await rig.service.set_on(True)
+    task = asyncio.create_task(rig.service.run())
+    try:
+        await offer(rig, rig.frame())
+    finally:
+        task.cancel()
+    calibration = rig.worker.calls[0].calibration
+    assert calibration is not None
+    assert calibration.bias
+    assert calibration.cosmetic
+
+
+async def test_a_master_that_fails_is_reported_as_such(tmp_path: Path) -> None:
+    darks = [row("dark") for _ in range(2)]
+    flats = [row("flat", filter="L", exposure=2.0) for _ in range(2)]
+    bias = [row("bias", exposure=0.001) for _ in range(2)]
+    rig = Rig(tmp_path, darks + flats + bias)
+    await rig.service.set_on(True)
+    build = rig.worker.build_master
+    seen: list[Any] = []
+
+    async def failing(path: str, kind: Kind, *args: Any, **kwargs: Any) -> Master:
+        seen.append(rig.state().building)
+        if kind in ("dark", "flat"):
+            raise OSError("a broken file")
+        return await build(path, kind, *args, **kwargs)
+
+    rig.worker.build_master = failing  # type: ignore[method-assign]
+    task = asyncio.create_task(rig.service.run())
+    try:
+        await offer(rig, rig.frame())
+    finally:
+        task.cancel()
+    state = rig.state()
+    assert state.current is not None
+    calibration = state.current.calibration
+    assert (calibration.dark_failed, calibration.flat_failed) == (True, True)
+    assert (calibration.dark_frames, calibration.flat_frames) == (0, 0)
+    assert state.building is None  # done
+    # While each was built, the state said which.
+    assert [(b.kind, b.frames) for b in seen] == [("dark", 2), ("bias", 2), ("flat", 2)]
+
+
+async def test_a_failed_save_stays_reported_while_stacking_goes_on(rig: Rig) -> None:
+    rig.library.full = True
+    for _ in range(2):
+        await offer(rig, rig.frame())
+    await offer(rig, rig.frame(exposure=60.0))  # another setup: the first stack ends
+    state = rig.state()
+    assert state.save_error is not None
+    assert state.status == "stacking"
+
+
+async def test_saves_and_frames_take_turns(rig: Rig) -> None:
+    for _ in range(2):
+        await offer(rig, rig.frame())
+    rig.worker.save_gate = asyncio.Event()
+    saving = asyncio.create_task(rig.service.save())
+    await asyncio.sleep(0.01)  # the save is in the worker
+    await rig.service.offer(rig.frame())  # a frame arrives meanwhile: it waits its turn
+    ending = asyncio.create_task(rig.service.reset())  # and New stack is tapped
+    await asyncio.sleep(0.01)
+    assert len(rig.worker.calls) == 2
+    rig.worker.save_gate.set()
+    saved = await saving
+    await ending
+    await rig.service.idle()
+    # The save held the two frames it counted; New stack, after it, saved nothing more
+    # (no frame came in between), and the waiting frame started the next stack.
+    assert saved.id == 1001
+    assert len(rig.library.saved) == 1
+    assert rig.library.saved[0].exposure == 600.0
+    assert rig.worker.calls[-1].new

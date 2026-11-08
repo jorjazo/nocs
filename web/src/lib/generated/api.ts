@@ -591,6 +591,10 @@ export interface AppState {
    */
   power?: PowerState | null;
   sequence?: SequenceState | null;
+  /**
+   * None where NOCS does not share the frames (a PC).
+   */
+  share?: ShareState | null;
   sites?: SitesState | null;
   solver?: SolverState | null;
   stack?: StackState | null;
@@ -2162,6 +2166,49 @@ export interface SequencePlanRow {
   filter: string | null;
 }
 /**
+ * The SMB share of the frames for desktop computers, read-only for guests and the
+ * published login nocs / nocs (ADR 0039).
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "ShareState".
+ */
+export interface ShareState {
+  /**
+   * Computers connected now.
+   */
+  clients: number;
+  /**
+   * The owner switched it on.
+   */
+  on: boolean;
+  /**
+   * smbd is running.
+   */
+  running: boolean;
+  /**
+   * One per volume: its NOCS folder (Internal, then each USB drive).
+   */
+  shares: Share[];
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "Share".
+ */
+export interface Share {
+  /**
+   * The drive's label.
+   */
+  label: string | null;
+  /**
+   * The share's name, as a desktop shows it.
+   */
+  name: string;
+  /**
+   * "internal", or the drive's filesystem UUID.
+   */
+  volume: string;
+}
+/**
  * The saved sites and the box's active one (ADR 0038).
  *
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -2295,12 +2342,16 @@ export interface SolutionState {
   time: string;
 }
 /**
- * Live stacking (ADR 0039).
+ * Live stacking (ADR 0040).
  *
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "StackState".
  */
 export interface StackState {
+  /**
+   * The master being built, if one is.
+   */
+  building: StackBuilding | null;
   /**
    * The stack shown; None before a frame.
    */
@@ -2308,13 +2359,17 @@ export interface StackState {
   error: string | null;
   look: StackLook;
   /**
-   * What it is doing (building a master).
+   * What it is doing, in English (for logs).
    */
   message: string | null;
   /**
    * Lights of the main camera are stacked as they arrive.
    */
   on: boolean;
+  /**
+   * Why the latest stack to end could not be saved; None after a save.
+   */
+  save_error: string | null;
   /**
    * The latest stack saved; None: none yet.
    */
@@ -2328,6 +2383,14 @@ export interface StackState {
    */
   stacks: number;
   status: "off" | "idle" | "preparing" | "stacking" | "failed";
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "StackBuilding".
+ */
+export interface StackBuilding {
+  frames: number;
+  kind: "dark" | "bias" | "flat";
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -2377,6 +2440,10 @@ export interface StackCalibration {
    */
   dark: boolean;
   /**
+   * Darks or bias were found, but no master came of them.
+   */
+  dark_failed: boolean;
+  /**
    * Frames in that master.
    */
   dark_frames: number;
@@ -2389,11 +2456,15 @@ export interface StackCalibration {
    */
   flat: boolean;
   /**
+   * Flats were found, but no master came of them.
+   */
+  flat_failed: boolean;
+  /**
    * Frames in the flat master; 0: no flat.
    */
   flat_frames: number;
   /**
-   * Flats were found without their bias or dark flats.
+   * Flats were found, but without their bias or dark flats, or the lights'.
    */
   flats_unused: boolean;
   /**
@@ -4864,6 +4935,13 @@ export interface SetPropertyRequest {
   values: {
     [k: string]: string | number | boolean;
   };
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "ShareRequest".
+ */
+export interface ShareRequest {
+  on: boolean;
 }
 /**
  * Refused (409) while a job runs, unless ``force``.

@@ -433,6 +433,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
         services.stacking = LiveStackService(
             store, services.worker, storage, settings.config_dir, settings.data_dir
         )
+        await services.stacking.start()
         services.capture.use_stacker(services.stacking)
         services.flats = FlatsService(
             store,
@@ -476,6 +477,11 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
         try:
             yield
         finally:
+            # Live stacks are saved first, while the worker holds them and the frame
+            # in its hands (if any) finishes: cancelling mid-save left temporary files
+            # and a stack saved twice.
+            with contextlib.suppress(Exception):
+                await stacking().close()
             for background in (
                 stacking_task,
                 recovery_task,
@@ -488,7 +494,6 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
                 background.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
                     await background
-            await stacking().close()
             services.guiding.close()
             await mount().close()
             power().close()
