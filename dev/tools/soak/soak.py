@@ -534,6 +534,8 @@ class Night:
         }
         (self.out / "sequence.json").write_text(json.dumps(sequence, indent=2))
         await self.call("PUT", "/api/sequences/soak", ok=(204,), json=sequence)
+        if self.args.stack:
+            await self.call("PUT", "/api/stack", ok=(204,), json={"on": True})
         started = await self.call("POST", "/api/sequences/soak/start", ok=(202,))
         return started["job"]
 
@@ -823,7 +825,28 @@ class Night:
             "pruned": self.pruned,
             **window.summary(),
         }
+        if self.args.stack:
+            sample["stack"] = stack_sample(self.state.get("stack"))
         self.append("samples.jsonl", json.dumps(sample) + "\n")
+
+
+def stack_sample(stack: Any) -> dict[str, Any] | None:
+    """The live stack as the phone sees it (ADR 0039): counts and the worker's last time."""
+    if not isinstance(stack, dict):
+        return None
+    current = stack.get("current") or {}
+    last = current.get("last") or {}
+    saved = stack.get("saved") or {}
+    return {
+        "status": stack.get("status"),
+        "id": current.get("id"),
+        "frames": current.get("frames"),
+        "rejected": current.get("rejected"),
+        "skipped": current.get("skipped"),
+        "seconds": last.get("seconds"),
+        "saved": saved.get("frame_id"),
+        "error": stack.get("error"),
+    }
 
 
 # -- summary --------------------------------------------------------------------------
@@ -942,6 +965,25 @@ def summarize(out: Path, warmup: float) -> str:
         f"- downloads: {sum(s['previews'] for s in samples)} previews (slowest {fmt(max((s['preview_max'] or 0) for s in samples))} ms),"
         f" {sum(s['fits'] for s in samples)} FITS; {sum(s['download_failures'] for s in samples)} failures",
     ]
+    stacked = [s["stack"] for s in samples if s.get("stack")]
+    if stacked:
+        per_stack: dict[str, dict[str, Any]] = {}
+        for x in stacked:
+            if x["id"]:
+                per_stack[x["id"]] = x  # its latest sample
+        seconds = [x["seconds"] for x in stacked if x["seconds"] is not None]
+        lines += [
+            "",
+            "## Live stack",
+            "",
+            f"- {len(per_stack)} stacks; frames stacked {sum(x['frames'] or 0 for x in per_stack.values())},"
+            f" left out {sum(x['rejected'] or 0 for x in per_stack.values())},"
+            f" skipped {sum(x['skipped'] or 0 for x in per_stack.values())}",
+            f"- worker time per frame (sampled): median {fmt(statistics.median(seconds) if seconds else None, 2)} s,"
+            f" max {fmt(max(seconds) if seconds else None, 2)} s",
+            f"- saved stacks: {len({x['saved'] for x in stacked if x['saved']})};"
+            f" errors: {sorted({x['error'] for x in stacked if x['error']}) or 'none'}",
+        ]
     log: Counter[str] = Counter()
     for s in samples:
         log.update(s["log"])
@@ -1003,6 +1045,7 @@ def main() -> int:
     run.add_argument("--ws-stay", type=pair_of_floats, default=(120.0, 900.0), help="min,max s")
     run.add_argument("--ws-sleep", type=pair_of_floats, default=(1.0, 60.0), help="min,max s")
     run.add_argument("--seed", type=int, default=1)
+    run.add_argument("--stack", action="store_true", help="live stacking on all night (ADR 0039)")
     summary = sub.add_parser("summarize")
     summary.add_argument("out", type=Path)
     summary.add_argument("--warmup", type=float, default=600, help="seconds left out of slopes")
