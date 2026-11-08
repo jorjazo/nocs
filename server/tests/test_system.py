@@ -26,7 +26,7 @@ from nocs.services.system import OperationUnavailableError, SystemBusyError, Sys
 from nocs.state import StateStore
 from nocs.system.client import HelperUnavailableError, call
 from nocs.system.operations import Context, eject, mount, update_hosts
-from nocs.system.protocol import HelperError
+from nocs.system.protocol import HelperError, redact
 from nocs.system.server import Config, Helper, load_config
 
 ALL = frozenset({"power", "hostname"})
@@ -166,6 +166,24 @@ async def test_a_message_too_long_closes_the_connection(helper: Config) -> None:
         await stream.send(b"x" * 70000)
         reply = await stream.receive()
     assert b"at most 65536 bytes" in reply
+
+
+async def test_passwords_never_reach_the_log(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    helper = Helper(config(tmp_path, enabled=frozenset({"network"})))
+    caplog.set_level("INFO", "nocs.system")
+    args = {"ssid": "Home", "password": "hunter2-secret", "join": {"password": "nested-secret"}}
+    await helper.reply(json.dumps({"id": 1, "op": "network.join", "args": args}).encode())
+    assert "network.join" in caplog.text
+    assert '"ssid": "Home"' in caplog.text
+    assert "secret" not in caplog.text
+
+
+def test_redact_leaves_the_arguments_alone() -> None:
+    args: dict[str, object] = {"password": "x", "ssid": "Home"}
+    assert redact(args) == {"password": "***", "ssid": "Home"}
+    assert args == {"password": "x", "ssid": "Home"}
 
 
 async def test_without_helper_calls_say_it_is_not_running(tmp_path: Path) -> None:
