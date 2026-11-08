@@ -2337,12 +2337,16 @@ export interface SolutionState {
   time: string;
 }
 /**
- * Live stacking (ADR 0039).
+ * Live stacking (ADR 0040).
  *
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "StackState".
  */
 export interface StackState {
+  /**
+   * The master being built, if one is.
+   */
+  building: StackBuilding | null;
   /**
    * The stack shown; None before a frame.
    */
@@ -2350,7 +2354,7 @@ export interface StackState {
   error: string | null;
   look: StackLook;
   /**
-   * What it is doing (building a master).
+   * What it is doing, in English (for logs).
    */
   message: string | null;
   /**
@@ -2362,6 +2366,14 @@ export interface StackState {
    */
   stacks: number;
   status: "off" | "idle" | "preparing" | "stacking" | "failed";
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "StackBuilding".
+ */
+export interface StackBuilding {
+  frames: number;
+  kind: "dark" | "bias" | "flat";
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -2411,6 +2423,10 @@ export interface StackCalibration {
    */
   dark: boolean;
   /**
+   * Darks or bias were found, but no master came of them.
+   */
+  dark_failed: boolean;
+  /**
    * Frames in that master.
    */
   dark_frames: number;
@@ -2423,11 +2439,15 @@ export interface StackCalibration {
    */
   flat: boolean;
   /**
+   * Flats were found, but no master came of them.
+   */
+  flat_failed: boolean;
+  /**
    * Frames in the flat master; 0: no flat.
    */
   flat_frames: number;
   /**
-   * Flats were found without their bias or dark flats.
+   * Flats were found, but without their bias or dark flats, or the lights'.
    */
   flats_unused: boolean;
   /**

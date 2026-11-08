@@ -1,4 +1,4 @@
-"""Live stacking's settings, kept in ``<config dir>/stacking.json`` (ADR 0039).
+"""Live stacking's settings, kept in ``<config dir>/stacking.json`` (ADR 0040).
 
 Pydantic models only, so the API schemas can use them without importing the
 stacking code.

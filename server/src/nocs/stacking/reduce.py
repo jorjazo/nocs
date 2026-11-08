@@ -1,4 +1,4 @@
-"""Frames reduced to the live stack's resolution (ADR 0039).
+"""Frames reduced to the live stack's resolution (ADR 0040).
 
 A colour frame becomes one RGB pixel per Bayer cell (superpixel), in OpenCV's
 channel order (BGR); a mono frame stays whole, or is 2x2 binned when large.

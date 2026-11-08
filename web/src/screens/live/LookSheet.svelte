@@ -1,31 +1,39 @@
 <script lang="ts">
-  // How the live stack is stretched into a picture (ADR 0039). The server keeps
+  // How the live stack is stretched into a picture (ADR 0040). The server keeps
   // the look for every client and shows the current stack with it at once, so
-  // each change is sent as it is chosen.
+  // each change is sent as it is chosen. The sheet keeps its own copy: the
+  // server's comes back only after the stack is drawn again, and a second tap
+  // before that must not undo the first.
+  import Banner from "../../components/Banner.svelte";
   import Button from "../../components/Button.svelte";
   import SegmentedControl from "../../components/SegmentedControl.svelte";
   import Sheet from "../../components/Sheet.svelte";
   import Toggle from "../../components/Toggle.svelte";
+  import { untrack } from "svelte";
   import { setStackLook } from "../../lib/api";
+  import { errorText } from "../../lib/errors";
   import { i18n } from "../../lib/i18n";
-  import { BACKGROUNDS, complete, DEFAULT_LOOK, nearest, SATURATIONS, SHADOWS } from "../../lib/stack";
+  import { BACKGROUNDS, complete, DEFAULT_LOOK, type Look, nearest, SATURATIONS, SHADOWS } from "../../lib/stack";
   import type { StackLook } from "../../lib/types";
 
-  let {
-    look: given,
-    run,
-    onclose,
-  }: {
-    look: StackLook;
-    run: (action: () => Promise<unknown>) => Promise<void>;
-    onclose: () => void;
-  } = $props();
+  let { look: given, onclose }: { look: StackLook; onclose: () => void } = $props();
 
   const t = $derived(i18n.t);
-  const look = $derived(complete(given));
+  let look = $state<Look>(untrack(() => complete(given)));
+  let error = $state("");
+
+  async function send(next: Look): Promise<void> {
+    look = next;
+    error = "";
+    try {
+      await setStackLook(next);
+    } catch (e) {
+      error = errorText(e, t);
+    }
+  }
 
   function change(update: Partial<StackLook>): void {
-    void run(() => setStackLook({ ...look, ...update }));
+    void send({ ...look, ...update });
   }
 
   function options(steps: readonly number[], labels: string[]): { value: string; label: string }[] {
@@ -35,6 +43,7 @@
 
 <Sheet title={t.stack.lookTitle} {onclose}>
   <div class="look">
+    {#if error}<Banner icon="alert" tone="error">{error}</Banner>{/if}
     <div class="group">
       <span class="label muted">{t.stack.background}</span>
       <SegmentedControl
@@ -66,7 +75,7 @@
       onchange={(linked) => change({ linked })} />
   </div>
   {#snippet actions()}
-    <Button variant="text" onclick={() => void run(() => setStackLook(DEFAULT_LOOK))}>{t.stack.defaults}</Button>
+    <Button variant="text" onclick={() => void send(DEFAULT_LOOK)}>{t.stack.defaults}</Button>
   {/snippet}
 </Sheet>
 

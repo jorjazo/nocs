@@ -1,4 +1,4 @@
-"""A frame offered to the live stack (ADR 0039).
+"""A frame offered to the live stack (ADR 0040).
 
 Kept apart from the service, with no imaging imports, so the capture service can
 build one without importing the stacking code (which imports the imaging pipeline).

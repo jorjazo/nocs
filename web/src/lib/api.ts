@@ -690,7 +690,7 @@ export function flatWindows(): Promise<FlatWindows> {
   return request("GET", "/api/flats/window");
 }
 
-// -- Live stacking (ADR 0039) ----------------------------------------------------------
+// -- Live stacking (ADR 0040) ----------------------------------------------------------
 
 export function setStacking(on: boolean): Promise<void> {
   return request("PUT", "/api/stack", { on } satisfies StackSwitchRequest);

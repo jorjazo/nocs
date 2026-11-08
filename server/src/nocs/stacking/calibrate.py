@@ -1,4 +1,4 @@
-"""Which calibration frames a live stack uses (ADR 0039), from the library (ADR 0036).
+"""Which calibration frames a live stack uses (ADR 0040), from the library (ADR 0036).
 
 The stack's lights form one light group of the library; its matches decide the
 masters: darks of the lights' exposure (else their bias) to subtract, and flats of

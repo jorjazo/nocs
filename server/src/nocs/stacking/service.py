@@ -167,6 +167,7 @@ class LiveStackService:
         self._idle.set()
         self._status = "idle"
         self._message: str | None = None
+        self._building: dict[str, Json] | None = None
         self._error: str | None = None
         self._new = False
         self._tasks: set[asyncio.Task[None]] = set()
@@ -395,6 +396,7 @@ class LiveStackService:
             if spec is None:
                 return None
             self._message = f"building the {spec.kind} master ({len(spec.frames)} frames)"
+            self._building = {"kind": spec.kind, "frames": len(spec.frames)}
             self._publish()
             try:
                 built = await self._build(library, spec, frame.bayer, subtract)
@@ -415,15 +417,19 @@ class LiveStackService:
             offset = await master(found.flat_offset)
             if offset is None:
                 notes.append("flats not used: no master of their bias or dark flats")
-                used["flats_unused"] = True
+                used["flat_failed"] = True
             else:
                 flat = await master(found.flat, offset)
+                used["flat_failed"] = flat is None
         if dark is not None and found.dark is not None:
             used["dark_kind"] = found.dark.kind
             used["dark_frames"] = counts[found.dark]
+        elif found.dark is not None:
+            used["dark_failed"] = True  # found, but none of them could be read or used
         if flat is not None and found.flat is not None:
             used["flat_frames"] = counts[found.flat]
         self._message = None
+        self._building = None
         return Calibration(dark=dark, flat=flat, cosmetic=True, bias=bias), notes, used
 
     async def _build(
@@ -565,6 +571,7 @@ class LiveStackService:
                 "on": self.on,
                 "status": self._status if self.on else "off",
                 "message": self._message,
+                "building": self._building,
                 "error": self._error,
                 "look": self.settings.look.model_dump(),
                 "current": current,
@@ -574,7 +581,14 @@ class LiveStackService:
 
 
 def _unused() -> dict[str, Json]:
-    return {"dark_kind": None, "dark_frames": 0, "flat_frames": 0, "flats_unused": False}
+    return {
+        "dark_kind": None,
+        "dark_frames": 0,
+        "dark_failed": False,
+        "flat_frames": 0,
+        "flats_unused": False,
+        "flat_failed": False,
+    }
 
 
 class _AbandonedError(Exception):

@@ -244,7 +244,7 @@ class Guider(Protocol):
 
 
 class Stacker(Protocol):
-    """The live stack (``LiveStackService``, ADR 0039)."""
+    """The live stack (``LiveStackService``, ADR 0040)."""
 
     @property
     def on(self) -> bool: ...
