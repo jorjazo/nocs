@@ -319,6 +319,7 @@ class AltitudeLimits(StateModel):
 class MeridianLimits(StateModel):
     flip: bool = Field(description="The mount flips by itself at the limit.")
     limit: float = Field(description="Degrees past the meridian.")
+    stops: bool = Field(description="It stops tracking at the limit (when it does not flip).")
 
 
 class MountLimits(StateModel):

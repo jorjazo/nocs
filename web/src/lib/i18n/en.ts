@@ -535,7 +535,8 @@ export const en = {
     limits: "Limits the mount keeps",
     altitudeOn: (lower: string, upper: string) => `Altitude ${lower} to ${upper}`,
     altitudeOff: "Altitude limits off",
-    meridian: (flip: boolean, limit: string) => `Meridian limit ${limit}${flip ? ", flips by itself" : ""}`,
+    meridian: (flip: boolean, stops: boolean, limit: string) =>
+      `Meridian limit ${limit}${flip ? ", flips by itself" : stops ? ", stops tracking there" : ""}`,
     noLimits: "The driver shows none.",
     locked: "Only the owner's devices move the mount.",
   },
@@ -1356,6 +1357,8 @@ export const en = {
       flipped: (side: string) => `Meridian flip done: pier ${side}`,
       flipWaiting: (minutes: string) => `Meridian flip: waiting ${minutes} min for the meridian`,
       flipDue: "Meridian flip",
+      mountMeridian: (flips: boolean, limit: string, after: string) =>
+        `The mount ${flips ? "flips by itself" : "stops tracking"} ${limit} past the meridian, before the flip ${after} min past it: raise its meridian limit`,
       guard: "Past the meridian without a flip: tracking stopped",
     },
     hold: {

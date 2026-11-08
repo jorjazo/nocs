@@ -1682,6 +1682,10 @@ export interface MeridianLimits {
    * Degrees past the meridian.
    */
   limit: number;
+  /**
+   * It stops tracking at the limit (when it does not flip).
+   */
+  stops: boolean;
 }
 /**
  * Manual motion (slew pad), axis by axis.

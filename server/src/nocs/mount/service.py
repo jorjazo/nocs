@@ -12,7 +12,8 @@ motion. Manual motion goes through slew pads (``nocs.mount.pad``).
 Whenever the mount becomes ready, NOCS sends it the site and then the time (as
 soon as a client has reported its clock): the lab's ZWO AM7 refuses every go to
 after power-on until it gets them, and the site its driver shows is only the
-driver's saved configuration (ADR 0015). Go to waits for both.
+driver's saved configuration (ADR 0015). Go to waits for both. They go again after
+an unpark (the iOptron driver drops them while parked).
 """
 
 from __future__ import annotations
@@ -82,6 +83,8 @@ _WATCHED = frozenset(
         "ALTITUDE_UPPER_LIMIT",
         "MERIDIAN_FLIP",
         "MERIDIAN_LIMIT",
+        "MERIDIAN_ACTION",
+        "POST_MERIDIAN_TRACK",
     }
 )
 
@@ -337,9 +340,17 @@ class MountService:
         await self._slew(mount, mount.park())
 
     async def unpark(self, *, job: str | None = None) -> None:
-        """Unpark; refused while a job other than ``job`` holds the mount."""
+        """Unpark; refused while a job other than ``job`` holds the mount.
+
+        The site and the time go to the mount again afterwards: the iOptron driver
+        drops both while the mount is parked, yet reports them set.
+        """
         self._check_holder(job)
-        await self.mount().unpark()
+        mount = self.mount()
+        parked = mount.parked
+        await mount.unpark()
+        if parked:
+            await self._send_site_and_time(again=True)
 
     def home(self) -> str:
         mount = self._ready_to_slew()
@@ -560,12 +571,13 @@ class MountService:
         if self._device is not None and not self._time_sent:
             self._background(self._send_site_and_time())
 
-    async def _send_site_and_time(self) -> None:
-        """Site first, then time (the order EKOS uses); failures are only logged."""
+    async def _send_site_and_time(self, *, again: bool = False) -> None:
+        """Site first, then time (the order EKOS uses), unless sent already or ``again``;
+        failures are only logged."""
         try:
-            if not self._site_sent:
+            if again or not self._site_sent:
                 await self._send_site()
-            if self._clock.known and not self._time_sent:
+            if self._clock.known and (again or not self._time_sent):
                 await self.send_time()
         except (DeviceError, ConnectionError, MountNotReadyError, PointingError) as e:
             log.warning("could not send the mount its site and time: %s", e)
@@ -660,7 +672,9 @@ class MountService:
                     else None
                 ),
                 "meridian": (
-                    {"flip": meridian.flip, "limit": meridian.limit} if meridian else None
+                    {"flip": meridian.flip, "limit": meridian.limit, "stops": meridian.stops}
+                    if meridian
+                    else None
                 ),
             },
         }
