@@ -38,9 +38,10 @@ from nocs.imaging.pipeline import FrameAnalysis, StarMetrics
 
 # The module, not its names: nocs.stacking.stack imports nocs.imaging.pipeline, whose
 # package imports this module, so its names may not exist yet when this runs.
-from nocs.stacking import stack
+from nocs.stacking import masters, stack
 
 if TYPE_CHECKING:
+    from nocs.stacking.masters import Calibration, Kind, Master
     from nocs.stacking.stack import Added, Look, Rendered
 
 log = logging.getLogger(__name__)
@@ -140,6 +141,7 @@ class ImageWorker:
         stars: int | None,
         hfr: float | None,
         look: Look,
+        calibration: Calibration | None = None,
     ) -> Added:
         """Offer a frame to the live stack ``stack_id`` held by the worker (ADR 0040) and,
         when it goes in, render the stack as a new preview under the key ``stack``.
@@ -158,11 +160,24 @@ class ImageWorker:
             hfr=hfr,
             preview_path=str(preview),
             look=look,
+            calibration=calibration,
         )
         added = await self._run(call)
         if added.preview is not None:
             await self._expire("stack", preview)
         return added
+
+    async def build_master(
+        self,
+        path: str,
+        kind: Kind,
+        frames: list[str],
+        bayer: str | None,
+        subtract: str | None = None,
+    ) -> Master:
+        """Build a live stack's calibration master at ``path`` (``masters.build``)."""
+        call = functools.partial(masters.build, path, kind, frames, bayer, subtract=subtract)
+        return await self._run(call)
 
     async def stack_render(self, stack_id: str, look: Look) -> Rendered:
         """The stack as it stands, rendered with ``look`` as a new preview."""

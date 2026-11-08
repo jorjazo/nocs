@@ -11,7 +11,7 @@ from astropy.io import fits  # pyright: ignore[reportMissingTypeStubs]
 from numpy.typing import NDArray
 from synthstars import CELLS, Sky, render, sky
 
-from nocs.stacking import stack
+from nocs.stacking import reduce, stack
 from nocs.stacking.register import Transform, find_stars, register
 from nocs.stacking.stack import (
     FrameError,
@@ -93,7 +93,7 @@ def test_superpixel_takes_each_colour_from_its_place(pattern: str) -> None:
 def test_mono_frames_stay_whole_or_are_binned(monkeypatch: pytest.MonkeyPatch) -> None:
     raw = np.arange(24, dtype=np.uint16).reshape(4, 6)
     assert to_stack_image(raw, None).shape == (4, 6, 1)
-    monkeypatch.setattr(stack, "MONO_FULL_PIXELS", 10)
+    monkeypatch.setattr(reduce, "MONO_FULL_PIXELS", 10)
     binned = to_stack_image(raw, None)
     assert binned.shape == (2, 3, 1)
     assert binned[0, 0, 0] == pytest.approx((0 + 1 + 6 + 7) / 4)
