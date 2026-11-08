@@ -171,6 +171,8 @@ class LiveStackService:
         self._error: str | None = None
         self._new = False
         self._tasks: set[asyncio.Task[None]] = set()
+        self._early_skips: dict[Key, int] = {}
+        """Frames skipped while the stack of their setup was still being started."""
         self._publish()
 
     async def start(self) -> None:
@@ -233,6 +235,9 @@ class LiveStackService:
             )
             if skipped is not None:
                 skipped.skipped += 1
+            else:  # its stack is still being started: it counts there once it exists
+                setup = _key(replaced, None, None)
+                self._early_skips[setup] = self._early_skips.get(setup, 0) + 1
             # Not on the capture's path: an unlink can wait seconds on the Pi's microSD.
             self._background(self._discard(replaced))
         self._idle.clear()
@@ -356,6 +361,7 @@ class LiveStackService:
             started=frame.taken,
             colour=frame.bayer is not None,
         )
+        stack.skipped = self._early_skips.pop(_key(frame, None, None), 0)
         self._stacks[key] = stack
         self._current = stack
         while len(self._stacks) > STACKS:

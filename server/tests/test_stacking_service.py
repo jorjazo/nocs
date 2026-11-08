@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import threading
 from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -14,6 +15,7 @@ from astropy.io import fits  # pyright: ignore[reportMissingTypeStubs]
 from test_calibration_library import row
 
 from nocs.api.schemas import StackState
+from nocs.stacking import service as service_module
 from nocs.stacking.frames import Offered
 from nocs.stacking.masters import Calibration, Kind, Master
 from nocs.stacking.service import MISSES, LiveStackService
@@ -51,6 +53,8 @@ class FakeWorker:
     seen: list[bool] = field(default_factory=list[bool])
     """For each call, whether the file was there when the worker read it."""
     gate: asyncio.Event | None = None
+    entered: asyncio.Event = field(default_factory=asyncio.Event)
+    """Set when a frame reaches the worker (before ``gate``)."""
 
     async def stack_add(
         self,
@@ -64,6 +68,7 @@ class FakeWorker:
         look: Look,
         calibration: Calibration | None = None,
     ) -> Added:
+        self.entered.set()
         if self.gate is not None:
             await self.gate.wait()
         self.seen.append(os.path.isfile(fits_path))  # noqa: ASYNC240 (a test double)
@@ -312,7 +317,7 @@ async def test_a_lost_stack_starts_again(rig: Rig) -> None:
 async def test_newest_frame_wins_while_busy(rig: Rig, tmp_path: Path) -> None:
     rig.worker.gate = asyncio.Event()
     await rig.service.offer(rig.frame())
-    await asyncio.sleep(0)  # the first is in the worker
+    await rig.worker.entered.wait()  # the first is in the worker
     loop_frames = [rig.frame(owned=True) for _ in range(3)]
     for f in loop_frames:
         await rig.service.offer(f)
@@ -519,3 +524,29 @@ async def test_a_master_that_fails_is_reported_as_such(tmp_path: Path) -> None:
     assert state.building is None  # done
     # While each was built, the state said which.
     assert [(b.kind, b.frames) for b in seen] == [("dark", 2), ("bias", 2), ("flat", 2)]
+
+
+async def test_frames_skipped_before_their_stack_exists_still_count(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The first frame's header is still being read, so its stack does not exist yet,
+    # when the next ones arrive: they are skipped, and counted once it exists.
+    reading = threading.Event()
+    release = threading.Event()
+    read = service_module._dimensions  # pyright: ignore[reportPrivateUsage]
+
+    def slow(path: Path) -> tuple[int | None, int | None]:
+        reading.set()
+        release.wait(5)
+        return read(path)
+
+    monkeypatch.setattr(service_module, "_dimensions", slow)
+    await rig.service.offer(rig.frame())
+    await asyncio.to_thread(reading.wait, 5)
+    for _ in range(3):
+        await rig.service.offer(rig.frame(owned=True))
+    release.set()
+    await rig.service.idle()
+    state = rig.state()
+    assert state.current is not None
+    assert state.current.skipped == 2
