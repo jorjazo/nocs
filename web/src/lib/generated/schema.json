@@ -4200,7 +4200,7 @@
           ]
         },
         "frame_type": {
-          "$ref": "#/$defs/FrameTypeName"
+          "$ref": "#/$defs/SavedFrameTypeName"
         },
         "gain": {
           "anyOf": [
@@ -4245,6 +4245,18 @@
         },
         "id": {
           "type": "integer"
+        },
+        "image_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A live stack's stretched JPEG (ADR 0039); None for others."
         },
         "night": {
           "type": "string"
@@ -4342,6 +4354,7 @@
         "volume",
         "available",
         "url",
+        "image_url",
         "camera",
         "profile",
         "gain",
@@ -6252,7 +6265,7 @@
           ]
         },
         "frame_type": {
-          "$ref": "#/$defs/FrameTypeName"
+          "$ref": "#/$defs/SavedFrameTypeName"
         },
         "frames": {
           "type": "integer"
@@ -8054,7 +8067,7 @@
           ]
         },
         "frame_type": {
-          "$ref": "#/$defs/FrameTypeName"
+          "$ref": "#/$defs/SavedFrameTypeName"
         },
         "guide_rms": {
           "anyOf": [
@@ -8191,6 +8204,16 @@
       ],
       "title": "RoleState",
       "type": "object"
+    },
+    "SavedFrameTypeName": {
+      "enum": [
+        "light",
+        "dark",
+        "bias",
+        "flat",
+        "stack"
+      ],
+      "type": "string"
     },
     "SelectFilter": {
       "additionalProperties": false,
@@ -9755,6 +9778,73 @@
       "title": "StackPreview",
       "type": "object"
     },
+    "StackSaved": {
+      "properties": {
+        "id": {
+          "description": "The saved stack's frame id.",
+          "type": "integer"
+        },
+        "path": {
+          "description": "Below <destination>/NOCS/.",
+          "type": "string"
+        },
+        "url": {
+          "description": "Download URL of its FITS.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "path",
+        "url"
+      ],
+      "title": "StackSaved",
+      "type": "object"
+    },
+    "StackSavedState": {
+      "additionalProperties": false,
+      "properties": {
+        "exposure": {
+          "description": "Seconds of exposure in it.",
+          "type": "number"
+        },
+        "frame_id": {
+          "description": "In the catalog, as frame type stack.",
+          "type": "integer"
+        },
+        "frames": {
+          "type": "integer"
+        },
+        "path": {
+          "description": "Below <destination>/NOCS/.",
+          "type": "string"
+        },
+        "target": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "time": {
+          "description": "UTC, ISO 8601, when it was saved.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "frame_id",
+        "path",
+        "frames",
+        "exposure",
+        "target",
+        "time"
+      ],
+      "title": "StackSavedState",
+      "type": "object"
+    },
     "StackSetup": {
       "additionalProperties": false,
       "properties": {
@@ -9872,6 +9962,21 @@
           "description": "Lights of the main camera are stacked as they arrive.",
           "type": "boolean"
         },
+        "saved": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StackSavedState"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The latest stack saved; None: none yet."
+        },
+        "saving": {
+          "description": "Saving a stack now.",
+          "type": "boolean"
+        },
         "stacks": {
           "description": "Stacks held (a mono camera keeps one per filter).",
           "type": "integer"
@@ -9894,7 +9999,9 @@
         "error",
         "look",
         "current",
-        "stacks"
+        "stacks",
+        "saving",
+        "saved"
       ],
       "title": "StackState",
       "type": "object"

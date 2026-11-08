@@ -72,7 +72,8 @@ The options weighed for each point are in [the plan](../roadmap/live-stacking.md
   frames in a row that do not register, or by hand.
 - **Saved as a frame of type `stack`.** When a stack with ≥ 2 frames ends, and on
   demand: a float32 FITS (an RGB cube for colour) and a full-size JPEG in
-  `<night>/Stack/<target>/`, catalogued (schema v7) so the night's list and zip
+  `<night>/Stack/<target>/`, catalogued as frame type `stack` (no migration: the
+  catalog's frame type is free text) so the night's list and zip
   include it; the calibration library ignores it.
 
 ## Consequences

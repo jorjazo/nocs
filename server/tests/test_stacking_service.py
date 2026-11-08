@@ -6,7 +6,7 @@ import asyncio
 import os
 from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 import pytest
@@ -16,11 +16,11 @@ from test_calibration_library import row
 from nocs.api.schemas import StackState
 from nocs.stacking.frames import Offered
 from nocs.stacking.masters import Calibration, Kind, Master
-from nocs.stacking.service import MISSES, LiveStackService
+from nocs.stacking.service import MISSES, LiveStackService, NothingToSaveError
 from nocs.stacking.settings import StackLook
 from nocs.stacking.stack import Added, Cause, Look, Rendered, StackLostError
 from nocs.state import StateStore
-from nocs.storage import FrameRow, FrameUnavailableError
+from nocs.storage import FrameFacts, FrameRow, FrameUnavailableError, SavedFrame, StorageError
 
 _fits: Any = fits
 
@@ -51,6 +51,9 @@ class FakeWorker:
     seen: list[bool] = field(default_factory=list[bool])
     """For each call, whether the file was there when the worker read it."""
     gate: asyncio.Event | None = None
+    saves: list[tuple[str, dict[str, str | int | float | bool | None]]] = field(
+        default_factory=list[tuple[str, dict[str, str | int | float | bool | None]]]
+    )
 
     async def stack_add(
         self,
@@ -100,6 +103,19 @@ class FakeWorker:
             raise StackLostError("unknown")
         return Rendered(str(self.previews_dir / f"{'f' * 32}.jpg"), 1920, 1280)
 
+    async def stack_save(
+        self,
+        stack_id: str,
+        fits_path: str,
+        jpeg_path: str,
+        look: Look,
+        header: dict[str, str | int | float | bool | None],
+    ) -> Rendered:
+        self.saves.append((stack_id, header))
+        await asyncio.to_thread(Path(fits_path).write_bytes, b"fits")
+        await asyncio.to_thread(Path(jpeg_path).write_bytes, b"jpeg")
+        return Rendered(jpeg_path, 3124, 2088)
+
     async def stack_drop(self, stack_id: str) -> None:
         self.dropped.append(stack_id)
         self.frames.pop(stack_id, None)
@@ -119,7 +135,20 @@ class FakeWorker:
 @dataclass
 class FakeLibrary:
     rows: list[FrameRow]
+    tmp: Path
     missing: set[int] = field(default_factory=set[int])
+    saved: list[FrameFacts] = field(default_factory=list[FrameFacts])
+    full: bool = False
+
+    def save(self, facts: FrameFacts) -> SavedFrame:
+        if self.full:
+            raise StorageError("the drive is full")
+        relative = PurePosixPath(f"2026-10-31/Stack/NGC_253/stack_{len(self.saved) + 1}.fits")
+        path = self.tmp / "NOCS" / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        facts.source.rename(path)
+        self.saved.append(facts)
+        return SavedFrame(1000 + len(self.saved), path, relative, "internal", 4, facts.arrived)
 
     def calibration_frames(self, cameras: list[str]) -> list[FrameRow]:
         return self.rows
@@ -148,7 +177,7 @@ class Rig:
         self.tmp = tmp_path
         self.store = StateStore()
         self.worker = FakeWorker(tmp_path / "previews")
-        self.library = FakeLibrary(rows or [])
+        self.library = FakeLibrary(rows or [], tmp_path / "drive")
         self.service = LiveStackService(
             self.store, self.worker, lambda: self.library, tmp_path / "config", tmp_path / "data"
         )
@@ -390,3 +419,69 @@ async def test_without_calibration_frames_the_stack_is_cosmetic(rig: Rig) -> Non
     assert state.current.calibration.notes == ["no darks or bias", "no flats"]
     assert state.current.calibration.dark_kind is None
     assert state.current.calibration.dark_frames == 0
+
+
+async def test_a_stack_is_saved_when_it_ends(rig: Rig, tmp_path: Path) -> None:
+    for _ in range(3):
+        await offer(rig, rig.frame())
+    await offer(rig, rig.frame(exposure=60.0))  # another setup ends the first stack
+    assert len(rig.library.saved) == 1
+    facts = rig.library.saved[0]
+    assert facts.frame_type == "stack"
+    assert facts.exposure == 900.0
+    assert facts.target == "NGC 253"
+    _, header = rig.worker.saves[0]
+    assert header["EXPTIME"] == 900.0
+    assert header["SUBEXP"] == 300.0
+    assert header["IMAGETYP"] == "Live stack"
+    assert header["CALSTAT"] == "none"
+    assert header["DATE-OBS"] == "2026-10-31T22:56:00"  # the first frame's start
+    jpeg = tmp_path / "drive" / "NOCS" / "2026-10-31" / "Stack" / "NGC_253" / "stack_1.jpg"
+    assert jpeg.read_bytes() == b"jpeg"
+    assert not list((tmp_path / "data" / "stacking").glob("*"))
+    saved = rig.state().saved
+    assert saved is not None
+    assert (saved.frame_id, saved.frames, saved.exposure) == (1001, 3, 900.0)
+
+
+async def test_a_stack_of_one_frame_is_not_saved(rig: Rig) -> None:
+    await offer(rig, rig.frame())
+    await rig.service.reset()
+    assert rig.library.saved == []
+
+
+async def test_saving_by_hand_and_not_twice(rig: Rig) -> None:
+    with pytest.raises(NothingToSaveError):
+        await rig.service.save()
+    await offer(rig, rig.frame())
+    saved = await rig.service.save()
+    assert saved.id == 1001
+    assert rig.state().saving is False
+    await offer(rig, rig.frame())
+    await offer(rig, rig.frame())
+    # Saved at one frame; three now: ending saves it again, with all three.
+    await rig.service.set_on(False)
+    assert len(rig.library.saved) == 2
+    assert rig.library.saved[1].exposure == 900.0
+    # Nothing new since: a second end saves nothing.
+    await rig.service.reset()
+    assert len(rig.library.saved) == 2
+
+
+async def test_a_stack_that_cannot_be_saved_is_reported(rig: Rig) -> None:
+    rig.library.full = True
+    for _ in range(2):
+        await offer(rig, rig.frame())
+    await rig.service.reset()
+    state = rig.state()
+    assert state.error is not None
+    assert "could not be saved" in state.error
+    assert not list((rig.tmp / "data" / "stacking").glob("*"))
+
+
+async def test_stopping_nocsd_saves_the_stacks(rig: Rig) -> None:
+    for _ in range(2):
+        await offer(rig, rig.frame())
+    await rig.service.close()
+    assert len(rig.library.saved) == 1
+    assert rig.state().on  # the switch stays as it was for the next start

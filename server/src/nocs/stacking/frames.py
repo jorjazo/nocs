@@ -9,6 +9,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from nocs.sites import Site
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,3 +37,5 @@ class Offered:
     stars: int | None = None
     hfr: float | None = None
     frame_id: int | None = None
+    site: Site | None = None
+    """Where it was taken: a saved stack's night and header."""

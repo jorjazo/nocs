@@ -49,7 +49,6 @@ from nocs.api.schemas import (
     ExposeRequest,
     FrameGuiding,
     FrameRecord,
-    FrameTypeName,
     GpsSiteRequest,
     Health,
     Hello,
@@ -58,6 +57,7 @@ from nocs.api.schemas import (
     NightGroup,
     NightInfo,
     PatchMessage,
+    SavedFrameTypeName,
     SerialPortInfo,
     ServerMessage,
     SetPropertyRequest,
@@ -488,6 +488,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
                 background.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
                     await background
+            await stacking().close()
             services.guiding.close()
             await mount().close()
             power().close()
@@ -531,7 +532,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
     app.include_router(sites_router(sites))
     app.include_router(targets_router())
     app.include_router(plan_router(plan))
-    app.include_router(stacking_router(stacking))
+    app.include_router(stacking_router(stacking, storage))
 
     @app.get("/api/autofocus/runs")
     async def focus_runs(  # pyright: ignore[reportUnusedFunction]
@@ -799,7 +800,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
     async def frames(  # pyright: ignore[reportUnusedFunction]
         night: int | None = None,
         target: str | None = None,
-        type: FrameTypeName | None = None,
+        type: SavedFrameTypeName | None = None,
         filter: str | None = None,
         before: int | None = None,
         limit: Annotated[int, Query(ge=1, le=1000)] = 100,
@@ -820,7 +821,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
     async def night_zip(  # pyright: ignore[reportUnusedFunction]
         night_id: int,
         target: str | None = None,
-        type: FrameTypeName | None = None,
+        type: SavedFrameTypeName | None = None,
         filter: str | None = None,
         calibration: bool = False,
     ) -> StreamingResponse:
@@ -1020,6 +1021,7 @@ def _frame_record(frame: Located) -> FrameRecord:
         volume=row.volume_label,
         available=frame.path is not None,
         url=f"/api/frames/{row.id}/file",
+        image_url=f"/api/frames/{row.id}/image" if row.frame_type == "stack" else None,
         camera=row.camera,
         profile=row.profile,
         gain=row.gain,

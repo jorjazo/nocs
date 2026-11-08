@@ -346,6 +346,11 @@ export type FailureKind = "device" | "clouds" | "guiding" | "focus" | "solve" | 
  * via the `definition` "FrameKind".
  */
 export type FrameKind = "light" | "dark" | "flat" | "bias";
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "SavedFrameTypeName".
+ */
+export type SavedFrameTypeName = "light" | "dark" | "bias" | "flat" | "stack";
 
 export interface NOCSAPI {
   [k: string]: unknown;
@@ -2311,6 +2316,14 @@ export interface StackState {
    */
   on: boolean;
   /**
+   * The latest stack saved; None: none yet.
+   */
+  saved: StackSavedState | null;
+  /**
+   * Saving a stack now.
+   */
+  saving: boolean;
+  /**
    * Stacks held (a mono camera keeps one per filter).
    */
   stacks: number;
@@ -2492,6 +2505,30 @@ export interface StackLook {
    * Black point, MADs from the median.
    */
   shadows?: number;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "StackSavedState".
+ */
+export interface StackSavedState {
+  /**
+   * Seconds of exposure in it.
+   */
+  exposure: number;
+  /**
+   * In the catalog, as frame type stack.
+   */
+  frame_id: number;
+  frames: number;
+  /**
+   * Below <destination>/NOCS/.
+   */
+  path: string;
+  target: string | null;
+  /**
+   * UTC, ISO 8601, when it was saved.
+   */
+  time: string;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -3968,7 +4005,7 @@ export interface FrameRecord {
   camera: string;
   exposure: number;
   filter: string | null;
-  frame_type: FrameTypeName;
+  frame_type: SavedFrameTypeName;
   gain: number | null;
   /**
    * None: not guided, or saved before 4.5.
@@ -3977,6 +4014,10 @@ export interface FrameRecord {
   height: number | null;
   hfr: number | null;
   id: number;
+  /**
+   * A live stack's stretched JPEG (ADR 0039); None for others.
+   */
+  image_url: string | null;
   night: string;
   offset: number | null;
   /**
@@ -4220,7 +4261,7 @@ export interface NightGroup {
    */
   exposure: number;
   filter: string | null;
-  frame_type: FrameTypeName;
+  frame_type: SavedFrameTypeName;
   frames: number;
   /**
    * Bytes.
@@ -4529,7 +4570,7 @@ export interface ReportFrame {
   clouds: boolean;
   exposure: number;
   filter: string | null;
-  frame_type: FrameTypeName;
+  frame_type: SavedFrameTypeName;
   /**
    * Total guiding RMS during the frame, arcseconds.
    */
@@ -5051,6 +5092,24 @@ export interface SolvedFrames {
    * Lights of the target never solved.
    */
   unsolved: number;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "StackSaved".
+ */
+export interface StackSaved {
+  /**
+   * The saved stack's frame id.
+   */
+  id: number;
+  /**
+   * Below <destination>/NOCS/.
+   */
+  path: string;
+  /**
+   * Download URL of its FITS.
+   */
+  url: string;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema

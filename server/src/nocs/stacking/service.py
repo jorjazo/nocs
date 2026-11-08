@@ -35,7 +35,7 @@ import uuid
 from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -52,7 +52,7 @@ from nocs.stacking.masters import Calibration, Kind, Master
 from nocs.stacking.settings import StackLook, StackSettings
 from nocs.stacking.stack import Added, Look, Rendered, StackLostError
 from nocs.state import Json, StateStore
-from nocs.storage import FrameRow, FrameUnavailableError
+from nocs.storage import FrameFacts, FrameRow, FrameUnavailableError, SavedFrame
 
 log = logging.getLogger(__name__)
 
@@ -64,6 +64,12 @@ MISSES = 3
 """Frames in a row that do not register before a new stack starts."""
 STACKS = 4
 """Stacks kept for a mono camera, one per filter."""
+SAVE_FROM = 2
+"""Frames a stack needs to be saved when it ends."""
+
+
+class NothingToSaveError(Exception):
+    """No stack, or a stack without frames."""
 
 
 class Worker(Protocol):
@@ -85,6 +91,14 @@ class Worker(Protocol):
     ) -> Added: ...
     async def stack_render(self, stack_id: str, look: Look) -> Rendered: ...
     async def stack_drop(self, stack_id: str) -> None: ...
+    async def stack_save(
+        self,
+        stack_id: str,
+        fits_path: str,
+        jpeg_path: str,
+        look: Look,
+        header: dict[str, str | int | float | bool | None],
+    ) -> Rendered: ...
     async def build_master(
         self,
         path: str,
@@ -96,7 +110,9 @@ class Worker(Protocol):
 
 
 class Library(Protocol):
-    """The frame catalog (``StorageService``); blocking, called from threads."""
+    """The frame catalog and storage (``StorageService``); blocking, called from threads."""
+
+    def save(self, facts: FrameFacts) -> SavedFrame: ...
 
     def calibration_frames(self, cameras: list[str]) -> list[FrameRow]: ...
     def frame_file(self, frame_id: int) -> tuple[FrameRow, Path]: ...
@@ -141,6 +157,10 @@ class LiveStack:
     preview: dict[str, Json] | None = None
     ids: list[int] = field(default_factory=list[int])
     """Catalog ids of the saved frames in it."""
+    newest: datetime | None = None
+    """When its latest accepted frame arrived."""
+    saved_at: int = 0
+    """Frames it had when it was last saved (0: never)."""
 
 
 class LiveStackService:
@@ -169,6 +189,8 @@ class LiveStackService:
         self._message: str | None = None
         self._error: str | None = None
         self._new = False
+        self._saving = False
+        self._saved: dict[str, Json] | None = None
         self._publish()
 
     @property
@@ -195,6 +217,10 @@ class LiveStackService:
             else:
                 stack.preview = self._preview(rendered)
         self._publish()
+
+    async def close(self) -> None:
+        """nocsd is stopping: save the stacks worth keeping while the worker still holds them."""
+        await self._drop_all()
 
     async def reset(self) -> None:
         """Start a new stack with the next frame."""
@@ -294,6 +320,7 @@ class LiveStackService:
         if added.accepted:
             stack.misses = 0
             stack.exposure += frame.exposure
+            stack.newest = frame.taken
             if frame.frame_id is not None:
                 stack.ids.append(frame.frame_id)
             if added.preview is not None:
@@ -411,8 +438,86 @@ class LiveStackService:
         await self._worker.build_master(str(target), spec.kind, files, bayer, subtract)
         return str(target), len(files)
 
+    async def save(self) -> SavedFrame:
+        """Save the current stack now; it goes on stacking. Raises
+        ``NothingToSaveError`` without one; ``StorageError`` when it cannot be saved."""
+        stack = self._current
+        if stack is None or not stack.created or stack.frames == 0:
+            raise NothingToSaveError("there is no stack to save")
+        self._saving = True
+        self._publish()
+        try:
+            return await self._save(stack)
+        finally:
+            self._saving = False
+            self._publish()
+
+    async def _save(self, stack: LiveStack) -> SavedFrame:
+        """The stack as a FITS and a JPEG, through storage: ``<night>/Stack/<target>/``."""
+        frame = stack.offered
+        self._links.mkdir(parents=True, exist_ok=True)
+        fits_path = self._links / f"{uuid.uuid4().hex}.fits"
+        jpeg_path = fits_path.with_suffix(".jpg")
+        first = stack.started - timedelta(seconds=frame.exposure)
+        header: dict[str, str | int | float | bool | None] = {
+            "IMAGETYP": "Live stack",
+            "EXPTIME": round(stack.exposure, 3),
+            "SUBEXP": frame.exposure,
+            "DATE-OBS": first.astimezone(UTC).replace(tzinfo=None).isoformat(timespec="seconds"),
+            "INSTRUME": frame.camera,
+            "FILTER": frame.filter,
+            "GAIN": frame.gain,
+            "OFFSET": frame.offset,
+            "XBINNING": frame.binning,
+            "YBINNING": frame.binning,
+            "CCD-TEMP": frame.temperature,
+            "CALSTAT": _calstat(stack.calibration),
+        }
+        try:
+            await self._worker.stack_save(
+                stack.id, str(fits_path), str(jpeg_path), _look(self.settings.look), header
+            )
+            facts = FrameFacts(
+                source=fits_path,
+                frame_type="stack",
+                exposure=round(stack.exposure, 3),
+                arrived=stack.newest or frame.taken,
+                camera=frame.camera,
+                gain=frame.gain,
+                offset=frame.offset,
+                binning=frame.binning,
+                temperature=frame.temperature,
+                cooler_target=None,
+                filter=frame.filter,
+                profile=None,
+                site=frame.site,
+                optics=None,
+                target=frame.target,
+            )
+            saved = await anyio.to_thread.run_sync(self._library().save, facts)
+            await anyio.to_thread.run_sync(shutil.move, jpeg_path, saved.path.with_suffix(".jpg"))
+        finally:
+            await anyio.to_thread.run_sync(_remove, [fits_path, jpeg_path])
+        stack.saved_at = stack.frames
+        self._saved = {
+            "frame_id": saved.id,
+            "path": str(saved.relative),
+            "frames": stack.frames,
+            "exposure": round(stack.exposure, 3),
+            "target": frame.target,
+            "time": datetime.now(UTC).isoformat(timespec="seconds"),
+        }
+        log.info("live stack saved: %s (%d frames)", saved.relative, stack.frames)
+        return saved
+
     async def _end(self, stack: LiveStack) -> None:
-        """Forget a stack (and free the worker's memory)."""
+        """Save a stack worth keeping, then forget it (and free the worker's memory)."""
+        if stack.created and stack.frames >= SAVE_FROM and stack.frames > stack.saved_at:
+            try:
+                await self._save(stack)
+            except Exception as e:  # a full or missing drive: the stack is lost, not the night
+                log.warning("live stack: could not save it: %s", e)
+                self._error = f"the stack could not be saved: {e}"
         self._stacks.pop(stack.key, None)
         if self._current is stack:
             self._current = None
@@ -513,8 +618,20 @@ class LiveStackService:
                 "look": self.settings.look.model_dump(),
                 "current": current,
                 "stacks": len(self._stacks),
+                "saving": self._saving,
+                "saved": self._saved,
             },
         )
+
+
+def _calstat(calibration: Calibration) -> str:
+    """Calibration applied, as the CALSTAT keyword spells it (D dark, F flat)."""
+    return ("D" if calibration.dark else "") + ("F" if calibration.flat else "") or "none"
+
+
+def _remove(paths: list[Path]) -> None:
+    for path in paths:
+        path.unlink(missing_ok=True)
 
 
 def _unused() -> dict[str, Json]:

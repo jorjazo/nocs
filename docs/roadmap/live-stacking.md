@@ -44,7 +44,7 @@ sub is gone from the stack; with darks and flats in the library they are applied
 | S3 | Calibration | Masters for the stack from the library's matches: median dark (or bias), flat minus its bias or dark flat, normalised per Bayer channel; built in the worker in strips, cached under `<data>/masters/`; cosmetic hot-pixel removal when there is no dark | Unit tests with a synthetic catalog and frames (a hot pixel and a vignetted flat corrected); cache reused; bench of building a master from 20 frames | Implemented: `nocs.stacking.masters` (16 tests with `calibrate`); a dark master of ten 26 MP frames in 5.5 s and 280 MB on the VM |
 | S4 | Service and API | `LiveStackService`: on/off, hook on main-camera lights from `_finish` (background, newest frame wins), new stack on a change of target, filter, exposure, gain, binning or size, or after 3 frames that do not register; state `stack`; `POST /api/stack` (on/off), `/api/stack/reset`, `/api/stack/save`, `PUT /api/stack/look`; schemas + TS types; worker death handled | Unit tests with a fake worker; API tests; simulators: a series with mount nudges between frames (GSC stars) stacks every frame and reports the shifts | Implemented: `nocs.stacking.service`, `api/stacking.py`, the capture hook; 22 tests with a fake worker and the API; `test_stacking_integration.py` against the simulators (CI runs it; not run in the cloud session, whose network blocks the INDI PPA) |
 | S5 | Web UI | Live view: *Stack* toggle, the stack in the viewer (switch to the last sub), frames / rejected / total time, *New stack*, *Save*, look sheet (background, strength, saturation); Session monitor shows the stack while a sequence stacks; en/es; `docs/ux.md` | `pnpm check`, `pnpm test`; browser against the simulators, phone and wide, Night mode; an observer sees it | Implemented: Live view card, look sheet, Stack/Frame choice in Live view and the Session monitor; checked in a browser (phone and wide, Dusk and Night, en and es) on nocsd with a stack of synthetic frames rendered by the worker, not on the simulators (blocked here); the monitor and the observer view not looked at |
-| S6 | Saving | Stack as FITS (float32, RGB cube) + JPEG in `<night>/Stack/<target>/`, catalogued as `stack` (catalog v7; ignored by the calibration library), at the end of a stack and on demand; listed under the night and in its zip; WCS from a solve of the reference when ASTAP is available | Unit tests (catalog migration, layout); API test; the saved FITS opens in Siril/astropy with the right orientation and WCS | Planned |
+| S6 | Saving | Stack as FITS (float32, RGB cube) + JPEG in `<night>/Stack/<target>/`, catalogued as `stack` (ignored by the calibration library), at the end of a stack and on demand; listed under the night and in its zip; WCS from a solve of the reference when ASTAP is available | Unit tests (catalog migration, layout); API test; the saved FITS opens in Siril/astropy with the right orientation and WCS | Implemented, without the WCS (left for later): through `StorageService.save` (headers, names, reserve, catalog), no migration (the frame type is free text); `POST /api/stack/save`, `GET /api/frames/{id}/image`; Save in Live view; the night's list links the picture; a test saves a real stack through the real storage and reads it back with astropy |
 | S7 | Lab and field | Bench on the lab Pi; a soak night with stacking on (memory, worker time, event loop); field test checklist item (EAA on a galaxy, dithers and a flip) | Lab Pi; field test | Planned |
 
 S1 and S3's master building are independent; S2 needs S1; S4 needs S2; S5 needs
@@ -210,7 +210,7 @@ end of sequence) with ≥ 2 frames, and on demand: a FITS (float32, linear,
 `NAXIS3 = 3` for colour, headers: frames, total exposure, the reference's
 pointing, filter, camera, calibration used, NOCS version; WCS when the reference
 is solved) and a stretched full-size JPEG, in `<night>/Stack/<target>/`,
-catalogued as frame type `stack` (catalog v7) so the night's list and zip
+catalogued as frame type `stack` (no migration: the frame type is free text) so the night's list and zip
 include them; the calibration library ignores them. ~78 MB per colour stack on
 the drive.
 
@@ -276,7 +276,8 @@ doing preview and stack in one worker call that loads the file once.
 - Shared files kept small: `api/schemas.py` (the `stack` state and requests),
   generated types, `api/app.py` wiring, `imaging/capture.py` (one hook),
   `imaging/worker.py` (stack calls), Live view and the Session monitor.
-- Later (not in this plan): LRGB/narrowband combination for mono, gradient
+- Later (not in this plan): a WCS in the saved stack from a solve of its reference,
+  LRGB/narrowband combination for mono, gradient
   removal, full-resolution and drizzle stacking, rebuilding a stack after a
   crash, weighting by noise, a stack per sequence target in the template,
   annotating objects on the stack from its WCS.

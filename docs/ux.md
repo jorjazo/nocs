@@ -472,7 +472,10 @@ Live stacking (ADR 0039, after v1.0):
   lay from the first, or why it was left out, in the warning color); what the
   calibration is made of (20 darks · flats without their bias: not used). Reasons
   are the client's words, not the server's English.
-- *New stack* and *Look*. The look is a sheet of preset steps, not sliders (sky,
+- *New stack*, *Save* and *Look*. A stack is saved by itself when it ends (New stack,
+  the switch off, another setup) with two frames or more, and *Save* keeps it as it is
+  now; the card then says where. The night's frames list a saved stack with a link
+  to its picture beside the FITS. The look is a sheet of preset steps, not sliders (sky,
   black point, colour, and keeping the camera's colour balance), applied as each
   is tapped: the server re-renders the stack at once for every client.
 - Observers see the stack and its numbers (an outreach night); the switch and the

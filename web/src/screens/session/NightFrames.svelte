@@ -212,6 +212,10 @@
             <span class="caption muted">
               {[t.live.frameTypes[frame.frame_type], frame.filter, formatSeconds(frame.exposure, locale)].filter(Boolean).join(" · ")}
             </span>
+            {#if frame.image_url && frame.available}
+              <!-- A live stack (ADR 0039): its stretched picture, beside the FITS. -->
+              <a class="caption" href={frame.image_url} target="_blank" rel="noopener">{t.nights.stackImage}</a>
+            {/if}
           </div>
           <div class="metrics mono">
             <span>{frame.stars === null ? "—" : t.live.stars(frame.stars)}</span>

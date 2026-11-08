@@ -713,6 +713,7 @@ class CaptureService:
                     stars=analysis.stars,
                     hfr=analysis.hfr,
                     frame_id=frame_id,
+                    site=site,
                 )
             )
         except Exception as e:  # the frame is taken whatever happens to its stacking
