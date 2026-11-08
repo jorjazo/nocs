@@ -9508,12 +9508,39 @@
           "description": "A dark (or bias) master is subtracted.",
           "type": "boolean"
         },
+        "dark_frames": {
+          "description": "Frames in that master.",
+          "type": "integer"
+        },
+        "dark_kind": {
+          "anyOf": [
+            {
+              "enum": [
+                "dark",
+                "bias"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "What the subtracted master is made of; None: nothing subtracted."
+        },
         "flat": {
           "description": "A flat master is divided.",
           "type": "boolean"
         },
+        "flat_frames": {
+          "description": "Frames in the flat master; 0: no flat.",
+          "type": "integer"
+        },
+        "flats_unused": {
+          "description": "Flats were found without their bias or dark flats.",
+          "type": "boolean"
+        },
         "notes": {
-          "description": "What was found and used, or why not.",
+          "description": "What was found and used, or why not (English, logs).",
           "items": {
             "type": "string"
           },
@@ -9524,7 +9551,11 @@
         "dark",
         "flat",
         "cosmetic",
-        "notes"
+        "notes",
+        "dark_kind",
+        "dark_frames",
+        "flat_frames",
+        "flats_unused"
       ],
       "title": "StackCalibration",
       "type": "object"

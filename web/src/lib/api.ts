@@ -74,6 +74,8 @@ import type {
   FlatPlan,
   FlatWindows,
   WifiNetwork,
+  StackLook,
+  StackSwitchRequest,
 } from "./types";
 
 export class ApiError extends Error {
@@ -680,4 +682,20 @@ export async function startFlats(plan: FlatPlan): Promise<string> {
 
 export function flatWindows(): Promise<FlatWindows> {
   return request("GET", "/api/flats/window");
+}
+
+// -- Live stacking (ADR 0039) ----------------------------------------------------------
+
+export function setStacking(on: boolean): Promise<void> {
+  return request("PUT", "/api/stack", { on } satisfies StackSwitchRequest);
+}
+
+// The next frame starts a new stack.
+export function resetStack(): Promise<void> {
+  return request("POST", "/api/stack/reset");
+}
+
+// Kept by the server for every client; the current stack is shown with it at once.
+export function setStackLook(look: StackLook): Promise<void> {
+  return request("PUT", "/api/stack/look", look);
 }

@@ -45,7 +45,9 @@ class MasterPlan:
     flat_offset: MasterSpec | None
     """The flats' own bias or dark flats; set whenever ``flat`` is."""
     notes: tuple[str, ...]
-    """What is used and what is missing, for the user."""
+    """What is used and what is missing, for the log."""
+    flats_unused: bool = False
+    """Flats were found, but not their bias or dark flats."""
 
     @property
     def specs(self) -> list[MasterSpec]:
@@ -85,7 +87,8 @@ def plan(light: Light, calibration: list[FrameRow]) -> MasterPlan:
         notes.append("flats without their bias or dark flats: not used")
     else:
         notes.append("no flats")
-    return MasterPlan(dark, flat, offset, tuple(notes))
+    unused = bool(group.flats.frames) and flat is None
+    return MasterPlan(dark, flat, offset, tuple(notes), unused)
 
 
 def _spec(kind: Kind, match: Match, rows: dict[int, FrameRow]) -> MasterSpec:

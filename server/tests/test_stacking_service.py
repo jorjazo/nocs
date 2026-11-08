@@ -374,6 +374,10 @@ async def test_calibration_masters_from_the_library(tmp_path: Path) -> None:
     assert state.current.calibration.dark
     assert state.current.calibration.flat
     assert state.current.calibration.notes == ["darks: 3", "flats: 2"]
+    assert state.current.calibration.dark_kind == "dark"
+    assert state.current.calibration.dark_frames == 2  # one is on an unplugged drive
+    assert state.current.calibration.flat_frames == 2
+    assert not state.current.calibration.flats_unused
 
 
 async def test_without_calibration_frames_the_stack_is_cosmetic(rig: Rig) -> None:
@@ -384,3 +388,5 @@ async def test_without_calibration_frames_the_stack_is_cosmetic(rig: Rig) -> Non
     assert state.current is not None
     assert state.current.calibration.cosmetic
     assert state.current.calibration.notes == ["no darks or bias", "no flats"]
+    assert state.current.calibration.dark_kind is None
+    assert state.current.calibration.dark_frames == 0

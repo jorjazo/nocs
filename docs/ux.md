@@ -457,6 +457,27 @@ Calibration frames (ADR 0036):
 - *Download with calibration* is the night's zip with the matching frames of other
   nights added.
 
+Live stacking (ADR 0039, after v1.0):
+
+- Live view's main camera gets a *Stack frames as they arrive* switch under the
+  histogram; it is the server's, so every client shows the same, and it covers
+  sequences too. Off, it explains what it does in one line.
+- On, a *Stack · Frame* choice (kept per device) says what the viewer shows; the
+  stack replaces the frame and its histogram, and the bottom pills say *Stack*, its
+  frames and its total exposure. The Session monitor offers the same choice above
+  its latest frame.
+- Below: frames, total time, frames left out and frames that arrived while the
+  worker was busy, in words; a chip with what calibrates the frames (darks and
+  flats, darks, flats, hot pixels removed); the latest frame's outcome (how far it
+  lay from the first, or why it was left out, in the warning color); what the
+  calibration is made of (20 darks · flats without their bias: not used). Reasons
+  are the client's words, not the server's English.
+- *New stack* and *Look*. The look is a sheet of preset steps, not sliders (sky,
+  black point, colour, and keeping the camera's colour balance), applied as each
+  is tapped: the server re-renders the stack at once for every client.
+- Observers see the stack and its numbers (an outreach night); the switch and the
+  buttons are disabled for them.
+
 ## 8. Open UX questions
 
 - How to expose the full sequence tree editor (advanced) without cluttering the

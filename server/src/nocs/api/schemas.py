@@ -988,7 +988,13 @@ class StackCalibration(StateModel):
     dark: bool = Field(description="A dark (or bias) master is subtracted.")
     flat: bool = Field(description="A flat master is divided.")
     cosmetic: bool = Field(description="Without a dark, hot pixels are removed.")
-    notes: list[str] = Field(description="What was found and used, or why not.")
+    notes: list[str] = Field(description="What was found and used, or why not (English, logs).")
+    dark_kind: Literal["dark", "bias"] | None = Field(
+        description="What the subtracted master is made of; None: nothing subtracted."
+    )
+    dark_frames: int = Field(description="Frames in that master.")
+    flat_frames: int = Field(description="Frames in the flat master; 0: no flat.")
+    flats_unused: bool = Field(description="Flats were found without their bias or dark flats.")
 
 
 class StackOutcome(StateModel):

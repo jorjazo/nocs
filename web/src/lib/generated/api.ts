@@ -2364,11 +2364,27 @@ export interface StackCalibration {
    */
   dark: boolean;
   /**
+   * Frames in that master.
+   */
+  dark_frames: number;
+  /**
+   * What the subtracted master is made of; None: nothing subtracted.
+   */
+  dark_kind: ("dark" | "bias") | null;
+  /**
    * A flat master is divided.
    */
   flat: boolean;
   /**
-   * What was found and used, or why not.
+   * Frames in the flat master; 0: no flat.
+   */
+  flat_frames: number;
+  /**
+   * Flats were found without their bias or dark flats.
+   */
+  flats_unused: boolean;
+  /**
+   * What was found and used, or why not (English, logs).
    */
   notes: string[];
 }
