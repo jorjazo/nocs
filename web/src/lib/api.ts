@@ -28,6 +28,8 @@ import type {
   FilterSelectRequest,
   FrameRecord,
   FrameTypeName,
+  SavedFrameTypeName,
+  StackSaved,
   FocuserBacklashRequest,
   FocuserMoveRequest,
   GpsSiteRequest,
@@ -542,7 +544,7 @@ export function getNights(): Promise<NightInfo[]> {
 export type FrameQuery = {
   night?: number;
   target?: string;
-  type?: FrameTypeName;
+  type?: SavedFrameTypeName;
   filter?: string;
   // Paging: frames older than this id.
   before?: number;
@@ -699,6 +701,11 @@ export function setStacking(on: boolean): Promise<void> {
 // The next frame starts a new stack.
 export function resetStack(): Promise<void> {
   return request("POST", "/api/stack/reset");
+}
+
+// The stack as it is now, as a FITS and a JPEG in the night's Stack/<target>/; it goes on.
+export function saveStack(): Promise<StackSaved> {
+  return request("POST", "/api/stack/save");
 }
 
 // Kept by the server for every client; the current stack is shown with it at once.

@@ -368,7 +368,7 @@ class StorageService:
         config = self._config
         filter = header.text("FILTER") or facts.filter
         target = None
-        if facts.frame_type == "light":
+        if facts.frame_type in ("light", "stack"):
             target = self.catalog.target(facts.target) if facts.target else config.target
         relative_dir = layout.folder(facts.frame_type, night, target, filter)
         directory = destination.directory / layout.ROOT / relative_dir

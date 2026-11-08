@@ -133,6 +133,8 @@ class EquipmentState(StateModel):
 
 
 type FrameTypeName = Literal["light", "dark", "bias", "flat"]
+type SavedFrameTypeName = Literal["light", "dark", "bias", "flat", "stack"]
+"""What a saved frame can be: a camera's frame types, and live stacks (ADR 0039)."""
 type JobStateName = Literal["running", "succeeded", "failed", "cancelled"]
 
 
@@ -1058,6 +1060,15 @@ class CurrentStack(StateModel):
     preview: StackPreview | None
 
 
+class StackSavedState(StateModel):
+    frame_id: int = Field(description="In the catalog, as frame type stack.")
+    path: str = Field(description="Below <destination>/NOCS/.")
+    frames: int
+    exposure: float = Field(description="Seconds of exposure in it.")
+    target: str | None
+    time: str = Field(description="UTC, ISO 8601, when it was saved.")
+
+
 class StackBuilding(StateModel):
     kind: Literal["dark", "bias", "flat"]
     frames: int
@@ -1074,6 +1085,11 @@ class StackState(StateModel):
     look: StackLook
     current: CurrentStack | None = Field(description="The stack shown; None before a frame.")
     stacks: int = Field(description="Stacks held (a mono camera keeps one per filter).")
+    saving: bool = Field(description="Saving a stack now.")
+    saved: StackSavedState | None = Field(description="The latest stack saved; None: none yet.")
+    save_error: str | None = Field(
+        description="Why the latest stack to end could not be saved; None after a save."
+    )
 
 
 class AppState(StateModel):
@@ -1141,6 +1157,12 @@ class Health(WireModel):
 class StateSnapshot(WireModel):
     version: int
     state: dict[str, Any]
+
+
+class StackSaved(WireModel):
+    id: int = Field(description="The saved stack's frame id.")
+    path: str = Field(description="Below <destination>/NOCS/.")
+    url: str = Field(description="Download URL of its FITS.")
 
 
 class StackSwitchRequest(BaseModel):
@@ -1651,7 +1673,7 @@ class ClockReport(WireModel):
 
 
 class NightGroup(WireModel):
-    frame_type: FrameTypeName
+    frame_type: SavedFrameTypeName
     target: str | None
     filter: str | None
     frames: int
@@ -1675,7 +1697,7 @@ class FrameRecord(WireModel):
     id: int
     night: str
     target: str | None
-    frame_type: FrameTypeName
+    frame_type: SavedFrameTypeName
     filter: str | None
     exposure: float
     started: str = Field(description="UTC, ISO 8601, exposure start.")
@@ -1684,6 +1706,9 @@ class FrameRecord(WireModel):
     volume: str = Field(description="Label of the drive it is on.")
     available: bool = Field(description="Its drive is mounted now.")
     url: str = Field(description="Download URL.")
+    image_url: str | None = Field(
+        default=None, description="A live stack's stretched JPEG (ADR 0039); None for others."
+    )
     camera: str
     profile: str | None
     gain: float | None
@@ -1825,7 +1850,7 @@ class SessionSummary(WireModel):
 class ReportFrame(WireModel):
     id: int
     started: str = Field(description="UTC, ISO 8601, exposure start.")
-    frame_type: FrameTypeName
+    frame_type: SavedFrameTypeName
     filter: str | None
     exposure: float
     stars: int | None

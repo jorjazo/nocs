@@ -6,7 +6,7 @@
   import Chip from "../../components/Chip.svelte";
   import SegmentedControl from "../../components/SegmentedControl.svelte";
   import Toggle from "../../components/Toggle.svelte";
-  import { resetStack, setStacking } from "../../lib/api";
+  import { resetStack, saveStack, setStacking } from "../../lib/api";
   import { formatDecimal, formatDuration } from "../../lib/format";
   import { i18n } from "../../lib/i18n";
   import { calibrated, folded, outcome, parts, type Part } from "../../lib/stack";
@@ -95,8 +95,16 @@
       <p class="caption muted notes">{t.stack.notes}: {parts(current).map(part).join(" · ")}</p>
     {/if}
 
+    {#if stack.saved}
+      <p class="caption muted notes">{t.stack.saved(stack.saved.path)}</p>
+    {/if}
+    {#if stack.save_error}
+      <p class="caption warning" role="status">{t.stack.saveFailed}</p>
+    {/if}
+
     <div class="buttons">
       <Button disabled={!owner || !current} onclick={() => void run(resetStack)}>{t.stack.newStack}</Button>
+      <Button disabled={!owner || !current?.frames} busy={stack.saving} onclick={() => void run(saveStack)}>{t.stack.save}</Button>
       <Button variant="text" disabled={!owner} onclick={() => (looking = true)}>{t.stack.look}</Button>
     </div>
   {/if}

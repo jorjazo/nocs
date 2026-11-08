@@ -126,7 +126,11 @@
     return new Intl.DateTimeFormat(locale, { timeStyle: "medium" }).format(new Date(iso));
   }
 
-  const exposure = $derived(night ? night.groups.reduce((sum, g) => sum + g.exposure, 0) : 0);
+  // Live stacks (ADR 0040) are made of the night's lights: counting them too would
+  // add their time twice.
+  const taken = $derived(night ? night.groups.filter((g) => g.frame_type !== "stack") : []);
+  const exposure = $derived(taken.reduce((sum, g) => sum + g.exposure, 0));
+  const takenFrames = $derived(taken.reduce((sum, g) => sum + g.frames, 0));
   const missing = $derived(frames.find((frame) => !frame.available) ?? null);
 </script>
 
@@ -164,7 +168,7 @@
     <p class="summary">
       <span class="date">{nightDate(night.night)}{night.site ? ` · ${night.site}` : ""}</span>
       <span class="muted">
-        {t.nights.count(night.frames)} · {formatDuration(exposure)} · {formatBytes(night.size, locale)}
+        {t.nights.count(takenFrames)} · {formatDuration(exposure)} · {formatBytes(night.size, locale)}
       </span>
     </p>
 
@@ -212,6 +216,10 @@
             <span class="caption muted">
               {[t.live.frameTypes[frame.frame_type], frame.filter, formatSeconds(frame.exposure, locale)].filter(Boolean).join(" · ")}
             </span>
+            {#if frame.image_url && frame.available}
+              <!-- A live stack (ADR 0039): its stretched picture, beside the FITS. -->
+              <a class="caption" href={frame.image_url} target="_blank" rel="noopener">{t.nights.stackImage}</a>
+            {/if}
           </div>
           <div class="metrics mono">
             <span>{frame.stars === null ? "—" : t.live.stars(frame.stars)}</span>

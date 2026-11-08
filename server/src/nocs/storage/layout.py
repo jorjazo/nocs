@@ -11,7 +11,13 @@ from pathlib import PurePosixPath
 
 ROOT = "NOCS"
 UNTITLED = "Untitled"
-TYPE_FOLDERS = {"light": "Light", "dark": "Dark", "flat": "Flat", "bias": "Bias"}
+TYPE_FOLDERS = {
+    "light": "Light",
+    "dark": "Dark",
+    "flat": "Flat",
+    "bias": "Bias",
+    "stack": "Stack",  # live stacks (ADR 0039), by target and filter as lights
+}
 
 DEFAULT_TEMPLATE = "{datetime}_{type}_{filter}_{exposure}s_{temperature}C_{seq}"
 FIELDS = frozenset(
@@ -64,11 +70,12 @@ def clean(name: str) -> str:
 
 
 def folder(frame_type: str, night: date, target: str | None, filter: str | None) -> PurePosixPath:
-    """``<night>/Light/<target>/<filter>``, ``<night>/Flat/<filter>``, ``<night>/Dark``…"""
+    """``<night>/Light/<target>/<filter>``, ``<night>/Flat/<filter>``, ``<night>/Dark``…
+    (``<night>/Stack/<target>/<filter>`` for live stacks)."""
     path = PurePosixPath(night.isoformat(), TYPE_FOLDERS[frame_type])
-    if frame_type == "light":
+    if frame_type in ("light", "stack"):
         path /= clean(target or "") or UNTITLED
-    if frame_type in ("light", "flat") and filter and (name := clean(filter)):
+    if frame_type in ("light", "flat", "stack") and filter and (name := clean(filter)):
         path /= name
     return path
 
