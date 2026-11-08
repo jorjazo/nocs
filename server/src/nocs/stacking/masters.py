@@ -1,4 +1,4 @@
-"""Calibration masters for the live stack, and applying them (ADR 0039).
+"""Calibration masters for the live stack, and applying them (ADR 0040).
 
 A master is the per-pixel median of up to a few tens of raw frames from the
 calibration library (ADR 0036), at the stack's resolution: each frame is reduced

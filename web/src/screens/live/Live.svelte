@@ -25,7 +25,7 @@
   } from "../../lib/camera.svelte";
   import SequenceHold from "../../components/SequenceHold.svelte";
   import { errorText } from "../../lib/errors";
-  import { formatDecimal, formatPlain, formatSeconds, formatTemperature } from "../../lib/format";
+  import { formatDecimal, formatDuration, formatPlain, formatSeconds, formatTemperature } from "../../lib/format";
   import { i18n } from "../../lib/i18n";
   import { live } from "../../lib/live.svelte";
   import { formatDec, formatRa, mountActivity } from "../../lib/mount.svelte";
@@ -44,7 +44,9 @@
   import SolvePanel from "./SolvePanel.svelte";
   import { folderName } from "../../lib/storage";
   import TargetSheet from "./TargetSheet.svelte";
+  import StackCard from "./StackCard.svelte";
   import Viewer from "./Viewer.svelte";
+  import { stackView } from "../../lib/stackview.svelte";
 
   const t = $derived(i18n.t);
   const locale = $derived(i18n.locale);
@@ -203,6 +205,17 @@
   // Framing: the pad sits with the actions and the preview stays in sight above,
   // with its centre marked, so a star can be watched while it moves.
   const framing = $derived(showPad && mount !== null);
+  // The live stack replaces the frame in the viewer while it has one, unless this
+  // device chose to watch the frames (ADR 0040).
+  const stack = $derived(live.app.stack ?? null);
+  // While framing with the pad, the newest frame shows whatever the choice: the stack
+  // cannot show where the mount points now.
+  const stacked = $derived(
+    role === "main_camera" && stack?.on && stackView.view === "stack" && !framing
+      ? (stack.current ?? null)
+      : null,
+  );
+  const shown = $derived(stacked?.preview ?? preview);
   const padReason = $derived.by((): string | null => {
     if (!owner) return t.mount.locked;
     if (mount?.parked) return t.mount.padParked;
@@ -259,10 +272,10 @@
   <div class="live" class:expanded class:framing={framing}>
     <section class="stage" aria-label={t.live.preview}>
       <Viewer
-        url={preview?.url ?? null}
-        width={preview?.width ?? 0}
-        height={preview?.height ?? 0}
-        label={t.live.previewLabel(camera.device)}
+        url={shown?.url ?? null}
+        width={shown?.width ?? 0}
+        height={shown?.height ?? 0}
+        label={stacked?.preview ? t.stack.previewLabel(camera.device) : t.live.previewLabel(camera.device)}
         reticle={framing}>
         {#snippet empty()}
           <div class="nopreview">
@@ -295,7 +308,11 @@
           </span>
         </div>
         <div class="overlay bottom">
-          {#if preview}
+          {#if stacked?.preview}
+            <span class="pill">{t.stack.stack}</span>
+            <span class="pill mono">{t.stack.frames(stacked.frames)}</span>
+            <span class="pill mono">{formatDuration(stacked.exposure)}</span>
+          {:else if preview}
             <span class="pill mono">{preview.hfr === null ? "HFR —" : `HFR ${formatDecimal(preview.hfr, locale, 2)}`}</span>
             <span class="pill mono">{t.live.stars(preview.stars)}</span>
             <span class="pill mono">{formatSeconds(preview.exposure, locale)}</span>
@@ -316,8 +333,12 @@
           onchange={(value) => capture.setRole(value)} />
       {/if}
 
-      {#if preview}
+      {#if preview && !stacked?.preview}
         <Histogram {preview} label={t.live.histogram} note={t.live.autoStretch} />
+      {/if}
+
+      {#if main && stack}
+        <StackCard {stack} {owner} run={act} />
       {/if}
 
       {#if wheel}

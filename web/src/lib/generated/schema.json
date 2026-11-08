@@ -9586,6 +9586,28 @@
       "title": "SolverState",
       "type": "object"
     },
+    "StackBuilding": {
+      "additionalProperties": false,
+      "properties": {
+        "frames": {
+          "type": "integer"
+        },
+        "kind": {
+          "enum": [
+            "dark",
+            "bias",
+            "flat"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "frames"
+      ],
+      "title": "StackBuilding",
+      "type": "object"
+    },
     "StackCalibration": {
       "additionalProperties": false,
       "properties": {
@@ -9597,12 +9619,47 @@
           "description": "A dark (or bias) master is subtracted.",
           "type": "boolean"
         },
+        "dark_failed": {
+          "description": "Darks or bias were found, but no master came of them.",
+          "type": "boolean"
+        },
+        "dark_frames": {
+          "description": "Frames in that master.",
+          "type": "integer"
+        },
+        "dark_kind": {
+          "anyOf": [
+            {
+              "enum": [
+                "dark",
+                "bias"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "What the subtracted master is made of; None: nothing subtracted."
+        },
         "flat": {
           "description": "A flat master is divided.",
           "type": "boolean"
         },
+        "flat_failed": {
+          "description": "Flats were found, but no master came of them.",
+          "type": "boolean"
+        },
+        "flat_frames": {
+          "description": "Frames in the flat master; 0: no flat.",
+          "type": "integer"
+        },
+        "flats_unused": {
+          "description": "Flats were found, but without their bias or dark flats, or the lights'.",
+          "type": "boolean"
+        },
         "notes": {
-          "description": "What was found and used, or why not.",
+          "description": "What was found and used, or why not (English, logs).",
           "items": {
             "type": "string"
           },
@@ -9613,7 +9670,13 @@
         "dark",
         "flat",
         "cosmetic",
-        "notes"
+        "notes",
+        "dark_kind",
+        "dark_frames",
+        "dark_failed",
+        "flat_frames",
+        "flats_unused",
+        "flat_failed"
       ],
       "title": "StackCalibration",
       "type": "object"
@@ -9889,8 +9952,19 @@
     },
     "StackState": {
       "additionalProperties": false,
-      "description": "Live stacking (ADR 0039).",
+      "description": "Live stacking (ADR 0040).",
       "properties": {
+        "building": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StackBuilding"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The master being built, if one is."
+        },
         "current": {
           "anyOf": [
             {
@@ -9924,7 +9998,7 @@
               "type": "null"
             }
           ],
-          "description": "What it is doing (building a master)."
+          "description": "What it is doing, in English (for logs)."
         },
         "on": {
           "description": "Lights of the main camera are stacked as they arrive.",
@@ -9949,6 +10023,7 @@
         "on",
         "status",
         "message",
+        "building",
         "error",
         "look",
         "current",

@@ -380,6 +380,10 @@ async def test_calibration_masters_from_the_library(tmp_path: Path) -> None:
     assert state.current.calibration.dark
     assert state.current.calibration.flat
     assert state.current.calibration.notes == ["darks: 3", "flats: 2"]
+    assert state.current.calibration.dark_kind == "dark"
+    assert state.current.calibration.dark_frames == 2  # one is on an unplugged drive
+    assert state.current.calibration.flat_frames == 2
+    assert not state.current.calibration.flats_unused
 
 
 async def test_without_calibration_frames_the_stack_is_cosmetic(rig: Rig) -> None:
@@ -390,6 +394,8 @@ async def test_without_calibration_frames_the_stack_is_cosmetic(rig: Rig) -> Non
     assert state.current is not None
     assert state.current.calibration.cosmetic
     assert state.current.calibration.notes == ["no darks or bias", "no flats"]
+    assert state.current.calibration.dark_kind is None
+    assert state.current.calibration.dark_frames == 0
 
 
 async def test_new_stack_while_its_masters_are_built(tmp_path: Path) -> None:
@@ -487,6 +493,37 @@ async def test_bias_only_calibration_says_so(tmp_path: Path) -> None:
     assert calibration is not None
     assert calibration.bias
     assert calibration.cosmetic
+
+
+async def test_a_master_that_fails_is_reported_as_such(tmp_path: Path) -> None:
+    darks = [row("dark") for _ in range(2)]
+    flats = [row("flat", filter="L", exposure=2.0) for _ in range(2)]
+    bias = [row("bias", exposure=0.001) for _ in range(2)]
+    rig = Rig(tmp_path, darks + flats + bias)
+    await rig.service.set_on(True)
+    build = rig.worker.build_master
+    seen: list[Any] = []
+
+    async def failing(path: str, kind: Kind, *args: Any, **kwargs: Any) -> Master:
+        seen.append(rig.state().building)
+        if kind in ("dark", "flat"):
+            raise OSError("a broken file")
+        return await build(path, kind, *args, **kwargs)
+
+    rig.worker.build_master = failing  # type: ignore[method-assign]
+    task = asyncio.create_task(rig.service.run())
+    try:
+        await offer(rig, rig.frame())
+    finally:
+        task.cancel()
+    state = rig.state()
+    assert state.current is not None
+    calibration = state.current.calibration
+    assert (calibration.dark_failed, calibration.flat_failed) == (True, True)
+    assert (calibration.dark_frames, calibration.flat_frames) == (0, 0)
+    assert state.building is None  # done
+    # While each was built, the state said which.
+    assert [(b.kind, b.frames) for b in seen] == [("dark", 2), ("bias", 2), ("flat", 2)]
 
 
 async def test_frames_skipped_before_their_stack_exists_still_count(

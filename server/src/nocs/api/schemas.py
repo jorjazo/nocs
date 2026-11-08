@@ -1006,7 +1006,17 @@ class StackCalibration(StateModel):
     dark: bool = Field(description="A dark (or bias) master is subtracted.")
     flat: bool = Field(description="A flat master is divided.")
     cosmetic: bool = Field(description="Without a dark, hot pixels are removed.")
-    notes: list[str] = Field(description="What was found and used, or why not.")
+    notes: list[str] = Field(description="What was found and used, or why not (English, logs).")
+    dark_kind: Literal["dark", "bias"] | None = Field(
+        description="What the subtracted master is made of; None: nothing subtracted."
+    )
+    dark_frames: int = Field(description="Frames in that master.")
+    dark_failed: bool = Field(description="Darks or bias were found, but no master came of them.")
+    flat_frames: int = Field(description="Frames in the flat master; 0: no flat.")
+    flats_unused: bool = Field(
+        description="Flats were found, but without their bias or dark flats, or the lights'."
+    )
+    flat_failed: bool = Field(description="Flats were found, but no master came of them.")
 
 
 class StackOutcome(StateModel):
@@ -1048,12 +1058,18 @@ class CurrentStack(StateModel):
     preview: StackPreview | None
 
 
+class StackBuilding(StateModel):
+    kind: Literal["dark", "bias", "flat"]
+    frames: int
+
+
 class StackState(StateModel):
-    """Live stacking (ADR 0039)."""
+    """Live stacking (ADR 0040)."""
 
     on: bool = Field(description="Lights of the main camera are stacked as they arrive.")
     status: Literal["off", "idle", "preparing", "stacking", "failed"]
-    message: str | None = Field(description="What it is doing (building a master).")
+    message: str | None = Field(description="What it is doing, in English (for logs).")
+    building: StackBuilding | None = Field(description="The master being built, if one is.")
     error: str | None
     look: StackLook
     current: CurrentStack | None = Field(description="The stack shown; None before a frame.")

@@ -19,6 +19,8 @@
   import { describeEvent, describeStep } from "../../lib/sequence.svelte";
   import type { SequenceEvent, SequenceRun } from "../../lib/types";
   import GuideGraph from "../guiding/GuideGraph.svelte";
+  import SegmentedControl from "../../components/SegmentedControl.svelte";
+  import { stackView, type StackView } from "../../lib/stackview.svelte";
 
   let { run }: { run: SequenceRun } = $props();
 
@@ -27,6 +29,9 @@
   const events = $derived(live.app.sequence?.events ?? []);
   const camera = $derived(live.app.cameras?.main_camera ?? null);
   const preview = $derived(camera?.preview ?? null);
+  // While live stacking runs, the stack can take the latest frame's place (ADR 0040).
+  const stack = $derived(live.app.stack?.on ? (live.app.stack.current ?? null) : null);
+  const stacked = $derived(stack?.preview && stackView.view === "stack" ? stack : null);
   const guiding = $derived(live.app.guiding ?? null);
   const stats = $derived(guiding?.stats ?? null);
   const outputs = $derived(live.app.power?.outputs ?? []);
@@ -132,8 +137,24 @@
 
   <div class="columns">
     <div class="visual">
+      {#if stack?.preview}
+        <SegmentedControl
+          label={t.stack.show}
+          options={[
+            { value: "stack" as StackView, label: t.stack.stack },
+            { value: "frame" as StackView, label: t.stack.frame },
+          ]}
+          value={stackView.view}
+          onchange={(view) => stackView.set(view)} />
+      {/if}
       <figure class="latest">
-        {#if preview}
+        {#if stacked?.preview}
+          <img src={stacked.preview.url} alt={t.stack.title} />
+          <figcaption>
+            <span class="pill mono">{t.stack.frames(stacked.frames)}</span>
+            <span class="pill mono">{formatDuration(stacked.exposure)}</span>
+          </figcaption>
+        {:else if preview}
           <img src={preview.url} alt={t.session.latest} />
           <figcaption>
             <span class="pill mono">{formatSeconds(preview.exposure, locale)}</span>

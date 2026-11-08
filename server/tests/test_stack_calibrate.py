@@ -40,6 +40,7 @@ def test_flats_without_their_bias_are_not_used() -> None:
     flats = [row("flat", filter="L", exposure=2.0, gain=0.0) for _ in range(3)]
     found = plan(LIGHT, darks + flats)
     assert found.flat is None
+    assert found.flats_unused
     assert found.notes == ("darks: 2", "flats without their bias or dark flats: not used")
 
 
@@ -50,6 +51,7 @@ def test_flats_need_the_lights_pedestal_taken_off_first() -> None:
     found = plan(LIGHT, flats + bias)
     assert found.dark is None
     assert found.flat is None
+    assert found.flats_unused
     assert found.notes == ("no darks or bias", "flats need the lights' darks or bias: not used")
 
 

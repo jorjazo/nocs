@@ -128,6 +128,8 @@ class LiveStack:
     colour: bool
     calibration: Calibration = field(default_factory=lambda: Calibration(cosmetic=True))
     notes: list[str] = field(default_factory=list[str])
+    used: dict[str, Json] = field(default_factory=dict[str, Json])
+    """What the calibration is made of, for the state (``StackCalibration``)."""
     created: bool = False
     """The worker has it (its first frame went there)."""
     frames: int = 0
@@ -165,6 +167,7 @@ class LiveStackService:
         self._idle.set()
         self._status = "idle"
         self._message: str | None = None
+        self._building: dict[str, Json] | None = None
         self._error: str | None = None
         self._new = False
         self._tasks: set[asyncio.Task[None]] = set()
@@ -366,14 +369,14 @@ class LiveStackService:
             await self._end(oldest)
         self._status, self._message = "preparing", "looking for darks and flats"
         self._publish()
-        stack.calibration, stack.notes = await self._calibration(frame, width, height)
+        stack.calibration, stack.notes, stack.used = await self._calibration(frame, width, height)
         if self._stacks.get(key) is not stack:
             raise _AbandonedError  # ended (New stack, switched off) while its masters were built
         return stack
 
     async def _calibration(
         self, frame: Offered, width: int | None, height: int | None
-    ) -> tuple[Calibration, list[str]]:
+    ) -> tuple[Calibration, list[str], dict[str, Json]]:
         """The masters for a stack of frames like ``frame``, built if needed."""
         light = Light(
             Setup(frame.camera, width, height, frame.binning, frame.gain, frame.offset),
@@ -388,21 +391,30 @@ class LiveStackService:
             rows = await anyio.to_thread.run_sync(library.calibration_frames, [frame.camera])
         except Exception as e:  # no catalog (no drive), or it failed
             log.warning("live stack: no calibration library: %s", e)
-            return Calibration(cosmetic=True), [f"no calibration library: {e}"]
+            return Calibration(cosmetic=True), [f"no calibration library: {e}"], _unused()
         found = calibrate.plan(light, rows)
         notes = list(found.notes)
+        used = _unused()
+        used["flats_unused"] = found.flats_unused
+        counts: dict[MasterSpec, int] = {}
 
         async def master(spec: MasterSpec | None, subtract: str | None = None) -> str | None:
             if spec is None:
                 return None
             self._message = f"building the {spec.kind} master ({len(spec.frames)} frames)"
+            self._building = {"kind": spec.kind, "frames": len(spec.frames)}
             self._publish()
             try:
-                return await self._build(library, spec, frame.bayer, subtract)
+                built = await self._build(library, spec, frame.bayer, subtract)
             except Exception as e:  # a broken file, a full drive: stack without it
                 log.warning("live stack: no %s master: %s", spec.kind, e)
                 notes.append(f"no {spec.kind} master: {e}")
                 return None
+            if built is None:
+                return None
+            path, count = built
+            counts[spec] = count
+            return path
 
         dark = await master(found.dark)
         bias = found.dark is not None and found.dark.kind == "bias"
@@ -411,14 +423,25 @@ class LiveStackService:
             offset = await master(found.flat_offset)
             if offset is None:
                 notes.append("flats not used: no master of their bias or dark flats")
+                used["flat_failed"] = True
             else:
                 flat = await master(found.flat, offset)
+                used["flat_failed"] = flat is None
+        if dark is not None and found.dark is not None:
+            used["dark_kind"] = found.dark.kind
+            used["dark_frames"] = counts[found.dark]
+        elif found.dark is not None:
+            used["dark_failed"] = True  # found, but none of them could be read or used
+        if flat is not None and found.flat is not None:
+            used["flat_frames"] = counts[found.flat]
         self._message = None
-        return Calibration(dark=dark, flat=flat, cosmetic=True, bias=bias), notes
+        self._building = None
+        return Calibration(dark=dark, flat=flat, cosmetic=True, bias=bias), notes, used
 
     async def _build(
         self, library: Library, spec: MasterSpec, bayer: str | None, subtract: str | None
-    ) -> str | None:
+    ) -> tuple[str, int] | None:
+        """The master's path and its frames, or None when none of them is at hand."""
         files: list[str] = []
         ids: list[int] = []
         for frame_id in spec.frames:
@@ -434,7 +457,7 @@ class LiveStackService:
         available = MasterSpec(spec.kind, tuple(ids))
         target = self._masters / available.file_name(bayer, subtract)
         await self._worker.build_master(str(target), spec.kind, files, bayer, subtract)
-        return str(target)
+        return str(target), len(files)
 
     async def _end(self, stack: LiveStack) -> None:
         """Forget a stack (and free the worker's memory)."""
@@ -543,6 +566,7 @@ class LiveStackService:
                     "flat": stack.calibration.flat is not None,
                     "cosmetic": stack.calibration.dark is None,
                     "notes": list[Json](stack.notes),
+                    **(stack.used or _unused()),
                 },
                 "last": stack.last,
                 "preview": stack.preview,
@@ -553,12 +577,24 @@ class LiveStackService:
                 "on": self.on,
                 "status": self._status if self.on else "off",
                 "message": self._message,
+                "building": self._building,
                 "error": self._error,
                 "look": self.settings.look.model_dump(),
                 "current": current,
                 "stacks": len(self._stacks),
             },
         )
+
+
+def _unused() -> dict[str, Json]:
+    return {
+        "dark_kind": None,
+        "dark_frames": 0,
+        "dark_failed": False,
+        "flat_frames": 0,
+        "flats_unused": False,
+        "flat_failed": False,
+    }
 
 
 class _AbandonedError(Exception):
