@@ -477,6 +477,17 @@
           ],
           "default": null
         },
+        "stack": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StackState"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "storage": {
           "anyOf": [
             {
@@ -2664,6 +2675,100 @@
         "on"
       ],
       "title": "CoolingRequest",
+      "type": "object"
+    },
+    "CurrentStack": {
+      "additionalProperties": false,
+      "properties": {
+        "calibration": {
+          "$ref": "#/$defs/StackCalibration"
+        },
+        "camera": {
+          "type": "string"
+        },
+        "exposure": {
+          "description": "Seconds of exposure in the stack.",
+          "type": "number"
+        },
+        "filter": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "frames": {
+          "description": "Frames in the stack.",
+          "type": "integer"
+        },
+        "id": {
+          "type": "string"
+        },
+        "last": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StackOutcome"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "preview": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StackPreview"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "rejected": {
+          "description": "Frames left out of it.",
+          "type": "integer"
+        },
+        "setup": {
+          "$ref": "#/$defs/StackSetup"
+        },
+        "skipped": {
+          "description": "Frames that arrived while it was busy.",
+          "type": "integer"
+        },
+        "started": {
+          "description": "UTC, ISO 8601: its first frame.",
+          "type": "string"
+        },
+        "target": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "started",
+        "frames",
+        "rejected",
+        "skipped",
+        "exposure",
+        "camera",
+        "target",
+        "filter",
+        "setup",
+        "calibration",
+        "last",
+        "preview"
+      ],
+      "title": "CurrentStack",
       "type": "object"
     },
     "Darkness": {
@@ -9390,6 +9495,390 @@
         "failure"
       ],
       "title": "SolverState",
+      "type": "object"
+    },
+    "StackCalibration": {
+      "additionalProperties": false,
+      "properties": {
+        "cosmetic": {
+          "description": "Without a dark, hot pixels are removed.",
+          "type": "boolean"
+        },
+        "dark": {
+          "description": "A dark (or bias) master is subtracted.",
+          "type": "boolean"
+        },
+        "flat": {
+          "description": "A flat master is divided.",
+          "type": "boolean"
+        },
+        "notes": {
+          "description": "What was found and used, or why not.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "dark",
+        "flat",
+        "cosmetic",
+        "notes"
+      ],
+      "title": "StackCalibration",
+      "type": "object"
+    },
+    "StackLook": {
+      "additionalProperties": false,
+      "description": "How the stack is shown (``nocs.stacking.stack.Look``).",
+      "properties": {
+        "background": {
+          "default": 0.25,
+          "description": "Sky level, 0..1.",
+          "maximum": 0.6,
+          "minimum": 0.02,
+          "type": "number"
+        },
+        "linked": {
+          "default": false,
+          "description": "One stretch for every channel.",
+          "type": "boolean"
+        },
+        "saturation": {
+          "default": 1.0,
+          "description": "Colour gain.",
+          "maximum": 3.0,
+          "minimum": 0.0,
+          "type": "number"
+        },
+        "shadows": {
+          "default": -2.8,
+          "description": "Black point, MADs from the median.",
+          "maximum": 0.0,
+          "minimum": -8.0,
+          "type": "number"
+        }
+      },
+      "title": "StackLook",
+      "type": "object"
+    },
+    "StackOutcome": {
+      "additionalProperties": false,
+      "description": "What happened to the latest frame offered to the stack.",
+      "properties": {
+        "accepted": {
+          "type": "boolean"
+        },
+        "cause": {
+          "anyOf": [
+            {
+              "enum": [
+                "gate",
+                "registration",
+                "stars"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "clipped": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Fraction of its values sigma-clipped."
+        },
+        "frame_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The saved frame's id; None: not saved."
+        },
+        "hot_pixels": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Hot pixels removed (no dark)."
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Why it was left out; None when accepted."
+        },
+        "rms": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Residual of those stars, pixels."
+        },
+        "rotation": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Degrees it turned."
+        },
+        "seconds": {
+          "description": "Time the worker took.",
+          "type": "number"
+        },
+        "shift": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Pixels (of the stack) it moved, x and y."
+        },
+        "stars": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Stars paired with the reference."
+        },
+        "time": {
+          "description": "UTC, ISO 8601, when the frame arrived.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "accepted",
+        "reason",
+        "cause",
+        "shift",
+        "rotation",
+        "stars",
+        "rms",
+        "clipped",
+        "hot_pixels",
+        "seconds",
+        "time",
+        "frame_id"
+      ],
+      "title": "StackOutcome",
+      "type": "object"
+    },
+    "StackPreview": {
+      "additionalProperties": false,
+      "properties": {
+        "height": {
+          "type": "integer"
+        },
+        "url": {
+          "description": "JPEG of the stack, at most 1920 px wide; immutable.",
+          "type": "string"
+        },
+        "width": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "url",
+        "width",
+        "height"
+      ],
+      "title": "StackPreview",
+      "type": "object"
+    },
+    "StackSetup": {
+      "additionalProperties": false,
+      "properties": {
+        "binning": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "colour": {
+          "description": "A Bayer sensor: stacked one RGB pixel per cell.",
+          "type": "boolean"
+        },
+        "exposure": {
+          "type": "number"
+        },
+        "gain": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "height": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "offset": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "width": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Pixels of the frames (before the stack's reduction)."
+        }
+      },
+      "required": [
+        "exposure",
+        "gain",
+        "offset",
+        "binning",
+        "width",
+        "height",
+        "colour"
+      ],
+      "title": "StackSetup",
+      "type": "object"
+    },
+    "StackState": {
+      "additionalProperties": false,
+      "description": "Live stacking (ADR 0039).",
+      "properties": {
+        "current": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CurrentStack"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The stack shown; None before a frame."
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "look": {
+          "$ref": "#/$defs/StackLook"
+        },
+        "message": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "What it is doing (building a master)."
+        },
+        "on": {
+          "description": "Lights of the main camera are stacked as they arrive.",
+          "type": "boolean"
+        },
+        "stacks": {
+          "description": "Stacks held (a mono camera keeps one per filter).",
+          "type": "integer"
+        },
+        "status": {
+          "enum": [
+            "off",
+            "idle",
+            "preparing",
+            "stacking",
+            "failed"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "on",
+        "status",
+        "message",
+        "error",
+        "look",
+        "current",
+        "stacks"
+      ],
+      "title": "StackState",
+      "type": "object"
+    },
+    "StackSwitchRequest": {
+      "properties": {
+        "on": {
+          "description": "Stack the main camera's lights as they arrive.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "on"
+      ],
+      "title": "StackSwitchRequest",
       "type": "object"
     },
     "StarDatabase": {

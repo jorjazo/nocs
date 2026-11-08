@@ -55,6 +55,7 @@ from nocs.indi import BlobMode, IndiClient, IndiEvent, PropertyDefined, Property
 from nocs.jobs import JobContext, JobManager
 from nocs.sites import Site
 from nocs.solving import field_of_view
+from nocs.stacking.frames import Offered
 from nocs.state import Json, Path, StateStore
 from nocs.storage import FrameFacts, StorageError, StorageService
 from nocs.storage.environment import number
@@ -242,6 +243,15 @@ class Guider(Protocol):
     def frame_guiding(self, start: float, end: float) -> dict[str, Json] | None: ...
 
 
+class Stacker(Protocol):
+    """The live stack (``LiveStackService``, ADR 0039)."""
+
+    @property
+    def on(self) -> bool: ...
+
+    async def offer(self, frame: Offered) -> None: ...
+
+
 @dataclass(frozen=True, slots=True)
 class DitherPlan:
     """Dither before every ``every``-th frame of a series, while PHD2 guides (ADR 0024)."""
@@ -317,6 +327,7 @@ class CaptureService:
         self._images: dict[Role, IndiClient] = {}
         self._tasks: set[asyncio.Task[object]] = set()
         self._guider: Guider | None = None
+        self._stacker: Stacker | None = None
         self._used_by: dict[Role, str] = {}
         """Cameras another client drives (PHD2), whose frames NOCS only previews."""
         self._following: dict[Role, asyncio.Task[None]] = {}
@@ -390,6 +401,10 @@ class CaptureService:
                 await camera.set_cooler(False)
             self._targets[role] = None
         self._publish(role)
+
+    def use_stacker(self, stacker: Stacker) -> None:
+        """Where the main camera's lights go while live stacking is on."""
+        self._stacker = stacker
 
     def use_guider(self, guider: Guider) -> None:
         """Where series dither, and where saved frames get their guiding figures."""
@@ -654,7 +669,54 @@ class CaptureService:
             await anyio.to_thread.run_sync(self._storage.set_guiding, frame_id, guiding)
         if analysis is None:
             return Captured(result, None, None)
+        await self._stack(role, shot, analysis, target, frame_id, owned=not save)
         return Captured(result, analysis.stars, analysis.hfr)
+
+    async def _stack(
+        self,
+        role: Role,
+        shot: Shot,
+        analysis: FrameAnalysis,
+        target: str | None,
+        frame_id: int | None,
+        *,
+        owned: bool,
+    ) -> None:
+        """Offer a light of the main camera to the live stack, when it is on; never raises."""
+        stacker = self._stacker
+        if (
+            stacker is None
+            or not stacker.on
+            or role is not Role.MAIN_CAMERA
+            or shot.frame_type is not FrameType.LIGHT
+        ):
+            return
+        try:
+            facts = self._facts(role, shot, target)
+            site = facts.site
+            await stacker.offer(
+                Offered(
+                    path=shot.path,
+                    owned=owned,
+                    bayer=shot.bayer,
+                    taken=shot.taken,
+                    night=night_of(shot.taken, site.longitude if site is not None else None),
+                    exposure=shot.exposure,
+                    camera=facts.camera,
+                    gain=facts.gain,
+                    offset=facts.offset,
+                    binning=facts.binning,
+                    temperature=facts.temperature,
+                    filter=facts.filter,
+                    target=facts.target or self._storage.target,
+                    rotation=facts.rotation,
+                    stars=analysis.stars,
+                    hfr=analysis.hfr,
+                    frame_id=frame_id,
+                )
+            )
+        except Exception as e:  # the frame is taken whatever happens to its stacking
+            log.warning("live stack: could not offer %s: %s", shot.path.name, e)
 
     def _facts(self, role: Role, shot: Shot, target: str | None = None) -> FrameFacts:
         """What storage needs to know about a frame, read now from the devices, the profile

@@ -588,6 +588,7 @@ export interface AppState {
   sequence?: SequenceState | null;
   sites?: SitesState | null;
   solver?: SolverState | null;
+  stack?: StackState | null;
   storage?: StorageState | null;
   system?: SystemState | null;
   /**
@@ -2287,6 +2288,194 @@ export interface SolutionState {
    * UTC, ISO 8601, when it was solved.
    */
   time: string;
+}
+/**
+ * Live stacking (ADR 0039).
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "StackState".
+ */
+export interface StackState {
+  /**
+   * The stack shown; None before a frame.
+   */
+  current: CurrentStack | null;
+  error: string | null;
+  look: StackLook;
+  /**
+   * What it is doing (building a master).
+   */
+  message: string | null;
+  /**
+   * Lights of the main camera are stacked as they arrive.
+   */
+  on: boolean;
+  /**
+   * Stacks held (a mono camera keeps one per filter).
+   */
+  stacks: number;
+  status: "off" | "idle" | "preparing" | "stacking" | "failed";
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "CurrentStack".
+ */
+export interface CurrentStack {
+  calibration: StackCalibration;
+  camera: string;
+  /**
+   * Seconds of exposure in the stack.
+   */
+  exposure: number;
+  filter: string | null;
+  /**
+   * Frames in the stack.
+   */
+  frames: number;
+  id: string;
+  last: StackOutcome | null;
+  preview: StackPreview | null;
+  /**
+   * Frames left out of it.
+   */
+  rejected: number;
+  setup: StackSetup;
+  /**
+   * Frames that arrived while it was busy.
+   */
+  skipped: number;
+  /**
+   * UTC, ISO 8601: its first frame.
+   */
+  started: string;
+  target: string | null;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "StackCalibration".
+ */
+export interface StackCalibration {
+  /**
+   * Without a dark, hot pixels are removed.
+   */
+  cosmetic: boolean;
+  /**
+   * A dark (or bias) master is subtracted.
+   */
+  dark: boolean;
+  /**
+   * A flat master is divided.
+   */
+  flat: boolean;
+  /**
+   * What was found and used, or why not.
+   */
+  notes: string[];
+}
+/**
+ * What happened to the latest frame offered to the stack.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "StackOutcome".
+ */
+export interface StackOutcome {
+  accepted: boolean;
+  cause: ("gate" | "registration" | "stars") | null;
+  /**
+   * Fraction of its values sigma-clipped.
+   */
+  clipped: number | null;
+  /**
+   * The saved frame's id; None: not saved.
+   */
+  frame_id: number | null;
+  /**
+   * Hot pixels removed (no dark).
+   */
+  hot_pixels: number | null;
+  /**
+   * Why it was left out; None when accepted.
+   */
+  reason: string | null;
+  /**
+   * Residual of those stars, pixels.
+   */
+  rms: number | null;
+  /**
+   * Degrees it turned.
+   */
+  rotation: number | null;
+  /**
+   * Time the worker took.
+   */
+  seconds: number;
+  /**
+   * Pixels (of the stack) it moved, x and y.
+   */
+  shift: number[] | null;
+  /**
+   * Stars paired with the reference.
+   */
+  stars: number | null;
+  /**
+   * UTC, ISO 8601, when the frame arrived.
+   */
+  time: string;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "StackPreview".
+ */
+export interface StackPreview {
+  height: number;
+  /**
+   * JPEG of the stack, at most 1920 px wide; immutable.
+   */
+  url: string;
+  width: number;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "StackSetup".
+ */
+export interface StackSetup {
+  binning: number | null;
+  /**
+   * A Bayer sensor: stacked one RGB pixel per cell.
+   */
+  colour: boolean;
+  exposure: number;
+  gain: number | null;
+  height: number | null;
+  offset: number | null;
+  /**
+   * Pixels of the frames (before the stack's reduction).
+   */
+  width: number | null;
+}
+/**
+ * How the stack is shown (``nocs.stacking.stack.Look``).
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "StackLook".
+ */
+export interface StackLook {
+  /**
+   * Sky level, 0..1.
+   */
+  background?: number;
+  /**
+   * One stretch for every channel.
+   */
+  linked?: boolean;
+  /**
+   * Colour gain.
+   */
+  saturation?: number;
+  /**
+   * Black point, MADs from the median.
+   */
+  shadows?: number;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -4846,6 +5035,16 @@ export interface SolvedFrames {
    * Lights of the target never solved.
    */
   unsolved: number;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "StackSwitchRequest".
+ */
+export interface StackSwitchRequest {
+  /**
+   * Stack the main camera's lights as they arrive.
+   */
+  on: boolean;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema

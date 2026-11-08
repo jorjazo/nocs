@@ -25,7 +25,7 @@ import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import cv2
 import numpy as np
@@ -69,6 +69,7 @@ MAX_STACKS = 4
 """Stacks held at once (a mono camera keeps one per filter); the oldest goes first."""
 
 type Image = NDArray[np.float32]
+type Cause = Literal["gate", "registration", "stars"]
 
 
 class StackLostError(Exception):
@@ -116,6 +117,9 @@ class Added:
     """Stars paired with the reference."""
     rms: float | None = None
     clipped: float | None = None
+    cause: Cause | None = None
+    """What left the frame out: the quality gate, its registration, or too few stars to
+    start the stack with."""
     hot_pixels: int | None = None
     """Hot pixels the cosmetic pass removed from the frame (no dark)."""
     """Fraction of the frame's values the kappa-sigma rejection left out."""
@@ -224,19 +228,20 @@ def add_frame(
     stack = _get(stack_id)
     steps: dict[str, float] = {}
 
-    def left_out(reason: str) -> Added:
+    def left_out(reason: str, cause: Cause) -> Added:
         stack.rejected += 1
         return Added(
             False,
             reason,
             stack.frames,
             stack.rejected,
+            cause=cause,
             seconds=round(time.perf_counter() - start, 3),
             steps=steps,
         )
 
     if (reason := stack.gate(stars, hfr)) is not None:
-        return left_out(reason)
+        return left_out(reason, "gate")
 
     t = time.perf_counter()
     data, header_bayer, bottom_up = load(fits_path)
@@ -263,14 +268,14 @@ def add_frame(
     registration: Registration
     if stack.reference is None:
         if len(found) < 6:
-            return left_out(f"too few stars to start a stack ({len(found)})")
+            return left_out(f"too few stars to start a stack ({len(found)})", "stars")
         registration = Registration(Transform.identity(), len(found), 0.0)
     else:
         t = time.perf_counter()
         try:
             registration = register(found, stack.reference)
         except RegistrationError as error:
-            return left_out(str(error))
+            return left_out(str(error), "registration")
         steps["register"] = _since(t)
 
     transform = registration.transform
