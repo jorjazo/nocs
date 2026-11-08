@@ -586,6 +586,10 @@ export interface AppState {
    */
   power?: PowerState | null;
   sequence?: SequenceState | null;
+  /**
+   * None where NOCS does not share the frames (a PC).
+   */
+  share?: ShareState | null;
   sites?: SitesState | null;
   solver?: SolverState | null;
   stack?: StackState | null;
@@ -2155,6 +2159,49 @@ export interface SequencePlanRow {
   done: number;
   exposure: number;
   filter: string | null;
+}
+/**
+ * The SMB share of the frames for desktop computers, read-only for guests and the
+ * published login nocs / nocs (ADR 0039).
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "ShareState".
+ */
+export interface ShareState {
+  /**
+   * Computers connected now.
+   */
+  clients: number;
+  /**
+   * The owner switched it on.
+   */
+  on: boolean;
+  /**
+   * smbd is running.
+   */
+  running: boolean;
+  /**
+   * One per volume: its NOCS folder (Internal, then each USB drive).
+   */
+  shares: Share[];
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "Share".
+ */
+export interface Share {
+  /**
+   * The drive's label.
+   */
+  label: string | null;
+  /**
+   * The share's name, as a desktop shows it.
+   */
+  name: string;
+  /**
+   * "internal", or the drive's filesystem UUID.
+   */
+  volume: string;
 }
 /**
  * The saved sites and the box's active one (ADR 0038).
@@ -4807,6 +4854,13 @@ export interface SetPropertyRequest {
   values: {
     [k: string]: string | number | boolean;
   };
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "ShareRequest".
+ */
+export interface ShareRequest {
+  on: boolean;
 }
 /**
  * Refused (409) while a job runs, unless ``force``.

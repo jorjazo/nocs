@@ -44,6 +44,7 @@ that supersedes the old one.
 | [0036](0036-calibration-frames.md) | Calibration frames: flats wizard, darks and bias, and their library | Proposed |
 | [0037](0037-coalesced-indi-mirror.md) | The state's INDI mirror is coalesced to one update a second per property | Proposed |
 | [0038](0038-saved-sites.md) | Sites belong to the box: a list of saved sites and one active site | Proposed |
-| [0039](0039-live-stacking.md) | Live stacking (EAA) | Proposed |
+| [0039](0039-smb-share.md) | An SMB share of the frames for desktop computers | Proposed |
+| [0040](0040-live-stacking.md) | Live stacking (EAA) | Proposed |
 
 Template: Context → Decision → Consequences.
