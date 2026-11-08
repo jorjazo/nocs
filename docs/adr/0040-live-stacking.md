@@ -1,4 +1,4 @@
-# 0039. Live stacking (EAA)
+# 0040. Live stacking (EAA)
 
 Date: 2026-11-01 · Status: Proposed · Plan: [roadmap/live-stacking.md](../roadmap/live-stacking.md)
 
@@ -37,15 +37,20 @@ The options weighed for each point are in [the plan](../roadmap/live-stacking.md
   `sep`, triangles with each star's nearest neighbours, matched by their side
   ratios; the matched stars go to `cv2.estimateAffinePartial2D` (RANSAC). The
   model is a similarity (rotation, shift, scale ≈ 1): dithers, drift, a meridian
-  flip's 180° and field rotation. A frame mirrored relative to the reference, or
+  flip's 180° and field rotation. Each colour channel is warped with its own offset
+  in the Bayer cell, so a turned frame keeps red, green and blue aligned. A frame mirrored relative to the reference, or
   with too few inliers, fails registration. No new dependency (astroalign would
   bring scikit-image and scipy); ASTAP stays out of the per-frame path.
 - **Colour by superpixel.** Colour frames are stacked at half resolution, one RGB
   pixel per Bayer cell (the pattern table of ADR 0012); mono frames at full
-  resolution up to 16 MP, 2×2 binned above.
+  resolution up to 16 MP, 2×2 binned above. The worker holds at most ~420 MB of
+  stacks (two 26 MP colour ones); the least recently used go first.
 - **Online kappa-sigma.** Per pixel and channel the stack keeps a mean, M2 and a
-  count (Welford); from the 5th frame a value more than 3σ from the mean is not
-  added. Processed in strips. Whole frames are left out when they do not
+  count (Welford); from the 8th frame a value more than 3σ from the mean (the
+  pixel's sample deviation, never less than the frame's sky noise) is not added.
+  Each frame is first matched to the reference: its sky level per channel, and its
+  stars' brightness (the paired stars' median flux ratio), so a brightening sky or
+  haze does not get rejected wholesale. Processed in strips. Whole frames are left out when they do not
   register, have fewer than half the stack's median stars, or an HFR above 1.5×
   its median. Memory: ~0.2 GB for a 26 MP colour stack.
 - **Calibration from the library when it can.** Masters (median dark or bias,
