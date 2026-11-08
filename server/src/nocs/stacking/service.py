@@ -1,4 +1,4 @@
-"""Live stacking in nocsd: which frames go to which stack, and the state (ADR 0039).
+"""Live stacking in nocsd: which frames go to which stack, and the state (ADR 0040).
 
 The capture service offers every light of the main camera that got a preview, from
 Live view and sequences alike, while stacking is on. Frames wait in a slot of one:
@@ -33,7 +33,7 @@ import os
 import shutil
 import uuid
 from collections import OrderedDict
-from collections.abc import Callable
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -178,7 +178,7 @@ class LiveStackService:
         self._settings_path = config_dir / SETTINGS_FILE
         self._masters = data_dir / "masters"
         self._links = data_dir / "stacking"
-        self.settings = self._load()
+        self.settings = StackSettings()
         self._stacks: OrderedDict[Key, LiveStack] = OrderedDict()
         self._current: LiveStack | None = None
         self._pending: Offered | None = None
@@ -187,10 +187,19 @@ class LiveStackService:
         self._idle.set()
         self._status = "idle"
         self._message: str | None = None
+        self._building: dict[str, Json] | None = None
         self._error: str | None = None
         self._new = False
         self._saving = False
         self._saved: dict[str, Json] | None = None
+        self._tasks: set[asyncio.Task[None]] = set()
+        self._publish()
+
+    async def start(self) -> None:
+        """Read the settings, and delete links a stopped nocsd left behind (each a whole
+        frame on the drive); in a thread, as both touch the microSD."""
+        self.settings = await anyio.to_thread.run_sync(self._load)
+        await anyio.to_thread.run_sync(self._clear_links)
         self._publish()
 
     @property
@@ -198,16 +207,20 @@ class LiveStackService:
         return self.settings.on
 
     async def set_on(self, on: bool) -> None:
-        self.settings = self.settings.model_copy(update={"on": on})
-        await anyio.to_thread.run_sync(self._save_settings)
-        if not on:
+        settings = self.settings.model_copy(update={"on": on})
+        await anyio.to_thread.run_sync(self._save_settings, settings)
+        self.settings = settings
+        if on:
+            self._status, self._message, self._error = "idle", None, None
+        else:
             await self._end_all()
         self._publish()
 
     async def set_look(self, look: StackLook) -> None:
         """Keep the look and show the current stack with it at once."""
-        self.settings = self.settings.model_copy(update={"look": look})
-        await anyio.to_thread.run_sync(self._save_settings)
+        settings = self.settings.model_copy(update={"look": look})
+        await anyio.to_thread.run_sync(self._save_settings, settings)
+        self.settings = settings
         stack = self._current
         if stack is not None and stack.created and stack.frames:
             try:
@@ -241,36 +254,52 @@ class LiveStackService:
             frame = replace(frame, path=link)
         replaced, self._pending = self._pending, frame
         if replaced is not None:
-            if self._current is not None:
-                self._current.skipped += 1
-            await self._discard(replaced)
+            skipped = next(
+                (s for s in self._stacks.values() if _same_setup(s.offered, replaced)), None
+            )
+            if skipped is not None:
+                skipped.skipped += 1
+            # Not on the capture's path: an unlink can wait seconds on the Pi's microSD.
+            self._background(self._discard(replaced))
         self._idle.clear()
         self._wake.set()
 
     async def run(self) -> None:
         """Take offered frames to the worker, one at a time, until cancelled."""
-        while True:
-            await self._wake.wait()
-            self._wake.clear()
-            frame, self._pending = self._pending, None
-            if frame is None:
-                self._idle.set()
-                continue
-            try:
-                await self._take(frame)
-            except asyncio.CancelledError:
-                raise
-            except Exception as e:
-                log.exception("live stack: %s", e)
-                self._status, self._error = "failed", str(e)
-                self._current = None
-            finally:
-                await self._discard(frame)
-                self._publish()
-            if self._pending is None:
-                self._idle.set()
-            else:
-                self._wake.set()
+        try:
+            while True:
+                await self._wake.wait()
+                self._wake.clear()
+                frame, self._pending = self._pending, None
+                if frame is None:
+                    self._idle.set()
+                    continue
+                try:
+                    await self._take(frame)
+                except asyncio.CancelledError:
+                    raise
+                except _AbandonedError:
+                    pass  # the stack was ended while it got ready: the frame goes with it
+                except Exception as e:
+                    log.exception("live stack: %s", e)
+                    self._status, self._error = "failed", str(e)
+                    if self._current is not None:
+                        failed = self._current
+                        self._stacks.pop(failed.key, None)
+                        self._current = None
+                        if failed.created:
+                            self._background(self._drop(failed.id))
+                finally:
+                    await self._discard(frame)
+                    self._publish()
+                if self._pending is None:
+                    self._idle.set()
+                else:
+                    self._wake.set()
+        finally:
+            pending, self._pending = self._pending, None
+            if pending is not None:
+                self._background(self._discard(pending))
 
     async def idle(self) -> None:
         """Wait until every offered frame has been dealt with (tests)."""
@@ -315,6 +344,11 @@ class LiveStackService:
             await self._add(stack, frame, retry=False)
             return
         stack.created = True
+        if self._stacks.get(stack.key) is not stack:
+            # Ended (New stack, switched off) while the worker added the frame: the
+            # worker holds it still, and only this call knows.
+            await self._drop(stack.id)
+            return
         stack.frames, stack.rejected = added.frames, added.rejected
         stack.last = _outcome(added, frame)
         if added.accepted:
@@ -357,6 +391,8 @@ class LiveStackService:
         self._status, self._message = "preparing", "looking for darks and flats"
         self._publish()
         stack.calibration, stack.notes, stack.used = await self._calibration(frame, width, height)
+        if self._stacks.get(key) is not stack:
+            raise _AbandonedError  # ended (New stack, switched off) while its masters were built
         return stack
 
     async def _calibration(
@@ -387,6 +423,7 @@ class LiveStackService:
             if spec is None:
                 return None
             self._message = f"building the {spec.kind} master ({len(spec.frames)} frames)"
+            self._building = {"kind": spec.kind, "frames": len(spec.frames)}
             self._publish()
             try:
                 built = await self._build(library, spec, frame.bayer, subtract)
@@ -401,21 +438,26 @@ class LiveStackService:
             return path
 
         dark = await master(found.dark)
+        bias = found.dark is not None and found.dark.kind == "bias"
         flat: str | None = None
         if found.flat is not None:
             offset = await master(found.flat_offset)
             if offset is None:
                 notes.append("flats not used: no master of their bias or dark flats")
-                used["flats_unused"] = True
+                used["flat_failed"] = True
             else:
                 flat = await master(found.flat, offset)
+                used["flat_failed"] = flat is None
         if dark is not None and found.dark is not None:
             used["dark_kind"] = found.dark.kind
             used["dark_frames"] = counts[found.dark]
+        elif found.dark is not None:
+            used["dark_failed"] = True  # found, but none of them could be read or used
         if flat is not None and found.flat is not None:
             used["flat_frames"] = counts[found.flat]
         self._message = None
-        return Calibration(dark=dark, flat=flat, cosmetic=True), notes, used
+        self._building = None
+        return Calibration(dark=dark, flat=flat, cosmetic=True, bias=bias), notes, used
 
     async def _build(
         self, library: Library, spec: MasterSpec, bayer: str | None, subtract: str | None
@@ -434,7 +476,7 @@ class LiveStackService:
         if not files:
             return None
         available = MasterSpec(spec.kind, tuple(ids))
-        target = self._masters / f"{available.key}.fits"
+        target = self._masters / available.file_name(bayer, subtract)
         await self._worker.build_master(str(target), spec.kind, files, bayer, subtract)
         return str(target), len(files)
 
@@ -522,8 +564,12 @@ class LiveStackService:
         if self._current is stack:
             self._current = None
         if stack.created:
-            with contextlib.suppress(Exception):
-                await self._worker.stack_drop(stack.id)
+            await self._drop(stack.id)
+
+    async def _drop(self, stack_id: str) -> None:
+        """Free a stack in the worker; a worker that cannot answer holds nothing."""
+        with contextlib.suppress(Exception):
+            await self._worker.stack_drop(stack_id)
 
     async def _end_all(self) -> None:
         """End every stack; the next frame starts a new one."""
@@ -559,8 +605,24 @@ class LiveStackService:
         return link
 
     async def _discard(self, frame: Offered) -> None:
-        if frame.owned:
+        """Delete a frame's own link; never raises (the stacking goes on)."""
+        if not frame.owned:
+            return
+        try:
             await anyio.to_thread.run_sync(lambda: frame.path.unlink(missing_ok=True))
+        except OSError as e:
+            log.warning("live stack: could not delete %s: %s", frame.path, e)
+
+    def _background(self, coro: Coroutine[Any, Any, None]) -> None:
+        task = asyncio.get_running_loop().create_task(coro)
+        self._tasks.add(task)  # kept until done
+        task.add_done_callback(self._tasks.discard)
+
+    def _clear_links(self) -> None:
+        if self._links.is_dir():
+            for path in self._links.iterdir():
+                if path.is_file():
+                    path.unlink(missing_ok=True)
 
     def _load(self) -> StackSettings:
         try:
@@ -571,8 +633,8 @@ class LiveStackService:
             log.warning("ignoring unreadable %s: %s", self._settings_path, e)
             return StackSettings()
 
-    def _save_settings(self) -> None:
-        write_atomic(self._settings_path, self.settings.model_dump_json(indent=2) + "\n")
+    def _save_settings(self, settings: StackSettings) -> None:
+        write_atomic(self._settings_path, settings.model_dump_json(indent=2) + "\n")
 
     def _publish(self) -> None:
         stack = self._current
@@ -614,6 +676,7 @@ class LiveStackService:
                 "on": self.on,
                 "status": self._status if self.on else "off",
                 "message": self._message,
+                "building": self._building,
                 "error": self._error,
                 "look": self.settings.look.model_dump(),
                 "current": current,
@@ -635,7 +698,22 @@ def _remove(paths: list[Path]) -> None:
 
 
 def _unused() -> dict[str, Json]:
-    return {"dark_kind": None, "dark_frames": 0, "flat_frames": 0, "flats_unused": False}
+    return {
+        "dark_kind": None,
+        "dark_frames": 0,
+        "dark_failed": False,
+        "flat_frames": 0,
+        "flats_unused": False,
+        "flat_failed": False,
+    }
+
+
+class _AbandonedError(Exception):
+    """The stack a frame was starting was ended meanwhile."""
+
+
+def _same_setup(a: Offered, b: Offered) -> bool:
+    return _key(a, None, None) == _key(b, None, None)
 
 
 def _look(look: StackLook) -> Look:

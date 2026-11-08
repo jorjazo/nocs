@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Live stacking in Live view (ADR 0039): the switch, what the stack holds and
+  // Live stacking in Live view (ADR 0040): the switch, what the stack holds and
   // how its frames are calibrated, the latest frame's outcome, a new stack and
   // its look. Which image the viewer shows is chosen here, per device.
   import Button from "../../components/Button.svelte";
@@ -37,12 +37,15 @@
 
   const counts = $derived.by(() => {
     if (!current) return "";
-    const parts = [t.stack.frames(current.frames)];
-    if (current.exposure > 0) parts.push(t.stack.total(formatDuration(current.exposure)));
-    if (current.rejected > 0) parts.push(t.stack.leftOut(current.rejected));
-    if (current.skipped > 0) parts.push(t.stack.skipped(current.skipped));
-    return parts.join(" · ");
+    const words = [t.stack.frames(current.frames)];
+    if (current.exposure > 0) words.push(t.stack.total(formatDuration(current.exposure)));
+    if (current.rejected > 0) words.push(t.stack.leftOut(current.rejected));
+    if (current.skipped > 0) words.push(t.stack.skipped(current.skipped));
+    return words.join(" · ");
   });
+  const preparing = $derived(
+    stack.building ? t.stack.building(t.stack.kinds[stack.building.kind], stack.building.frames) : t.stack.preparing,
+  );
 </script>
 
 <section class="stack" aria-labelledby="stack-title">
@@ -67,7 +70,7 @@
     {/if}
 
     {#if stack.status === "preparing"}
-      <p class="caption muted" role="status">{stack.message ?? t.stack.preparing}</p>
+      <p class="caption muted" role="status">{preparing}</p>
     {:else if stack.status === "failed"}
       <p class="caption error" role="status">{t.stack.failed}{stack.error ? `: ${stack.error}` : ""}</p>
     {:else if !current}
@@ -77,10 +80,11 @@
     {#if current}
       <div class="summary">
         <span>{counts}</span>
-        <Chip tone={calibrated(current) === "none" ? "neutral" : "ok"}>{t.stack.calibration[calibrated(current)]}</Chip>
+        <Chip tone={calibrated(current) === "none" || calibrated(current) === "cosmetic" ? "neutral" : "ok"}
+          >{t.stack.calibration[calibrated(current)]}</Chip>
       </div>
       {#if last}
-        <p class="caption" class:muted={last.kind === "accepted"} class:warning={last.kind === "left"} role="status">
+        <p class="caption" class:muted={last.kind === "accepted"} class:warning={last.kind === "left"}>
           {#if last.kind === "accepted"}
             {t.stack.moved(formatDecimal(last.shift, locale, 1), formatDecimal(folded(last.rotation), locale, 1))}
           {:else}
@@ -107,7 +111,7 @@
 </section>
 
 {#if looking}
-  <LookSheet look={stack.look} {run} onclose={() => (looking = false)} />
+  <LookSheet look={stack.look} onclose={() => (looking = false)} />
 {/if}
 
 <style>

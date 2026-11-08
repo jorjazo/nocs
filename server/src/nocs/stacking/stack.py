@@ -1,4 +1,4 @@
-"""The live stack, held by the imaging worker process (ADR 0037).
+"""The live stack, held by the imaging worker process (ADR 0040).
 
 Each frame is reduced to the stack's resolution (a colour frame by superpixel: one
 RGB pixel per Bayer cell; a mono frame as it is, or 2x2 binned when large), its
@@ -35,7 +35,7 @@ from numpy.typing import NDArray
 from nocs.imaging.pipeline import PREVIEW_WIDTH, apply_mtf, load, mtf_parameters, write_jpeg
 from nocs.stacking import masters
 from nocs.stacking.masters import Calibration
-from nocs.stacking.reduce import FrameError, binned, luminance, to_stack_image
+from nocs.stacking.reduce import CELLS, FrameError, binned, luminance, to_stack_image
 from nocs.stacking.register import (
     Registration,
     RegistrationError,
@@ -51,10 +51,13 @@ __all__ = ["FrameError", "luminance", "to_stack_image"]
 
 KAPPA = 3.0
 """A value further than this many standard deviations from a pixel's mean is not added."""
-REJECT_FROM = 5
-"""Values a pixel must have before a new one can be rejected (for a meaningful spread)."""
-LEAST_SPREAD = 2.0
-"""ADU: the rejection threshold never goes below this (pixels that hardly vary)."""
+REJECT_FROM = 8
+"""Values a pixel must have before a new one can be rejected: fewer give a spread too
+noisy to judge by (with 5, ~5 % of good values went)."""
+LEAST_NOISE = 1.0
+"""ADU: the noise floor of the rejection when a frame's own noise reads lower."""
+SCALE_LIMITS = (1 / 3, 3.0)
+"""How far a frame's brightness may be scaled to match the reference's (haze, altitude)."""
 STRIP_ROWS = 32
 """Rows updated at a time, so the arrays of a strip stay in the CPU's cache."""
 GATE_FROM = 3
@@ -67,6 +70,8 @@ COVERAGE = 0.5
 """The rendered stack is cropped to where at least this fraction of its frames cover."""
 MAX_STACKS = 4
 """Stacks held at once (a mono camera keeps one per filter); the oldest goes first."""
+MAX_BYTES = 420 * 2**20
+"""Memory the stacks may hold together (two 26 MP colour stacks); the oldest go first."""
 
 type Image = NDArray[np.float32]
 type Cause = Literal["gate", "registration", "stars"]
@@ -74,6 +79,10 @@ type Cause = Literal["gate", "registration", "stars"]
 
 class StackLostError(Exception):
     """The worker does not hold the stack asked for (it was restarted, or dropped it)."""
+
+
+class EmptyStackError(Exception):
+    """The stack has no frame yet (or no part of it is covered): nothing to show or save."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -123,6 +132,8 @@ class Added:
     hot_pixels: int | None = None
     """Hot pixels the cosmetic pass removed from the frame (no dark)."""
     """Fraction of the frame's values the kappa-sigma rejection left out."""
+    scale: float | None = None
+    """Factor the frame's brightness was multiplied by to match the reference's."""
     preview: Rendered | None = None
     seconds: float = 0.0
     steps: dict[str, float] = field(default_factory=dict[str, float])
@@ -145,6 +156,12 @@ class Stack:
         self.star_counts: list[int] = []
         self.hfrs: list[float] = []
         self.calibration = Calibration(cosmetic=False)
+        self.background: NDArray[np.float32] | None = None
+        """The reference's sky level per channel: every frame is matched to it."""
+
+    @property
+    def nbytes(self) -> int:
+        return sum(a.nbytes for a in (self.mean, self.m2, self.count) if a is not None)
 
     @property
     def shape(self) -> tuple[int, ...] | None:
@@ -164,13 +181,17 @@ class Stack:
                 return f"stars too large (HFR {hfr:.2f}, the stack's median is {median:.2f})"
         return None
 
-    def accumulate(self, image: Image) -> float:
-        """Add a frame already on the reference's geometry (NaN where it has no data);
-        returns the fraction of its values rejected."""
+    def accumulate(self, image: Image, noise: NDArray[np.float32]) -> float:
+        """Add a frame already matched to the reference and on its geometry (NaN where it
+        has no data); ``noise`` is its sky's noise per channel. Returns the fraction of
+        its values rejected."""
         if self.mean is None or self.m2 is None or self.count is None:
             self.mean = np.zeros(image.shape, dtype=np.float32)
             self.m2 = np.zeros(image.shape, dtype=np.float32)
             self.count = np.zeros(image.shape, dtype=np.uint16)
+        # A pixel's spread from a few values is itself noisy and, as rejected values do
+        # not enter it, shrinks: never judge a value against less than the frame's noise.
+        floor = np.maximum(noise, np.float32(LEAST_NOISE)).astype(np.float32) * np.float32(KAPPA)
         rejected = 0
         valid = 0
         for y in range(0, image.shape[0], STRIP_ROWS):
@@ -180,8 +201,8 @@ class Stack:
             ok = np.isfinite(x)
             valid += int(np.count_nonzero(ok))
             delta = np.where(ok, x - mean, np.float32(0))
-            limit = np.sqrt(m2 / np.maximum(n, 1)) * np.float32(KAPPA)
-            np.maximum(limit, np.float32(LEAST_SPREAD), out=limit)
+            limit = np.sqrt(m2 / np.maximum(n - 1, 1)) * np.float32(KAPPA)
+            np.maximum(limit, floor, out=limit)
             outlier = ok & (n >= REJECT_FROM) & (np.abs(delta) > limit)
             rejected += int(np.count_nonzero(outlier))
             ok &= ~outlier
@@ -226,6 +247,7 @@ def add_frame(
         if calibration is not None:
             _stacks[stack_id].calibration = calibration
     stack = _get(stack_id)
+    _stacks[stack_id] = _stacks.pop(stack_id)  # the most recently used goes last
     steps: dict[str, float] = {}
 
     def left_out(reason: str, cause: Cause) -> Added:
@@ -252,14 +274,13 @@ def add_frame(
     is_binned = binned(data.size, pattern)
     del data
     steps["reduce"] = _since(t)
-    t = time.perf_counter()
-    hot = masters.apply(image, stack.calibration)
-    steps["calibrate"] = _since(t)
-
     if stack.reference is None:
         stack.pattern, stack.bottom_up, stack.binned = pattern, bottom_up, is_binned
     elif pattern != stack.pattern or bottom_up != stack.bottom_up or image.shape != stack.shape:
         raise FrameError("the frame does not match the stack (camera, size or Bayer pattern)")
+    t = time.perf_counter()
+    hot = masters.apply(image, stack.calibration)
+    steps["calibrate"] = _since(t)
 
     t = time.perf_counter()
     found = find_stars(luminance(image))
@@ -280,13 +301,24 @@ def add_frame(
 
     transform = registration.transform
     t = time.perf_counter()
+    background, noise = sky(image)
+    if stack.background is None:
+        stack.background = background
+    scale = 1.0
+    if registration.flux_ratio is not None:
+        scale = min(max(registration.flux_ratio, SCALE_LIMITS[0]), SCALE_LIMITS[1])
+    # Matched to the reference: its sky level, and its stars' brightness.
+    image -= background
+    image *= np.float32(scale)
+    image += stack.background
     if stack.reference is not None:
-        image = warp(image, transform)
+        image = warp(image, transform, channel_offsets(pattern, image.shape[2]))
     steps["warp"] = _since(t)
     t = time.perf_counter()
-    clipped = stack.accumulate(image)
+    clipped = stack.accumulate(image, (noise * np.float32(scale)).astype(np.float32))
     del image
     steps["accumulate"] = _since(t)
+    _evict(keep=stack_id)
     if stack.reference is None:
         stack.reference = found
     if stars is not None:
@@ -297,7 +329,10 @@ def add_frame(
     preview = None
     if preview_path is not None:
         t = time.perf_counter()
-        preview = _render(stack, preview_path, look or Look(), width)
+        try:
+            preview = _render(stack, preview_path, look or Look(), width)
+        except EmptyStackError:
+            preview = None  # too little covered yet: the frame went in all the same
         steps["render"] = _since(t)
     assert stack.shape is not None
     centre = np.array([[stack.shape[1] / 2, stack.shape[0] / 2]])
@@ -312,7 +347,10 @@ def add_frame(
         stars=registration.stars,
         rms=registration.rms,
         clipped=round(clipped, 5),
-        hot_pixels=hot if stack.calibration.dark is None and stack.calibration.cosmetic else None,
+        hot_pixels=hot
+        if stack.calibration.cosmetic and (stack.calibration.dark is None or stack.calibration.bias)
+        else None,
+        scale=round(scale, 4),
         preview=preview,
         seconds=round(time.perf_counter() - start, 3),
         steps=steps,
@@ -335,21 +373,23 @@ def save(
     frame covers) and a full-size JPEG of it; returns the JPEG."""
     stack = _get(stack_id)
     if stack.mean is None or stack.count is None:
-        raise StackLostError("the stack has no frames")
+        raise EmptyStackError("the stack has no frames")
+    target = Path(fits_path)
+    if target.exists():
+        # Renaming over a file makes ext4 flush it first: seconds on the Pi's microSD.
+        raise FileExistsError(f"{target} exists: a stack is saved under a new name")
     data = np.where(stack.count > 0, stack.mean, np.float32(np.nan))
     planes = np.ascontiguousarray(np.moveaxis(data[..., ::-1], 2, 0))  # BGR -> R, G, B
     hdu = _fits.PrimaryHDU(planes[0] if planes.shape[0] == 1 else planes)
     hdu.header["ROWORDER"] = "BOTTOM-UP" if stack.bottom_up else "TOP-DOWN"
     hdu.header["NCOMBINE"] = (stack.frames, "frames in the stack")
     if stack.pattern is not None:
-        hdu.header["CTYPE3"] = "RGB"
-        hdu.header["HISTORY"] = f"superpixel debayer of {stack.pattern} frames"
+        hdu.header["HISTORY"] = f"superpixel debayer of {stack.pattern} frames: R, G, B planes"
     elif stack.binned:
         hdu.header["HISTORY"] = "frames binned 2x2"
     for key, value in header.items():
         if value is not None:
             hdu.header[key] = value
-    target = Path(fits_path)
     target.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=target.parent, prefix=f".{target.name}.")
     os.close(fd)
@@ -372,29 +412,93 @@ def drop_all() -> None:
     _stacks.clear()
 
 
-def warp(image: Image, transform: Transform) -> Image:
-    """``image`` moved onto the reference by ``transform``; NaN where it has no data."""
+def channel_offsets(pattern: str | None, channels: int) -> list[tuple[float, float]]:
+    """Where each channel of a stack image samples the sky, relative to the centre of its
+    pixel, in stack pixels (x, y): in a superpixel, red and blue sit in opposite corners
+    of the Bayer cell, green (the mean of two) at its centre."""
+    if pattern is None:
+        return [(0.0, 0.0)] * channels
+    r, g1, g2, b = CELLS[pattern]
+
+    def offset(*cells: tuple[int, int]) -> tuple[float, float]:
+        row = sum(c[0] for c in cells) / len(cells)
+        column = sum(c[1] for c in cells) / len(cells)
+        return (column - 0.5) / 2, (row - 0.5) / 2
+
+    return [offset(b), offset(g1, g2), offset(r)]  # OpenCV's order: B, G, R
+
+
+def warp(
+    image: Image, transform: Transform, offsets: list[tuple[float, float]] | None = None
+) -> Image:
+    """``image`` moved onto the reference by ``transform``; NaN where it has no data.
+
+    ``offsets`` (``channel_offsets``) moves each channel by its own place in the Bayer
+    cell: a turned frame (a meridian flip) would otherwise put red and blue half a pixel
+    off the green, the opposite way each."""
     height, width, channels = image.shape
-    moved = cv2.warpAffine(
-        image,
-        transform.matrix(),
-        (width, height),
-        flags=cv2.INTER_LINEAR,
-        borderMode=cv2.BORDER_CONSTANT,
-        borderValue=(math.nan, math.nan, math.nan, math.nan),
-    )
-    return np.asarray(moved, dtype=np.float32).reshape(height, width, channels)
+    matrix = transform.matrix()
+    if offsets is None or not any(dx or dy for dx, dy in offsets):
+        moved = cv2.warpAffine(
+            image,
+            matrix,
+            (width, height),
+            flags=cv2.INTER_LINEAR,
+            borderMode=cv2.BORDER_CONSTANT,
+            borderValue=(math.nan, math.nan, math.nan, math.nan),
+        )
+        return np.asarray(moved, dtype=np.float32).reshape(height, width, channels)
+    out = np.empty_like(image)
+    linear = matrix[:, :2]
+    for c, (dx, dy) in enumerate(offsets):
+        # A channel sample at q is the sky at q + d: it goes to T(q + d) - d.
+        d = np.array([dx, dy])
+        shifted = matrix.copy()
+        shifted[:, 2] += linear @ d - d
+        out[..., c] = cv2.warpAffine(
+            np.ascontiguousarray(image[..., c]),
+            shifted,
+            (width, height),
+            flags=cv2.INTER_LINEAR,
+            borderMode=cv2.BORDER_CONSTANT,
+            borderValue=math.nan,
+        )
+    return out
+
+
+def sky(image: Image) -> tuple[NDArray[np.float32], NDArray[np.float32]]:
+    """The sky level (median) and noise (MAD as sigma) of each channel, from a sample."""
+    sample = image[::4, ::4].reshape(-1, image.shape[2])
+    level = np.nanmedian(sample, axis=0)
+    noise = np.nanmedian(np.abs(sample - level), axis=0) * 1.4826
+    return level.astype(np.float32), noise.astype(np.float32)
+
+
+def _evict(keep: str) -> None:
+    """Drop the least recently used stacks while they hold more than ``MAX_BYTES``."""
+    while sum(s.nbytes for s in _stacks.values()) > MAX_BYTES:
+        oldest = next((k for k in _stacks if k != keep), None)
+        if oldest is None:
+            return
+        del _stacks[oldest]
 
 
 def _render(stack: Stack, path: str, look: Look, width: int) -> Rendered:
     if stack.mean is None or stack.count is None or stack.frames == 0:
-        raise StackLostError("the stack has no frames")
+        raise EmptyStackError("the stack has no frames")
     least = max(1, math.ceil(stack.frames * COVERAGE))
     covered = stack.count.min(axis=2) >= least
     rows, columns = np.flatnonzero(covered.any(axis=1)), np.flatnonzero(covered.any(axis=0))
     if rows.size == 0 or columns.size == 0:
-        raise StackLostError("no part of the stack is covered")
-    crop = stack.mean[rows[0] : rows[-1] + 1, columns[0] : columns[-1] + 1]
+        raise EmptyStackError("no part of the stack is covered")
+    box = (slice(rows[0], rows[-1] + 1), slice(columns[0], columns[-1] + 1))
+    crop = stack.mean[box]
+    inside = covered[box]
+    if not inside.all():
+        # The corners a turned frame leaves uncovered show as sky, not black, and do not
+        # pull the stretch's statistics down.
+        level = np.median(crop[inside], axis=0).astype(np.float32)
+        crop = np.where(inside[..., np.newaxis], crop, level)
     height, across = crop.shape[:2]
     if across > width:
         size = (width, max(1, round(height * width / across)))

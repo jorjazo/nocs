@@ -1,4 +1,4 @@
-"""Benchmark live stacking's per-frame cost in the imaging worker (ADR 0037).
+"""Benchmark live stacking's per-frame cost in the imaging worker (ADR 0040).
 
 Runs nocsd's own code (``nocs.stacking.stack.add_frame``, then the preview pipeline
 for comparison) on a series of full-size frames, as the worker would see them one

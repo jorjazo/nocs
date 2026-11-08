@@ -1,4 +1,4 @@
-"""Live stacking (ADR 0039): the switch, a new stack, the look, saving; ``stack`` shows it."""
+"""Live stacking (ADR 0040): the switch, a new stack, the look, saving; ``stack`` shows it."""
 
 from __future__ import annotations
 

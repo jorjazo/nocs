@@ -1,4 +1,4 @@
-// Whether this device shows the latest frame or the live stack (ADR 0039): a
+// Whether this device shows the latest frame or the live stack (ADR 0040): a
 // choice about this screen, kept in the browser like the other per-device ones.
 
 export type StackView = "frame" | "stack";

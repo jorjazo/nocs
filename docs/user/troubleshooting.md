@@ -78,3 +78,26 @@ Updates need internet: join a network with internet (Rig → Network), then Rig 
 computer → Updates → Check. NOCS installs them only when you say so, never during a
 session, and restarts itself at the end. If the new version misbehaves, **Go back**
 installs the previous one.
+
+## File sharing
+
+**The computer does not see the box under Network.** Windows lists it a minute or so
+after File sharing is switched on, and only on the same network: on the box's own
+Wi-Fi the computer has to join `NOCS-xxxx`. Type the address instead:
+`\\nocs.local\Internal` (Windows) or `smb://nocs.local` (Mac, Linux), with the box's
+name if you renamed it. If `.local` does not resolve, use its address
+(`\\10.42.0.1\Internal` on its Wi-Fi).
+
+**Windows asks for a user and password, or says it cannot access it.** Windows 11
+refuses guest access: log in as user `nocs`, password `nocs` (shown on Rig). To let it
+in as a guest instead, run in an administrator PowerShell on that computer:
+
+```powershell
+Set-SmbClientConfiguration -EnableInsecureGuestLogons $true -RequireSecuritySignature $false
+```
+
+**I cannot delete or copy into the folders.** File sharing is read-only, so a computer
+cannot change what the app's catalog knows about.
+
+**A USB drive is missing from the shared folders.** Only drives the box mounted itself
+are shared, with their `NOCS` folder; an ejected drive leaves the share.

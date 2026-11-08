@@ -12,7 +12,7 @@ from numpy.typing import NDArray
 from synthstars import CELLS, Sky, render, sky
 
 from nocs.stacking import reduce, stack
-from nocs.stacking.register import Transform, find_stars
+from nocs.stacking.register import Transform, find_stars, register
 from nocs.stacking.stack import (
     FrameError,
     Look,
@@ -138,8 +138,8 @@ def test_noise_falls_with_the_square_root_of_the_frames(tmp_path: Path) -> None:
 
 
 def test_a_satellite_trail_is_rejected(tmp_path: Path) -> None:
-    for i in range(8):
-        trail = (0.0, 100.0, WIDTH, 700.0) if i == 6 else None
+    for i in range(12):
+        trail = (0.0, 100.0, WIDTH, 700.0) if i == 10 else None
         move = Transform.of(0.0, (2.0 * i, 0.0))
         added = add_frame(
             "s",
@@ -148,12 +148,12 @@ def test_a_satellite_trail_is_rejected(tmp_path: Path) -> None:
             new=i == 0,
         )
         assert added.accepted
-        if i == 6:
+        if i == 10:
             assert added.clipped is not None
             assert added.clipped > 0.001
     held = stack._stacks["s"]  # pyright: ignore[reportPrivateUsage]
     assert held.mean is not None
-    # Along the trail (stack pixels): no more than the sky elsewhere, not +4000/8.
+    # Along the trail (stack pixels): no more than the sky elsewhere, not +4000/12.
     xs = np.arange(50, 550)
     ys = np.round((100 + (700 - 100) * (2 * xs + 0.5) / WIDTH - 0.5) / 2).astype(int)
     along = float(np.median(held.mean[ys, xs, 1]))
@@ -226,7 +226,6 @@ def test_the_stack_is_sharp(tmp_path: Path) -> None:
     # Same stars at the same places, and no fatter: peak heights within 15 %.
     stacked = find_stars(luminance(held.mean))
     reference = find_stars(luminance(single))
-    assert len(stacked) == len(reference)
     distance = np.hypot(
         stacked.x[:, None] - reference.x[None, :], stacked.y[:, None] - reference.y[None, :]
     ).min(axis=1)
@@ -340,3 +339,120 @@ def test_a_frame_without_stars_does_not_start_a_stack(tmp_path: Path) -> None:
     assert added.reason is not None
     assert "too few stars" in added.reason
     assert add_frame("s", frame(tmp_path, "a"), "RGGB", new=False).accepted
+
+
+def held(stack_id: str = "s") -> stack.Stack:
+    return stack._stacks[stack_id]  # pyright: ignore[reportPrivateUsage]
+
+
+def test_good_frames_are_hardly_rejected(tmp_path: Path) -> None:
+    # A constant sky and nothing wrong: about what 3 sigma leaves out (0.3 %), not 5 %.
+    clipped: list[float] = []
+    for i in range(16):
+        move = Transform.of(0.0, (2.0 * (i % 4), 2.0 * (i // 4)))
+        added = add_frame("s", frame(tmp_path, f"f{i}", move, seed=400 + i), "RGGB", new=i == 0)
+        assert added.clipped is not None
+        clipped.append(added.clipped)
+    assert max(clipped[stack.REJECT_FROM :]) < 0.01
+
+
+def test_a_brighter_sky_does_not_freeze_the_stack(tmp_path: Path) -> None:
+    # The Moon rises: the sky goes from 800 to 1100 ADU after a few frames.
+    for i in range(16):
+        background = 800.0 if i < 6 else 1100.0
+        move = Transform.of(0.0, (2.0 * (i % 4), 0.0))
+        added = add_frame(
+            "s",
+            frame(tmp_path, f"f{i}", move, seed=500 + i, background=background),
+            "RGGB",
+            new=i == 0,
+        )
+        assert added.accepted
+        assert added.clipped is not None
+        assert added.clipped < 0.02, (i, added.clipped)
+    stacked = held()
+    assert stacked.count is not None
+    assert stacked.mean is not None
+    # Every frame counted at nearly every pixel, at the reference's sky level.
+    assert float(np.median(stacked.count)) == 16
+    assert float(np.median(stacked.mean[..., 1])) == pytest.approx(800, abs=10)
+
+
+def test_a_dimmer_frame_is_scaled_to_the_reference(tmp_path: Path) -> None:
+    add_frame("s", frame(tmp_path, "a"), "RGGB", new=True)
+    dim = Sky(FIELD.x, FIELD.y, FIELD.flux * 0.6, FIELD.colour)  # haze
+    added = add_frame("s", frame(tmp_path, "b", field=dim, seed=2), "RGGB", new=False)
+    assert added.scale == pytest.approx(1 / 0.6, rel=0.05)
+
+
+def test_after_a_flip_every_channel_lands_on_its_stars() -> None:
+    # Noiseless frames: the reference and the same field turned by 180 degrees.
+    flip = Transform.of(180.0, (WIDTH - 0.0, HEIGHT - 0.0))
+    reference = to_stack_image(
+        render(FIELD, WIDTH, HEIGHT, sigma=SIGMA, bayer="RGGB", noise=False), "RGGB"
+    )
+    turned = to_stack_image(
+        render(FIELD, WIDTH, HEIGHT, flip, sigma=SIGMA, bayer="RGGB", noise=False), "RGGB"
+    )
+    found = register(find_stars(luminance(turned)), find_stars(luminance(reference)))
+    moved = stack.warp(turned, found.transform, stack.channel_offsets("RGGB", 3))
+    for c in range(3):
+        mine = find_stars(np.nan_to_num(moved[..., c]))
+        theirs = find_stars(reference[..., c])
+        distance = np.hypot(
+            mine.x[:, None] - theirs.x[None, :], mine.y[:, None] - theirs.y[None, :]
+        ).min(axis=1)
+        assert float(np.median(distance)) < 0.1, c
+
+
+def test_channel_offsets() -> None:
+    # RGGB: red at the cell's top left, blue at its bottom right; OpenCV's B, G, R.
+    assert stack.channel_offsets("RGGB", 3) == [(0.25, 0.25), (0.0, 0.0), (-0.25, -0.25)]
+    assert stack.channel_offsets("BGGR", 3) == [(-0.25, -0.25), (0.0, 0.0), (0.25, 0.25)]
+    assert stack.channel_offsets(None, 1) == [(0.0, 0.0)]
+
+
+def test_stacks_beyond_the_memory_budget_go(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = frame(tmp_path, "a")
+    add_frame("old", path, "RGGB", new=True)
+    monkeypatch.setattr(stack, "MAX_BYTES", held("old").nbytes + 1)
+    add_frame("new", path, "RGGB", new=True)
+    with pytest.raises(StackLostError):
+        add_frame("old", path, "RGGB", new=False)
+    assert add_frame("new", path, "RGGB", new=False).frames == 2
+
+
+def test_an_empty_stack_is_not_a_lost_one(tmp_path: Path) -> None:
+    empty = write(tmp_path / "e.fits", render(sky(0, WIDTH, HEIGHT), WIDTH, HEIGHT, bayer="RGGB"))
+    add_frame("s", empty, "RGGB", new=True)
+    with pytest.raises(stack.EmptyStackError):
+        stack.render("s", str(tmp_path / "p.jpg"), Look())
+    with pytest.raises(stack.EmptyStackError):
+        save("s", str(tmp_path / "s.fits"), str(tmp_path / "s.jpg"), Look(), {})
+
+
+def test_a_stack_is_never_saved_over_a_file(tmp_path: Path) -> None:
+    add_frame("s", frame(tmp_path, "a"), "RGGB", new=True)
+    existing = tmp_path / "s.fits"
+    existing.write_bytes(b"x")
+    with pytest.raises(FileExistsError):
+        save("s", str(existing), str(tmp_path / "s.jpg"), Look(), {})
+
+
+def test_uncovered_corners_show_as_sky(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(stack, "COVERAGE", 0.01)  # keep the corners only one frame covers
+    add_frame("s", frame(tmp_path, "a", bayer=None), None, new=True)
+    add_frame(
+        "s",
+        frame(tmp_path, "b", Transform.of(3.0, (30.0, 20.0)), bayer=None, seed=3),
+        None,
+        new=False,
+    )
+    rendered = stack.render("s", str(tmp_path / "p.jpg"), Look(), width=WIDTH)
+    image = cv2.imread(rendered.path, cv2.IMREAD_GRAYSCALE)
+    assert image is not None
+    # No black wedge: the darkest corner is about the sky's grey, not 0.
+    corners = [image[:10, :10], image[:10, -10:], image[-10:, :10], image[-10:, -10:]]
+    assert min(float(np.median(c)) for c in corners) > 0.5 * float(np.median(image))

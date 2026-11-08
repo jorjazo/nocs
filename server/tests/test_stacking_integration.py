@@ -113,17 +113,23 @@ def stacked(frames: int) -> Callable[[dict[str, Any]], bool]:
 
 
 def test_frames_stack_as_they_arrive(api: TestClient) -> None:
-    """Two frames, the second unsaved (Live view): quick enough for every pull request."""
+    """A saved frame, then Live view's loop (unsaved): quick enough for every pull request."""
     assert api.put("/api/stack", json={"on": True}).status_code == 204
     assert api.post("/api/stack/reset").status_code == 204
     expose(api)
     wait(api, stacked(1))
-    expose(api, save=False)
-    wait(api, stacked(2))
+    response = api.post("/api/cameras/main_camera/loop", json={"exposure": 1})
+    assert response.status_code == 202, response.text
+    loop = response.json()["job"]
+    try:
+        wait(api, stacked(3))
+    finally:
+        assert api.post(f"/api/jobs/{loop}/cancel").status_code in (202, 409)
+        wait(api, finished(loop))
     current = state(api)
     AppState.model_validate(current)
     stack = current["stack"]["current"]
-    assert stack["frames"] == 2, stack
+    assert stack["frames"] >= 3, stack
     assert stack["camera"] == "CCD Simulator"
     assert stack["last"]["accepted"], stack["last"]
     assert stack["last"]["stars"] >= 6

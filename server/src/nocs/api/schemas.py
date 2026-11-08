@@ -836,6 +836,24 @@ class UpdatesState(StateModel):
     log: list[str] = Field(description="The last lines apt or dpkg wrote, while installing.")
 
 
+class Share(StateModel):
+    name: str = Field(description="The share's name, as a desktop shows it.")
+    volume: str = Field(description='"internal", or the drive\'s filesystem UUID.')
+    label: str | None = Field(description="The drive's label.")
+
+
+class ShareState(StateModel):
+    """The SMB share of the frames for desktop computers, read-only for guests and the
+    published login nocs / nocs (ADR 0039)."""
+
+    on: bool = Field(description="The owner switched it on.")
+    running: bool = Field(description="smbd is running.")
+    shares: list[Share] = Field(
+        description="One per volume: its NOCS folder (Internal, then each USB drive)."
+    )
+    clients: int = Field(description="Computers connected now.")
+
+
 class GpsState(StateModel):
     """A USB GPS through gpsd (ADR 0029); positions to 4 decimals, at most every 10 s."""
 
@@ -995,8 +1013,12 @@ class StackCalibration(StateModel):
         description="What the subtracted master is made of; None: nothing subtracted."
     )
     dark_frames: int = Field(description="Frames in that master.")
+    dark_failed: bool = Field(description="Darks or bias were found, but no master came of them.")
     flat_frames: int = Field(description="Frames in the flat master; 0: no flat.")
-    flats_unused: bool = Field(description="Flats were found without their bias or dark flats.")
+    flats_unused: bool = Field(
+        description="Flats were found, but without their bias or dark flats, or the lights'."
+    )
+    flat_failed: bool = Field(description="Flats were found, but no master came of them.")
 
 
 class StackOutcome(StateModel):
@@ -1047,12 +1069,18 @@ class StackSavedState(StateModel):
     time: str = Field(description="UTC, ISO 8601, when it was saved.")
 
 
+class StackBuilding(StateModel):
+    kind: Literal["dark", "bias", "flat"]
+    frames: int
+
+
 class StackState(StateModel):
-    """Live stacking (ADR 0039)."""
+    """Live stacking (ADR 0040)."""
 
     on: bool = Field(description="Lights of the main camera are stacked as they arrive.")
     status: Literal["off", "idle", "preparing", "stacking", "failed"]
-    message: str | None = Field(description="What it is doing (building a master).")
+    message: str | None = Field(description="What it is doing, in English (for logs).")
+    building: StackBuilding | None = Field(description="The master being built, if one is.")
     error: str | None
     look: StackLook
     current: CurrentStack | None = Field(description="The stack shown; None before a frame.")
@@ -1102,6 +1130,9 @@ class AppState(StateModel):
     )
     network: NetworkState | None = Field(
         default=None, description="None where NOCS does not manage the network (a PC)."
+    )
+    share: ShareState | None = Field(
+        default=None, description="None where NOCS does not share the frames (a PC)."
     )
 
 
@@ -1407,6 +1438,12 @@ class NetworkModeRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     pin: Literal["auto", "ap", "station"]
+
+
+class ShareRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    on: bool
 
 
 class EjectRequest(BaseModel):

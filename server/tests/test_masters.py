@@ -201,3 +201,40 @@ def test_the_stack_calibrates_every_frame(tmp_path: Path) -> None:
     assert second.hot_pixels == first.hot_pixels  # the stack kept its calibration
     plain = add_frame("p", path, "RGGB", new=True)
     assert plain.hot_pixels is None
+
+
+def test_cosmetic_spares_sharp_stars_in_colour() -> None:
+    # Undersampled stars (FWHM 1.65 raw px) centred on red or blue photosites stand out
+    # of their own channel's neighbourhood like hot pixels: the other channels tell.
+    field = sky(300, WIDTH * 2, HEIGHT * 2, seed=6)
+    image = to_stack_image(
+        render(field, WIDTH * 2, HEIGHT * 2, sigma=0.7, bayer="RGGB", seed=7), "RGGB"
+    )
+    assert cosmetic(image) <= 2  # noise alone, not stars
+
+
+def test_cosmetic_follows_the_vignetting() -> None:
+    # No flat, 40 % vignetting: the corners' faint stars are not taken for hot pixels.
+    field = sky(300, WIDTH * 2, HEIGHT * 2, seed=8)
+    raw = render(field, WIDTH * 2, HEIGHT * 2, sigma=1.6, seed=9, vignetting=0.4)
+    assert cosmetic(to_stack_image(raw, None)) <= 2
+
+
+def test_bias_alone_leaves_the_hot_pixels_to_the_cosmetic_pass(tmp_path: Path) -> None:
+    bias = [write(tmp_path / f"b{i}.fits", dark(100 + i, hot=False)) for i in range(3)]
+    build(str(tmp_path / "bias.fits"), "bias", bias, None)
+    light = to_stack_image(dark(60), "RGGB")  # a light frame with the sensor's hot pixels
+    hot = masters.apply(light, Calibration(dark=str(tmp_path / "bias.fits"), bias=True))
+    assert hot > 20
+    assert float(np.max(light)) < 1000
+
+
+def test_a_master_cut_short_is_built_again(tmp_path: Path) -> None:
+    frames = [write(tmp_path / f"d{i}.fits", dark(i)) for i in range(3)]
+    out = tmp_path / "dark.fits"
+    build(str(out), "dark", frames, None)
+    whole = out.read_bytes()
+    out.write_bytes(whole[: len(whole) // 2])  # a power cut while it was written
+    masters.forget()
+    assert build(str(out), "dark", frames, None).frames == 3
+    assert out.read_bytes() == whole

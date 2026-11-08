@@ -433,6 +433,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
         services.stacking = LiveStackService(
             store, services.worker, storage, settings.config_dir, settings.data_dir
         )
+        await services.stacking.start()
         services.capture.use_stacker(services.stacking)
         services.flats = FlatsService(
             store,

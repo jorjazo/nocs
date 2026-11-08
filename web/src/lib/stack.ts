@@ -1,4 +1,4 @@
-// Live stacking (ADR 0039) in the client: the look's presets and what the
+// Live stacking (ADR 0040) in the client: the look's presets and what the
 // stack's state says, in words. Pure functions, tested with node:test.
 
 import type { CurrentStack, StackLook, StackOutcome } from "./types";
@@ -41,15 +41,16 @@ export function calibrated(stack: CurrentStack): Calibrated {
 // What the calibration is made of, as parts of one line ("20 darks · 15 flats").
 export type Part =
   | { kind: "darks" | "bias" | "flats"; count: number }
-  | { kind: "noFlats" | "flatsUnused" | "noDarks" };
+  | { kind: "noFlats" | "flatsUnused" | "flatsFailed" | "noDarks" | "darksFailed" };
 
 export function parts(stack: CurrentStack): Part[] {
   const c = stack.calibration;
   const found: Part[] = [];
   if (c.dark_kind === "dark") found.push({ kind: "darks", count: c.dark_frames });
   else if (c.dark_kind === "bias") found.push({ kind: "bias", count: c.dark_frames });
-  else found.push({ kind: "noDarks" });
+  else found.push({ kind: c.dark_failed ? "darksFailed" : "noDarks" });
   if (c.flat_frames > 0) found.push({ kind: "flats", count: c.flat_frames });
+  else if (c.flat_failed) found.push({ kind: "flatsFailed" });
   else found.push({ kind: c.flats_unused ? "flatsUnused" : "noFlats" });
   return found;
 }
