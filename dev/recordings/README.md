@@ -8,6 +8,15 @@ tests for hardware that has no INDI simulator (`FakeClient.replay` in the
 server tests; [`dev/tools/fake_ppba.py`](../tools/fake_ppba.py) serves the PPBA
 to a nocsd).
 
+New recordings are zips ([ADR 0038](../../docs/adr/0038-recording-indi-sessions.md)),
+from the same tool or, later, from nocsd: `manifest.json` (versions, drivers, a note
+of what was done, why it ended, what was scrubbed) and `session.jsonl`, one
+`{"t": seconds, "xml": "<…/>"}` per message. indiserver echoes every client's
+commands (`new*Vector`) to the recorder, so they are there too, in order with the
+driver's answers. The site, serial
+numbers, addresses and home directories are scrubbed while recording;
+`nocs.indi.recording.read` loads one. The raw XML ones below predate it.
+
 | File | Devices | Notes |
 |---|---|---|
 | `lab-rig-2026-10-30.xml` | ZWO ASI2600MC Duo (+ its ASI220MM Mini guide sensor), ZWO EAF, ZWO EFW (8 slots), ZWO AM7 (its driver, `indi_lx200am5`, names the device "ZWO AM5"), Pegasus PPBA Gen2 | INDI 2.2.5 from the PPA on the lab Pi 5, all devices connected through nocsd (cameras already pointed at the rig with `ACTIVE_DEVICES`). The PPBA driver also defines five empty vectors (`device=""`). |
