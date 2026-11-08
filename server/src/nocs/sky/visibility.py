@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from nocs.equipment import HorizonPoint
+from nocs.sites import HorizonPoint
 from nocs.sky.almanac import Interval, Night, intersect, intervals_above
 from nocs.sky.ephemeris import SIDEREAL_DAY, Floats, separation, sky
 

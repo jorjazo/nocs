@@ -4,7 +4,8 @@
 export type Tab = "tonight" | "live" | "plan" | "session" | "rig";
 export const TABS: readonly Tab[] = ["tonight", "live", "plan", "session", "rig"];
 
-// The profile editor hangs off Rig: #/rig/profile/<id>, or #/rig/profile/new; a
+// The profile editor hangs off Rig: #/rig/profile/<id>, or #/rig/profile/new, and
+// so does a site's: #/rig/site/<id>, or #/rig/site/new; a
 // target's page off Plan: #/plan/<catalog id>, and the sequence builder:
 // #/plan/sequence (no catalog id is "sequence"); a session's report off Session:
 // #/session/<id>.
@@ -21,6 +22,7 @@ export type Route =
   | { screen: "polar" }
   | { screen: "flats"; night: number | null }
   | { screen: "profile"; id: string | null }
+  | { screen: "site"; id: string | null }
   | { screen: "target"; id: string };
 
 const DEFAULT: Route = { screen: "tonight" };
@@ -38,12 +40,16 @@ function parse(hash: string): Route {
   if (first === "rig" && second === "profile" && third) {
     return { screen: "profile", id: third === "new" ? null : decodeURIComponent(third) };
   }
+  if (first === "rig" && second === "site" && third) {
+    return { screen: "site", id: third === "new" ? null : decodeURIComponent(third) };
+  }
   const tab = TABS.find((name) => name === first);
   return tab ? { screen: tab } : DEFAULT;
 }
 
 export function href(route: Route): string {
   if (route.screen === "profile") return `#/rig/profile/${route.id === null ? "new" : encodeURIComponent(route.id)}`;
+  if (route.screen === "site") return `#/rig/site/${route.id === null ? "new" : encodeURIComponent(route.id)}`;
   if (route.screen === "target") return `#/plan/${encodeURIComponent(route.id)}`;
   if (route.screen === "sequence") return "#/plan/sequence";
   if (route.screen === "report") return `#/session/${route.id}`;

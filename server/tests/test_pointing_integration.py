@@ -28,6 +28,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 from owner import pair_owner
+from sites import use_site
 
 from nocs.api import create_app
 from nocs.config import Settings
@@ -166,9 +167,10 @@ def api(tmp_path_factory: pytest.TempPathFactory) -> Iterator[TestClient]:
         astap_db=Path(database) if database else None,
     )
     devices = {k: v for k, v in SIMULATORS["devices"].items() if k in {"main_camera", "mount"}}
-    profile = {**SIMULATORS, "devices": devices, "site": SITE}
+    profile = {**SIMULATORS, "devices": devices}
     with TestClient(create_app(settings)) as client:
         pair_owner(client)
+        use_site(client, SITE)
         assert client.put("/api/profiles/pointing", json=profile).status_code == 204
         assert (
             client.post("/api/equipment/connect", json={"profile": "pointing"}).status_code == 202

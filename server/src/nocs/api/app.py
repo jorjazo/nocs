@@ -50,6 +50,7 @@ from nocs.api.schemas import (
     FrameGuiding,
     FrameRecord,
     FrameTypeName,
+    GpsSiteRequest,
     Health,
     Hello,
     JobStarted,
@@ -60,6 +61,7 @@ from nocs.api.schemas import (
     SerialPortInfo,
     ServerMessage,
     SetPropertyRequest,
+    SiteCreated,
     SnapshotMessage,
     StateSnapshot,
     TargetRequest,
@@ -68,6 +70,7 @@ from nocs.api.schemas import (
 )
 from nocs.api.sequences import sequences_router
 from nocs.api.sessions import sessions_router
+from nocs.api.sites import sites_router
 from nocs.api.sky import sky_router
 from nocs.api.solver import align_router, saved_frames_router, solver_router
 from nocs.api.system import system_router
@@ -84,12 +87,10 @@ from nocs.equipment import (
     DriverRestartError,
     EquipmentBusyError,
     EquipmentService,
-    HorizonPoint,
     Profile,
     ProfileError,
     ProfileStore,
     Role,
-    Site,
     serial_ports,
 )
 from nocs.equipment.profiles import FocusSweep
@@ -128,6 +129,7 @@ from nocs.services.gps import GpsService, NoFixError
 from nocs.services.indi_bridge import IndiBridge, NotConnectedError
 from nocs.services.system import OperationUnavailableError, SystemService
 from nocs.services.timekeeping import TimeKeeper
+from nocs.sites import SiteService, SiteStore
 from nocs.sky import Target as SkyTarget
 from nocs.solving import Astap, SolverService
 from nocs.state import Resync, StateStore
@@ -255,6 +257,10 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
         assert services.sequences is not None
         return services.sequences
 
+    def sites() -> SiteService:
+        assert services.sites is not None
+        return services.sites
+
     class RigRecovery:
         """Bringing a device back for a sequence (ADR 0030)."""
 
@@ -278,9 +284,8 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
         )
 
     def sequence_place() -> Place | None:
-        """Where the rig is, for a sequence's sky: the profile's site and horizon."""
-        profile = equipment().active_profile
-        site = profile.site if profile is not None else None
+        """Where the rig is, for a sequence's sky: the active site and its horizon."""
+        site = sites().active
         if site is None:
             return None
         return Place(Location(site.latitude, site.longitude, site.elevation), site.horizon)
@@ -302,18 +307,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
         return Role.MOUNT not in roles or clock().known
 
     def site_longitude() -> float | None:
-        profile = equipment().active_profile
-        return profile.site.longitude if profile is not None and profile.site else None
-
-    def site_location() -> Location | None:
-        site = saved_site()
-        return Location(site.latitude, site.longitude, site.elevation) if site else None
-
-    def saved_site() -> Site | None:
-        """From the profile as saved: a new horizon needs no reconnection."""
-        active = equipment().active
-        profile = ProfileStore(settings.config_dir).get(active) if active else None
-        return profile.site if profile else None
+        return sites().longitude()
 
     def imaging_sweep() -> FocusSweep | None:
         """From the profile as saved: a new sweep needs no reconnection."""
@@ -328,6 +322,12 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
     async def lifespan(_: FastAPI) -> AsyncGenerator[None]:
         services.clock = Clock(store)
         services.jobs = JobManager(store)
+        services.sites = SiteService(
+            store,
+            SiteStore(settings.config_dir),
+            # A go to, a sequence, polar alignment or sky flats work from the site.
+            check=lambda: jobs().check_free([Role.MOUNT.value]),
+        )
         services.system = SystemService(store, services.jobs, settings.system_socket)
         services.equipment = EquipmentService(
             store, ProfileStore(settings.config_dir), bridge, fifo
@@ -357,9 +357,10 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
             settings.data_dir,
             _upload_dirs(settings),
             services.clock,
+            site=lambda: sites().active,
         )
         services.mount = MountService(
-            store, services.jobs, services.equipment, bridge, services.clock
+            store, services.jobs, services.equipment, bridge, services.clock, services.sites
         )
         services.power = PowerService(store, services.jobs, services.equipment, bridge)
         services.weather = WeatherService(store, services.equipment, bridge)
@@ -418,7 +419,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
             services.pointing,
             services.mount,
             services.clock,
-            horizon=lambda: _horizon(services.equipment),
+            horizon=lambda: sites().horizon(),
         )
         services.plan = PlanService(store, settings.config_dir)
         services.capture.use_guider(services.guiding)
@@ -430,7 +431,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
             filter_wheel,
             ready_focuser,
             services.storage,
-            site=site_location,
+            site=lambda: sites().location(),
             mount=mount,
             now=services.clock.now,
         )
@@ -455,7 +456,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
             memory=settings.data_dir / "clock-set-from-client",
         )
         time_task = asyncio.create_task(time_keeper.run(), name="timekeeping")
-        services.gps = GpsService(store, services.equipment, settings.gpsd_host, settings.gpsd_port)
+        services.gps = GpsService(store, services.sites, settings.gpsd_host, settings.gpsd_port)
         gps_task = asyncio.create_task(services.gps.run(), name="gpsd")
         watchdog_task = asyncio.create_task(watchdog.run(), name="systemd-watchdog")
         recovery_task = asyncio.create_task(
@@ -514,7 +515,8 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
     app.include_router(sequences_router(sequences))
     app.include_router(sessions_router(storage, lambda: clock().now()))
     app.include_router(calibration_router(lambda: calibration_library, flats))
-    app.include_router(sky_router(saved_site, clock, _catalog_target))
+    app.include_router(sky_router(lambda: sites().active, clock, _catalog_target))
+    app.include_router(sites_router(sites))
     app.include_router(targets_router())
     app.include_router(plan_router(plan))
 
@@ -722,21 +724,17 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     @app.post("/api/gps/site")
-    async def gps_site() -> Site:  # pyright: ignore[reportUnusedFunction]
-        """Make the GPS's position the active profile's site, and the mount's (ADR 0029)."""
+    async def gps_site(  # pyright: ignore[reportUnusedFunction]
+        request: GpsSiteRequest | None = None,
+    ) -> SiteCreated:
+        """Make the saved site the GPS is at the active one, or else save the GPS's position
+        as a new site and make it active (ADR 0038); the mount follows. Returns its id."""
         assert services.gps is not None
         try:
-            site = services.gps.apply_site()
-        except NoFixError as e:
+            site_id = services.gps.use_site(request.name if request is not None else "")
+        except (NoFixError, ResourceBusyError) as e:
             raise HTTPException(status.HTTP_409_CONFLICT, str(e)) from e
-        except ProfileError as e:
-            raise HTTPException(status.HTTP_409_CONFLICT, str(e)) from e
-        try:
-            await mount().send_site(site)
-        except (MountNotReadyError, ResourceBusyError, DeviceError) as e:
-            # It gets the profile's site whenever it becomes ready, or with the next go to.
-            log.info("the mount keeps its site for now: %s", e)
-        return site
+        return SiteCreated(id=site_id)
 
     @app.post(
         "/api/storage/destinations/{destination_id}/eject",
@@ -912,12 +910,7 @@ class _Services:
     sequences: SequenceService | None = None
     flats: FlatsService | None = None
     gps: GpsService | None = None
-
-
-def _horizon(equipment: EquipmentService | None) -> list[HorizonPoint] | None:
-    """The active profile's horizon profile."""
-    profile = equipment.active_profile if equipment is not None else None
-    return profile.site.horizon if profile is not None and profile.site is not None else None
+    sites: SiteService | None = None
 
 
 def _iso(time: datetime) -> str:

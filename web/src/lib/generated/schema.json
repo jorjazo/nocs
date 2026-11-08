@@ -42,8 +42,29 @@
       "title": "AccessPointRequest",
       "type": "object"
     },
+    "ActiveSiteRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "A saved site's id; None: no site is active."
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "ActiveSiteRequest",
+      "type": "object"
+    },
     "Almanac": {
-      "description": "``GET /api/sky/tonight``: the night at the active profile's site.",
+      "description": "``GET /api/sky/tonight``: the night at the active site.",
       "properties": {
         "astronomical": {
           "anyOf": [
@@ -427,6 +448,17 @@
           "anyOf": [
             {
               "$ref": "#/$defs/SequenceState"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "sites": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SitesState"
             },
             {
               "type": "null"
@@ -4229,6 +4261,19 @@
       ],
       "type": "string"
     },
+    "GpsSiteRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "default": "",
+          "description": "The name of a new site, when the GPS is at none of the saved ones.",
+          "maxLength": 80,
+          "type": "string"
+        }
+      },
+      "title": "GpsSiteRequest",
+      "type": "object"
+    },
     "GpsState": {
       "additionalProperties": false,
       "description": "A USB GPS through gpsd (ADR 0029); positions to 4 decimals, at most every 10 s.",
@@ -4278,16 +4323,16 @@
           ],
           "description": "Degrees, east positive."
         },
-        "site_differs": {
+        "site": {
           "anyOf": [
             {
-              "type": "boolean"
+              "type": "string"
             },
             {
               "type": "null"
             }
           ],
-          "description": "A 3D fix more than 0.01\u00b0 or 50 m from the active profile's site, or a profile without one: the app offers the GPS's site. None without a 3D fix or profile."
+          "description": "The saved site nearest to a 3D fix within 500 m (ADR 0038): the app offers it when it is not the active one, and to save a new site when there is none."
         },
         "time": {
           "anyOf": [
@@ -4308,7 +4353,7 @@
         "longitude",
         "elevation",
         "time",
-        "site_differs"
+        "site"
       ],
       "title": "GpsState",
       "type": "object"
@@ -5677,7 +5722,7 @@
             }
           ],
           "default": null,
-          "description": "None: the active profile's site."
+          "description": "None: the active site."
         }
       },
       "title": "MountSiteRequest",
@@ -5781,12 +5826,12 @@
           "description": "Where the mount believes it is."
         },
         "site_check": {
-          "description": "The mount's site against the active profile's.",
+          "description": "The mount's site against the box's active site.",
           "enum": [
             "same",
             "different",
             "unknown",
-            "no_profile_site"
+            "no_site"
           ],
           "type": "string"
         },
@@ -7651,17 +7696,6 @@
           "maxLength": 80,
           "minLength": 1,
           "type": "string"
-        },
-        "site": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/Site"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null
         }
       },
       "required": [
@@ -8763,6 +8797,7 @@
         },
         "name": {
           "default": "",
+          "maxLength": 80,
           "type": "string"
         }
       },
@@ -8771,6 +8806,48 @@
         "longitude"
       ],
       "title": "Site",
+      "type": "object"
+    },
+    "SiteCreated": {
+      "properties": {
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "SiteCreated",
+      "type": "object"
+    },
+    "SitesState": {
+      "additionalProperties": false,
+      "description": "The saved sites and the box's active one (ADR 0038).",
+      "properties": {
+        "active": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The active site's id; None: no site is active."
+        },
+        "saved": {
+          "additionalProperties": {
+            "$ref": "#/$defs/Site"
+          },
+          "description": "Every saved site, by id.",
+          "type": "object"
+        }
+      },
+      "required": [
+        "active",
+        "saved"
+      ],
+      "title": "SitesState",
       "type": "object"
     },
     "SkyChart": {
@@ -8851,7 +8928,7 @@
       "type": "object"
     },
     "SkyVisibility": {
-      "description": "``GET /api/sky/visibility``: targets during a night at the active profile's site.",
+      "description": "``GET /api/sky/visibility``: targets during a night at the active site.",
       "properties": {
         "dark": {
           "anyOf": [

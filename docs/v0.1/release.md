@@ -51,10 +51,10 @@ note why: that is a finding, and the release waits for its fix.
    quick start, open `http://nocs.local` (or `http://10.42.0.1`), set the owner
    passphrase, the access point's country and own password. The phone joins
    again.
-2. **Time and site.** The clock comes from the phone (or the GPS); the site from
-   the phone's entry or the GPS.
-3. **Profile.** Make the rig's profile in the app: every role, the optics, the
-   site, filter names, which power box output feeds what. Connect it.
+2. **Time and site.** The clock comes from the phone (or the GPS); the site is
+   saved in Rig (typed in, or the GPS's position) and becomes the active one.
+3. **Profile.** Make the rig's profile in the app: every role, the optics, filter
+   names, which power box output feeds what. Connect it.
 4. **Storage.** Plug the USB drive; it mounts and becomes the destination.
 5. **Polar alignment, focus, guiding.** Polar align from three solves; autofocus;
    calibrate and guide with PHD2.

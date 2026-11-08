@@ -15,7 +15,8 @@ from pydantic import (
     model_validator,
 )
 
-from nocs.equipment import Role, Site
+from nocs.equipment import Role
+from nocs.sites import Site
 from nocs.state import Patch
 from nocs.system.network import COUNTRIES
 from nocs.targets import TargetType
@@ -357,8 +358,8 @@ class MountState(StateModel):
     )
     time: str | None = Field(description="The mount's clock as it last reported it, UTC.")
     site: MountSite | None = Field(description="Where the mount believes it is.")
-    site_check: Literal["same", "different", "unknown", "no_profile_site"] = Field(
-        description="The mount's site against the active profile's."
+    site_check: Literal["same", "different", "unknown", "no_site"] = Field(
+        description="The mount's site against the box's active site."
     )
     site_sent: bool = Field(description="NOCS sent the site since the mount became ready.")
     time_sent: bool = Field(
@@ -841,10 +842,17 @@ class GpsState(StateModel):
     longitude: float | None = Field(description="Degrees, east positive.")
     elevation: int | None = Field(description="Metres above sea level; 3D fixes only.")
     time: str | None = Field(description="The GPS's time of the fix, UTC.")
-    site_differs: bool | None = Field(
-        description="A 3D fix more than 0.01° or 50 m from the active profile's site, or a"
-        " profile without one: the app offers the GPS's site. None without a 3D fix or profile."
+    site: str | None = Field(
+        description="The saved site nearest to a 3D fix within 500 m (ADR 0038): the app "
+        "offers it when it is not the active one, and to save a new site when there is none."
     )
+
+
+class SitesState(StateModel):
+    """The saved sites and the box's active one (ADR 0038)."""
+
+    active: str | None = Field(description="The active site's id; None: no site is active.")
+    saved: dict[str, Site] = Field(description="Every saved site, by id.")
 
 
 class SystemHealth(StateModel):
@@ -999,6 +1007,7 @@ class AppState(StateModel):
     system: SystemState | None = None
     sequence: SequenceState | None = None
     gps: GpsState | None = None
+    sites: SitesState | None = None
     updates: UpdatesState | None = Field(
         default=None, description="None where NOCS does not install updates (a PC)."
     )
@@ -1341,7 +1350,27 @@ class AutoDewRequest(BaseModel):
 class MountSiteRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    site: Site | None = Field(default=None, description="None: the active profile's site.")
+    site: Site | None = Field(default=None, description="None: the active site.")
+
+
+class SiteCreated(WireModel):
+    id: str
+
+
+class ActiveSiteRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str | None = Field(description="A saved site's id; None: no site is active.")
+
+
+class GpsSiteRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(
+        default="",
+        max_length=80,
+        description="The name of a new site, when the GPS is at none of the saved ones.",
+    )
 
 
 class FocuserMoveRequest(BaseModel):
@@ -1950,7 +1979,7 @@ class MoonNight(WireModel):
 
 
 class Almanac(WireModel):
-    """``GET /api/sky/tonight``: the night at the active profile's site."""
+    """``GET /api/sky/tonight``: the night at the active site."""
 
     night: str = Field(description="YYYY-MM-DD, the date at the start of the night.")
     site: Site
@@ -1994,7 +2023,7 @@ class TargetVisibility(WireModel):
 
 
 class SkyVisibility(WireModel):
-    """``GET /api/sky/visibility``: targets during a night at the active profile's site."""
+    """``GET /api/sky/visibility``: targets during a night at the active site."""
 
     night: str
     min_altitude: float

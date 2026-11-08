@@ -35,7 +35,8 @@ import zipstream  # pyright: ignore[reportMissingTypeStubs]
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from nocs import __version__
-from nocs.equipment.profiles import Optics, Site, write_atomic
+from nocs.equipment.profiles import Optics, write_atomic
+from nocs.sites import Site
 from nocs.state import Json, StateStore
 from nocs.state import Path as StatePath
 from nocs.storage import layout

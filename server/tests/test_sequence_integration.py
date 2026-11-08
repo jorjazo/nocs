@@ -19,12 +19,14 @@ import pytest
 from fastapi.testclient import TestClient
 from owner import pair_owner
 from simfocus import APERTURE, FOCAL_LENGTH, FOCUSER, ORION
+from sites import use_site
 
 from nocs.api import create_app
 from nocs.api.schemas import AppState
 from nocs.config import Settings
 from nocs.devices import Location
 from nocs.mount.coords import horizontal_to_jnow, jnow_to_j2000
+from nocs.sites import Site, SiteFile, SiteStore
 
 pytestmark = pytest.mark.indi
 
@@ -79,10 +81,12 @@ def api(tmp_path_factory: pytest.TempPathFactory) -> Iterator[TestClient]:
             "aperture": APERTURE,
             "autofocus": {"step": 4000, "exposure": 1},
         },
-        "site": {"name": "Sim", "latitude": LATITUDE, "longitude": longitude_for_orion(now)},
     }
     with TestClient(create_app(settings)) as client:
         pair_owner(client)
+        use_site(
+            client, {"name": "Sim", "latitude": LATITUDE, "longitude": longitude_for_orion(now)}
+        )
         assert client.put("/api/profiles/sequence", json=profile).status_code == 204
         response = client.post("/api/equipment/connect", json={"profile": "sequence"})
         assert response.status_code == 202, response.text
@@ -331,12 +335,9 @@ def restartable(tmp_path: Path) -> tuple[Settings, dict[str, Any]]:
         **SIMULATORS,
         "devices": {k: v for k, v in SIMULATORS["devices"].items() if k in roles},
         "imaging": {"focal_length": FOCAL_LENGTH, "aperture": APERTURE},
-        "site": {
-            "name": "Sim",
-            "latitude": LATITUDE,
-            "longitude": longitude_for_orion(datetime.now(UTC)),
-        },
     }
+    site = Site(name="Sim", latitude=LATITUDE, longitude=longitude_for_orion(datetime.now(UTC)))
+    SiteStore(settings.config_dir).save(SiteFile(active="sim", sites={"sim": site}))
     return settings, profile
 
 
