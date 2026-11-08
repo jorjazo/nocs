@@ -36,19 +36,32 @@ def test_bias_when_there_are_no_darks() -> None:
 
 
 def test_flats_without_their_bias_are_not_used() -> None:
+    darks = [row("dark") for _ in range(2)]
     flats = [row("flat", filter="L", exposure=2.0, gain=0.0) for _ in range(3)]
-    found = plan(LIGHT, flats)
+    found = plan(LIGHT, darks + flats)
     assert found.flat is None
-    assert found.notes == ("no darks or bias", "flats without their bias or dark flats: not used")
+    assert found.notes == ("darks: 2", "flats without their bias or dark flats: not used")
+
+
+def test_flats_need_the_lights_pedestal_taken_off_first() -> None:
+    # Flats with their bias, but nothing to take the lights' own pedestal off.
+    flats = [row("flat", filter="L", exposure=2.0) for _ in range(2)]
+    bias = [row("bias", exposure=0.001, gain=0.0) for _ in range(2)]
+    found = plan(LIGHT, flats + bias)
+    assert found.dark is None
+    assert found.flat is None
+    assert found.notes == ("no darks or bias", "flats need the lights' darks or bias: not used")
 
 
 def test_dark_flats_serve_as_the_flats_offset() -> None:
+    darks = [row("dark") for _ in range(2)]
     flats = [row("flat", filter="L", exposure=2.0) for _ in range(2)]
     dark_flats = [row("dark", exposure=2.0) for _ in range(2)]
-    found = plan(LIGHT, flats + dark_flats)
+    found = plan(LIGHT, darks + flats + dark_flats)
     assert found.flat_offset is not None
     assert found.flat_offset.kind == "dark"
-    assert found.dark is None
+    assert found.dark is not None
+    assert set(found.dark.frames) == {d.id for d in darks}
 
 
 def test_at_most_the_newest_frames() -> None:
@@ -63,3 +76,14 @@ def test_the_same_frames_make_the_same_key() -> None:
     assert MasterSpec("dark", (3, 1, 2)).key == MasterSpec("dark", (1, 2, 3)).key
     assert MasterSpec("dark", (1, 2)).key != MasterSpec("bias", (1, 2)).key
     assert MasterSpec("dark", (1, 2)).key != MasterSpec("dark", (1, 3)).key
+
+
+def test_a_master_is_named_by_everything_that_makes_it() -> None:
+    flat = MasterSpec("flat", (1, 2, 3))
+    name = flat.file_name("RGGB", "/data/masters/bias-a.fits")
+    assert name.startswith("flat-")
+    assert name.endswith(".fits")
+    # Another bias under the flats, another Bayer pattern: another master.
+    assert flat.file_name("RGGB", "/data/masters/bias-b.fits") != name
+    assert flat.file_name("BGGR", "/data/masters/bias-a.fits") != name
+    assert flat.file_name("RGGB", "/data/masters/bias-a.fits") == name

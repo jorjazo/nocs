@@ -149,13 +149,22 @@ twenty. **Recommendation:**
   files so no more than one strip of each is in memory; the flat minus its
   bias/dark, normalised per Bayer channel (so the flat's tint does not change
   the colour). Masters are stored at the stack's resolution (superpixel), cached
-  as FITS under `<data>/masters/<hash of the frame ids>.fits` and reused across
-  stacks and nights; they are internal (not in the catalog, not offered).
+  as FITS under `<data>/masters/`, named by a hash of their frame ids, the Bayer
+  pattern, the reduction and (for a flat) the master subtracted from it, written
+  with fsync and checked whole before reuse, and reused across stacks and nights;
+  they are internal (not in the catalog, not offered).
+- A flat is used only when the lights have their own darks or bias too: dividing
+  light that still holds its pedestal inverted the vignetting by ~19 % (review of
+  PR #27).
 - Calibration happens after superpixel: exact for darks and bias (linear), and
   near exact for flats (vignetting and dust are smooth at 2 px).
-- **No dark:** a cosmetic correction instead: per channel, pixels more than
-  ~8σ above the median of their 3×3 neighbours are replaced by it (hot pixels
-  walk across an undithered stack otherwise).
+- **No dark** (none, or only a bias): a cosmetic correction instead: per channel,
+  pixels more than ~8σ above the median of their 3×3 neighbours, and above the
+  local sky (a 5×5 median) more than 3× their brightest neighbour, are replaced by
+  that median (hot pixels walk across an undithered stack otherwise). On a colour
+  image the other channels must stay near their sky too: in a superpixel, red and
+  blue are one photosite in four, and a sharp star centred on one looked hot in its
+  own channel (review of PR #27); a star lifts every channel, a hot photosite one.
 - The first frame waits for its masters (tens of seconds once, from the
   microSD); frames meanwhile are dropped as for a busy pipeline.
 

@@ -59,9 +59,11 @@ The options weighed for each point are in [the plan](../roadmap/live-stacking.md
   `<data>/masters/` and never catalogued: they are an internal cache of live
   stacking, not the masters ADR 0036 leaves to stacking programs. At most the 20
   newest frames of each kind; flats without their own bias or dark flats are not
-  used (their level would include the pedestal). Without a dark, hot pixels are
-  removed cosmetically: far above the median of their 3x3 neighbours and, above the
-  sky, several times brighter than every neighbour (a star's core never is).
+  used (their level would include the pedestal), nor flats for lights with no darks
+  or bias of their own. Without a dark (or with a bias only), hot pixels are removed
+  cosmetically: far above the median of their 3x3 neighbours, above the local sky
+  several times brighter than every neighbour, and, on a colour image, alone among
+  the channels (a star lifts them all).
 - **In the imaging worker, stateful.** The stack lives in the worker process,
   under an id nocsd gives it; every call names the stack it expects, so a
   restarted worker cannot add to a stale one. A crash or a restart of nocsd loses

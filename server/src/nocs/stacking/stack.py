@@ -269,14 +269,13 @@ def add_frame(
     is_binned = binned(data.size, pattern)
     del data
     steps["reduce"] = _since(t)
-    t = time.perf_counter()
-    hot = masters.apply(image, stack.calibration)
-    steps["calibrate"] = _since(t)
-
     if stack.reference is None:
         stack.pattern, stack.bottom_up, stack.binned = pattern, bottom_up, is_binned
     elif pattern != stack.pattern or bottom_up != stack.bottom_up or image.shape != stack.shape:
         raise FrameError("the frame does not match the stack (camera, size or Bayer pattern)")
+    t = time.perf_counter()
+    hot = masters.apply(image, stack.calibration)
+    steps["calibrate"] = _since(t)
 
     t = time.perf_counter()
     found = find_stars(luminance(image))
@@ -343,7 +342,9 @@ def add_frame(
         stars=registration.stars,
         rms=registration.rms,
         clipped=round(clipped, 5),
-        hot_pixels=hot if stack.calibration.dark is None and stack.calibration.cosmetic else None,
+        hot_pixels=hot
+        if stack.calibration.cosmetic and (stack.calibration.dark is None or stack.calibration.bias)
+        else None,
         scale=round(scale, 4),
         preview=preview,
         seconds=round(time.perf_counter() - start, 3),

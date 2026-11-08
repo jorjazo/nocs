@@ -3,7 +3,8 @@
 The stack's lights form one light group of the library; its matches decide the
 masters: darks of the lights' exposure (else their bias) to subtract, and flats of
 the filter with their own bias or dark flats. A flat with neither is not used: its
-level would include the pedestal and every correction would be off. At most the
+level would include the pedestal and every correction would be off; nor is one
+without the lights' own darks or bias, for the lights' pedestal. At most the
 newest ``MOST`` frames of each kind go into a master.
 
 A master is named by its kind and the frames it comes from, so the same frames
@@ -18,6 +19,7 @@ import hashlib
 from dataclasses import dataclass
 
 from nocs.calibration.library import Light, Match, Wanted, report
+from nocs.stacking import reduce
 from nocs.stacking.masters import Kind
 from nocs.storage import FrameRow
 
@@ -35,6 +37,14 @@ class MasterSpec:
     def key(self) -> str:
         digest = hashlib.sha256(",".join(map(str, sorted(self.frames))).encode()).hexdigest()
         return f"{self.kind}-{digest[:20]}"
+
+    def file_name(self, bayer: str | None, subtract: str | None = None) -> str:
+        """The master's file name: its frames, and everything else that shapes it (how the
+        frames are reduced, and for a flat the master subtracted from each), so a change
+        of either builds a new master instead of reusing a stale one."""
+        parts = [self.key, bayer or "mono", str(reduce.MONO_FULL_PIXELS), subtract or ""]
+        digest = hashlib.sha256("|".join(parts).encode()).hexdigest()
+        return f"{self.kind}-{digest[:24]}.fits"
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,7 +82,11 @@ def plan(light: Light, calibration: list[FrameRow]) -> MasterPlan:
         notes.append("no darks or bias")
     flat: MasterSpec | None = None
     offset: MasterSpec | None = None
-    if group.flats.frames and group.flat_calibration.frames:
+    if group.flats.frames and dark is None:
+        # A flat divides the sky's light; the lights' pedestal must go first, or every
+        # correction is off (19 % across a vignetted frame, review of PR #27).
+        notes.append("flats need the lights' darks or bias: not used")
+    elif group.flats.frames and group.flat_calibration.frames:
         flat = _spec("flat", group.flats, rows)
         offset_kind: Kind = (
             "bias"
