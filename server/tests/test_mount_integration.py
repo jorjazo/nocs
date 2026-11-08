@@ -11,6 +11,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 from owner import pair_owner
+from sites import use_site
 
 from nocs.api import create_app
 from nocs.api.schemas import AppState
@@ -24,7 +25,6 @@ SITE = {"name": "Diaguitas", "latitude": -30.03, "longitude": -70.65, "elevation
 PROFILE = {
     "name": "Mount only",
     "devices": {"mount": {"driver": "indi_simulator_telescope"}},
-    "site": SITE,
 }
 
 
@@ -69,6 +69,7 @@ def api(tmp_path_factory: pytest.TempPathFactory) -> Iterator[TestClient]:
         patch.setattr(timekeeping, "clock_source", unsynchronised)
         with TestClient(create_app(settings)) as client:
             pair_owner(client)
+            use_site(client, SITE)
             assert client.put("/api/profiles/mount", json=PROFILE).status_code == 204
             assert (
                 client.post("/api/equipment/connect", json={"profile": "mount"}).status_code == 202
@@ -114,12 +115,23 @@ def test_clock_report_sets_the_mount_time(api: TestClient) -> None:
     assert mount(api)["alt"] is not None
 
 
-def test_site_from_the_profile(api: TestClient) -> None:
+def test_the_active_site(api: TestClient) -> None:
     assert api.put("/api/mount/site", json={}).status_code == 204
     wait(api, lambda s: s["mount"]["site_check"] == "same")
     site = mount(api)["site"]
     assert site["latitude"] == pytest.approx(SITE["latitude"])
     assert site["longitude"] == pytest.approx(SITE["longitude"])
+
+
+def test_the_mount_follows_the_active_site(api: TestClient) -> None:
+    previous = state(api)["sites"]["active"]
+    use_site(api, {"name": "Elsewhere", "latitude": -33.4, "longitude": -70.6})
+    try:
+        wait(api, lambda s: abs(s["mount"]["site"]["latitude"] + 33.4) < 0.01)
+        assert mount(api)["site_check"] == "same"
+    finally:
+        assert api.put("/api/sites/active", json={"id": previous}).status_code == 204
+    wait(api, lambda s: abs(s["mount"]["site"]["latitude"] - SITE["latitude"]) < 0.01)
 
 
 def test_goto_below_the_horizon_is_refused(api: TestClient) -> None:

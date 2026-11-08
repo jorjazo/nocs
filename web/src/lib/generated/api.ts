@@ -2,6 +2,192 @@
 
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "WifiCountry".
+ */
+export type WifiCountry =
+  | "AD"
+  | "AE"
+  | "AF"
+  | "AI"
+  | "AL"
+  | "AM"
+  | "AN"
+  | "AR"
+  | "AS"
+  | "AT"
+  | "AU"
+  | "AW"
+  | "AZ"
+  | "BA"
+  | "BB"
+  | "BD"
+  | "BE"
+  | "BF"
+  | "BG"
+  | "BH"
+  | "BL"
+  | "BM"
+  | "BN"
+  | "BO"
+  | "BR"
+  | "BS"
+  | "BT"
+  | "BW"
+  | "BY"
+  | "BZ"
+  | "CA"
+  | "CF"
+  | "CH"
+  | "CI"
+  | "CL"
+  | "CN"
+  | "CO"
+  | "CR"
+  | "CU"
+  | "CX"
+  | "CY"
+  | "CZ"
+  | "DE"
+  | "DK"
+  | "DM"
+  | "DO"
+  | "DZ"
+  | "EC"
+  | "EE"
+  | "EG"
+  | "ES"
+  | "ET"
+  | "FI"
+  | "FM"
+  | "FO"
+  | "FR"
+  | "GB"
+  | "GD"
+  | "GE"
+  | "GF"
+  | "GH"
+  | "GI"
+  | "GL"
+  | "GP"
+  | "GR"
+  | "GT"
+  | "GU"
+  | "GY"
+  | "HK"
+  | "HN"
+  | "HR"
+  | "HT"
+  | "HU"
+  | "ID"
+  | "IE"
+  | "IL"
+  | "IM"
+  | "IN"
+  | "IR"
+  | "IS"
+  | "IT"
+  | "JM"
+  | "JO"
+  | "JP"
+  | "KE"
+  | "KH"
+  | "KN"
+  | "KP"
+  | "KR"
+  | "KW"
+  | "KY"
+  | "KZ"
+  | "LB"
+  | "LC"
+  | "LI"
+  | "LK"
+  | "LS"
+  | "LT"
+  | "LU"
+  | "LV"
+  | "MA"
+  | "MC"
+  | "MD"
+  | "ME"
+  | "MF"
+  | "MH"
+  | "MK"
+  | "MN"
+  | "MO"
+  | "MP"
+  | "MQ"
+  | "MR"
+  | "MT"
+  | "MU"
+  | "MV"
+  | "MW"
+  | "MX"
+  | "MY"
+  | "NA"
+  | "NG"
+  | "NI"
+  | "NL"
+  | "NO"
+  | "NP"
+  | "NZ"
+  | "OM"
+  | "PA"
+  | "PE"
+  | "PF"
+  | "PG"
+  | "PH"
+  | "PK"
+  | "PL"
+  | "PM"
+  | "PR"
+  | "PT"
+  | "PW"
+  | "PY"
+  | "QA"
+  | "RE"
+  | "RO"
+  | "RS"
+  | "RU"
+  | "RW"
+  | "SA"
+  | "SE"
+  | "SG"
+  | "SI"
+  | "SK"
+  | "SM"
+  | "SN"
+  | "SR"
+  | "SV"
+  | "SX"
+  | "SY"
+  | "TC"
+  | "TD"
+  | "TG"
+  | "TH"
+  | "TN"
+  | "TR"
+  | "TT"
+  | "TW"
+  | "TZ"
+  | "UA"
+  | "UG"
+  | "US"
+  | "UY"
+  | "UZ"
+  | "VA"
+  | "VC"
+  | "VE"
+  | "VI"
+  | "VN"
+  | "VU"
+  | "WF"
+  | "WS"
+  | "YE"
+  | "YT"
+  | "ZA"
+  | "ZW";
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "DarknessName".
  */
 export type DarknessName = "civil" | "nautical" | "astronomical";
@@ -20,11 +206,6 @@ export type SolveFailureReason = "unavailable" | "no_database" | "no_stars" | "n
  * via the `definition` "ConnectionName".
  */
 export type ConnectionName = "disconnected" | "connecting" | "connected" | "disconnecting";
-/**
- * This interface was referenced by `NOCSAPI`'s JSON-Schema
- * via the `definition` "DeviceStatusName".
- */
-export type DeviceStatusName = "waiting" | "connecting" | "ready" | "error" | "disconnected";
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "Phd2AppState".
@@ -147,6 +328,11 @@ export type Darkness = "civil" | "nautical" | "astronomical";
 export type Trigger = AutofocusTrigger | DitherTrigger | RecenterTrigger | FlipTrigger;
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "DeviceStatusName".
+ */
+export type DeviceStatusName = "waiting" | "connecting" | "ready" | "error" | "disconnected" | "unresponsive";
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "DriverName".
  */
 export type DriverName = string;
@@ -172,10 +358,7 @@ export interface NOCSAPI {
  * via the `definition` "AccessPointRequest".
  */
 export interface AccessPointRequest {
-  /**
-   * Two letters, ISO 3166 (e.g. CL).
-   */
-  country?: string | null;
+  country?: WifiCountry | null;
   /**
    * 8 to 63 characters.
    */
@@ -183,7 +366,17 @@ export interface AccessPointRequest {
   ssid?: string | null;
 }
 /**
- * ``GET /api/sky/tonight``: the night at the active profile's site.
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "ActiveSiteRequest".
+ */
+export interface ActiveSiteRequest {
+  /**
+   * A saved site's id; None: no site is active.
+   */
+  id: string | null;
+}
+/**
+ * ``GET /api/sky/tonight``: the night at the active site.
  *
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "Almanac".
@@ -397,6 +590,7 @@ export interface AppState {
    * None where NOCS does not share the frames (a PC).
    */
   share?: ShareState | null;
+  sites?: SitesState | null;
   solver?: SolverState | null;
   storage?: StorageState | null;
   system?: SystemState | null;
@@ -897,7 +1091,14 @@ export interface RoleState {
   device: string | null;
   driver: string;
   error: string | null;
-  status: DeviceStatusName;
+  /**
+   * unresponsive: connected, but it stopped answering a command (ADR 0030).
+   */
+  status: "waiting" | "connecting" | "ready" | "error" | "disconnected" | "unresponsive";
+  /**
+   * When it was noticed unresponsive, UTC.
+   */
+  unresponsive_since: string | null;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -1059,9 +1260,9 @@ export interface GpsState {
    */
   longitude: number | null;
   /**
-   * A 3D fix more than 0.01° or 50 m from the active profile's site, or a profile without one: the app offers the GPS's site. None without a 3D fix or profile.
+   * The saved site nearest to a 3D fix within 500 m (ADR 0038): the app offers it when it is not the active one, and to save a new site when there is none.
    */
-  site_differs: boolean | null;
+  site: string | null;
   /**
    * The GPS's time of the fix, UTC.
    */
@@ -1266,6 +1467,9 @@ export interface GuideEntryModel {
  * via the `definition` "IndiState".
  */
 export interface IndiState {
+  /**
+   * Every property, for people (#/dev): a property's updates reach it at most once a second, and at once when its state changes (ADR 0037).
+   */
   devices?: {
     [k: string]: IndiDevice;
   };
@@ -1435,9 +1639,9 @@ export interface MountState {
    */
   site: MountSite | null;
   /**
-   * The mount's site against the active profile's.
+   * The mount's site against the box's active site.
    */
-  site_check: "same" | "different" | "unknown" | "no_profile_site";
+  site_check: "same" | "different" | "unknown" | "no_site";
   /**
    * NOCS sent the site since the mount became ready.
    */
@@ -1957,7 +2161,7 @@ export interface SequencePlanRow {
 }
 /**
  * The SMB share of the frames for desktop computers, read-only for guests and the
- * published login nocs / nocs (ADR 0037).
+ * published login nocs / nocs (ADR 0039).
  *
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "ShareState".
@@ -1997,6 +2201,24 @@ export interface Share {
    * "internal", or the drive's filesystem UUID.
    */
   volume: string;
+}
+/**
+ * The saved sites and the box's active one (ADR 0038).
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "SitesState".
+ */
+export interface SitesState {
+  /**
+   * The active site's id; None: no site is active.
+   */
+  active: string | null;
+  /**
+   * Every saved site, by id.
+   */
+  saved: {
+    [k: string]: Site;
+  };
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -3242,6 +3464,10 @@ export interface DeviceConfig {
    */
   driver: string;
   /**
+   * The INDI catalog's model chosen for this driver (iOptron GEM45 of indi_ioptronv3_telescope), only shown.
+   */
+  model?: string | null;
+  /**
    * Power role only: what each output (dc:1, dew:2, variable:1…) is called and feeds.
    */
   outputs?: {
@@ -3620,6 +3846,16 @@ export interface FrameRecord {
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "GpsSiteRequest".
+ */
+export interface GpsSiteRequest {
+  /**
+   * The name of a new site, when the GPS is at none of the saved ones.
+   */
+  name?: string;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "GuideRequest".
  */
 export interface GuideRequest {
@@ -3768,7 +4004,7 @@ export interface MountMoveRequest {
  */
 export interface MountSiteRequest {
   /**
-   * None: the active profile's site.
+   * None: the active site.
    */
   site?: Site | null;
 }
@@ -3809,10 +4045,7 @@ export interface NetworkModeRequest {
  * via the `definition` "NetworkSetupRequest".
  */
 export interface NetworkSetupRequest {
-  /**
-   * Two letters, ISO 3166 (e.g. CL).
-   */
-  country: string;
+  country: WifiCountry;
   join?: NetworkJoinRequest | null;
   /**
    * The access point's new password, 8 to 63 characters.
@@ -4078,7 +4311,6 @@ export interface Profile {
    */
   imaging?: Optics | null;
   name: string;
-  site?: Site | null;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -4444,6 +4676,13 @@ export interface ShutdownRequest {
   force?: boolean;
 }
 /**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "SiteCreated".
+ */
+export interface SiteCreated {
+  id: string;
+}
+/**
  * What the framing chart draws around a point (ADR 0020).
  *
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -4484,7 +4723,7 @@ export interface SkyChart {
   truncated: boolean;
 }
 /**
- * ``GET /api/sky/visibility``: targets during a night at the active profile's site.
+ * ``GET /api/sky/visibility``: targets during a night at the active site.
  *
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "SkyVisibility".
@@ -4697,4 +4936,21 @@ export interface TrackingRequest {
    */
   mode?: string | null;
   on?: boolean | null;
+}
+/**
+ * A Wi-Fi network in range (ADR 0028).
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "WifiNetwork".
+ */
+export interface WifiNetwork {
+  /**
+   * False for an open network.
+   */
+  secured: boolean;
+  /**
+   * Strongest signal heard, 0 to 100.
+   */
+  signal: number;
+  ssid: string;
 }

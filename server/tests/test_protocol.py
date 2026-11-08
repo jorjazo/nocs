@@ -1,8 +1,14 @@
+import asyncio
 import base64
+import os
+import threading
 import zlib
+from collections.abc import Callable
 
 import pytest
 
+from nocs.indi import protocol
+from nocs.indi.client import IndiClient, PropertyUpdated
 from nocs.indi.properties import (
     BlobElement,
     NumberElement,
@@ -20,6 +26,7 @@ from nocs.indi.protocol import (
     SetProperty,
     StreamParser,
     apply_set,
+    decode_blob,
     encode_enable_blob,
     encode_get_properties,
     encode_new_vector,
@@ -136,6 +143,91 @@ def test_set_blob_decodes_compressed_payload() -> None:
     assert isinstance(blob, BlobElement)
     assert blob.data == payload
     assert blob.size == len(payload)
+
+
+DEF_BLOB = (
+    b'<defBLOBVector device="Guide Simulator" name="CCD1" state="Idle" perm="ro">'
+    b'<defBLOB name="CCD1" label="Image"/></defBLOBVector>\n'
+)
+
+
+def set_blob(payload: bytes, encoded: bytes) -> bytes:
+    return (
+        b'<setBLOBVector device="Guide Simulator" name="CCD1" state="Ok">'
+        b'<oneBLOB name="CCD1" size="'
+        + str(len(payload)).encode()
+        + b'" format=".fits">\n'
+        + encoded
+        + b"\n</oneBLOB></setBLOBVector>\n"
+    )
+
+
+@pytest.mark.parametrize("encode", [base64.b64encode, base64.encodebytes], ids=["line", "lines"])
+def test_blobs_decode_in_slices(encode: Callable[[bytes], bytes]) -> None:
+    payload = os.urandom(300_001)  # several slices, and padding at the end
+    assert decode_blob(encode(payload).decode(), ".fits") == payload
+    assert decode_blob("", ".fits") == b""
+
+
+def test_blobs_are_decoded_while_parsing() -> None:
+    payload = os.urandom(100_000)
+    parser = StreamParser()
+    [define] = parser.feed(DEF_BLOB)
+    message = set_blob(payload, base64.b64encode(payload))
+    assert parser.feed(message[:70_000]) == []
+    assert parser.unfinished == 70_000
+    [update] = parser.feed(message[70_000:])
+    assert parser.unfinished == 0
+    assert isinstance(update, SetProperty)
+    assert isinstance(define, DefineProperty)
+    assert update.values["CCD1"].text == ""
+    assert update.values["CCD1"].data == payload
+    apply_set(define.property, update)
+    blob = define.property.elements["CCD1"]
+    assert isinstance(blob, BlobElement)
+    assert blob.data == payload
+
+
+async def test_large_blobs_are_decoded_off_the_event_loop(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A guide frame's 3.5 MB of base64 would hold the event loop up (ADR 0012)."""
+    payload = os.urandom(2_000_000)
+    decoded_in: list[threading.Thread] = []
+
+    def decode(text: str, fmt: str) -> bytes:
+        decoded_in.append(threading.current_thread())
+        return decode_blob(text, fmt)
+
+    monkeypatch.setattr(protocol, "decode_blob", decode)
+
+    async def serve(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        await reader.read(1000)  # getProperties
+        writer.write(DEF_BLOB + set_blob(payload, base64.b64encode(payload)))
+        await writer.drain()
+        await reader.read(1000)
+
+    server = await asyncio.start_server(serve, "127.0.0.1", 0)
+    client = IndiClient("127.0.0.1", server.sockets[0].getsockname()[1])
+    received: asyncio.Future[PropertyUpdated] = asyncio.get_running_loop().create_future()
+
+    def on_event(event: object) -> None:
+        if isinstance(event, PropertyUpdated) and not received.done():
+            received.set_result(event)
+
+    client.add_listener(on_event)
+    try:
+        await client.connect()
+        event = await asyncio.wait_for(received, 10)
+    finally:
+        await client.close()
+        server.close()
+    assert isinstance(event, PropertyUpdated)
+    blob = event.property.elements["CCD1"]
+    assert isinstance(blob, BlobElement)
+    assert blob.data == payload
+    assert decoded_in
+    assert threading.main_thread() not in decoded_in
 
 
 def test_delete_property() -> None:

@@ -1,7 +1,7 @@
 # Starlette's TestClient is typed against the `httpx2` package; with plain `httpx`
 # installed its response types are unknown to pyright.
 # pyright: reportUnknownMemberType=false, reportUnknownVariableType=false, reportUnknownArgumentType=false
-"""nocs-system's SMB share (ADR 0037), with fake tools on the PATH."""
+"""nocs-system's SMB share (ADR 0039), with fake tools on the PATH."""
 
 import json
 import os

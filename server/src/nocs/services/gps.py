@@ -1,16 +1,17 @@
-"""A USB GPS through gpsd (ADR 0029): its fix, and its site for the active profile.
+"""A USB GPS through gpsd (ADR 0029): its fix, and the saved site it is at (ADR 0038).
 
 gpsd also feeds the GPS's time to chrony (a reference clock), which sets the system
 clock; nocsd only reads positions, from gpsd's JSON stream (``?WATCH``, TPV reports).
 
 State under ``("gps",)``::
 
-    {connected, fix, latitude, longitude, elevation, time, site_differs}
+    {connected, fix, latitude, longitude, elevation, time, site}
 
-``site_differs`` is whether a 3D fix is more than 0.01° or 50 m away from the active
-profile's site, or the profile has none: the app then offers the GPS's site, which
-is never applied without the owner asking. Positions are rounded and published at
-most every ``PUBLISH`` seconds, since a fix wanders a little all the time.
+``site`` is the saved site nearest to a 3D fix within 500 m on the ground. When it is
+not the active site the app offers to make it active, and when there is none, to save
+the GPS's position as a new site: neither happens without the owner asking.
+Positions are rounded and published at most every ``PUBLISH`` seconds, since a fix
+wanders a little all the time.
 """
 
 from __future__ import annotations
@@ -23,8 +24,7 @@ from typing import cast
 import anyio
 from anyio.streams.buffered import BufferedByteReceiveStream
 
-from nocs.equipment.profiles import Site
-from nocs.equipment.service import EquipmentService
+from nocs.sites import Site, SiteService
 from nocs.state import Json, StateStore
 
 log = logging.getLogger(__name__)
@@ -34,9 +34,6 @@ RETRY = 10.0
 """Seconds between attempts to reach gpsd."""
 PUBLISH = 10.0
 """Seconds between publications of a fix that keeps its quality."""
-DEGREES = 0.01
-METRES = 50.0
-"""How far the GPS's site may be from the profile's before the app offers it."""
 WATCH = b'?WATCH={"enable":true,"json":true};\n'
 
 
@@ -45,11 +42,9 @@ class NoFixError(Exception):
 
 
 class GpsService:
-    def __init__(
-        self, store: StateStore, equipment: EquipmentService, host: str, port: int
-    ) -> None:
+    def __init__(self, store: StateStore, sites: SiteService, host: str, port: int) -> None:
         self._store = store
-        self._equipment = equipment
+        self._sites = sites
         self._host = host
         self._port = port
         self._connected = False
@@ -57,7 +52,7 @@ class GpsService:
         """gpsd's last TPV report."""
         self._published: dict[str, Json] | None = None
         self._last_publish = 0.0
-        equipment.add_listener(self._publish)
+        sites.add_listener(self._publish, saved=True)
         self._publish()
 
     async def run(self) -> None:
@@ -99,23 +94,32 @@ class GpsService:
         self._fix = report
         self._publish(force=self._fix_name() != previous)
 
-    def site(self) -> Site:
-        """The GPS's position as a site, named as the profile's site is."""
+    def site(self, name: str = "") -> Site:
+        """The GPS's position as a site."""
         if self._fix_name() != "3d":
             raise NoFixError("the GPS has no 3D fix")
         latitude, longitude, elevation = self._position()
         if latitude is None or longitude is None:
             raise NoFixError("the GPS reports a 3D fix without a position")
-        profile = self._equipment.active_profile
-        name = profile.site.name if profile is not None and profile.site is not None else ""
-        return Site(name=name or "GPS", latitude=latitude, longitude=longitude, elevation=elevation)
+        return Site(
+            name=name.strip() or "GPS",
+            latitude=round(latitude, 6),
+            longitude=round(longitude, 6),
+            elevation=round(elevation),
+        )
 
-    def apply_site(self) -> Site:
-        """Make the GPS's site the active profile's (ADR 0029: only when the owner asks)."""
-        site = self.site()
-        self._equipment.set_site(site)
-        log.info("site of the active profile from the GPS: %s", site)
-        return site
+    def use_site(self, name: str = "") -> str:
+        """Make the saved site the GPS is at the active one, or else save its position as a
+        new site and make that active (only when the owner asks); returns the site's id."""
+        site = self.site(name)
+        near = self._sites.nearest(site.latitude, site.longitude)
+        if near is not None:
+            self._sites.activate(near)
+            log.info("site %s from the GPS", near)
+            return near
+        site_id = self._sites.add(site, activate=True)
+        log.info("new site %s from the GPS: %s", site_id, site)
+        return site_id
 
     def _fix_name(self) -> str:
         mode = self._fix.get("mode") if self._fix is not None else None
@@ -133,21 +137,12 @@ class GpsService:
             elevation = number("alt")
         return number("lat"), number("lon"), elevation if elevation is not None else 0.0
 
-    def _differs(self) -> bool | None:
-        if self._fix_name() != "3d":
+    def _near(self) -> str | None:
+        """The saved site a 3D fix is at."""
+        latitude, longitude, _ = self._position()
+        if self._fix_name() != "3d" or latitude is None or longitude is None:
             return None
-        profile = self._equipment.active_profile
-        if profile is None:
-            return None
-        site = profile.site
-        latitude, longitude, elevation = self._position()
-        if site is None or latitude is None or longitude is None:
-            return True
-        return (
-            abs(site.latitude - latitude) > DEGREES
-            or abs((site.longitude - longitude + 180) % 360 - 180) > DEGREES
-            or abs(site.elevation - elevation) > METRES
-        )
+        return self._sites.nearest(latitude, longitude)
 
     def _publish(self, force: bool = False) -> None:
         fix = self._fix_name()
@@ -160,11 +155,11 @@ class GpsService:
             "longitude": None if fix == "none" or longitude is None else round(longitude, 4),
             "elevation": round(elevation) if fix == "3d" else None,
             "time": when if isinstance(when, str) else None,
-            "site_differs": self._differs(),
+            "site": self._near(),
         }
         previous = self._published
         if previous is not None and not force:
-            changed = any(state[k] != previous[k] for k in ("connected", "fix", "site_differs"))
+            changed = any(state[k] != previous[k] for k in ("connected", "fix", "site"))
             moved = any(state[k] != previous[k] for k in ("latitude", "longitude", "elevation"))
             if not changed and (not moved or time.monotonic() - self._last_publish < PUBLISH):
                 return

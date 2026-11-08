@@ -68,7 +68,7 @@ runuser -u nocs -- /opt/nocs/venv/bin/nocs-system call network.status | grep -q 
     || fail "nocs-system does not manage the network"
 runuser -u nocs -- /opt/nocs/venv/bin/nocs-system call hello | grep -q '"time.set"' \
     || fail "nocs-system does not offer the appliance's operations"
-# The SMB share is off on a new box, and Samba's own services never run (ADR 0037).
+# The SMB share is off on a new box, and Samba's own services never run (ADR 0039).
 [[ $(systemctl is-enabled smbd 2>/dev/null) == masked ]] || fail "smbd is not masked"
 [[ $(systemctl is-enabled nocs-share 2>/dev/null) == disabled ]] || fail "the SMB share is not off"
 ! (echo > /dev/tcp/127.0.0.1/445) 2>/dev/null || fail "something listens on 445"

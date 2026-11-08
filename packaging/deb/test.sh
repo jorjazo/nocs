@@ -114,7 +114,7 @@ for _ in $(seq 60); do health 2>/dev/null | grep -q '"indi_connected":true' && b
 health | grep -q '"indi_connected":true' || fail "nocsd does not answer on port 80"
 runuser -u nocs -- /opt/nocs/venv/bin/nocs-system call hello | grep -q '"network.status"' \
     || fail "nocs-system does not offer the appliance's operations"
-# The SMB share (ADR 0037): off, Samba's own services masked, nothing on 445.
+# The SMB share (ADR 0039): off, Samba's own services masked, nothing on 445.
 listening() { (echo > /dev/tcp/127.0.0.1/445) 2>/dev/null; }
 for unit in smbd nmbd; do
     [[ $(systemctl is-enabled "$unit" 2>/dev/null) == masked ]] || fail "$unit is not masked"

@@ -1,4 +1,6 @@
-"""Equipment profiles: which devices make up a rig, their roles, optics and site.
+"""Equipment profiles: which devices make up a rig, their roles and optics.
+
+The site is not a profile's: it belongs to the box (``nocs.sites``, ADR 0038).
 
 Profiles are stored as one JSON file per profile in ``<config dir>/profiles/``,
 named after the profile id, so they can be backed up, exported and edited by hand.
@@ -70,6 +72,13 @@ class OutputConfig(ProfileModel):
 
 class DeviceConfig(ProfileModel):
     driver: DriverName = Field(description="INDI driver executable, e.g. indi_asi_ccd.")
+    model: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=80,
+        description="The INDI catalog's model chosen for this driver (iOptron GEM45 of "
+        "indi_ioptronv3_telescope), only shown.",
+    )
     device: str | None = Field(
         default=None,
         min_length=1,
@@ -106,34 +115,6 @@ class Optics(ProfileModel):
     )
 
 
-class HorizonPoint(ProfileModel):
-    azimuth: float = Field(ge=0, lt=360, description="Degrees from north through east.")
-    altitude: float = Field(ge=-10, le=90, description="Lowest visible altitude, degrees.")
-
-
-class Site(ProfileModel):
-    name: str = ""
-    latitude: float = Field(ge=-90, le=90, description="Degrees, north positive.")
-    longitude: float = Field(ge=-180, le=180, description="Degrees, east positive.")
-    elevation: float = Field(default=0.0, description="Metres above sea level.")
-    horizon: list[HorizonPoint] | None = Field(
-        default=None,
-        description="The local horizon (hills, trees, buildings): straight lines between "
-        "points, all round the sky. None: a flat horizon at 0°.",
-    )
-
-    @model_validator(mode="after")
-    def _sorted_horizon(self) -> Self:
-        if self.horizon is not None:
-            if not self.horizon:
-                raise ValueError("a horizon needs at least one point (or none at all)")
-            self.horizon.sort(key=lambda point: point.azimuth)
-            azimuths = [point.azimuth for point in self.horizon]
-            if len(set(azimuths)) != len(azimuths):
-                raise ValueError("the horizon has two points at the same azimuth")
-        return self
-
-
 class Profile(ProfileModel):
     name: str = Field(min_length=1, max_length=80)
     devices: dict[Role, DeviceConfig] = Field(default_factory=dict[Role, DeviceConfig])
@@ -146,7 +127,6 @@ class Profile(ProfileModel):
         description="The guide camera sees through the imaging optics: an off-axis guider, or "
         "a guide sensor built into the main camera. Guiding then uses the imaging optics.",
     )
-    site: Site | None = None
 
     @property
     def guiding_optics(self) -> Optics | None:

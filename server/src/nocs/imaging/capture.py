@@ -46,13 +46,14 @@ import anyio
 from nocs.clock import Clock
 from nocs.devices import Camera, Coordinates, DeviceError, FilterWheel, Frame, FrameType, Mount
 from nocs.devices.camera import Region
-from nocs.equipment import EquipmentService, Role, Site
+from nocs.equipment import EquipmentService, Role
 from nocs.equipment.service import IndiConnection
 from nocs.guiding import GuidingError, GuidingNotReadyError, Settle
 from nocs.imaging.pipeline import FrameAnalysis, StarMetrics
 from nocs.imaging.worker import ImageWorker
 from nocs.indi import BlobMode, IndiClient, IndiEvent, PropertyDefined, PropertyUpdated
 from nocs.jobs import JobContext, JobManager
+from nocs.sites import Site
 from nocs.solving import field_of_view
 from nocs.state import Json, Path, StateStore
 from nocs.storage import FrameFacts, StorageError, StorageService
@@ -292,8 +293,10 @@ class CaptureService:
         data_dir: FsPath,
         uploads: UploadDirs | None = None,
         clock: Clock | None = None,
+        site: Callable[[], Site | None] = lambda: None,
     ) -> None:
         self._store = store
+        self._site = site
         self._jobs = jobs
         self._equipment = equipment
         self._connect_images = connect_images
@@ -654,7 +657,8 @@ class CaptureService:
         return Captured(result, analysis.stars, analysis.hfr)
 
     def _facts(self, role: Role, shot: Shot, target: str | None = None) -> FrameFacts:
-        """What storage needs to know about a frame, read now from the devices and profile."""
+        """What storage needs to know about a frame, read now from the devices, the profile
+        and the active site."""
         camera = self.camera(role)
         filter: str | None = None
         wheel = self._equipment.ready_device(Role.FILTER_WHEEL)
@@ -664,9 +668,7 @@ class CaptureService:
             except (DeviceError, KeyError) as e:
                 log.debug("no filter name for the frame: %s", e)
         profile = self._equipment.active_profile
-        site = profile.site if profile is not None else None
-        if site is None:
-            site = self._mount_site()
+        site = self._site() or self._mount_site()
         return FrameFacts(
             source=shot.path,
             frame_type=FRAME_TYPE_NAMES[shot.frame_type],
@@ -706,7 +708,7 @@ class CaptureService:
         return round(rotation, 2)
 
     def _mount_site(self) -> Site | None:
-        """The site the mount has, for a profile without one.
+        """The site the mount has, when the box has no active site.
 
         The driver writes the mount's latitude and longitude in the header itself;
         this adds its elevation.

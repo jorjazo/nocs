@@ -1,6 +1,6 @@
 # Calibration frames plan — flats wizard, darks and bias, library
 
-Status: in progress · Last updated: 2026-11-01 · Roadmap: [Beyond v0.1](../roadmap.md#beyond-v01-unordered-backlog) · Decision: [ADR 0036](../adr/0036-calibration-frames.md)
+Status: in progress · Last updated: 2026-11-01 · Roadmap: [Beyond v0.1](../v0.1.md#beyond-v01) · Decision: [ADR 0036](../../adr/0036-calibration-frames.md)
 
 Goal: after (or before) a night of lights, NOCS says which darks, flats and bias
 they need, which already exist, and takes the missing ones: darks and bias as a
@@ -62,7 +62,7 @@ a filter and in the dark.
   the gain, offset and binning of the night's first group, not of the lights that
   miss flats; it now takes the setup of the first missing flats.
 
-Left for the field test (steps 22–23 of [field-test.md](../v0.1/field-test.md)):
+Left for the field test (steps 22–23 of [field-test.md](field-test.md)):
 flats with real light (a panel, a white screen or the twilight sky) and their
 per-channel levels; sky flats at dusk or dawn; darks with the filter wheel present.
 

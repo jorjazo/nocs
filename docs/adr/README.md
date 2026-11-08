@@ -42,6 +42,8 @@ that supersedes the old one.
 | [0034](0034-polar-alignment.md) | Polar alignment from three solved frames | Proposed |
 | [0035](0035-apt-repository-and-release-publishing.md) | Apt repository, signing and release publishing | Proposed |
 | [0036](0036-calibration-frames.md) | Calibration frames: flats wizard, darks and bias, and their library | Proposed |
-| [0037](0037-smb-share.md) | An SMB share of the frames for desktop computers | Proposed |
+| [0037](0037-coalesced-indi-mirror.md) | The state's INDI mirror is coalesced to one update a second per property | Proposed |
+| [0038](0038-saved-sites.md) | Sites belong to the box: a list of saved sites and one active site | Proposed |
+| [0039](0039-smb-share.md) | An SMB share of the frames for desktop computers | Proposed |
 
 Template: Context → Decision → Consequences.

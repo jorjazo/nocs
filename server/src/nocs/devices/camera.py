@@ -6,7 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 
-from nocs.devices.base import Device, DeviceError, DeviceInterface
+from nocs.devices.base import Device, DeviceError, DeviceInterface, event_device
 from nocs.indi import (
     BlobElement,
     BlobMode,
@@ -395,14 +395,19 @@ class Camera(Device):
 
         For property ``updates_of``, a definition counts only if the property did
         not exist yet: a definition of a known property is a re-send, not news.
-        Fails on an ``Alert`` exposure or a lost connection; a cancelled wait aborts
-        the exposure on the camera too.
+        Fails on an ``Alert`` exposure or a lost connection, and when the camera stops
+        answering (``Device.supervise``); a cancelled wait aborts the exposure on the
+        camera too.
         """
         loop = asyncio.get_running_loop()
         result: asyncio.Future[T] = loop.create_future()
         known = updates_of is not None and self.has(updates_of)
+        heard = loop.time()
 
         def on_event(event: IndiEvent) -> None:
+            nonlocal heard
+            if event_device(event) == self.name:
+                heard = loop.time()
             if result.done():
                 return
             match event:
@@ -426,12 +431,12 @@ class Camera(Device):
             removers.append(images.add_listener(on_event))
         try:
             await self.client.send(self.name, "CCD_EXPOSURE", {"CCD_EXPOSURE_VALUE": seconds})
-            async with asyncio.timeout(seconds + DOWNLOAD_MARGIN):
-                return await result
-        except TimeoutError as e:
-            raise DeviceError(
-                f"{self.name}: no image {seconds + DOWNLOAD_MARGIN:g} s after start"
-            ) from e
+            return await self.supervise(
+                result,
+                loop.time() + seconds + DOWNLOAD_MARGIN,
+                lambda: heard,
+                f"{self.name}: no image {seconds + DOWNLOAD_MARGIN:g} s after start",
+            )
         except asyncio.CancelledError:
             # Stop the camera too, so the next exposure does not have to wait for it.
             if self.exposing:

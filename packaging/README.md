@@ -3,7 +3,7 @@
 How NOCS is packaged for PCs and for the Raspberry Pi image
 ([ADR 0025](../docs/adr/0025-packaging-and-updates.md),
 [ADR 0026](../docs/adr/0026-raspberry-pi-image.md)). Plan and status:
-[phase 6](../docs/v0.1/phase-6.md).
+[phase 6](../docs/roadmap/v0.1/phase-6.md).
 
 ## The `nocs` package
 
@@ -36,12 +36,13 @@ What it installs:
 | `/var/lib/nocs` | profiles and `auth.json` (`config/`), catalog, previews, frames; kept on purge |
 | `/run/indi/fifo` | indiserver's driver FIFO |
 
-Installing it by hand on a PC, until the apt repository exists:
+Installing it on a PC from the apt repository is in the
+[user documentation](../docs/user/pc-install.md); a package built here installs by hand:
 
 ```sh
 sudo add-apt-repository ppa:mutlaqja/ppa
 sudo add-apt-repository ppa:pch/phd2
-sudo apt install ./nocs_<version>_amd64.deb indi-3rdparty-drivers phd2 xvfb
+sudo apt install ./packaging/out/nocs_<version>_amd64.deb indi-3rdparty-drivers phd2 xvfb
 # http://<this computer>:8000; logs: journalctl -u nocsd -u nocs-indiserver -u nocs-phd2
 # what nocs-system offers here (as nocs): sudo -u nocs /opt/nocs/venv/bin/nocs-system call hello
 ```
@@ -50,6 +51,25 @@ ASTAP and its star databases are installed as [ADR 0018](../docs/adr/0018-plate-
 says, in `/opt/astap`. Versions between releases are `<version>~git<commits>.g<commit>`,
 which sort before `<version>`: bump `server/pyproject.toml` right after tagging a
 release.
+
+## Releases
+
+```sh
+packaging/release.sh --dry-run 0.2.0rc1   # check only
+packaging/release.sh 0.2.0rc1             # tag main and push the tag
+```
+
+A release is `X.Y.Z`; a release candidate `X.Y.0rcN`, only before a minor or major
+release (a patch goes straight out). The tag is `v<version>` and Python says the
+same (PEP 440); the packages say it in Debian's form (`0.2.0~rc1`, which sorts before
+`0.2.0`), which `deb/build.sh` derives from `server/pyproject.toml`.
+Bump `server/pyproject.toml` (then `uv lock`), `nocs.__version__` and
+`web/package.json` in a pull request first. `release.sh` checks the version's form,
+that `main` says it, that the tag and its GitHub release are new and newer than every
+release, and that CI passed on that commit, then tags it and pushes the tag: the
+Packages and Image workflows publish it and make the GitHub release (an `rc` one as
+a prerelease). Never create the release on GitHub by hand: the tag is checked here, not
+there, and the workflows make the release.
 
 ## The `nocs-appliance` package
 
@@ -118,7 +138,7 @@ To switch it on, the repository needs:
 
 | Kind | Name | What |
 |---|---|---|
-| variable | `NOCS_APT_URL` | the public address, e.g. `https://apt.example.org` |
+| variable | `NOCS_APT_URL` | the public address: `https://apt.nocs.app` |
 | secret | `R2_ENDPOINT` | `https://<account id>.r2.cloudflarestorage.com` |
 | secrets | `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` | the bucket and an R2 token that may write to it |
 | secret | `APT_SIGNING_KEY` | set by `new-key.sh`, which also writes `repo/nocs-archive-keyring.asc` (commit it) |

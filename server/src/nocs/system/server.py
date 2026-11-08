@@ -11,7 +11,7 @@ in ``/etc/nocs/system.conf.d/``::
     [operations]
     enabled = power hostname storage    # groups of operations to perform
     [share]
-    internal = /var/lib/nocs    # the internal storage destination, shared (ADR 0037)
+    internal = /var/lib/nocs    # the internal storage destination, shared (ADR 0039)
 
 The socket is ``/run/nocs-system/socket`` (``NOCS_SYSTEM_SOCKET``), mode 0660 with
 the served user's group. A connection from any other user is closed unanswered.

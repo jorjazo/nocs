@@ -44,6 +44,8 @@ SAMPLE = 5.0
 NETWORK = 10.0
 """Seconds between readings of the Wi-Fi's state, where nocs-system manages it."""
 NETWORK_ROOT = ("network",)
+SCAN_TIMEOUT = 30.0
+"""Seconds a Wi-Fi scan gets; nocs-system gives NetworkManager 20 of them."""
 UPDATES_ROOT = ("updates",)
 SHARE_ROOT = ("share",)
 
@@ -177,6 +179,16 @@ class SystemService:
         await self._call(op, args)
         await self.read_network()
 
+    async def scan_networks(self) -> list[Message]:
+        """The Wi-Fi networks in range, strongest first: a scan made now (ADR 0028)."""
+        result = await self._call("network.scan", {}, timeout=SCAN_TIMEOUT)
+        networks = result.get("networks")
+        return [
+            cast(Message, n)
+            for n in cast(list[object], networks if isinstance(networks, list) else [])
+            if isinstance(n, dict)
+        ]
+
     async def read_updates(self) -> None:
         """Publish what nocs-system says of updates (ADR 0025); ``None`` where it installs
         none (a PC, whose owner updates it as usual)."""
@@ -192,7 +204,7 @@ class SystemService:
             self._store.set(UPDATES_ROOT, state)
 
     async def read_share(self) -> None:
-        """Publish the SMB share's state (ADR 0037), ``None`` where there is none (a PC).
+        """Publish the SMB share's state (ADR 0039), ``None`` where there is none (a PC).
         While it is on, nocs-system first shares what is mounted now: a drive pulled out
         without ejecting leaves the share within one reading."""
         state: Json = None
@@ -257,14 +269,16 @@ class SystemService:
         log.warning("%s requested", op)
         await self._call(op)
 
-    async def _call(self, op: str, args: Message | None = None) -> Message:
+    async def _call(
+        self, op: str, args: Message | None = None, *, timeout: float = client.TIMEOUT
+    ) -> Message:
         if op not in self._operations:
             await self.refresh()  # nocs-system may have started since the last look
         if op not in self._operations:
             reason = self._error or "it is switched off in /etc/nocs/system.conf"
             raise OperationUnavailableError(f"NOCS cannot do {op} on this computer: {reason}")
         try:
-            return await client.call(op, args, socket=self._socket)
+            return await client.call(op, args, socket=self._socket, timeout=timeout)
         except HelperError as e:
             if e.code == "invalid":
                 raise ValueError(str(e)) from e

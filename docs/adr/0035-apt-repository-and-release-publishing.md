@@ -10,7 +10,8 @@ the host open. Facts that shape the choice:
 
 - The `nocs` package is about 120 MB per architecture, more than the 100 MB per
   file that GitHub Pages (a git repository) accepts.
-- The image is 3.3 GB compressed, more than the 2 GiB per file of GitHub Releases.
+- The image is 2.4–3.3 GB compressed (2.43 GB as booted on the lab Pi), more than
+  the 2 GiB per file of GitHub Releases.
   D50 (874 MB) barely compresses, and an image without it does not solve dense
   Milky Way fields (ADR 0018).
 - One maintainer, 5–10 h a week: the host must need no server to keep up, and
@@ -28,7 +29,7 @@ the host open. Facts that shape the choice:
 ### Host
 
 - **Cloudflare R2**, served from a **domain of the maintainer's** (the repository
-  variable `NOCS_APT_URL`, for example `https://apt.example.org`), holds the apt
+  variable `NOCS_APT_URL`: `https://apt.nocs.app`), holds the apt
   repository and the images. One bucket:
 
   ```

@@ -11,6 +11,12 @@ State layout under ``("indi",)``::
     server:  {host, port, connected, responsive, error}
     devices: {<device>: {interfaces: [...], properties: {<name>: <property>}}}
     messages: last driver messages (newest last)
+
+The mirror is for people (the ``#/dev`` screen, the profile editor), not for NOCS's
+own services, which use the client: a property's updates reach it at most once a
+second (``COALESCE``), the latest values of every element changed meanwhile, and at
+once when its state changes (ADR 0037). Drivers update some properties 8 to 16 times a
+second, and the mirror was ~88 % of what every WebSocket client received.
 """
 
 from __future__ import annotations
@@ -19,6 +25,7 @@ import asyncio
 import contextlib
 import logging
 from collections.abc import Awaitable, Callable, Mapping
+from dataclasses import dataclass, field
 
 from nocs.devices import DeviceInterface
 from nocs.indi import (
@@ -47,7 +54,22 @@ PING_EVERY = 10.0
 PING_TIMEOUT = 10.0
 MISSES = 3
 """Unanswered pings in a row after which indiserver is taken as hung (~1 min)."""
-_MAX_MESSAGES = 50
+_MAX_MESSAGES = 10
+"""Driver messages kept in the state, all sent again with each new one (#/dev shows 5)."""
+COALESCE = 1.0
+"""Seconds a property's updates wait after the last one published (ADR 0037)."""
+
+type _Key = tuple[str, str]
+
+
+@dataclass
+class _Held:
+    """A property's updates since it was last published."""
+
+    published: float
+    state: str
+    changed: set[str] = field(default_factory=set[str])
+    timer: asyncio.TimerHandle | None = None
 
 
 def element_value(element: Element) -> Json:
@@ -114,6 +136,7 @@ class IndiBridge:
         self._client: IndiClient | None = None
         self._messages: list[Json] = []
         self._watchers: list[Callable[[IndiClient | None], None]] = []
+        self._held: dict[_Key, _Held] = {}
 
     @property
     def client(self) -> IndiClient | None:
@@ -231,6 +254,7 @@ class IndiBridge:
                 },
             )
             if not connected:
+                self._forget(lambda _: True)
                 self._store.set((*ROOT, "devices"), {})
 
     def _mirror(self, event: IndiEvent) -> None:
@@ -238,6 +262,7 @@ class IndiBridge:
         match event:
             case PropertyDefined(property=prop):
                 path = (*devices, prop.device, "properties", prop.name)
+                self._forget(lambda key: key == (prop.device, prop.name))
                 with self._store.transaction():
                     self._store.set(path, property_to_json(prop))
                     if prop.name == "DRIVER_INFO":
@@ -245,26 +270,13 @@ class IndiBridge:
                             (*devices, prop.device, "interfaces"), interface_names(prop)
                         )
             case PropertyUpdated(property=prop, elements=changed):
-                path = (*devices, prop.device, "properties", prop.name)
-                with self._store.transaction():
-                    self._store.set((*path, "state"), prop.state.value)
-                    self._store.set((*path, "timestamp"), prop.timestamp)
-                    self._store.set((*path, "message"), prop.message)
-                    if prop.name == "DRIVER_INFO":
-                        self._store.set(
-                            (*devices, prop.device, "interfaces"), interface_names(prop)
-                        )
-                    for name in changed:
-                        element = prop.elements[name]
-                        if isinstance(element, NumberElement):
-                            self._store.set((*path, "elements", name), element_to_json(element))
-                        else:
-                            value = element_value(element)
-                            self._store.set((*path, "elements", name, "value"), value)
+                self._update(prop, changed)
             case PropertyDeleted(device=device, name=name):
                 if name is None:
+                    self._forget(lambda key: key[0] == device)
                     self._store.delete((*devices, device))
                 else:
+                    self._forget(lambda key: key == (device, name))
                     self._store.delete((*devices, device, "properties", name))
             case MessageReceived(device=device, timestamp=timestamp, text=text):
                 self._messages = [
@@ -274,3 +286,66 @@ class IndiBridge:
                 self._store.set((*ROOT, "messages"), self._messages)
             case ConnectionLost():
                 self._publish_server(connected=False, error=event.reason)
+
+    def _update(self, prop: Property, changed: tuple[str, ...]) -> None:
+        """Publish an update now, or hold it until ``COALESCE`` after the last one."""
+        key = (prop.device, prop.name)
+        now = asyncio.get_running_loop().time()
+        held = self._held.get(key)
+        if held is None or now - held.published >= COALESCE or prop.state.value != held.state:
+            self._publish(prop, {*(held.changed if held else ()), *changed})
+            return
+        held.changed.update(changed)
+        if held.timer is None:
+            held.timer = asyncio.get_running_loop().call_at(
+                held.published + COALESCE, self._publish_held, prop
+            )
+
+    def _publish_held(self, prop: Property) -> None:
+        if (held := self._held.get((prop.device, prop.name))) is not None:
+            held.timer = None
+            self._publish(prop, held.changed)
+
+    def _publish(self, prop: Property, changed: set[str]) -> None:
+        key = (prop.device, prop.name)
+        if (held := self._held.get(key)) is not None and held.timer is not None:
+            held.timer.cancel()
+        self._held[key] = _Held(asyncio.get_running_loop().time(), prop.state.value)
+        devices = (*ROOT, "devices")
+        path = (*devices, prop.device, "properties", prop.name)
+        # Only what differs from the mirror: drivers send every element of a property,
+        # most of them unchanged, and a number's limits rarely change.
+        mirrored = self._store.get(path)
+        before = mirrored if isinstance(mirrored, dict) else {}
+        elements = before.get("elements")
+        before_elements = elements if isinstance(elements, dict) else {}
+        with self._store.transaction():
+            for field_name, value in (
+                ("state", prop.state.value),
+                ("timestamp", prop.timestamp),
+                ("message", prop.message),
+            ):
+                if before.get(field_name) != value or field_name not in before:
+                    self._store.set((*path, field_name), value)
+            if prop.name == "DRIVER_INFO":
+                self._store.set((*devices, prop.device, "interfaces"), interface_names(prop))
+            for name in sorted(changed):
+                element = prop.elements.get(name)
+                if element is None:
+                    continue
+                was = before_elements.get(name)
+                was = was if isinstance(was, dict) else {}
+                if isinstance(element, NumberElement):
+                    now = element_to_json(element)
+                    if any(was.get(k) != v or k not in was for k, v in now.items() if k != "value"):
+                        self._store.set((*path, "elements", name), now)
+                        continue
+                value = element_value(element)
+                if was.get("value") != value or "value" not in was:
+                    self._store.set((*path, "elements", name, "value"), value)
+
+    def _forget(self, matches: Callable[[_Key], bool]) -> None:
+        """Drop the held updates of properties defined anew, deleted or gone."""
+        for key in [key for key in self._held if matches(key)]:
+            if (timer := self._held.pop(key).timer) is not None:
+                timer.cancel()

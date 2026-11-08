@@ -47,6 +47,7 @@ def updates(api: TestClient) -> int:
     return len(run.get("updates", []))
 
 
+@pytest.mark.slow
 @pytest.mark.indi
 def test_polar_alignment_follows_the_knobs(misaligned: TestClient) -> None:
     api = misaligned

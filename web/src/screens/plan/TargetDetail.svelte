@@ -36,7 +36,7 @@
   import { href } from "../../lib/router.svelte";
   import { separation, type Sky } from "../../lib/sky/projection";
   import { commonNames, objectSummary } from "../../lib/targets";
-  import { tonight } from "../../lib/tonight.svelte";
+  import { siteKey, tonight } from "../../lib/tonight.svelte";
   import type { CatalogObject, PlannedTarget, SolvedFrames, TargetVisibility } from "../../lib/types";
   import CenteringCard from "../live/CenteringCard.svelte";
 
@@ -57,7 +57,7 @@
   let seen: TargetVisibility | null = $state(null);
 
   $effect(() => {
-    void tonight.load(live.app.equipment?.active ?? null);
+    void tonight.load(siteKey(live.app.sites));
   });
 
   let now = $state(Date.now());
@@ -324,7 +324,7 @@
           </div>
         </div>
       {:else if tonight.missingSite}
-        <p class="muted">{live.app.equipment?.active ? t.tonight.noSite : t.tonight.noProfile}</p>
+        <p class="muted">{t.tonight.noSite}</p>
       {:else}
         <p class="muted" role="status">{t.tonight.loading}</p>
       {/if}
