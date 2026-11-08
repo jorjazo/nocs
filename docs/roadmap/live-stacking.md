@@ -301,22 +301,26 @@ On the lab Pi 5 (8 GB, microSD), from `main` with the stages merged:
    uv run --project server python dev/bench/stack_bench.py --count 12 --json stack.json
    ```
 
-   Then the bench's simulator samples (`dev/bench/run.sh` makes them):
-   `--frames dev/bench/samples`. Expect ≤ 3 s of stack per frame and ≤ 1 GB peak.
+   Then real frames: `--frames <drive>/NOCS/<night>/Light/<target>/` (one target's
+   lights; the bench's own samples are three different fields and will not stack).
+   Expect ≤ 3 s of stack per frame and ≤ 1 GB peak.
 2. **A night with stacking on**: the soak test with `STACK=1` turns live stacking
-   on before its sequence starts and records the stack in every sample; its summary
-   gets a *Live stack* section (stacks, frames stacked and left out, the worker's
-   time per frame, saved stacks, errors):
+   on before its sequence starts, records the stack in every sample, downloads the
+   stack's previews like the phone, saves the stack every hour (as a user would)
+   and, at the end, switches stacking off, which saves every stack, and lists the
+   saved ones (`stacks.json`). Its summary gets a *Live stack* section (stacks,
+   frames stacked and left out, the worker's time per frame, saved stacks, errors):
 
    ```sh
    STACK=1 HOURS=8 EXPOSURE=30 ASTAP=/opt/astap/astap_cli dev/tools/soak/run.sh
    ```
 
    Compare the worker's memory and CPU and the event loop's latency with the
-   eight-hour night without it ([soak spike](../spikes/pi5-soak.md)). The night's
-   setup changes (three filters in batches) start a new stack at every filter
-   change on the simulator's mono camera, which keeps one per filter: four stacks
-   at most, each saved when it ends.
+   eight-hour night without it ([soak spike](../spikes/pi5-soak.md)). The
+   simulator's camera is mono, so its three filters in batches make three stacks,
+   one per filter, each taken up again when its filter comes back (not a new stack
+   at every change). Autofocus and pointing frames never reach a stack; dithers and
+   the meridian flip do not end one. The soak's pruning leaves saved stacks alone.
 3. **Lab rig** (ASI2600MC on the bench, capped and then on a lit target or the
    sky through a window): darks from the library applied, the stack shown on a
    phone ≤ 5 s after each frame is saved.
