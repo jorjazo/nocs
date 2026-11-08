@@ -32,6 +32,7 @@ import type {
   GuideRequest,
   GuideSteps,
   HorizontalGoto,
+  MountMoveRequest,
   HostnameRequest,
   JobStarted,
   LoopRequest,
@@ -439,8 +440,10 @@ export function setTracking(body: TrackingRequest): Promise<void> {
   return request("PUT", "/api/mount/tracking", body);
 }
 
-export async function parkMount(): Promise<string> {
-  const started = await request<JobStarted>("POST", "/api/mount/park");
+// stopGuiding: stop PHD2 first, else a guiding mount refuses (ADR 0023).
+export async function parkMount(stopGuiding = false): Promise<string> {
+  const body: MountMoveRequest = { stop_guiding: stopGuiding };
+  const started = await request<JobStarted>("POST", "/api/mount/park", body);
   return started.job;
 }
 
@@ -448,8 +451,9 @@ export function unparkMount(): Promise<void> {
   return request("POST", "/api/mount/unpark");
 }
 
-export async function homeMount(): Promise<string> {
-  const started = await request<JobStarted>("POST", "/api/mount/home");
+export async function homeMount(stopGuiding = false): Promise<string> {
+  const body: MountMoveRequest = { stop_guiding: stopGuiding };
+  const started = await request<JobStarted>("POST", "/api/mount/home", body);
   return started.job;
 }
 

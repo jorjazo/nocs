@@ -136,6 +136,11 @@
   );
   // PHD2 calibrates or guides: NOCS holds the mount until guiding stops (ADR 0023).
   const guiding = $derived(guidingActive(live.app.guiding));
+  // Park, home and the zenith stop guiding first instead of being refused: a
+  // second tap that says so is the confirmation (ADR 0023).
+  function zenith(): void {
+    void run("zenith", () => gotoMount({ frame: "altaz", alt: 90, az: 0, stop_guiding: guiding }));
+  }
   const padReason = $derived.by((): string | null => {
     if (!owner) return t.mount.locked;
     if (mount?.parked) return t.mount.padParked;
@@ -237,12 +242,18 @@
           onclick={() => void goTo(false, true)}>
           {t.center.goCenter}
         </Button>
-        <Button
-          disabled={!owner || !!job || mount.parked}
-          busy={busy === "zenith"}
-          onclick={() => void run("zenith", () => gotoMount({ frame: "altaz", alt: 90, az: 0 }))}>
-          {t.mount.zenith}
-        </Button>
+        {#if guiding && owner && !job && !mount.parked}
+          <!-- Guiding stops first, so it asks for a second tap (ADR 0023). -->
+          <ConfirmButton
+            label={t.mount.zenith}
+            confirmLabel={t.mount.zenithConfirmGuiding}
+            busy={busy === "zenith"}
+            onconfirm={zenith} />
+        {:else}
+          <Button disabled={!owner || !!job || mount.parked} busy={busy === "zenith"} onclick={zenith}>
+            {t.mount.zenith}
+          </Button>
+        {/if}
       </div>
       <p class="caption muted">{centerReason ?? t.center.hint}</p>
       <p class="caption muted">{t.mount.zenithHint}</p>
@@ -276,16 +287,16 @@
         {:else if mount.can_park}
           <ConfirmButton
             label={t.mount.park}
-            confirmLabel={t.mount.parkConfirm}
+            confirmLabel={guiding ? t.mount.parkConfirmGuiding : t.mount.parkConfirm}
             busy={busy === "park"}
-            onconfirm={() => void run("park", parkMount)} />
+            onconfirm={() => void run("park", () => parkMount(guiding))} />
         {/if}
         {#if mount.can_home && !mount.parked}
           <ConfirmButton
             label={t.mount.home}
-            confirmLabel={t.mount.homeConfirm}
+            confirmLabel={guiding ? t.mount.homeConfirmGuiding : t.mount.homeConfirm}
             busy={busy === "home"}
-            onconfirm={() => void run("home", homeMount)} />
+            onconfirm={() => void run("home", () => homeMount(guiding))} />
         {/if}
       </div>
     {/if}
