@@ -73,6 +73,7 @@ from nocs.api.sessions import sessions_router
 from nocs.api.sites import sites_router
 from nocs.api.sky import sky_router
 from nocs.api.solver import align_router, saved_frames_router, solver_router
+from nocs.api.stacking import stacking_router
 from nocs.api.system import system_router
 from nocs.api.targets import targets_router
 from nocs.auth import AuthStore
@@ -132,6 +133,7 @@ from nocs.services.timekeeping import TimeKeeper
 from nocs.sites import SiteService, SiteStore
 from nocs.sky import Target as SkyTarget
 from nocs.solving import Astap, SolverService
+from nocs.stacking.service import LiveStackService
 from nocs.state import Resync, StateStore
 from nocs.storage import (
     FocusRun,
@@ -190,6 +192,10 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
     def storage() -> StorageService:
         assert services.storage is not None
         return services.storage
+
+    def stacking() -> LiveStackService:
+        assert services.stacking is not None
+        return services.stacking
 
     def mount() -> MountService:
         assert services.mount is not None
@@ -424,6 +430,11 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
         services.plan = PlanService(store, settings.config_dir)
         services.capture.use_guider(services.guiding)
         services.capture.use_pointing(lambda: _pointing(services.mount))
+        services.stacking = LiveStackService(
+            store, services.worker, storage, settings.config_dir, settings.data_dir
+        )
+        await services.stacking.start()
+        services.capture.use_stacker(services.stacking)
         services.flats = FlatsService(
             store,
             services.jobs,
@@ -448,6 +459,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
         )
         task = asyncio.create_task(bridge.run(), name="indi-bridge")
         guiding_task = asyncio.create_task(services.guiding.run(), name="phd2")
+        stacking_task = asyncio.create_task(services.stacking.run(), name="live-stack")
         system_task = asyncio.create_task(services.system.run(), name="nocs-system")
         time_keeper = TimeKeeper(
             services.clock,
@@ -466,6 +478,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
             yield
         finally:
             for background in (
+                stacking_task,
                 recovery_task,
                 watchdog_task,
                 gps_task,
@@ -519,6 +532,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
     app.include_router(sites_router(sites))
     app.include_router(targets_router())
     app.include_router(plan_router(plan))
+    app.include_router(stacking_router(stacking))
 
     @app.get("/api/autofocus/runs")
     async def focus_runs(  # pyright: ignore[reportUnusedFunction]
@@ -911,6 +925,7 @@ class _Services:
     flats: FlatsService | None = None
     gps: GpsService | None = None
     sites: SiteService | None = None
+    stacking: LiveStackService | None = None
 
 
 def _iso(time: datetime) -> str:

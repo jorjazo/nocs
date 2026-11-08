@@ -86,6 +86,7 @@ from nocs.api.schemas import (
     SnapshotMessage,
     SolvedFrames,
     SolveRequest,
+    StackSwitchRequest,
     StateSnapshot,
     TargetRequest,
     TemperatureRecord,
@@ -98,6 +99,7 @@ from nocs.equipment import Profile
 from nocs.sequence import Sequence
 from nocs.sequence.model import Template
 from nocs.sites import Site
+from nocs.stacking.settings import StackLook
 
 type Mode = Literal["validation", "serialization"]
 
@@ -138,6 +140,8 @@ MODELS: list[tuple[type[BaseModel], Mode]] = [
     (AutofocusRequest, "validation"),
     (FocuserBacklashRequest, "validation"),
     (MountMoveRequest, "validation"),
+    (StackSwitchRequest, "validation"),
+    (StackLook, "validation"),
     (GuidingLoopRequest, "validation"),
     (GuidingExposureRequest, "validation"),
     (GuideRequest, "validation"),

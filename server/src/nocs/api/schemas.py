@@ -17,6 +17,7 @@ from pydantic import (
 
 from nocs.equipment import Role
 from nocs.sites import Site
+from nocs.stacking.settings import StackLook
 from nocs.state import Patch
 from nocs.system.network import COUNTRIES
 from nocs.targets import TargetType
@@ -991,6 +992,74 @@ class FlatsState(StateModel):
     error: str | None
 
 
+class StackSetup(StateModel):
+    exposure: float
+    gain: float | None
+    offset: float | None
+    binning: int | None
+    width: int | None = Field(description="Pixels of the frames (before the stack's reduction).")
+    height: int | None
+    colour: bool = Field(description="A Bayer sensor: stacked one RGB pixel per cell.")
+
+
+class StackCalibration(StateModel):
+    dark: bool = Field(description="A dark (or bias) master is subtracted.")
+    flat: bool = Field(description="A flat master is divided.")
+    cosmetic: bool = Field(description="Without a dark, hot pixels are removed.")
+    notes: list[str] = Field(description="What was found and used, or why not.")
+
+
+class StackOutcome(StateModel):
+    """What happened to the latest frame offered to the stack."""
+
+    accepted: bool
+    reason: str | None = Field(description="Why it was left out; None when accepted.")
+    cause: Literal["gate", "registration", "stars"] | None
+    shift: list[float] | None = Field(description="Pixels (of the stack) it moved, x and y.")
+    rotation: float | None = Field(description="Degrees it turned.")
+    stars: int | None = Field(description="Stars paired with the reference.")
+    rms: float | None = Field(description="Residual of those stars, pixels.")
+    clipped: float | None = Field(description="Fraction of its values sigma-clipped.")
+    hot_pixels: int | None = Field(description="Hot pixels removed (no dark).")
+    seconds: float = Field(description="Time the worker took.")
+    time: str = Field(description="UTC, ISO 8601, when the frame arrived.")
+    frame_id: int | None = Field(description="The saved frame's id; None: not saved.")
+
+
+class StackPreview(StateModel):
+    url: str = Field(description="JPEG of the stack, at most 1920 px wide; immutable.")
+    width: int
+    height: int
+
+
+class CurrentStack(StateModel):
+    id: str
+    started: str = Field(description="UTC, ISO 8601: its first frame.")
+    frames: int = Field(description="Frames in the stack.")
+    rejected: int = Field(description="Frames left out of it.")
+    skipped: int = Field(description="Frames that arrived while it was busy.")
+    exposure: float = Field(description="Seconds of exposure in the stack.")
+    camera: str
+    target: str | None
+    filter: str | None
+    setup: StackSetup
+    calibration: StackCalibration
+    last: StackOutcome | None
+    preview: StackPreview | None
+
+
+class StackState(StateModel):
+    """Live stacking (ADR 0039)."""
+
+    on: bool = Field(description="Lights of the main camera are stacked as they arrive.")
+    status: Literal["off", "idle", "preparing", "stacking", "failed"]
+    message: str | None = Field(description="What it is doing (building a master).")
+    error: str | None
+    look: StackLook
+    current: CurrentStack | None = Field(description="The stack shown; None before a frame.")
+    stacks: int = Field(description="Stacks held (a mono camera keeps one per filter).")
+
+
 class AppState(StateModel):
     """The whole state tree sent in snapshots and modified by patches."""
 
@@ -1021,6 +1090,7 @@ class AppState(StateModel):
         default=None, description="None: never run."
     )
     plan: PlanState | None = None
+    stack: StackState | None = None
     guiding: GuidingState | None = None
     system: SystemState | None = None
     sequence: SequenceState | None = None
@@ -1055,6 +1125,10 @@ class Health(WireModel):
 class StateSnapshot(WireModel):
     version: int
     state: dict[str, Any]
+
+
+class StackSwitchRequest(BaseModel):
+    on: bool = Field(description="Stack the main camera's lights as they arrive.")
 
 
 class GuidingLoopRequest(BaseModel):
