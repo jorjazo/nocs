@@ -67,3 +67,9 @@ on the lab Pi 5 ([spike](../spikes/pi5-performance.md)):
   applies to any other client sharing a camera, such as KStars.
 - Measured on the Pi with a 26 MP color camera: preview published ~2.1 s after
   the exposure ends (0.7 s driver, 1.4 s worker), with the event loop free.
+- (2026-11-02, soak test) The guide camera's BLOBs, which NOCS previews from what
+  PHD2 takes, cost the Pi's event loop ~1.7 % of its time in 50–100 ms pieces. The
+  INDI client now parses an element over 64 KB, and decodes its base64 in 64 KB
+  slices, in a thread. Parsing and decoding still hold the GIL, so the CPU is the
+  same, but the loop waits a few ms at a time instead (a PC's worst lag went from
+  22–31 ms to 6–11 ms per 2.6 MB guide frame).

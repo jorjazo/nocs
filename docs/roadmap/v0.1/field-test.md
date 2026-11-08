@@ -11,7 +11,7 @@ EFW, EAF, PPBA on the lab Pi 5), covering what exists on `main` now. Steps marke
 | [4](phase-4.md), polar half | Polar align from the phone within 1′ | 5 |
 | [4](phase-4.md), guiding half | Guided 300 s sub-frames with dithering, total RMS under 1″, round stars | 14–18 |
 | [5](phase-5.md) | A multi-filter sequence from dusk to a parked dawn, with a meridian flip | 19–20, in part: see there |
-| [Calibration](../beyond/calibration.md) | Sky flats at twilight and the night's darks and bias, matched to its lights | 22–23 |
+| [Calibration](calibration.md) | Sky flats at twilight and the night's darks and bias, matched to its lights | 22–23 |
 
 The rule of every exit: **no laptop and no SSH** during the night. If one is needed,
 note why: that is a finding, and that phase's test is not passed. Note also

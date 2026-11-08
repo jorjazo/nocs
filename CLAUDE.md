@@ -1,7 +1,7 @@
 # NOCS — notes for Claude
 
 NOCS is a web-first control system for astrophotography rigs on top of INDI.
-Read [docs/design.md](docs/design.md), [docs/roadmap.md](docs/roadmap.md) and the
+Read [docs/design.md](docs/design.md), [docs/roadmap/](docs/roadmap/) and the
 [ADRs](docs/adr/) before planning work; [docs/ux.md](docs/ux.md) for UI work;
 [docs/spikes/](docs/spikes/) for measured facts (PHD2 headless, Pi 5 performance, a
 whole night on the Pi).
@@ -18,6 +18,11 @@ whole night on the Pi).
   The same goes for long local test runs.
 - Propose a plan in stages before large changes; record significant decisions as
   a new ADR rather than editing an accepted one.
+- **Backward compatibility does not matter before v1.0.0.** While the maintainer
+  is the only user, profiles, settings, state, the API, files on disk and
+  rollbacks may change freely: no migrations, shims, fallbacks or deprecation
+  paths for older versions. Only from v1.0.0 on does a change that is not
+  backward compatible require a major version release.
 
 ## Layout
 
@@ -32,6 +37,7 @@ server/   Python package `nocs` (nocsd): indi/ (protocol + async client, driver
           solving/ (ASTAP, fields of view), pointing/ (solve and sync, centre),
           align/ (polar alignment: axis from three solves, knobs; ADR 0034),
           sky/ (a night's almanac at the site, targets' visibility),
+          sites/ (the saved sites and the box's active one, ADR 0038),
           targets/ (bundled OpenNGC catalog and its search, ADR 0019; Tycho-2
           stars for the framing chart, ADR 0020; tonight's target, `plan`),
           system/ (nocs-system, the root helper: stdlib + anyio only, ADR 0027),
@@ -46,7 +52,8 @@ dev/      compose.yaml (INDI simulators + GSC catalog + driver FIFO in dev/.run,
           tools/ (indi_record, phd2_record, fake_ppba; soak/: a long simulated night),
           bench/, spikes/, pi/ (lab Pi flashing and setup)
 packaging/ deb/ (the nocs .deb: build.sh, test.sh), image/ (the Pi 5 image, arm64 only; ADR 0025, 0026)
-docs/     design, roadmap, ux, adr/, spikes/
+docs/     design, ux, roadmap/ (v0.1.md with its phase plans in v0.1/; v1.0.md),
+          adr/, spikes/, user/
 ```
 
 ## Commands
@@ -57,7 +64,7 @@ cd server && uv sync
 uv run ruff check . && uv run ruff format --check . && uv run pyright   # strict
 dev/astap/install.sh  # ASTAP + D05 in dev/.astap (slow download; ADR 0018)
 NOCS_TEST_INDI=localhost:7624 NOCS_TEST_INDI_FIFO=../dev/.run/fifo \
-  NOCS_TEST_INDI_UPLOADS=../dev/.run/uploads NOCS_TEST_ASTAP=../dev/.astap/astap_cli \
+  NOCS_TEST_INDI_CONTAINER=dev-indi-1 NOCS_TEST_INDI_UPLOADS=../dev/.run/uploads NOCS_TEST_ASTAP=../dev/.astap/astap_cli \
   NOCS_TEST_PHD2=localhost:4400 NOCS_TEST_PHD2_SETTINGS=../dev/.run/phd2.phd uv run pytest
 # real night frames for the solver: NOCS_TEST_FRAMES=<dir of FITS lights>, with D50
 # (NOCS_TEST_ASTAP_DB=<dir>): D05 fails dense Milky Way fields
@@ -67,7 +74,8 @@ NOCS_WEB_DIR=web/dist NOCS_INDI_FIFO=dev/.run/fifo NOCS_INDI_DRIVERS_DIR=dev/.ru
   NOCS_INDI_UPLOAD_DIR=/run/indi/uploads NOCS_INDI_UPLOAD_DIR_LOCAL=dev/.run/uploads \
   NOCS_PHD2_SETTINGS=dev/.run/phd2.phd NOCS_PHD2_INDI_HOST=indi \
   uv run --project server nocsd               # http://127.0.0.1:8000
-# profiles live in ~/.config/nocs/profiles/ (NOCS_CONFIG_DIR); dev/profiles/ has the simulators
+# profiles live in ~/.config/nocs/profiles/ (NOCS_CONFIG_DIR); dev/profiles/ has the simulators,
+# and dev/sites.json an example site (copy it to ~/.config/nocs/sites.json; ADR 0038)
 # the first visit sets the owner passphrase and pairs that browser (ADR 0014);
 # rm ~/.config/nocs/auth.json and restart nocsd to start over. From a shell:
 curl -c jar -H 'Content-Type: application/json' -d '{"passphrase": "…", "name": "curl"}' \
@@ -78,10 +86,23 @@ curl -c jar -H 'Content-Type: application/json' -d '{"passphrase": "…", "name"
 
 ```sh
 packaging/deb/build.sh && packaging/deb/test.sh packaging/out/nocs_*_amd64.deb  # .deb, installed with systemd
+packaging/release.sh 0.2.0rc1  # the maintainer's: tag main (X.Y.Z or X.Y.0rcN) after a version bump PR
 ```
 
 CI runs all of the above (INDI simulators included) on every push to `main`; the
-packages workflow builds and installs the .deb on amd64 and arm64.
+packages workflow builds and installs the .deb on amd64 and arm64 (on `main` and tags,
+not on pull requests). Pushes that change
+only `docs/` or `*.md` run neither, and a newer push cancels CI's run in progress.
+CI takes the simulators' and PHD2's images from the Actions cache, built again each
+ISO week (`APT_REFRESH`) with the PPAs' current packages or when `dev/indi`/`dev/phd2`
+change: a new INDI shows up in CI at the first run of a week. pytest fails a test
+after 10 minutes and CI prints the 30 slowest.
+
+CI runs unit tests (`pytest -m "not indi" -n auto`, no simulators) apart from the
+integration tests, which run one at a time on runners of their own. Integration
+tests marked `slow` (more than ~5 s in CI, or a module whose tests depend on each
+other's state) run only on pushes to `main`, so a pull request's CI takes 2–3
+minutes: mark a new integration test `slow` when CI's durations show it past that.
 
 ## Conventions and decisions to respect
 
@@ -103,8 +124,16 @@ packages workflow builds and installs the .deb on amd64 and arm64.
   for debayer and downscale, star metrics (`sep`) in a worker process, never on
   the event loop. ASTAP downsampling must be chosen from star size, not `-z 0`.
   Frames arrive by `UPLOAD_LOCAL` when indiserver shares the filesystem (a BLOB
-  blocks the event loop ~0.3 s per 26 MP frame on the Pi), are analysed in one
-  spawned worker process, and OpenCV calls an RGGB sensor "BG" (ADR 0012).
+  costs ~0.3 s of the Pi's CPU per 26 MP frame; the client parses large ones in a
+  thread, but under the GIL), are analysed in one spawned worker process, and
+  OpenCV calls an RGGB sensor "BG" (ADR 0012).
+- **Nothing that can wait on the microSD runs on the event loop**: file operations
+  go to a thread, and log records are written by one (`nocs.logs`). uvicorn raises
+  SIGTERM again after its shutdown; nocsd's own handler makes that a normal exit,
+  so the log thread and multiprocessing's exit handlers still run.
+- **The state's INDI mirror** (`indi.devices`) is for people: a property's
+  updates reach it at most once a second (ADR 0037). Services use the device
+  facades; a test reading the mirror right after an action must wait for it.
 - **Python runtime:** nocsd should run on a uv-managed Python (3.12/3.13), not
   the system interpreter: scientific deps lack arm64 wheels for Ubuntu 26.04's
   Python 3.14.

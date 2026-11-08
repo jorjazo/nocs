@@ -4,10 +4,13 @@
   // anything else, while the access point keeps its default password.
   import Banner from "../components/Banner.svelte";
   import Button from "../components/Button.svelte";
+  import CountrySelect from "../components/CountrySelect.svelte";
   import Icon from "../components/Icon.svelte";
   import TextField from "../components/TextField.svelte";
   import Toggle from "../components/Toggle.svelte";
+  import WifiPicker from "../components/WifiPicker.svelte";
   import { setUpNetwork } from "../lib/api";
+  import { isCountry } from "../lib/countries";
   import { errorText } from "../lib/errors";
   import { i18n } from "../lib/i18n";
   import { live } from "../lib/live.svelte";
@@ -23,6 +26,7 @@
   let joining = $state(false);
   let ssid = $state("");
   let wifiPassword = $state("");
+  let openNetwork = $state(false);
   let busy = $state(false);
   let error = $state("");
   let passwordError = $state("");
@@ -35,10 +39,11 @@
       passwordError = t.boxSetup.passwordShort;
       return;
     }
-    const join = joining && ssid.trim() ? { ssid: ssid.trim(), password: wifiPassword || null } : null;
+    if (!isCountry(country)) return;
+    const join = joining && ssid.trim() ? { ssid: ssid.trim(), password: openNetwork ? null : wifiPassword || null } : null;
     busy = true;
     try {
-      await setUpNetwork({ country: country.trim().toUpperCase(), password, join });
+      await setUpNetwork({ country, password, join });
       boxSetup.done = { ssid: join?.ssid ?? null, accessPoint: ap, host };
       password = wifiPassword = "";
     } catch (e) {
@@ -74,7 +79,7 @@
         <p class="body">{t.boxSetup.body(ap)}</p>
       </div>
 
-      <TextField label={t.boxSetup.country} hint={t.boxSetup.countryHint} bind:value={country} required maxlength={2} />
+      <CountrySelect label={t.boxSetup.country} hint={t.boxSetup.countryHint} bind:value={country} />
       <TextField
         label={t.boxSetup.password}
         hint={t.boxSetup.passwordHint}
@@ -92,8 +97,10 @@
         checked={joining}
         onchange={(on) => (joining = on)} />
       {#if joining}
-        <TextField label={t.boxSetup.ssid} bind:value={ssid} maxlength={32} />
-        <TextField label={t.boxSetup.wifiPassword} type="password" autocomplete="off" bind:value={wifiPassword} maxlength={63} />
+        <WifiPicker label={t.boxSetup.ssid} bind:value={ssid} bind:open={openNetwork} />
+        {#if !openNetwork}
+          <TextField label={t.boxSetup.wifiPassword} type="password" autocomplete="off" bind:value={wifiPassword} maxlength={63} />
+        {/if}
       {/if}
 
       <p class="body note">
@@ -103,7 +110,7 @@
       {#if error}<Banner icon="alert" tone="error">{error}</Banner>{/if}
 
       <div class="actions">
-        <Button variant="primary" type="submit" wide {busy} disabled={country.trim().length !== 2}>
+        <Button variant="primary" type="submit" wide {busy} disabled={!isCountry(country)}>
           {t.boxSetup.submit}
         </Button>
       </div>

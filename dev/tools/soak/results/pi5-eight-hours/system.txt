@@ -1,0 +1,12 @@
+date: 2026-11-02T19:16:29-03:00
+Linux nocs-soak 7.0.0-1017-raspi #17-Ubuntu SMP PREEMPT_DYNAMIC Fri Aug  7 16:13:24 UTC 2026 aarch64 GNU/Linux
+PRETTY_NAME="Ubuntu 26.04.1 LTS"
+Model		: Raspberry Pi 5 Model B Rev 1.1
+cpus: 4
+               total        used        free      shared  buff/cache   available
+Mem:            7931         622        4084           1        3418        7309
+Swap:              0           0           0
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/mmcblk0p2   29G  4.4G   24G  16% /
+commit: fccce28
+hours: 8 exposure: 30 keep: 60

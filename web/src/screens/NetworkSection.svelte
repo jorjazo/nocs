@@ -6,14 +6,17 @@
   import Chip from "../components/Chip.svelte";
   import ConfirmButton from "../components/ConfirmButton.svelte";
   import DeviceRow from "../components/DeviceRow.svelte";
+  import CountrySelect from "../components/CountrySelect.svelte";
   import SegmentedControl from "../components/SegmentedControl.svelte";
   import TextField from "../components/TextField.svelte";
+  import WifiPicker from "../components/WifiPicker.svelte";
   import { forgetNetwork, joinNetwork, setAccessPoint, setNetworkMode } from "../lib/api";
   import { auth } from "../lib/auth.svelte";
+  import { isCountry } from "../lib/countries";
   import { errorText } from "../lib/errors";
   import { i18n } from "../lib/i18n";
   import { live } from "../lib/live.svelte";
-  import type { NetworkState } from "../lib/types";
+  import type { AccessPointRequest, NetworkState } from "../lib/types";
 
   const t = $derived(i18n.t);
   const network = $derived(live.app.network ?? null);
@@ -50,11 +53,12 @@
 
   let ssid = $state("");
   let password = $state("");
+  let openNetwork = $state(false);
 
   async function join(event: SubmitEvent): Promise<void> {
     event.preventDefault();
     const name = ssid.trim();
-    if (await act("join", () => joinNetwork(name, password || null), t.network.joinStarted(name))) {
+    if (await act("join", () => joinNetwork(name, openNetwork ? null : password || null), t.network.joinStarted(name))) {
       password = "";
     }
   }
@@ -73,12 +77,10 @@
   async function saveAccessPoint(event: SubmitEvent): Promise<void> {
     event.preventDefault();
     if (!network) return;
-    const body: { ssid?: string; password?: string; country?: string } = {};
+    const body: AccessPointRequest = {};
     if (apName.trim() && apName.trim() !== network.ap_ssid) body.ssid = apName.trim();
     if (apPassword) body.password = apPassword;
-    if (country.trim() && country.trim().toUpperCase() !== network.country) {
-      body.country = country.trim().toUpperCase();
-    }
+    if (isCountry(country) && country !== network.country) body.country = country;
     if (Object.keys(body).length === 0) return;
     if (await act("ap", () => setAccessPoint(body), t.network.saved)) apPassword = "";
   }
@@ -130,16 +132,18 @@
 
       <h3 class="label muted subsection">{t.network.join}</h3>
       <form class="form" onsubmit={join}>
-        <TextField label={t.network.ssid} bind:value={ssid} required maxlength={32} />
-        <TextField
-          label={t.network.password}
-          hint={t.network.passwordHint}
-          type="password"
-          autocomplete="off"
-          bind:value={password}
-          maxlength={63} />
+        <WifiPicker label={t.network.ssid} bind:value={ssid} bind:open={openNetwork} />
+        {#if !openNetwork}
+          <TextField
+            label={t.network.password}
+            hint={t.network.passwordHint}
+            type="password"
+            autocomplete="off"
+            bind:value={password}
+            maxlength={63} />
+        {/if}
         {#if ssid.trim()}<p class="caption muted">{t.network.joinHint(ssid.trim(), hostname)}</p>{/if}
-        <div><Button variant="primary" type="submit" busy={busy === "join"}>{t.network.joinButton}</Button></div>
+        <div><Button variant="primary" type="submit" busy={busy === "join"} disabled={!ssid.trim()}>{t.network.joinButton}</Button></div>
       </form>
 
       <h3 class="label muted subsection">{t.network.accessPoint}</h3>
@@ -153,7 +157,7 @@
           bind:value={apPassword}
           minlength={8}
           maxlength={63} />
-        <TextField label={t.network.country} hint={t.network.countryHint} bind:value={country} maxlength={2} />
+        <CountrySelect label={t.network.country} hint={t.network.countryHint} bind:value={country} />
         <div><Button type="submit" busy={busy === "ap"}>{t.network.save}</Button></div>
       </form>
 

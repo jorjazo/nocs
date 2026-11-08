@@ -63,6 +63,7 @@ def wait(api: TestClient, condition: Callable[[dict[str, Any]], bool], timeout: 
         time.sleep(0.2)
 
 
+@pytest.mark.slow
 def test_phd2_runs_the_profiles_settings_and_takes_the_guide_camera(
     api: TestClient, phd2: Phd2Setup
 ) -> None:
@@ -159,6 +160,7 @@ def start_guiding(api: TestClient, **request: Any) -> dict[str, Any]:
     return job["result"]
 
 
+@pytest.mark.slow
 def test_calibrate_guide_and_stop_for_the_mount(api: TestClient) -> None:
     expect(api.put("/api/profiles/simulators", json=SIMULATORS), 204)
     expect(api.post("/api/equipment/connect", json={"profile": "simulators"}), 202)

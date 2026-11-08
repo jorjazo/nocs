@@ -8,7 +8,7 @@ operated from any phone, tablet or computer through the browser.
 The goal: the ease of use of a dedicated appliance, without the vendor lock-in.
 
 > **Status:** in development towards the first release, v0.1 (see the
-> [roadmap](docs/roadmap.md)). Not ready for a night under the sky yet.
+> [roadmap](docs/roadmap/)). Not ready for a night under the sky yet.
 
 ## Key ideas
 
@@ -28,7 +28,7 @@ The goal: the ease of use of a dedicated appliance, without the vendor lock-in.
 - [Product and architecture design](docs/design.md)
 - [UX and design system](docs/ux.md)
 - [Architecture decision records](docs/adr/)
-- [Roadmap](docs/roadmap.md)
+- [Roadmap](docs/roadmap/)
 
 ## Development
 
