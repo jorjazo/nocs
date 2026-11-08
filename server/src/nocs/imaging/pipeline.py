@@ -119,7 +119,7 @@ def analyze(
     stretched = stretch(_downscale(image, width))
     if bottom_up:
         stretched = np.ascontiguousarray(stretched[::-1])
-    _write_jpeg(Path(preview_path), stretched)
+    write_jpeg(Path(preview_path), stretched)
     return FrameAnalysis(
         preview=preview_path,
         width=int(stretched.shape[1]),
@@ -181,21 +181,35 @@ def stretch(
     out = np.empty(channels.shape, dtype=np.uint8)
     for c in range(channels.shape[2]):
         data = channels[..., c] / np.float32(65535.0)
-        sample = data[::2, ::2]
-        median = float(np.median(sample))
-        mad = float(np.median(np.abs(sample - median))) * 1.4826
-        shadows = min(max(median + shadows_sigma * mad, 0.0), 1.0)
-        scale = max(1.0 - shadows, 1e-6)
-        x = (median - shadows) / scale
-        midtones = (
-            x * (target_background - 1) / ((2 * target_background - 1) * x - target_background)
-            if 0 < x < 1
-            else 0.5
-        )
-        normalized = np.clip((data - shadows) / scale, 0.0, 1.0)
-        mapped = (midtones - 1) * normalized / ((2 * midtones - 1) * normalized - midtones)
-        out[..., c] = (np.clip(mapped, 0.0, 1.0) * 255).astype(np.uint8)
+        shadows, midtones = mtf_parameters(data[::2, ::2], target_background, shadows_sigma)
+        out[..., c] = (apply_mtf(data, shadows, midtones) * 255).astype(np.uint8)
     return out[..., 0] if image.ndim == 2 else out
+
+
+def mtf_parameters(
+    sample: Image, target_background: float = 0.25, shadows_sigma: float = -2.8
+) -> tuple[float, float]:
+    """Shadows clipping point and midtones balance (data normalised to 0..1) that put
+    the median of ``sample`` (no NaNs) at ``target_background``."""
+    median = float(np.median(sample))
+    mad = float(np.median(np.abs(sample - median))) * 1.4826
+    shadows = min(max(median + shadows_sigma * mad, 0.0), 1.0)
+    scale = max(1.0 - shadows, 1e-6)
+    x = (median - shadows) / scale
+    midtones = (
+        x * (target_background - 1) / ((2 * target_background - 1) * x - target_background)
+        if 0 < x < 1
+        else 0.5
+    )
+    return shadows, midtones
+
+
+def apply_mtf(data: Image, shadows: float, midtones: float) -> Image:
+    """The midtones transfer function on data normalised to 0..1, clipped to 0..1."""
+    scale = max(1.0 - shadows, 1e-6)
+    normalized = np.clip((data - shadows) / scale, 0.0, 1.0)
+    mapped = (midtones - 1) * normalized / ((2 * midtones - 1) * normalized - midtones)
+    return np.clip(mapped, 0.0, 1.0).astype(np.float32)
 
 
 def measure_stars(data: Mono16, *, binned: bool) -> tuple[int, float | None]:
@@ -269,7 +283,8 @@ def _downscale(image: NDArray[np.uint16], most: int = PREVIEW_WIDTH) -> Image:
     return np.asarray(cv2.resize(pixels, size, interpolation=cv2.INTER_AREA), dtype=np.float32)
 
 
-def _write_jpeg(path: Path, image: NDArray[np.uint8]) -> None:
+def write_jpeg(path: Path, image: NDArray[np.uint8]) -> None:
+    """Write a JPEG atomically (a reader never sees half a file)."""
     ok, encoded = cv2.imencode(".jpg", image, [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY])
     if not ok:
         raise ValueError("JPEG encoding failed")
