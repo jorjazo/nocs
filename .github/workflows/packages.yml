@@ -99,6 +99,9 @@ jobs:
         run: |
           prerelease=()
           [[ $GITHUB_REF_NAME == *rc* ]] && prerelease=(--prerelease)
-          gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes "${prerelease[@]}" \
+          notes=(--generate-notes)
+          start=$(packaging/repo/notes-start-tag.sh "$GITHUB_REF_NAME")
+          [[ -n $start ]] && notes+=(--notes-start-tag "$start")
+          gh release create "$GITHUB_REF_NAME" --verify-tag "${notes[@]}" "${prerelease[@]}" \
             || true  # the Image workflow may have made it first
           gh release upload "$GITHUB_REF_NAME" --clobber debs/nocs-amd64/*.deb debs/nocs-arm64/nocs_*_arm64.deb
