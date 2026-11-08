@@ -10,6 +10,7 @@
 #   ASTAP_DB  its star database                        default: next to ASTAP
 #   OUT       results directory                        default: dev/tools/soak/results/<host>-<date>
 #   KEEP      frame files kept on disk                 default: 60
+#   STACK     1: live stacking on all night (ADR 0040)  default: off
 #   ARGS      more options for soak.py run
 #   DOWN      1: stop the simulators afterwards        default: 1
 set -euo pipefail
@@ -37,7 +38,7 @@ COMPOSE=(docker compose -p nocs-soak -f "$HERE/compose.yaml")
     free -m
     df -h "$OUT"
     echo "commit: $(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
-    echo "hours: $HOURS exposure: $EXPOSURE keep: $KEEP"
+    echo "hours: $HOURS exposure: $EXPOSURE keep: $KEEP stack: ${STACK:-0}"
 } > "$OUT/system.txt"
 
 "${COMPOSE[@]}" up -d --build
@@ -71,7 +72,7 @@ status=0
 "$ROOT/server/.venv/bin/python" "$HERE/soak.py" run --url http://127.0.0.1:28000 \
     --nocsd-pid "$NOCSD" --containers nocs-soak-indi-1,nocs-soak-phd2-1 \
     --out "$OUT" --storage "$OUT/data" --hours "$HOURS" --exposure "$EXPOSURE" \
-    --keep-frames "$KEEP" ${ARGS:-} || status=$?
+    --keep-frames "$KEEP" ${STACK:+$([ "$STACK" = 1 ] && echo --stack)} ${ARGS:-} || status=$?
 "$ROOT/server/.venv/bin/python" "$HERE/soak.py" summarize "$OUT" > /dev/null || true
 echo "results: $OUT (status $status)"
 exit $status

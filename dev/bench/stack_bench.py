@@ -7,13 +7,14 @@ and the stack's own size.
 
 Frames are synthetic by default: a 26 MP RGGB field like the reference rig's
 (6248x4176), with dithers of a few pixels and a meridian flip (180 degrees) half
-way. ``--frames DIR`` stacks the FITS files of a directory instead, in name order
-(the bench's simulator samples, or a night's lights of one target).
+way. ``--frames DIR`` stacks the FITS files of a directory instead, in name order:
+a night's lights of one target (``<drive>/NOCS/<night>/Light/<target>/``). Frames
+that do not fit the first (another camera, size or Bayer pattern) are skipped.
 
 Usage (from the repository root):
 
     uv run --project server python dev/bench/stack_bench.py [--count 12] [--json out.json]
-    uv run --project server python dev/bench/stack_bench.py --frames dev/bench/samples
+    uv run --project server python dev/bench/stack_bench.py --frames <dir of one target's lights>
 """
 
 from __future__ import annotations
@@ -37,6 +38,7 @@ from astropy.io import fits  # pyright: ignore[reportMissingTypeStubs]
 from nocs.imaging import pipeline
 from nocs.stacking import masters, stack
 from nocs.stacking.register import Transform
+from nocs.stacking.stack import FrameError
 
 _fits: Any = fits
 
@@ -105,13 +107,17 @@ def run(paths: list[Path], previews: Path) -> dict[str, Any]:
     preview_times: list[float] = []
     outcomes: list[str] = []
     for i, path in enumerate(paths):
-        added = stack.add_frame(
-            "bench",
-            str(path),
-            None,
-            new=i == 0,
-            preview_path=str(previews / f"stack{i}.jpg"),
-        )
+        try:
+            added = stack.add_frame(
+                "bench",
+                str(path),
+                None,
+                new=i == 0,
+                preview_path=str(previews / f"stack{i}.jpg"),
+            )
+        except FrameError as e:
+            print(f"  {path.name}: skipped, {e}", flush=True)
+            continue
         start = time.perf_counter()
         pipeline.analyze(str(path), str(previews / f"preview{i}.jpg"))
         preview_times.append(time.perf_counter() - start)

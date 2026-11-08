@@ -534,6 +534,8 @@ class Night:
         }
         (self.out / "sequence.json").write_text(json.dumps(sequence, indent=2))
         await self.call("PUT", "/api/sequences/soak", ok=(204,), json=sequence)
+        # Said either way: a results directory used again keeps nocsd's stacking.json.
+        await self.call("PUT", "/api/stack", ok=(204,), json={"on": self.args.stack})
         started = await self.call("POST", "/api/sequences/soak/start", ok=(202,))
         return started["job"]
 
@@ -561,6 +563,9 @@ class Night:
             for task in tasks:
                 task.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
+            if self.args.stack:
+                with contextlib.suppress(Exception):
+                    await self.end_stacks()
             await self.flush_sample()
             with contextlib.suppress(Exception):
                 await self.save_report()
@@ -570,9 +575,21 @@ class Night:
         print(f"night over: {outcome}", flush=True)
         return 0 if outcome == "completed" else 1
 
+    async def end_stacks(self) -> None:
+        """Switch live stacking off (which saves every stack) and keep what was saved."""
+        await self.call("PUT", "/api/stack", ok=(204,), json={"on": False})
+        stacks = await self.call("GET", "/api/frames", params={"type": "stack", "limit": 1000})
+        self.append("stacks.json", json.dumps(stacks, indent=1) + "\n")
+
+    async def save_stack(self) -> None:
+        """Save the stack as it is, as a user would now and then (409: none yet)."""
+        with contextlib.suppress(httpx.HTTPError, RuntimeError):
+            await self.call("POST", "/api/stack/save", ok=(200, 409))
+
     async def watch(self, job: str) -> str:
         grace = timedelta(minutes=20)
         stopping = False
+        next_save = time.monotonic() + 3600
         while True:
             with contextlib.suppress(TimeoutError):
                 await asyncio.wait_for(self.interrupted.wait(), 5)
@@ -593,6 +610,9 @@ class Night:
                 or run.get("state") == "finished"
             ):
                 return str(run.get("outcome"))
+            if self.args.stack and time.monotonic() > next_save:
+                next_save += 3600
+                await self.save_stack()
             if now_utc() > self.ends + grace:
                 self.note("the run did not end on time: stopping it")
                 await self.call("POST", "/api/sequence/stop", ok=(204,), json={"run_end": True})
@@ -722,6 +742,12 @@ class Night:
             self._preview = preview
             with contextlib.suppress(asyncio.QueueFull):
                 self.downloads.put_nowait(("preview", preview))
+        # The phone shows the live stack too, when it is on.
+        stacked = dig(self.state, "stack", "current", "preview", "url")
+        if stacked and stacked != getattr(self, "_stacked", None):
+            self._stacked = stacked
+            with contextlib.suppress(asyncio.QueueFull):
+                self.downloads.put_nowait(("preview", stacked))
         frame = dig(self.state, "cameras", "main_camera", "last_frame") or {}
         frame_id = frame.get("id")
         if frame_id is not None and frame_id not in self.frames_seen:
@@ -788,10 +814,11 @@ class Night:
                     errors.write(line + "\n")
 
     def prune(self) -> None:
-        # Saved frames only: incoming/ holds guide frames for a second (ADR 0023).
+        # Saved frames only: incoming/ holds guide frames for a second (ADR 0023). Saved
+        # live stacks stay: there are a few, and the summary reads them.
         found: list[tuple[float, Path]] = []
         for path in (self.storage / "NOCS").rglob("*"):
-            if path.suffix.lower() in (".fits", ".fit", ".xisf"):
+            if path.suffix.lower() in (".fits", ".fit", ".xisf") and "Stack" not in path.parts:
                 with contextlib.suppress(OSError):  # moved or deleted meanwhile
                     found.append((path.stat().st_mtime, path))
         frames = [path for _, path in sorted(found)]
@@ -823,7 +850,29 @@ class Night:
             "pruned": self.pruned,
             **window.summary(),
         }
+        if self.args.stack:
+            sample["stack"] = stack_sample(self.state.get("stack"))
         self.append("samples.jsonl", json.dumps(sample) + "\n")
+
+
+def stack_sample(stack: Any) -> dict[str, Any] | None:
+    """The live stack as the phone sees it (ADR 0040): counts and the worker's last time."""
+    if not isinstance(stack, dict):
+        return None
+    current = stack.get("current") or {}
+    last = current.get("last") or {}
+    saved = stack.get("saved") or {}
+    return {
+        "status": stack.get("status"),
+        "id": current.get("id"),
+        "frames": current.get("frames"),
+        "rejected": current.get("rejected"),
+        "skipped": current.get("skipped"),
+        "seconds": last.get("seconds"),
+        "time": last.get("time"),
+        "saved": saved.get("frame_id"),
+        "error": stack.get("error"),
+    }
 
 
 # -- summary --------------------------------------------------------------------------
@@ -942,6 +991,37 @@ def summarize(out: Path, warmup: float) -> str:
         f"- downloads: {sum(s['previews'] for s in samples)} previews (slowest {fmt(max((s['preview_max'] or 0) for s in samples))} ms),"
         f" {sum(s['fits'] for s in samples)} FITS; {sum(s['download_failures'] for s in samples)} failures",
     ]
+    stacked = [s["stack"] for s in samples if s.get("stack")]
+    if stacked:
+        per_stack: dict[str, dict[str, Any]] = {}
+        for x in stacked:
+            if x["id"]:
+                per_stack[x["id"]] = x  # its latest sample
+        # Each frame's time once: a stale state is sampled again and again (autofocus).
+        per_frame = {
+            (x["id"], x.get("time")): x["seconds"] for x in stacked if x["seconds"] is not None
+        }
+        seconds = list(per_frame.values())
+        lines += [
+            "",
+            "## Live stack",
+            "",
+            f"- {len(per_stack)} stacks seen in samples; at their last sample: frames stacked"
+            f" {sum(x['frames'] or 0 for x in per_stack.values())},"
+            f" left out {sum(x['rejected'] or 0 for x in per_stack.values())},"
+            f" skipped {sum(x['skipped'] or 0 for x in per_stack.values())}",
+            f"- worker time per frame ({len(seconds)} frames sampled):"
+            f" median {fmt(statistics.median(seconds) if seconds else None, 2)} s,"
+            f" max {fmt(max(seconds) if seconds else None, 2)} s",
+            f"- errors: {sorted({x['error'] for x in stacked if x['error']}) or 'none'}",
+        ]
+        saved_file = out / "stacks.json"
+        if saved_file.exists():
+            saved = json.loads(saved_file.read_text())
+            lines.append(
+                f"- saved stacks (catalog, at the end): {len(saved)},"
+                f" {sum(x['exposure'] for x in saved) / 3600:.1f} h of exposure in them"
+            )
     log: Counter[str] = Counter()
     for s in samples:
         log.update(s["log"])
@@ -1003,6 +1083,7 @@ def main() -> int:
     run.add_argument("--ws-stay", type=pair_of_floats, default=(120.0, 900.0), help="min,max s")
     run.add_argument("--ws-sleep", type=pair_of_floats, default=(1.0, 60.0), help="min,max s")
     run.add_argument("--seed", type=int, default=1)
+    run.add_argument("--stack", action="store_true", help="live stacking on all night (ADR 0040)")
     summary = sub.add_parser("summarize")
     summary.add_argument("out", type=Path)
     summary.add_argument("--warmup", type=float, default=600, help="seconds left out of slopes")

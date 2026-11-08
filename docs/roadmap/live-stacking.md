@@ -1,6 +1,6 @@
 # Live stacking plan — EAA
 
-Status: decided, implementation starting · Last updated: 2026-11-01 · Roadmap: after [v1.0](v1.0.md), not part of it · Decision: [ADR 0040](../adr/0040-live-stacking.md)
+Status: S1–S6 implemented (stacked PRs), S7 to run in the lab · Last updated: 2026-11-08 · Roadmap: after [v1.0](v1.0.md), not part of it · Decision: [ADR 0040](../adr/0040-live-stacking.md)
 
 Goal: as the main camera's light frames come in, NOCS registers each one on the
 first, adds it to a running stack and shows the growing stack on the phone, so a
@@ -45,7 +45,7 @@ sub is gone from the stack; with darks and flats in the library they are applied
 | S4 | Service and API | `LiveStackService`: on/off, hook on main-camera lights from `_finish` (background, newest frame wins), new stack on a change of target, filter, exposure, gain, binning or size, or after 3 frames that do not register; state `stack`; `PUT /api/stack` (on/off), `/api/stack/reset`, `/api/stack/save`, `PUT /api/stack/look`; schemas + TS types; worker death handled | Unit tests with a fake worker; API tests; simulators: a series with mount nudges between frames (GSC stars) stacks every frame and reports the shifts | Implemented: `nocs.stacking.service`, `api/stacking.py`, the capture hook; 22 tests with a fake worker and the API; `test_stacking_integration.py` against the simulators (CI runs it; not run in the cloud session, whose network blocks the INDI PPA) |
 | S5 | Web UI | Live view: *Stack* toggle, the stack in the viewer (switch to the last sub), frames / rejected / total time, *New stack*, *Save*, look sheet (background, strength, saturation); Session monitor shows the stack while a sequence stacks; en/es; `docs/ux.md` | `pnpm check`, `pnpm test`; browser against the simulators, phone and wide, Night mode; an observer sees it | Implemented: Live view card, look sheet, Stack/Frame choice in Live view and the Session monitor; checked in a browser (phone and wide, Dusk and Night, en and es) on nocsd with a stack of synthetic frames rendered by the worker, not on the simulators (blocked here); the monitor and the observer view not looked at |
 | S6 | Saving | Stack as FITS (float32, RGB cube) + JPEG in `<night>/Stack/<target>/`, catalogued as `stack` (ignored by the calibration library), at the end of a stack and on demand; listed under the night and in its zip; WCS from a solve of the reference when ASTAP is available | Unit tests (catalog migration, layout); API test; the saved FITS opens in Siril/astropy with the right orientation and WCS | Implemented, without the WCS (left for later): through `StorageService.save` (headers, names, reserve, catalog), no migration (the frame type is free text); `POST /api/stack/save`, `GET /api/frames/{id}/image`; Save in Live view; the night's list links the picture; a test saves a real stack through the real storage and reads it back with astropy |
-| S7 | Lab and field | Bench on the lab Pi; a soak night with stacking on (memory, worker time, event loop); field test checklist item (EAA on a galaxy, dithers and a flip) | Lab Pi; field test | Planned |
+| S7 | Lab and field | Bench on the lab Pi; a soak night with stacking on (memory, worker time, event loop); field test checklist item (EAA on a galaxy, dithers and a flip) | Lab Pi; field test | Ready to run (below): the bench and the soak test take live stacking; not run (no lab Pi from the cloud session) |
 
 S1 and S3's master building are independent; S2 needs S1; S4 needs S2; S5 needs
 S4; S6 needs S4 (and S5 for its button); S3 slots in before S4 or after S5
@@ -282,13 +282,59 @@ The stack costs about as much as the preview the worker already makes, so
 ~1.1–1.5 s on the Pi; stack arrays 187 MB, peak RSS of a process doing both 850 MB
 (the preview's full-resolution debayer included; a first measure of 1.13 GB counted
 the parent's peak, as `ru_maxrss` survives exec). A dark master from ten frames:
-5.5 s, 280 MB peak (S3). The stars and the stretch in the render are
+5.5 s, 280 MB peak (S3).
+
+**After the review's fixes** (matching each frame to the reference, a warp per
+channel for turned frames, corners filled with sky), same VM and bench, half the
+frames turned by a flip: stack 1.48 s per frame (was 1.18); warp 207 ms median
+(a turned frame warps each channel on its own, ~110 ms; a dithered one does not,
+~20 ms; both include the match to the reference, ~60 ms), render 466 ms, peak
+804 MB. The stars and the stretch in the render are
 the largest steps: a lookup table for the stretch is the first saving to try if
 the Pi needs one.
 
 Possible saving if the Pi is slower than estimated: reuse the preview's star
 detection (it already bins 2×2 on colour frames, i.e. superpixel resolution) by
 doing preview and stack in one worker call that loads the file once.
+
+## S7: lab and field (to run)
+
+On the lab Pi 5 (8 GB, microSD), from `main` with the stages merged:
+
+1. **Per-frame cost and memory**, synthetic 26 MP RGGB frames with dithers and a
+   flip, and a dark master of the same frames:
+
+   ```sh
+   uv run --project server python dev/bench/stack_bench.py --count 12 --json stack.json
+   ```
+
+   Then real frames: `--frames <drive>/NOCS/<night>/Light/<target>/` (one target's
+   lights; the bench's own samples are three different fields and will not stack).
+   Expect ≤ 3 s of stack per frame and ≤ 1 GB peak.
+2. **A night with stacking on**: the soak test with `STACK=1` turns live stacking
+   on before its sequence starts, records the stack in every sample, downloads the
+   stack's previews like the phone, saves the stack every hour (as a user would)
+   and, at the end, switches stacking off, which saves every stack, and lists the
+   saved ones (`stacks.json`). Its summary gets a *Live stack* section (stacks,
+   frames stacked and left out, the worker's time per frame, saved stacks, errors):
+
+   ```sh
+   STACK=1 HOURS=8 EXPOSURE=30 ASTAP=/opt/astap/astap_cli dev/tools/soak/run.sh
+   ```
+
+   Compare the worker's memory and CPU and the event loop's latency with the
+   eight-hour night without it ([soak spike](../spikes/pi5-soak.md)). The
+   simulator's camera is mono, so its three filters in batches make three stacks,
+   one per filter, each taken up again when its filter comes back (not a new stack
+   at every change). Autofocus and pointing frames never reach a stack; dithers and
+   the meridian flip do not end one. The soak's pruning leaves saved stacks alone.
+3. **Lab rig** (ASI2600MC on the bench, capped and then on a lit target or the
+   sky through a window): darks from the library applied, the stack shown on a
+   phone ≤ 5 s after each frame is saved.
+4. **Field test** (a clear night): EAA on a galaxy with 30 s frames, dithering every
+   3 frames and a meridian flip in the middle; a satellite trail through one frame
+   gone from the stack; an observer's phone sees the stack; the saved stack opens
+   in Siril.
 
 ## Testing
 
