@@ -366,7 +366,17 @@ export interface AccessPointRequest {
   ssid?: string | null;
 }
 /**
- * ``GET /api/sky/tonight``: the night at the active profile's site.
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "ActiveSiteRequest".
+ */
+export interface ActiveSiteRequest {
+  /**
+   * A saved site's id; None: no site is active.
+   */
+  id: string | null;
+}
+/**
+ * ``GET /api/sky/tonight``: the night at the active site.
  *
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "Almanac".
@@ -576,6 +586,7 @@ export interface AppState {
    */
   power?: PowerState | null;
   sequence?: SequenceState | null;
+  sites?: SitesState | null;
   solver?: SolverState | null;
   storage?: StorageState | null;
   system?: SystemState | null;
@@ -1245,9 +1256,9 @@ export interface GpsState {
    */
   longitude: number | null;
   /**
-   * A 3D fix more than 0.01° or 50 m from the active profile's site, or a profile without one: the app offers the GPS's site. None without a 3D fix or profile.
+   * The saved site nearest to a 3D fix within 500 m (ADR 0038): the app offers it when it is not the active one, and to save a new site when there is none.
    */
-  site_differs: boolean | null;
+  site: string | null;
   /**
    * The GPS's time of the fix, UTC.
    */
@@ -1624,9 +1635,9 @@ export interface MountState {
    */
   site: MountSite | null;
   /**
-   * The mount's site against the active profile's.
+   * The mount's site against the box's active site.
    */
-  site_check: "same" | "different" | "unknown" | "no_profile_site";
+  site_check: "same" | "different" | "unknown" | "no_site";
   /**
    * NOCS sent the site since the mount became ready.
    */
@@ -2143,6 +2154,24 @@ export interface SequencePlanRow {
   done: number;
   exposure: number;
   filter: string | null;
+}
+/**
+ * The saved sites and the box's active one (ADR 0038).
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "SitesState".
+ */
+export interface SitesState {
+  /**
+   * The active site's id; None: no site is active.
+   */
+  active: string | null;
+  /**
+   * Every saved site, by id.
+   */
+  saved: {
+    [k: string]: Site;
+  };
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -3770,6 +3799,16 @@ export interface FrameRecord {
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "GpsSiteRequest".
+ */
+export interface GpsSiteRequest {
+  /**
+   * The name of a new site, when the GPS is at none of the saved ones.
+   */
+  name?: string;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "GuideRequest".
  */
 export interface GuideRequest {
@@ -3918,7 +3957,7 @@ export interface MountMoveRequest {
  */
 export interface MountSiteRequest {
   /**
-   * None: the active profile's site.
+   * None: the active site.
    */
   site?: Site | null;
 }
@@ -4225,7 +4264,6 @@ export interface Profile {
    */
   imaging?: Optics | null;
   name: string;
-  site?: Site | null;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -4591,6 +4629,13 @@ export interface ShutdownRequest {
   force?: boolean;
 }
 /**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "SiteCreated".
+ */
+export interface SiteCreated {
+  id: string;
+}
+/**
  * What the framing chart draws around a point (ADR 0020).
  *
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -4631,7 +4676,7 @@ export interface SkyChart {
   truncated: boolean;
 }
 /**
- * ``GET /api/sky/visibility``: targets during a night at the active profile's site.
+ * ``GET /api/sky/visibility``: targets during a night at the active site.
  *
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "SkyVisibility".

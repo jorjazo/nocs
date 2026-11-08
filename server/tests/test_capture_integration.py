@@ -16,6 +16,7 @@ import pytest
 from astropy.io import fits  # pyright: ignore[reportMissingTypeStubs]
 from fastapi.testclient import TestClient
 from owner import pair_owner
+from sites import use_site
 
 from nocs.api import create_app
 from nocs.api.schemas import AppState
@@ -97,10 +98,11 @@ def api(
         indi_upload_dir=Path(DRIVER_UPLOADS) if transfer else None,
         indi_upload_dir_local=transfer,
     )
-    profile = {**SIMULATORS, "devices": dict(SIMULATORS["devices"]), "site": SITE}
+    profile = {**SIMULATORS, "devices": dict(SIMULATORS["devices"])}
     profile["devices"].pop("weather")  # needs the FIFO; not relevant here
     with TestClient(create_app(settings)) as client:
         pair_owner(client)
+        use_site(client, SITE)
         # Never a drive that happens to be mounted on the test machine.
         response = client.put("/api/storage/destination", json={"destination": "internal"})
         assert response.status_code == 204, response.text

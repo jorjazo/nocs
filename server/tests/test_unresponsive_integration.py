@@ -19,6 +19,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 from owner import pair_owner
+from sites import use_site
 
 from nocs.api import create_app
 from nocs.api.schemas import AppState
@@ -99,13 +100,14 @@ def api(
         config_dir=tmp_path_factory.mktemp("config"),
         data_dir=tmp_path_factory.mktemp("data"),
     )
-    profile = {**SIMULATORS, "devices": dict(SIMULATORS["devices"]), "site": SITE}
+    profile = {**SIMULATORS, "devices": dict(SIMULATORS["devices"])}
     profile["devices"].pop("weather")  # not relevant here
     with pytest.MonkeyPatch.context() as patch:
         patch.setattr(devices_base, "SILENCE", SILENCE)
         patch.setattr(devices_base, "PROBE_TIMEOUT", PROBE_TIMEOUT)
         with TestClient(create_app(settings)) as client:
             pair_owner(client)
+            use_site(client, SITE)
             response = client.put("/api/storage/destination", json={"destination": "internal"})
             assert response.status_code == 204, response.text
             assert client.put("/api/profiles/sim", json=profile).status_code == 204

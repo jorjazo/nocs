@@ -3,6 +3,7 @@
 
 import type {
   AccessPointRequest,
+  ActiveSiteRequest,
   Almanac,
   AuthStatus,
   AutofocusRequest,
@@ -29,6 +30,7 @@ import type {
   FrameTypeName,
   FocuserBacklashRequest,
   FocuserMoveRequest,
+  GpsSiteRequest,
   GuideRequest,
   GuideSteps,
   HorizontalGoto,
@@ -58,6 +60,7 @@ import type {
   SessionSummary,
   ShutdownRequest,
   Site,
+  SiteCreated,
   SkyChart,
   SkyVisibility,
   SolvedFrames,
@@ -192,9 +195,31 @@ export function setHostname(name: string): Promise<void> {
   return request("PUT", "/api/system/hostname", { name } satisfies HostnameRequest);
 }
 
-// The GPS's position becomes the active profile's site, and the mount's (ADR 0029).
-export function useGpsSite(): Promise<Site> {
-  return request("POST", "/api/gps/site");
+// -- Sites (ADR 0038) -------------------------------------------------------------
+
+// A new saved site; returns its id.
+export async function addSite(site: Site): Promise<string> {
+  return (await request<SiteCreated>("POST", "/api/sites", site)).id;
+}
+
+// The active site only while no job holds the mount (409).
+export function putSite(id: string, site: Site): Promise<void> {
+  return request("PUT", `/api/sites/${encodeURIComponent(id)}`, site);
+}
+
+export function deleteSite(id: string): Promise<void> {
+  return request("DELETE", `/api/sites/${encodeURIComponent(id)}`);
+}
+
+// Refused (409) while a job holds the mount; the mount follows.
+export function activateSite(id: string | null): Promise<void> {
+  return request("PUT", "/api/sites/active", { id } satisfies ActiveSiteRequest);
+}
+
+// The saved site the GPS is at becomes the active one, or else its position is
+// saved as a new site (named `name`) and made active; returns the site's id.
+export async function useGpsSite(name = ""): Promise<string> {
+  return (await request<SiteCreated>("POST", "/api/gps/site", { name } satisfies GpsSiteRequest)).id;
 }
 
 // The box leaves its access point to join in a moment (202): the phone must follow it.
@@ -457,7 +482,7 @@ export function sendMountTime(): Promise<void> {
   return request("POST", "/api/mount/time");
 }
 
-// Without a site, the active profile's.
+// Without a site, the active one.
 export function sendMountSite(body: MountSiteRequest = {}): Promise<void> {
   return request("PUT", "/api/mount/site", body);
 }
@@ -561,7 +586,7 @@ export function getTargetSources(): Promise<CatalogSource[]> {
 
 // -- Tonight's sky and target (stages 3.5, 3.6) ------------------------------------------
 
-// The night the server's clock is in, at the active profile's site.
+// The night the server's clock is in, at the active site.
 export function getTonight(): Promise<Almanac> {
   return request("GET", "/api/sky/tonight");
 }

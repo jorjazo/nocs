@@ -37,6 +37,7 @@ server/   Python package `nocs` (nocsd): indi/ (protocol + async client, driver
           solving/ (ASTAP, fields of view), pointing/ (solve and sync, centre),
           align/ (polar alignment: axis from three solves, knobs; ADR 0034),
           sky/ (a night's almanac at the site, targets' visibility),
+          sites/ (the saved sites and the box's active one, ADR 0038),
           targets/ (bundled OpenNGC catalog and its search, ADR 0019; Tycho-2
           stars for the framing chart, ADR 0020; tonight's target, `plan`),
           system/ (nocs-system, the root helper: stdlib + anyio only, ADR 0027),
@@ -73,7 +74,8 @@ NOCS_WEB_DIR=web/dist NOCS_INDI_FIFO=dev/.run/fifo NOCS_INDI_DRIVERS_DIR=dev/.ru
   NOCS_INDI_UPLOAD_DIR=/run/indi/uploads NOCS_INDI_UPLOAD_DIR_LOCAL=dev/.run/uploads \
   NOCS_PHD2_SETTINGS=dev/.run/phd2.phd NOCS_PHD2_INDI_HOST=indi \
   uv run --project server nocsd               # http://127.0.0.1:8000
-# profiles live in ~/.config/nocs/profiles/ (NOCS_CONFIG_DIR); dev/profiles/ has the simulators
+# profiles live in ~/.config/nocs/profiles/ (NOCS_CONFIG_DIR); dev/profiles/ has the simulators,
+# and dev/sites.json an example site (copy it to ~/.config/nocs/sites.json; ADR 0038)
 # the first visit sets the owner passphrase and pairs that browser (ADR 0014);
 # rm ~/.config/nocs/auth.json and restart nocsd to start over. From a shell:
 curl -c jar -H 'Content-Type: application/json' -d '{"passphrase": "…", "name": "curl"}' \

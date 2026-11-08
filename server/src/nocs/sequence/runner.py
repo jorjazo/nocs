@@ -856,7 +856,7 @@ class Runner:
     def _where(self) -> sky.Place:
         place = self._place()
         if place is None:
-            raise ValueError("the site is unknown: set it in the profile")
+            raise ValueError("the site is unknown: choose the site")
         return place
 
     async def _wait_for(self, wait: Wait, path: tuple[str, ...], target: Target | None) -> None:

@@ -1,0 +1,45 @@
+{
+  "active": "diaguitas",
+  "sites": {
+    "diaguitas": {
+      "name": "Diaguitas (example)",
+      "latitude": -30.03,
+      "longitude": -70.67,
+      "elevation": 700,
+      "horizon": [
+        {
+          "azimuth": 0,
+          "altitude": 30
+        },
+        {
+          "azimuth": 30,
+          "altitude": 26
+        },
+        {
+          "azimuth": 60,
+          "altitude": 14
+        },
+        {
+          "azimuth": 90,
+          "altitude": 6
+        },
+        {
+          "azimuth": 180,
+          "altitude": 3
+        },
+        {
+          "azimuth": 270,
+          "altitude": 6
+        },
+        {
+          "azimuth": 300,
+          "altitude": 14
+        },
+        {
+          "azimuth": 330,
+          "altitude": 26
+        }
+      ]
+    }
+  }
+}

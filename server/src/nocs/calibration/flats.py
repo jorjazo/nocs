@@ -248,7 +248,7 @@ class FlatsService:
         """The Sun's altitude now and the twilight windows of the next day."""
         site = self._site()
         if site is None:
-            raise FlatsError("sky flats need the site: set it in the profile")
+            raise FlatsError("sky flats need the site: choose the site")
         now = self._now()
         return twilight.sun(site, now)[0], twilight.windows(site, now)
 
@@ -320,7 +320,7 @@ class FlatsService:
         """Wait for the twilight window, then point high up opposite the Sun, not tracking."""
         site = self._site()
         if site is None:
-            raise FlatsError("sky flats need the site: set it in the profile")
+            raise FlatsError("sky flats need the site: choose the site")
         mount = self._mount()
         if mount is None:
             raise FlatsError("sky flats need the mount")

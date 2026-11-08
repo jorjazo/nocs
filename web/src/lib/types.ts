@@ -6,6 +6,7 @@ import type * as Api from "./generated/api";
 
 export type {
   AccessPointRequest,
+  ActiveSiteRequest,
   Almanac,
   AppState,
   AuthStatus,
@@ -65,6 +66,7 @@ export type {
   FrameInfo,
   FrameRecord,
   FrameTypeName,
+  GpsSiteRequest,
   GpsState,
   GuideEntryModel as GuideEntry,
   GuideRequest,
@@ -141,6 +143,8 @@ export type {
   SetPropertyRequest,
   ShutdownRequest,
   Site,
+  SiteCreated,
+  SitesState,
   SkyChart,
   SkyVisibility,
   SolutionState,

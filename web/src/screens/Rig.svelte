@@ -43,6 +43,7 @@
   import MountSheet from "./devices/MountSheet.svelte";
   import PowerSheet from "./devices/PowerSheet.svelte";
   import NetworkSection from "./NetworkSection.svelte";
+  import SiteSection from "./SiteSection.svelte";
   import StorageDrives from "./StorageDrives.svelte";
   import SystemSection from "./SystemSection.svelte";
   import type { CameraState, DeviceStatusName, Optics, PairedDevice, Profile, Role, RoleState } from "../lib/types";
@@ -288,6 +289,7 @@
       {/if}
     {/snippet}
   </EmptyState>
+  <div class="sections"><SiteSection /></div>
 {:else if equipment}
   <div class="sections">
     <section class="card equipment" aria-labelledby="equipment-title">
@@ -346,6 +348,8 @@
         {/each}
       </section>
     {/if}
+
+    <SiteSection />
 
     <section aria-labelledby="devices-title">
       <div class="line section-title">

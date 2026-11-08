@@ -702,7 +702,7 @@ async def test_a_sequence_that_asks_about_the_sky_needs_the_site(setup: Any) -> 
     dark = lrgb()
     dark.targets.conditions.append(UntilDawn())
     service.put("dark", dark)
-    with pytest.raises(ValueError, match="set the site"):
+    with pytest.raises(ValueError, match="choose the site"):
         service.start("dark")
 
 
