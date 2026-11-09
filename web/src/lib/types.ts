@@ -95,6 +95,7 @@ export type {
   LoopRequest,
   MountLimits,
   MountMotion,
+  MountMoveRequest,
   MountSiteRequest,
   MountState,
   MoonNight,

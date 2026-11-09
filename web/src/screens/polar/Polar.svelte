@@ -112,7 +112,8 @@
   function goToStart(): void {
     if (!site) return;
     const start = suggestedStart(site.latitude, site.longitude, new Date());
-    void act("goto", () => gotoMount({ frame: "jnow", ra: start.ra, dec: start.dec }));
+    // Guiding would only hold the mount: the alignment needs it, so it stops first.
+    void act("goto", () => gotoMount({ frame: "jnow", ra: start.ra, dec: start.dec, stop_guiding: true }));
   }
 
   function start(): void {
