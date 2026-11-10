@@ -1,6 +1,6 @@
 [project]
 name = "nocs"
-version = "0.1.0rc2"
+version = "0.1.0rc3"
 description = "NOCS core daemon (nocsd): web-first control of astrophotography rigs over INDI"
 license = "AGPL-3.0-or-later"
 requires-python = ">=3.12,<3.14"  # sep has no arm64 wheels for 3.14 yet
