@@ -7,6 +7,7 @@ import type {
   CenteringState,
   ConnectionName,
   DeviceStatusName,
+  FailureKind,
   FrameTypeName,
   SavedFrameTypeName,
   PolarAlignmentState,
@@ -1381,8 +1382,23 @@ export const en = {
       ended: (outcome: string) => `Ended: ${outcome}`,
       failed: (message: string) => `Failed: ${message}`,
       recovery: (message: string) => `Recovery: ${message}`,
+      recovered: (kind: string, failures: number) =>
+        `Recovered from ${kind} (${failures} ${failures === 1 ? "failure" : "failures"})`,
+      failureKind: {
+        device: "a device failure",
+        clouds: "clouds",
+        guiding: "lost guiding",
+        focus: "a failed autofocus",
+        solve: "a failed plate solve",
+        flip: "a failed meridian flip",
+        storage: "a storage failure",
+        other: "a failure",
+      } satisfies Record<FailureKind, string>,
       skipped: (what: string) => `Skipped: ${what}`,
-      trigger: (reason: string) => `Autofocus due: ${reason}`,
+      focusDue: (reason: string) => `Autofocus due: ${reason}`,
+      ditherDue: (frames: number) => `Dither due: ${frames} ${frames === 1 ? "frame" : "frames"} since the last`,
+      recenterDue: (frames: number) =>
+        `Pointing check due: ${frames} ${frames === 1 ? "frame" : "frames"} since the last`,
       condition: {
         until_time: "Time is up",
         until_dawn: "Dawn: the night is over",

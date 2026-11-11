@@ -251,6 +251,10 @@ class EventKind(StrEnum):
     RESUMED = "resumed"
     FAILED = "failed"
     RECOVERY = "recovery"
+    """Something the recovery did: a driver restarted, a power cycle, the meridian guard."""
+    RECOVERED = "recovered"
+    """A step that failed went through at a later attempt: its policy's retries (or the
+    user, after a ``pause``) got the run past the failures."""
     SKIPPED = "skipped"
     ENDING = "ending"
     ENDED = "ended"
@@ -613,9 +617,10 @@ class Runner:
         up, and the failure itself when it ends the session. *End* tries each step once.
         """
         tries = 0
+        failed: list[FailureKind] = []
         while True:
             try:
-                return await self._run_step(path, step)
+                done = await self._run_step(path, step)
             except Exception as e:
                 if self._state is RunState.ENDING:
                     raise
@@ -630,6 +635,7 @@ class Runner:
                 if isinstance(e, StepError) and e.frame is not None:
                     data["frame"] = e.frame  # kept, and marked in the report (ADR 0032)
                 self._event(EventKind.FAILED, str(e) or type(e).__name__, path, data)
+                failed.append(kind)
                 if again:
                     tries += 1
                     if isinstance(e, StepError) and e.kind == "device":
@@ -648,6 +654,11 @@ class Runner:
                     case "end":
                         self._reported = e
                         raise
+            else:
+                if done is not None and failed:
+                    recovered: dict[str, Json] = {"kind": failed[-1], "failures": len(failed)}
+                    self._event(EventKind.RECOVERED, failed[-1], path, recovered)
+                return done
 
     async def _recover(self, error: StepError, attempt: int, path: PathKey) -> None:
         try:

@@ -6,7 +6,7 @@ import { listSequences } from "./api";
 import { formatDecimal, formatDuration, formatPlain, formatTemperature, formatTime } from "./format";
 import type { Messages } from "./i18n";
 import type { AutofocusTrigger, DitherTrigger, FlipTrigger, RecenterTrigger } from "./generated/api";
-import { frameName, newTemplate, sequenceId } from "./sequence";
+import { frameName, newTemplate, sequenceId, triggerDue } from "./sequence";
 import type { Container, Node, PlannedTarget, PowerOutput, SequenceEvent, SequenceRun, Template } from "./types";
 
 export { isActive, nextFilter, rowSeconds, sequenceId } from "./sequence";
@@ -197,13 +197,26 @@ export function describeEvent(event: SequenceEvent, t: Messages, locale: string)
       return e.failed(event.message);
     case "recovery":
       return data.guard ? e.guard : e.recovery(event.message);
+    case "recovered": {
+      const kind = String(data.kind ?? event.message) as keyof typeof e.failureKind;
+      return e.recovered(e.failureKind[kind] ?? kind, number("failures") ?? 1);
+    }
     case "skipped":
       return e.skipped(event.message);
     case "trigger": {
-      const waiting = /^flip: waiting ([\d.]+) min/.exec(event.message);
-      if (waiting) return e.flipWaiting(formatDecimal(Number(waiting[1]), locale, 1));
-      if (event.message.startsWith("flip:")) return e.flipDue;
-      return e.trigger(event.message.replace(/^autofocus: /, ""));
+      const due = triggerDue(event.message);
+      switch (due.kind) {
+        case "flip":
+          return due.waiting === null ? e.flipDue : e.flipWaiting(formatDecimal(due.waiting, locale, 1));
+        case "autofocus":
+          return e.focusDue(due.reason);
+        case "dither":
+          return e.ditherDue(due.frames);
+        case "recenter":
+          return e.recenterDue(due.frames);
+        default:
+          return due.message;
+      }
     }
     case "condition": {
       const condition = data.condition as keyof typeof e.condition;

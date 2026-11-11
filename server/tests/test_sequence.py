@@ -623,6 +623,26 @@ async def test_frames_under_clouds_are_taken_again_after_a_wait() -> None:
     assert counted == [1, 2, 5, 6]
     # The frames under the cloud were kept: the report marks them.
     assert [e.data["frame"] for e in events if e.kind is EventKind.FAILED] == [3, 4]
+    # The frame taken after the cloud got the run past both failures.
+    recovered = [e for e in events if e.kind is EventKind.RECOVERED]
+    assert [(e.path, e.data) for e in recovered] == [
+        ("targets.0.1", {"kind": "clouds", "failures": 2})
+    ]
+    assert events.index(recovered[0]) < next(
+        i for i, e in enumerate(events) if e.kind is EventKind.FRAME and e.data["id"] == 5
+    )
+
+
+async def test_a_guide_star_lost_and_found_again_is_recovered() -> None:
+    rig = Rig()
+    rig.errors["frame"] = [StepError("guiding", "PHD2 is not guiding (LostLock)")]
+    events: list[Event] = []
+    assert await run(night(target(row("L", 2))), rig, events).run() is Outcome.COMPLETED
+    assert failures(events) == [("targets.0.1", "guiding", "retry")]
+    assert rig.slept == 10
+    kinds = [e.kind for e in events if e.kind in (EventKind.FAILED, EventKind.RECOVERED)]
+    assert kinds == [EventKind.FAILED, EventKind.RECOVERED]
+    assert [e.message for e in events if e.kind is EventKind.RECOVERED] == ["guiding"]
 
 
 async def test_clouds_until_the_condition_ends_the_target() -> None:
@@ -659,6 +679,8 @@ async def test_a_device_that_keeps_failing_ends_the_session_parked() -> None:
     assert [e.message for e in events if e.kind is EventKind.RECOVERY] == [
         "recovered main_camera"
     ] * 2
+    # The step never went through: nothing was recovered.
+    assert not any(e.kind is EventKind.RECOVERED for e in events)
 
 
 async def test_a_failed_autofocus_is_skipped_and_waits_for_the_next_reason() -> None:
@@ -669,6 +691,7 @@ async def test_a_failed_autofocus_is_skipped_and_waits_for_the_next_reason() -> 
     await run(night(target(row("L", 6), triggers=[trigger])), rig, events).run()
     assert [e.message for e in events if e.kind is EventKind.SKIPPED] == ["autofocus"]
     assert frames_between_focus(rig) == [3, 3]
+    assert not any(e.kind is EventKind.RECOVERED for e in events)  # skipped, not recovered
 
 
 async def test_a_target_the_solver_cannot_find_is_skipped() -> None:

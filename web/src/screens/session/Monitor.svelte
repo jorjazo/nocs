@@ -512,6 +512,9 @@
   .events .dot.failed {
     background: var(--error);
   }
+  .events .dot.recovered {
+    background: var(--ok);
+  }
   .events .dot.recovery,
   .events .dot.skipped,
   .events .dot.paused,

@@ -49,6 +49,7 @@ export type {
   EquatorialGoto,
   EquipmentState,
   ExposeRequest,
+  FailureKind,
   FilterNamesRequest,
   FilterSelectRequest,
   FilterWheelState,

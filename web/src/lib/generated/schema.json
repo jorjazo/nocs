@@ -8412,6 +8412,7 @@
             "resumed",
             "failed",
             "recovery",
+            "recovered",
             "skipped",
             "ending",
             "ended"
@@ -8722,7 +8723,7 @@
           "type": "number"
         },
         "recoveries": {
-          "description": "Devices brought back (driver restarts, power cycles).",
+          "description": "Of the failures, those the run got past: the failed step went through at a later attempt (a `recovered` event).",
           "type": "integer"
         },
         "session": {

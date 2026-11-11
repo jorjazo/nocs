@@ -954,6 +954,7 @@ class SequenceEvent(StateModel):
         "resumed",
         "failed",
         "recovery",
+        "recovered",
         "skipped",
         "ending",
         "ended",
@@ -1888,7 +1889,10 @@ class SessionReport(WireModel):
     focus: list[ReportFocus]
     temperatures: list[TemperatureRecord]
     failures: int = Field(description="Steps that failed, retried or not.")
-    recoveries: int = Field(description="Devices brought back (driver restarts, power cycles).")
+    recoveries: int = Field(
+        description="Of the failures, those the run got past: the failed step went through "
+        "at a later attempt (a `recovered` event)."
+    )
     events: list[SequenceEvent] = Field(description="Every event, oldest first.")
 
 

@@ -99,3 +99,25 @@ export function currentRow(run: SequenceRun, filter: string | null): RowProgress
   const open = plan.rows.filter((row) => row.done < row.count);
   return open.find((row) => row.filter === filter) ?? open[0] ?? null;
 }
+
+// What a trigger event says (the server's words, "<trigger>: <reason>"): which
+// trigger fired, and the frames since its last run for a dither or a recentre.
+export type TriggerDue =
+  | { kind: "autofocus"; reason: string }
+  | { kind: "dither" | "recenter"; frames: number }
+  | { kind: "flip"; waiting: number | null }
+  | { kind: "other"; message: string };
+
+export function triggerDue(message: string): TriggerDue {
+  const at = message.indexOf(": ");
+  const kind = at < 0 ? message : message.slice(0, at);
+  const reason = at < 0 ? "" : message.slice(at + 2);
+  if (kind === "autofocus") return { kind, reason };
+  if (kind === "flip") {
+    const waiting = /^waiting ([\d.]+) min/.exec(reason);
+    return { kind, waiting: waiting ? Number(waiting[1]) : null };
+  }
+  const frames = /^(\d+) frames?$/.exec(reason);
+  if ((kind === "dither" || kind === "recenter") && frames) return { kind, frames: Number(frames[1]) };
+  return { kind: "other", message };
+}

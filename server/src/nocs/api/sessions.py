@@ -151,9 +151,19 @@ def build(storage: StorageService, session_id: int, now: datetime) -> SessionRep
             for t in temperatures
         ],
         failures=sum(e.kind == "failed" for e in events),
-        recoveries=sum(e.kind == "recovery" for e in events),
+        recoveries=sum(_recovered(e) for e in events),
         events=events,
     )
+
+
+def _recovered(event: SequenceEvent) -> int:
+    """The failures a ``recovered`` event says the run got past: those of one step that
+    went through at a later attempt. What the recovery did on the way (a driver
+    restarted, the meridian guard: ``recovery`` events) is not a failure overcome."""
+    if event.kind != "recovered":
+        return 0
+    failures = event.data.get("failures")
+    return failures if isinstance(failures, int) and failures > 0 else 1
 
 
 def _event(row: SessionEvent) -> SequenceEvent:
@@ -230,8 +240,8 @@ def _focus(events: list[SequenceEvent]) -> list[ReportFocus]:
                     temperature=_number(data.get("temperature")),
                 )
             )
-        if event.kind != "failed":
-            reason = None
+        if event.kind not in ("failed", "recovery", "recovered"):
+            reason = None  # an autofocus retried after a failure keeps its reason
     return runs
 
 

@@ -96,8 +96,13 @@ def seed(db: Catalog) -> int:
                 "2 stars, fewer than 100",
                 {"kind": "clouds", "then": "retry", "frame": ids[1]},
             ),
+            event("01:04:00", "recovered", "clouds", {"kind": "clouds", "failures": 1}),
             event("01:04:00", "frame", "L 120 s 2/3", {"row": 0, "id": ids[2]}),
             event("01:05:00", "trigger", "autofocus: filter R", {}),
+            # Autofocus failed twice under a cloud, and went through at its third try.
+            event("01:05:10", "failed", "no stars", {"kind": "clouds", "attempt": 1}),
+            event("01:05:20", "failed", "no stars", {"kind": "clouds", "attempt": 2}),
+            event("01:05:30", "recovered", "clouds", {"kind": "clouds", "failures": 2}),
             event(
                 "01:05:30",
                 "action",
@@ -150,8 +155,10 @@ def test_the_report_of_a_session(tmp_path: Path) -> None:
             ("filter R", "R", 36700),
         ]
         assert [t["time"][11:16] for t in report["temperatures"]] == ["01:00"]
-        assert (report["failures"], report["recoveries"]) == (1, 1)
-        assert len(report["events"]) == 10
+        # A driver restart (a ``recovery`` event) is what the recovery did, not a
+        # failure overcome; each ``recovered`` event counts the failures it got past.
+        assert (report["failures"], report["recoveries"]) == (3, 3)
+        assert len(report["events"]) == 14
 
         table = client.get(f"/api/sessions/{session}/frames.csv")
         assert table.headers["content-type"].startswith("text/csv")

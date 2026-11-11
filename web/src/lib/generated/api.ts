@@ -2097,6 +2097,7 @@ export interface SequenceEvent {
     | "resumed"
     | "failed"
     | "recovery"
+    | "recovered"
     | "skipped"
     | "ending"
     | "ended";
@@ -4868,7 +4869,7 @@ export interface SessionReport {
    */
   integration: number;
   /**
-   * Devices brought back (driver restarts, power cycles).
+   * Of the failures, those the run got past: the failed step went through at a later attempt (a `recovered` event).
    */
   recoveries: number;
   session: SessionSummary;

@@ -1,6 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { currentRow, frameName, isActive, newTemplate, nextFilter, runProgress, sequenceId } from "./sequence.ts";
+import {
+  currentRow,
+  frameName,
+  isActive,
+  newTemplate,
+  nextFilter,
+  runProgress,
+  sequenceId,
+  triggerDue,
+} from "./sequence.ts";
 
 test("a target's sequence id is a file name", () => {
   assert.equal(sequenceId("NGC 253"), "ngc-253");
@@ -61,4 +70,14 @@ test("a run's progress adds its rows up", () => {
   assert.equal(currentRow(run, "L")?.filter, "R");
   assert.equal(currentRow(run, "R")?.done, 2);
   assert.equal(currentRow({ ...run, current: "end.0" }, "R"), null);
+});
+
+test("a trigger event names the trigger that fired", () => {
+  assert.deepEqual(triggerDue("autofocus: temperature -1.2 °C"), { kind: "autofocus", reason: "temperature -1.2 °C" });
+  // Not an autofocus: the Session tab once read "Autofocus due: dither: 3 frames".
+  assert.deepEqual(triggerDue("dither: 3 frames"), { kind: "dither", frames: 3 });
+  assert.deepEqual(triggerDue("recenter: 10 frames"), { kind: "recenter", frames: 10 });
+  assert.deepEqual(triggerDue("flip: waiting 4.5 min for the meridian"), { kind: "flip", waiting: 4.5 });
+  assert.deepEqual(triggerDue("flip: +5.2 min past the meridian"), { kind: "flip", waiting: null });
+  assert.deepEqual(triggerDue("something new"), { kind: "other", message: "something new" });
 });
