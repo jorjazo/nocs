@@ -28,9 +28,10 @@ note why: that is a finding, and the release waits for its fix.
   - [ ] a hung driver (`kill -STOP`) and a hung indiserver are noticed and
         restarted; the power box cycles a camera under a sequence.
 - [ ] The screens and names in the [user guide](../../user/README.md) match the app.
-- [ ] `server/pyproject.toml` says the candidate's version, `0.1.0rc3` after `rc1`'s
-      [findings](phase-6.md#612-findings-from-v010rc1) and `rc2`'s first night out
-      ([#26](https://github.com/jorjazo/nocs/pull/26)); `packaging/release.sh 0.1.0rc3`. The tag's
+- [ ] `server/pyproject.toml` says the candidate's version, `0.1.0rc4` after `rc1`'s
+      [findings](phase-6.md#612-findings-from-v010rc1), `rc2`'s first night out
+      ([#26](https://github.com/jorjazo/nocs/pull/26)) and its
+      [field notes](rc2-field-notes.md); `packaging/release.sh 0.1.0rc4`. The tag's
       packages reach `stable` and its image `images/` on the repository; the
       GitHub release has the notes, the packages, the image's checksum and link.
 - [ ] Someone other than the maintainer follows the [quick start](../../user/quick-start.md)
