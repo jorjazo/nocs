@@ -140,7 +140,16 @@ class Camera(Device):
 
     @property
     def exposing(self) -> bool:
-        return self.prop("CCD_EXPOSURE").state is PropertyState.BUSY
+        return self.has("CCD_EXPOSURE") and self.prop("CCD_EXPOSURE").state is PropertyState.BUSY
+
+    @property
+    def streaming(self) -> bool:
+        """The driver streams video (``CCD_VIDEO_STREAM``), as PHD2 does when an exposure
+        of its own brought no frame in time."""
+        if not self.has("CCD_VIDEO_STREAM"):
+            return False
+        prop = self.prop("CCD_VIDEO_STREAM")
+        return "STREAM_ON" in prop.elements and prop.switch("STREAM_ON")
 
     @property
     def exposure_remaining(self) -> float | None:
@@ -448,6 +457,20 @@ class Camera(Device):
 
     async def abort_exposure(self) -> None:
         await self.client.send(self.name, "CCD_ABORT_EXPOSURE", {"ABORT": True})
+
+    async def stop_exposing(self, timeout: float = 10.0) -> None:
+        """Abort the exposure in progress, whoever started it, and wait until it has stopped.
+
+        A cancelled exposure only sends the abort; the driver may still be busy with it
+        (downloading, or stopping the sensor) for a moment.
+        """
+        if not self.exposing:
+            return
+        await self.abort_exposure()
+        try:
+            await self.client.wait_for(lambda _: not self.exposing, timeout)
+        except TimeoutError:
+            raise DeviceError(f"{self.name} still exposes {timeout:g} s after an abort") from None
 
     async def _abort_quietly(self) -> None:
         with contextlib.suppress(ConnectionError, KeyError):

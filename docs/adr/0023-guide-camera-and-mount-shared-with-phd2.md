@@ -36,6 +36,15 @@ Facts from stages 4.1 and 2.11:
 - **Connecting needs PHD2 to run NOCS's settings** for the active profile
   (ADR 0022), and NOCS applies new settings only while PHD2's equipment is
   disconnected.
+- **Before PHD2 connects, the guide camera is idle and sends BLOBs**: NOCS aborts an
+  exposure still running on it (a cancelled one whose abort has not landed yet) and
+  waits for it to stop, and puts it back in `UPLOAD_CLIENT`. PHD2 2.6.14 gives its
+  first frame after connecting the exposure plus its camera timeout (15 s); without
+  it, PHD2 says "exposure error. Trying to use streaming instead." and takes the
+  camera's video stream until PHD2 restarts (a flag of its INDI camera that a
+  reconnection keeps). NOCS recognises that (the alert, or `CCD_VIDEO_STREAM` on while
+  PHD2 holds the camera), explains it, and restarts a PHD2 it manages: on request, or
+  by itself once when a start of guiding meets it before calibrating.
 - **Disconnecting stops PHD2's capture first**, waits for it to end, then
   disconnects PHD2 and frees the camera. Disconnecting the equipment profile
   does the same first; losing PHD2 (it exits or restarts) frees the camera.

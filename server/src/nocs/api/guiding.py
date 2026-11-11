@@ -80,6 +80,14 @@ def guiding_router(guiding: Callable[[], GuidingService]) -> APIRouter:
             )
         return JobStarted(job=job)
 
+    @router.post("/restart", status_code=status.HTTP_204_NO_CONTENT)
+    async def restart() -> Response:  # pyright: ignore[reportUnusedFunction]
+        """Restart PHD2 (managed only), connecting its equipment again if it was: what ends
+        its fallback to the guide camera's video stream."""
+        with _guiding_errors():
+            await guiding().restart()
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
     @router.post("/stop", status_code=status.HTTP_204_NO_CONTENT)
     async def stop() -> Response:  # pyright: ignore[reportUnusedFunction]
         with _guiding_errors():

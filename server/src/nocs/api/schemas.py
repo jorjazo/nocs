@@ -725,9 +725,15 @@ class GuidingCalibrationStep(StateModel):
 
 
 class GuidingAlert(StateModel):
-    message: str
+    message: str = Field(description="PHD2's own words.")
     kind: str = Field(description="PHD2's type: info, question, warning or error.")
     time: str = Field(description="UTC, ISO 8601.")
+    code: Literal["camera_streaming"] | None = Field(
+        default=None,
+        description="An alert NOCS recognises and explains in its own words. camera_streaming:"
+        " PHD2's first exposure after connecting got no frame in time, and it takes the guide"
+        " camera's video stream instead until PHD2 restarts.",
+    )
 
 
 class GuideEntryModel(StateModel):
@@ -784,6 +790,12 @@ class GuidingState(StateModel):
     )
     settling: bool = Field(description="PHD2 waits for the star to settle.")
     alert: GuidingAlert | None = Field(description="The last thing PHD2 warned about.")
+    streaming: bool = Field(
+        description="PHD2 takes the guide camera's video stream instead of exposures (its"
+        " fallback when the first frame after connecting does not arrive), which guides worse:"
+        " it lasts until PHD2 restarts, not only until its equipment reconnects."
+    )
+    restarting: bool = Field(description="NOCS restarts PHD2 (``POST /api/guiding/restart``).")
     pixel_scale: float | None = Field(description="Of the guide camera, arcseconds per pixel.")
     stats: GuidingStats | None = Field(description="None until PHD2 guides.")
     error: str | None = Field(description="Why PHD2 does not run the profile's settings.")

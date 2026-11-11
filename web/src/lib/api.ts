@@ -411,6 +411,11 @@ export function disconnectGuiding(): Promise<void> {
   return request("POST", "/api/guiding/disconnect");
 }
 
+// Ends PHD2's fallback to the guide camera's video stream, which outlives a reconnection.
+export function restartGuiding(): Promise<void> {
+  return request("POST", "/api/guiding/restart");
+}
+
 export function loopGuiding(exposure?: number): Promise<void> {
   return request("POST", "/api/guiding/loop", exposure === undefined ? {} : { exposure });
 }

@@ -1325,6 +1325,10 @@ export interface GuidingState {
    */
   profile: string | null;
   /**
+   * NOCS restarts PHD2 (``POST /api/guiding/restart``).
+   */
+  restarting: boolean;
+  /**
    * none: nothing to apply yet (no profile, or its guide camera or mount not ready); pending: waiting for PHD2 to stop; applying: PHD2 restarting with them; user: PHD2 runs the settings its user chose.
    */
   settings: "none" | "pending" | "applying" | "applied" | "failed" | "user";
@@ -1336,6 +1340,10 @@ export interface GuidingState {
    * None until PHD2 guides.
    */
   stats: GuidingStats | null;
+  /**
+   * PHD2 takes the guide camera's video stream instead of exposures (its fallback when the first frame after connecting does not arrive), which guides worse: it lasts until PHD2 restarts, not only until its equipment reconnects.
+   */
+  streaming: boolean;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -1343,9 +1351,16 @@ export interface GuidingState {
  */
 export interface GuidingAlert {
   /**
+   * An alert NOCS recognises and explains in its own words. camera_streaming: PHD2's first exposure after connecting got no frame in time, and it takes the guide camera's video stream instead until PHD2 restarts.
+   */
+  code?: "camera_streaming" | null;
+  /**
    * PHD2's type: info, question, warning or error.
    */
   kind: string;
+  /**
+   * PHD2's own words.
+   */
   message: string;
   /**
    * UTC, ISO 8601.

@@ -14,7 +14,10 @@ State layout under ``("guiding",)``::
     calibrating: {direction, step, distance}: PHD2's latest calibration step while it
                calibrates, or None
     settling:  PHD2 waits for the star to settle (after starting to guide or a dither)
-    alert:     {message, kind, time}: the last thing PHD2 warned about, or None
+    alert:     {message, kind, time, code}: the last thing PHD2 warned about, or None;
+               ``code`` names an alert NOCS explains itself (``camera_streaming``)
+    streaming: PHD2 takes the guide camera's video stream instead of exposures
+    restarting: NOCS restarts PHD2 (to end that fallback)
     pixel_scale: of the guide camera as PHD2 has it, arcseconds per pixel, or None
     stats:     the guiding RMS (``nocs.guiding.stats``) and the last guide step, or None
     error:     why PHD2 does not run the profile's settings, or None
@@ -29,6 +32,15 @@ While PHD2's equipment is connected, the guide camera is PHD2's: NOCS holds the
 role with a reservation, refuses its own exposures, and shows PHD2's frames as
 previews (ADR 0023). While PHD2 calibrates or guides, NOCS also holds the mount, so
 that slews, parking and the pad wait until guiding stops.
+
+Before PHD2 takes the camera, NOCS stops any exposure still running on it and makes
+sure its frames go out as BLOBs: when the first frame PHD2 asks for after connecting
+does not reach it within the exposure plus its camera timeout, PHD2 says "exposure
+error. Trying to use streaming instead." and takes the camera's video stream from
+then on, until it restarts (reconnecting its equipment does not end it). NOCS
+recognises that (the alert, or ``CCD_VIDEO_STREAM`` turned on while PHD2 holds the
+camera), and restarts a PHD2 it manages: by itself when a start of guiding meets it
+before calibrating (once), or on ``restart``.
 
 Starting to guide is a job: loop, select a star, calibrate if needed, guide, and
 wait until PHD2 has settled. Guiding goes on after the job ends, until ``stop``.
@@ -63,7 +75,7 @@ from nocs.guiding.phd2 import (
 )
 from nocs.guiding.settings import GuideRig, Phd2Settings, render
 from nocs.guiding.stats import GuideEntry, GuideHistory, rms
-from nocs.indi import IndiClient
+from nocs.indi import IndiClient, IndiEvent, PropertyUpdated
 from nocs.jobs import JobContext, JobFunction, JobManager, ResourceBusyError
 from nocs.state import Json, Path, StateStore
 
@@ -104,6 +116,12 @@ FIRST_FRAME_MARGIN = 20.0
 STAR_EDGE = 0.1
 """Guide stars are picked away from the frame's edges (this fraction, at least 50 px):
 calibration moves the star by 25 px each way, and a star near the edge is lost."""
+CAMERA_IDLE = 10.0
+"""How long an aborted exposure on the guide camera may take to stop before PHD2 takes it."""
+RESTART_TIMEOUT = 90.0
+"""How long PHD2 may take to come back after NOCS restarted it."""
+STREAMING_ALERT = re.compile(r"exposure error.*streaming", re.IGNORECASE | re.DOTALL)
+"""PHD2's "Camera  <name>, exposure error. Trying to use streaming instead." (cam_indi.cpp)."""
 LOST_WHILE_CALIBRATING = 30.0
 """Seconds (or 10 exposures, if longer) without the star before calibration is given up.
 PHD2 counts no step while the star is lost, so it would calibrate forever."""
@@ -143,6 +161,10 @@ class GuidingNotReadyError(Exception):
 
 class GuidingError(Exception):
     """Guiding did not start: no star, calibration failed, PHD2 stopped, no settle."""
+
+
+class _StreamingFallback(Exception):
+    """PHD2 took the video stream while a start of guiding waited for its frames."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -213,6 +235,12 @@ class GuidingService:
         self._attempted: str | None = None
         """Name of the settings PHD2 was last restarted for."""
         self._changed = asyncio.Event()
+        self._streaming = False
+        """PHD2 fell back to the video stream: it lasts until PHD2 restarts."""
+        self._restarting = False
+        self._synced: Phd2Client | None = None
+        """The PHD2 connection ``_sync`` went through last."""
+        self._unlisten_indi: Callable[[], None] | None = None
 
         store.set(
             ROOT,
@@ -228,6 +256,8 @@ class GuidingService:
                 "calibrating": None,
                 "settling": False,
                 "alert": None,
+                "streaming": False,
+                "restarting": False,
                 "pixel_scale": None,
                 "stats": None,
                 "error": None,
@@ -235,6 +265,7 @@ class GuidingService:
         )
         self._unwatch_bridge = bridge.watch(self._on_indi)
         self._unwatch_equipment = equipment.add_listener(self._refresh)
+        self._listen(self._indi)
         self._refresh()
 
     @property
@@ -275,11 +306,13 @@ class GuidingService:
     async def connect(self) -> None:
         """Connect PHD2 to the guide camera and the mount; the camera is PHD2's then."""
         async with self._commands:
+            await self._fresh()
             await self._connect()
 
     async def loop(self, exposure: float | None = None) -> None:
         """Expose with PHD2 again and again (connecting it first), without guiding."""
         async with self._commands:
+            await self._fresh()
             client = await self._connect()
             if exposure is not None:
                 await self._set_exposure(client, exposure)
@@ -288,6 +321,15 @@ class GuidingService:
     async def set_exposure(self, exposure: float) -> None:
         async with self._commands:
             await self._set_exposure(self._client(), exposure)
+
+    async def restart(self) -> None:
+        """Restart PHD2, connecting its equipment again if it was: the one way to end its
+        video-stream fallback. Only for a PHD2 whose settings NOCS manages (its service
+        starts it again); refused while a start of guiding or a sequence uses PHD2."""
+        if self._starting is not None or self._under_running():
+            raise GuidingNotReadyError("PHD2 is in use by a start of guiding or a sequence")
+        async with self._commands:
+            await self._restart()
 
     async def stop(self) -> None:
         """Stop PHD2's looping or guiding, and wait until its exposure ends."""
@@ -530,6 +572,7 @@ class GuidingService:
                     pass
                 finally:
                     self._phd2 = None
+                    self._synced = None
                     self._app_state = None
                     self._idle.clear()
                     self._release()  # a PHD2 that went away holds nothing
@@ -542,8 +585,11 @@ class GuidingService:
                         self._store.set((*ROOT, "settling"), False)
                         self._store.set((*ROOT, "calibrating"), None)
                     self._settling = False
+                    # A PHD2 that starts again exposes again; if it was only the connection
+                    # that broke, the stream turning on again tells.
+                    self._set_streaming(False)
                 log.info("lost connection to PHD2")
-            restarting = self._status() is SettingsStatus.APPLYING
+            restarting = self._restarting or self._status() is SettingsStatus.APPLYING
             if restarting and attempt < RESTART_ATTEMPTS:
                 delay = RESTART_BACKOFF
             else:
@@ -554,6 +600,7 @@ class GuidingService:
     def close(self) -> None:
         self._unwatch_bridge()
         self._unwatch_equipment()
+        self._listen(None)
 
     # -- internals: commands ---------------------------------------------------
 
@@ -578,6 +625,7 @@ class GuidingService:
         self._hold_camera()  # raises ResourceBusyError while NOCS uses the camera
         try:
             if await client.call("get_connected") is not True:
+                await self._idle_camera()
                 await self._set_connected(client, True)
             await self._read_exposure(client)
             await self._read_calibration(client)
@@ -588,21 +636,36 @@ class GuidingService:
         return client
 
     async def _start_guiding(self, context: JobContext, recalibrate: bool, settle: Settle) -> Json:
-        queue: asyncio.Queue[Phd2Message] = asyncio.Queue()
-        self._queues.add(queue)
-        try:
-            async with self._commands:
-                client = await self._connect()
-            self._hold_mount()  # raises ResourceBusyError while NOCS moves the mount
+        retried = False
+        while True:
+            if self._streaming and self.managed and self._app_state not in GUIDING_STATES:
+                context.progress(None, "restarting PHD2 to end its video-stream fallback")
+                async with self._commands:
+                    await self._fresh()
+            # Only now: the events of a PHD2 that was restarted are not this attempt's.
+            queue: asyncio.Queue[Phd2Message] = asyncio.Queue()
+            self._queues.add(queue)
             try:
-                return await self._guide_steps(context, client, queue, recalibrate, settle)
-            except asyncio.CancelledError:
-                # Not guiding is what a cancelled start means: stop whatever began.
-                with contextlib.suppress(Phd2Error, Phd2ConnectionError, TimeoutError):
-                    await asyncio.shield(client.call("stop_capture"))
-                raise
-        finally:
-            self._queues.discard(queue)
+                async with self._commands:
+                    client = await self._connect()
+                self._hold_mount()  # raises ResourceBusyError while NOCS moves the mount
+                try:
+                    return await self._guide_steps(context, client, queue, recalibrate, settle)
+                except asyncio.CancelledError:
+                    # Not guiding is what a cancelled start means: stop whatever began.
+                    with contextlib.suppress(Phd2Error, Phd2ConnectionError, TimeoutError):
+                        await asyncio.shield(client.call("stop_capture"))
+                    raise
+            except _StreamingFallback:
+                if retried:
+                    raise GuidingError(
+                        "PHD2 fell back to the guide camera's video stream again: its first"
+                        " exposure brought no frame in time (see PHD2's debug log)"
+                    ) from None
+                retried = True  # once: PHD2 restarts at the top
+                log.warning("PHD2 fell back to the video stream while starting to guide")
+            finally:
+                self._queues.discard(queue)
 
     async def _guide_steps(
         self,
@@ -683,6 +746,8 @@ class GuidingService:
         async with asyncio.timeout(timeout):
             while True:
                 message = await queue.get()
+                if self._streaming and self.managed:
+                    raise _StreamingFallback
                 if isinstance(message, Phd2Closed):
                     raise Phd2ConnectionError(f"lost PHD2: {message.reason}")
                 if message.name == "LoopingExposures":
@@ -824,6 +889,60 @@ class GuidingService:
         finally:
             self._queues.discard(queue)
 
+    async def _fresh(self) -> None:
+        """Restart a managed PHD2 stuck in its video-stream fallback, unless it guides."""
+        if self._streaming and self.managed and self._app_state not in GUIDING_STATES:
+            await self._restart()
+
+    async def _restart(self) -> None:
+        """Restart PHD2 and connect its equipment again if it was; ``_commands`` held.
+
+        ``shutdown`` ends PHD2 and its service starts it again (ADR 0022), as when it
+        takes new settings.
+        """
+        if not self.managed:
+            raise GuidingNotReadyError("PHD2 runs outside NOCS: restart it there")
+        client = self._client()
+        reconnect = self._hold is not None
+        log.info("restarting PHD2%s", " (streaming instead of exposing)" if self._streaming else "")
+        self._set_restarting(True)
+        try:
+            await self._stop(client)
+            if await client.call("get_connected") is True:
+                await self._set_connected(client, False)
+            self._release()
+            # PHD2 may close the connection before answering.
+            with contextlib.suppress(Phd2ConnectionError, TimeoutError):
+                await client.call("shutdown", timeout=5)
+            try:
+                async with asyncio.timeout(RESTART_TIMEOUT):
+                    while self._synced is None or self._synced is client:  # noqa: ASYNC110
+                        await asyncio.sleep(0.1)
+            except TimeoutError:
+                raise GuidingNotReadyError(
+                    f"PHD2 did not come back within {RESTART_TIMEOUT:g} s of a restart"
+                ) from None
+            if reconnect:
+                await self._connect()
+        finally:
+            self._set_restarting(False)
+
+    async def _idle_camera(self) -> None:
+        """Before PHD2 takes the guide camera: no exposure of anyone else's may still run,
+        and frames must go out as BLOBs. PHD2 gives its first frame the exposure plus its
+        camera timeout (15 s), then falls back to the video stream for good."""
+        device = self._equipment.ready_device(CAMERA)
+        if device is None or self._indi is None:
+            return
+        camera = Camera(self._indi, device)
+        try:
+            if camera.exposing:
+                log.info("stopping an exposure of the guide camera before PHD2 takes it")
+                await camera.stop_exposing(CAMERA_IDLE)
+            await camera.set_upload_mode("UPLOAD_CLIENT")
+        except (DeviceError, ConnectionError, KeyError) as e:
+            raise GuidingNotReadyError(f"the guide camera is not ready for PHD2: {e}") from e
+
     async def _read_exposure(self, client: Phd2Client) -> None:
         milliseconds = await client.call("get_exposure")
         if isinstance(milliseconds, int | float) and milliseconds > 0:
@@ -853,6 +972,10 @@ class GuidingService:
     # -- internals ----------------------------------------------------------
 
     async def _sync(self, client: Phd2Client) -> None:
+        await self._sync_settings(client)
+        self._synced = client
+
+    async def _sync_settings(self, client: Phd2Client) -> None:
         """Bring PHD2's settings in line with the active profile, as far as it can now."""
         try:
             state = await client.call("get_app_state")
@@ -935,7 +1058,31 @@ class GuidingService:
 
     def _on_indi(self, client: IndiClient | None) -> None:
         self._indi = client
+        self._listen(client)
         self._refresh()
+
+    def _listen(self, client: IndiClient | None) -> None:
+        if self._unlisten_indi is not None:
+            self._unlisten_indi()
+            self._unlisten_indi = None
+        if client is not None:
+            self._unlisten_indi = client.add_listener(self._on_indi_event)
+
+    def _on_indi_event(self, event: IndiEvent) -> None:
+        """PHD2 streaming from the guide camera it holds: its fallback, in any language."""
+        match event:
+            case PropertyUpdated(property=prop) if (
+                prop.name == "CCD_VIDEO_STREAM" and self._hold is not None and not self._streaming
+            ):
+                device = self._equipment.ready_device(CAMERA)
+                indi = self._indi
+                if device is None or prop.device != device or indi is None:
+                    return
+                if Camera(indi, device).streaming:
+                    log.warning("PHD2 streams video from %s instead of exposing", device)
+                    self._set_streaming(True)
+            case _:
+                pass
 
     def _refresh(self) -> None:
         """Work out the settings for the active profile as its devices come and go."""
@@ -993,7 +1140,13 @@ class GuidingService:
                 if isinstance(state, str):
                     self._set_app_state(state)
             case "Alert":
-                self._alert(str(event.data.get("Msg", "")), str(event.data.get("Type", "info")))
+                message = str(event.data.get("Msg", ""))
+                streaming = STREAMING_ALERT.search(message) is not None
+                code = "camera_streaming" if streaming else None
+                self._alert(message, str(event.data.get("Type", "info")), code)
+                if streaming:
+                    log.warning("PHD2: %s", message)
+                    self._set_streaming(True)
             case "SettleBegin" | "Settling":
                 self._set_settling(True)
             case "SettleDone":
@@ -1065,9 +1218,23 @@ class GuidingService:
             },
         )
 
-    def _alert(self, message: str, kind: str) -> None:
+    def _alert(self, message: str, kind: str, code: str | None = None) -> None:
         when = datetime.now(UTC).isoformat(timespec="seconds")
-        self._store.set((*ROOT, "alert"), {"message": message, "kind": kind, "time": when})
+        alert: dict[str, Json] = {"message": message, "kind": kind, "time": when, "code": code}
+        self._store.set((*ROOT, "alert"), alert)
+
+    def _set_streaming(self, streaming: bool) -> None:
+        if streaming == self._streaming:
+            return
+        self._streaming = streaming
+        with self._store.transaction():
+            self._store.set((*ROOT, "streaming"), streaming)
+            if not streaming and self._store.get((*ROOT, "alert", "code")) == "camera_streaming":
+                self._store.set((*ROOT, "alert"), None)  # resolved
+
+    def _set_restarting(self, restarting: bool) -> None:
+        self._restarting = restarting
+        self._store.set((*ROOT, "restarting"), restarting)
 
     def _background(self, coro: Coroutine[Any, Any, None]) -> None:
         task = asyncio.get_running_loop().create_task(coro)

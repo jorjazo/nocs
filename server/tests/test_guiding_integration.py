@@ -276,3 +276,64 @@ def test_calibrate_guide_and_stop_for_the_mount(api: TestClient) -> None:
     assert abs(state(api)["mount"]["dec"] - (dec + 0.3)) < 0.1
     expect(api.post("/api/guiding/stop"), 204)
     expect(api.post("/api/guiding/disconnect"), 204)
+
+
+def guide_camera(current: dict[str, Any], name: str) -> dict[str, Any]:
+    return current["indi"]["devices"]["Guide Simulator"]["properties"][name]
+
+
+def switched_on(current: dict[str, Any], name: str, element: str) -> bool:
+    return guide_camera(current, name)["elements"][element]["value"] is True
+
+
+@pytest.mark.slow
+def test_an_exposure_left_on_the_guide_camera_stops_before_phd2_takes_it(api: TestClient) -> None:
+    expect(api.put("/api/profiles/simulators", json=SIMULATORS), 204)
+    expect(api.post("/api/equipment/connect", json={"profile": "simulators"}), 202)
+    wait(api, lambda s: s["guiding"]["settings"] == "applied", timeout=90)
+    # An exposure NOCS no longer tracks: a cancelled one whose abort has not landed yet.
+    # PHD2 would wait for it, beyond its first frame's timeout.
+    set_property(api, "Guide Simulator", "CCD_EXPOSURE", {"CCD_EXPOSURE_VALUE": 60})
+    wait(api, lambda s: guide_camera(s, "CCD_EXPOSURE")["state"] == "Busy", timeout=10)
+    expect(api.post("/api/guiding/connect"), 204)
+    wait(api, lambda s: guide_camera(s, "CCD_EXPOSURE")["state"] != "Busy", timeout=5)
+    assert state(api)["guiding"]["equipment"]
+    expect(api.post("/api/guiding/disconnect"), 204)
+
+
+@pytest.mark.slow
+def test_phd2_streaming_instead_of_exposing_is_explained_and_ended(api: TestClient) -> None:
+    expect(api.put("/api/profiles/simulators", json=SIMULATORS), 204)
+    expect(api.post("/api/equipment/connect", json={"profile": "simulators"}), 202)
+    wait(api, lambda s: s["guiding"]["settings"] == "applied", timeout=90)
+    expect(api.post("/api/guiding/connect"), 204)
+    # PHD2's first frame never arrives: the driver saves it instead of sending it. PHD2
+    # gives up after the exposure plus its camera timeout (15 s) and streams instead.
+    local = {"UPLOAD_CLIENT": False, "UPLOAD_LOCAL": True, "UPLOAD_BOTH": False}
+    set_property(api, "Guide Simulator", "UPLOAD_MODE", local)
+    wait(api, lambda s: switched_on(s, "UPLOAD_MODE", "UPLOAD_LOCAL"), timeout=10)
+    expect(api.post("/api/guiding/loop", json={"exposure": 1}), 204)
+    wait(api, lambda s: s["guiding"]["streaming"], timeout=60)
+    current = state(api)
+    AppState.model_validate(current)
+    assert current["guiding"]["alert"]["code"] == "camera_streaming"
+    assert "streaming" in current["guiding"]["alert"]["message"]
+
+    # Reconnecting PHD2's equipment would not end it (PHD2 2.6.14 keeps streaming until it
+    # restarts): NOCS restarts PHD2, connects it again and sends frames as BLOBs again.
+    expect(api.post("/api/guiding/restart"), 204)
+    current = state(api)
+    assert not current["guiding"]["streaming"]
+    assert not current["guiding"]["restarting"]
+    assert current["guiding"]["alert"] is None
+    assert current["guiding"]["equipment"]
+    wait(api, lambda s: switched_on(s, "UPLOAD_MODE", "UPLOAD_CLIENT"), timeout=10)
+    expect(api.post("/api/guiding/loop", json={"exposure": 1}), 204)
+    wait(api, lambda s: guide_camera(s, "CCD_EXPOSURE")["state"] == "Busy", timeout=20)
+    first = state(api)["cameras"]["guide_camera"]["preview"]
+    wait(api, lambda s: _new_preview(s, first) is not None, timeout=40)  # PHD2's frame
+    current = state(api)
+    assert not current["guiding"]["streaming"]
+    assert switched_on(current, "CCD_VIDEO_STREAM", "STREAM_OFF")
+    expect(api.post("/api/guiding/stop"), 204)
+    expect(api.post("/api/guiding/disconnect"), 204)

@@ -4665,11 +4665,25 @@
     "GuidingAlert": {
       "additionalProperties": false,
       "properties": {
+        "code": {
+          "anyOf": [
+            {
+              "const": "camera_streaming",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "An alert NOCS recognises and explains in its own words. camera_streaming: PHD2's first exposure after connecting got no frame in time, and it takes the guide camera's video stream instead until PHD2 restarts."
+        },
         "kind": {
           "description": "PHD2's type: info, question, warning or error.",
           "type": "string"
         },
         "message": {
+          "description": "PHD2's own words.",
           "type": "string"
         },
         "time": {
@@ -4896,6 +4910,10 @@
           ],
           "description": "The PHD2 profile in use."
         },
+        "restarting": {
+          "description": "NOCS restarts PHD2 (``POST /api/guiding/restart``).",
+          "type": "boolean"
+        },
         "settings": {
           "description": "none: nothing to apply yet (no profile, or its guide camera or mount not ready); pending: waiting for PHD2 to stop; applying: PHD2 restarting with them; user: PHD2 runs the settings its user chose.",
           "enum": [
@@ -4922,6 +4940,10 @@
             }
           ],
           "description": "None until PHD2 guides."
+        },
+        "streaming": {
+          "description": "PHD2 takes the guide camera's video stream instead of exposures (its fallback when the first frame after connecting does not arrive), which guides worse: it lasts until PHD2 restarts, not only until its equipment reconnects.",
+          "type": "boolean"
         }
       },
       "required": [
@@ -4935,6 +4957,8 @@
         "calibration",
         "settling",
         "alert",
+        "streaming",
+        "restarting",
         "pixel_scale",
         "stats",
         "error"

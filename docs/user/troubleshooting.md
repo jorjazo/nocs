@@ -69,6 +69,15 @@ restarts. A running sequence does both by itself before retrying (first the driv
 then the power), and lists them in its events. The mount is never power cycled: it
 would lose its position.
 
+**Guiding says PHD2 takes the guide camera's video stream.** PHD2's first frame
+after connecting did not arrive in time (its alert "exposure error. Trying to use
+streaming instead"), and it keeps using the camera's video, which guides worse, until
+PHD2 restarts: disconnecting and connecting again does not end it. Tap **Restart PHD2**
+on Guiding; a start of guiding restarts it once by itself before calibrating. If it
+comes back, look for USB trouble on the guide camera (cable, hub, the bandwidth it
+shares with the main sensor on a Duo) in PHD2's debug log (`/var/lib/nocs/Documents/PHD2/`)
+and the INDI log.
+
 **A USB drive is "Not mounted".** Rig shows why: NOCS reads FAT, exFAT, NTFS, ext4,
 btrfs and XFS. An ejected drive stays unmounted until you unplug it.
 

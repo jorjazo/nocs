@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, cast
 
 import pytest
-from fakes import FakeClient, driver_info, number_property
+from fakes import FakeClient, driver_info, number_property, switch_property
 
 from nocs.devices import DeviceInterface, Mount
 from nocs.equipment import EquipmentService, Optics, Profile, Role
@@ -26,7 +26,7 @@ from nocs.guiding import (
     render,
 )
 from nocs.guiding.service import _calibration_progress  # pyright: ignore[reportPrivateUsage]
-from nocs.indi import IndiClient
+from nocs.indi import IndiClient, PropertyState
 from nocs.jobs import JobManager, ResourceBusyError
 from nocs.state import Json, StateStore
 
@@ -148,6 +148,9 @@ class FakePhd2:
         self.params: dict[str, Any] = {}
         """The last parameters of each method."""
         self.restarts = 0
+        self.fallbacks = 0
+        """PHD2 processes to come whose first frame does not arrive: they stream instead."""
+        self.streaming = False
         self.import_on_restart = True
         self.answer: dict[str, Callable[[Any], Any]] = {}
         self._server: asyncio.Server | None = None
@@ -219,6 +222,10 @@ class FakePhd2:
                     else:
                         response["result"] = 0
                         self.state = "Looping"
+                        if self.fallbacks > 0 and not self.streaming:
+                            self.fallbacks -= 1
+                            self.streaming = True
+                            asyncio.get_running_loop().call_later(0.01, self._fall_back)
                         asyncio.get_running_loop().call_later(
                             0.02, lambda: self.event("LoopingExposures", Frame=1)
                         )
@@ -330,8 +337,14 @@ class FakePhd2:
         else:
             self.event("LoopingExposuresStopped")
 
+    def _fall_back(self) -> None:
+        message = f"Camera  {CAMERA}, exposure error. Trying to use streaming instead."
+        self.event("Alert", Msg=message, Type="warning")
+
     def _restart(self) -> None:
         self.restarts += 1
+        self.streaming = False
+        self.connected = False
         self.drop()
         if self.import_on_restart and self.settings_file is not None:
             for line in self.settings_file.read_text().splitlines():
@@ -468,12 +481,13 @@ async def running(
     store: StateStore | None = None,
     jobs: JobManager | None = None,
     frames: Frames | None = None,
+    indi: FakeClient | None = None,
 ) -> AsyncGenerator[tuple[GuidingService, StateStore]]:
     store = store if store is not None else StateStore()
     service = GuidingService(
         store,
         cast(EquipmentService, equipment),
-        Bridge(indi_rig()),
+        Bridge(indi if indi is not None else indi_rig()),
         jobs if jobs is not None else JobManager(store),
         frames,
         host="127.0.0.1",
@@ -603,14 +617,14 @@ async def test_service_reconnects(phd2: FakePhd2) -> None:
 
 @contextlib.asynccontextmanager
 async def applied(
-    phd2: FakePhd2, tmp_path: Path
+    phd2: FakePhd2, tmp_path: Path, indi: FakeClient | None = None
 ) -> AsyncGenerator[tuple[GuidingService, StateStore, JobManager, Frames, Equipment]]:
     """A service whose PHD2 runs the lab rig's settings."""
     settings_file = tmp_path / "settings.phd"
     phd2.settings_file = settings_file
     store = StateStore()
     jobs, frames, equipment = JobManager(store), Frames(), Equipment(DUO)
-    async with running(phd2, equipment, settings_file, store, jobs, frames) as (service, _):
+    async with running(phd2, equipment, settings_file, store, jobs, frames, indi) as (service, _):
         equipment.connect()
         await until(lambda: guiding(store, "settings") == "applied")
         yield service, store, jobs, frames, equipment
@@ -1134,3 +1148,188 @@ async def test_guiding_again_needs_phd2(phd2: FakePhd2, tmp_path: Path) -> None:
         await until(lambda: service.phd2 is None)
         with pytest.raises(GuidingNotReadyError):
             service.guide_afterwards()
+
+
+# -- PHD2's fallback to the video stream ------------------------------------------------
+
+STREAMING = f"Camera  {CAMERA}, exposure error. Trying to use streaming instead."
+
+
+def camera_rig(*, exposing: bool = False, upload: str = "UPLOAD_CLIENT") -> FakeClient:
+    """The lab rig with the guide camera's exposure, upload mode and video stream."""
+    client = indi_rig()
+    exposure = number_property(CAMERA, "CCD_EXPOSURE", CCD_EXPOSURE_VALUE=0)
+    exposure.state = PropertyState.BUSY if exposing else PropertyState.IDLE
+    client.define(exposure)
+    modes = ("UPLOAD_CLIENT", "UPLOAD_LOCAL", "UPLOAD_BOTH")
+    client.define(switch_property(CAMERA, "UPLOAD_MODE", **{m: m == upload for m in modes}))
+    client.define(switch_property(CAMERA, "CCD_VIDEO_STREAM", STREAM_ON=False, STREAM_OFF=True))
+    return client
+
+
+async def test_streaming_alert_is_recognised(phd2: FakePhd2) -> None:
+    async with running(phd2, Equipment(None), None) as (_, store):
+        await until(lambda: guiding(store, "phd2", "connected"))
+        assert guiding(store, "streaming") is False
+        phd2.event("Alert", Msg="Image scale changed", Type="warning")
+        await until(lambda: guiding(store, "alert") is not None)
+        assert guiding(store, "alert")["code"] is None
+        assert guiding(store, "streaming") is False
+        # PHD2's words, matched loosely (spacing and case may change between versions).
+        phd2.event(
+            "Alert",
+            Msg="Camera Foo, Exposure error.\nTrying to use STREAMING instead",
+            Type="warning",
+        )
+        await until(lambda: guiding(store, "alert")["code"] == "camera_streaming")
+        assert guiding(store, "alert")["message"].startswith("Camera Foo")
+        assert guiding(store, "streaming") is True
+        # A PHD2 that starts again exposes again: the alert is over.
+        phd2.drop()
+        await until(lambda: not guiding(store, "streaming"))
+        assert guiding(store, "alert") is None
+
+
+async def test_streaming_is_seen_on_the_guide_camera(phd2: FakePhd2, tmp_path: Path) -> None:
+    indi = camera_rig()
+    async with applied(phd2, tmp_path, indi) as (service, store, _, _, _):
+        stream = {"STREAM_ON": "On", "STREAM_OFF": "Off"}
+        indi.update(CAMERA, "CCD_VIDEO_STREAM", PropertyState.BUSY, stream)
+        await asyncio.sleep(0.05)
+        assert guiding(store, "streaming") is False  # not PHD2's: it does not hold the camera
+        await service.connect()
+        indi.update(CAMERA, "CCD_VIDEO_STREAM", PropertyState.BUSY, stream)
+        await until(lambda: guiding(store, "streaming"))
+        assert guiding(store, "alert") is None  # seen whatever PHD2 said, in any language
+
+
+async def test_connect_stops_an_exposure_left_on_the_guide_camera(
+    phd2: FakePhd2, tmp_path: Path
+) -> None:
+    indi = camera_rig(exposing=True, upload="UPLOAD_LOCAL")
+
+    def respond(device: str, name: str, values: Any) -> None:
+        loop = asyncio.get_running_loop()
+        if name == "CCD_ABORT_EXPOSURE":
+            loop.call_later(0.05, indi.update, CAMERA, "CCD_EXPOSURE", PropertyState.IDLE)
+        elif name == "UPLOAD_MODE":
+            switches = {k: "On" if v else "Off" for k, v in values.items()}
+            loop.call_soon(indi.update, CAMERA, "UPLOAD_MODE", PropertyState.OK, switches)
+
+    indi.responder = respond
+    seen: list[tuple[bool, bool]] = []
+
+    def set_connected(params: Any) -> int:
+        camera = indi.get_property(CAMERA, "CCD_EXPOSURE")
+        upload = indi.get_property(CAMERA, "UPLOAD_MODE")
+        assert camera is not None
+        assert upload is not None
+        seen.append((camera.state is PropertyState.BUSY, upload.switch("UPLOAD_CLIENT")))
+        phd2.connected = params[0]
+        return 0
+
+    phd2.answer["set_connected"] = set_connected
+    async with applied(phd2, tmp_path, indi) as (service, store, _, _, _):
+        await service.connect()
+        assert seen == [(False, True)]  # idle, sending BLOBs, before PHD2 took it
+        assert (CAMERA, "CCD_ABORT_EXPOSURE", {"ABORT": True}) in indi.sent
+        assert guiding(store, "equipment")
+
+
+async def test_connect_fails_when_the_guide_camera_keeps_exposing(
+    phd2: FakePhd2, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("nocs.guiding.service.CAMERA_IDLE", 0.1)
+    indi = camera_rig(exposing=True)
+    async with applied(phd2, tmp_path, indi) as (service, store, jobs, _, _):
+        with pytest.raises(GuidingNotReadyError, match="still exposes"):
+            await service.connect()
+        assert not phd2.connected
+        assert not guiding(store, "equipment")
+        jobs.check_free([Role.GUIDE_CAMERA.value])
+
+
+async def test_restart_ends_the_fallback_and_reconnects(phd2: FakePhd2, tmp_path: Path) -> None:
+    phd2.fallbacks = 1
+    async with applied(phd2, tmp_path) as (service, store, _, _, _):
+        await service.loop()
+        await until(lambda: guiding(store, "streaming"))
+        assert guiding(store, "alert")["code"] == "camera_streaming"
+        restarts = phd2.restarts
+        await service.restart()
+        assert phd2.restarts == restarts + 1
+        assert not guiding(store, "restarting")
+        assert not guiding(store, "streaming")
+        assert guiding(store, "alert") is None
+        assert phd2.connected  # connected again, as it was
+        assert guiding(store, "equipment")
+        assert guiding(store, "settings") == "applied"
+        await service.loop()
+        await asyncio.sleep(0.05)
+        assert not phd2.streaming
+        assert not guiding(store, "streaming")
+
+
+async def test_a_loop_restarts_phd2_stuck_streaming(phd2: FakePhd2, tmp_path: Path) -> None:
+    phd2.fallbacks = 1
+    async with applied(phd2, tmp_path) as (service, store, _, _, _):
+        await service.loop()
+        await until(lambda: guiding(store, "streaming"))
+        await service.stop()
+        await service.disconnect()
+        restarts = phd2.restarts
+        await service.loop()  # reconnecting would not end it: PHD2 restarts first
+        assert phd2.restarts == restarts + 1
+        assert not guiding(store, "streaming")
+        assert phd2.connected
+        assert phd2.state == "Looping"
+
+
+async def test_restart_needs_a_managed_phd2(phd2: FakePhd2) -> None:
+    async with running(phd2, Equipment(DUO), None) as (service, store):
+        await until(lambda: guiding(store, "phd2", "connected"))
+        with pytest.raises(GuidingNotReadyError, match="outside NOCS"):
+            await service.restart()
+        assert phd2.restarts == 0
+
+
+async def test_a_start_of_guiding_restarts_phd2_once_after_a_fallback(
+    phd2: FakePhd2, tmp_path: Path
+) -> None:
+    phd2.fallbacks = 1
+    async with applied(phd2, tmp_path) as (service, store, jobs, _, _):
+        restarts = phd2.restarts
+        job_id = service.guide()
+        await asyncio.wait_for(jobs.wait(job_id), 10)
+        assert job(store, job_id)["state"] == "succeeded", job(store, job_id)["error"]
+        assert phd2.restarts == restarts + 1
+        assert guiding(store, "app_state") == "Guiding"
+        assert not guiding(store, "streaming")
+        assert not phd2.streaming
+
+
+async def test_a_second_fallback_fails_the_start(phd2: FakePhd2, tmp_path: Path) -> None:
+    phd2.fallbacks = 2
+    async with applied(phd2, tmp_path) as (service, store, jobs, _, _):
+        restarts = phd2.restarts
+        job_id = service.guide()
+        await asyncio.wait_for(jobs.wait(job_id), 10)
+        assert job(store, job_id)["state"] == "failed"
+        assert "video stream again" in job(store, job_id)["error"]
+        assert phd2.restarts == restarts + 1
+        assert guiding(store, "streaming")
+        jobs.check_free([Role.MOUNT.value])
+
+
+async def test_restart_is_refused_while_a_start_of_guiding_runs(
+    phd2: FakePhd2, tmp_path: Path
+) -> None:
+    phd2.hold_calibration = True
+    async with applied(phd2, tmp_path) as (service, store, jobs, _, _):
+        job_id = service.guide()
+        await until(lambda: guiding(store, "app_state") == "Calibrating")
+        with pytest.raises(GuidingNotReadyError, match="in use"):
+            await service.restart()
+        jobs.cancel(job_id)
+        phd2.finish_calibration()
+        await asyncio.wait_for(jobs.wait(job_id), 5)

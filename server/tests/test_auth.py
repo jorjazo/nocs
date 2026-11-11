@@ -220,6 +220,7 @@ def test_observer_watches_but_cannot_command(client: TestClient) -> None:
     assert client.get("/api/previews/none.jpg").status_code == 404  # allowed, just missing
     assert client.get("/api/guiding/steps").status_code == 200  # the guiding graph
     assert client.post("/api/guiding/stop").status_code == 401
+    assert client.post("/api/guiding/restart").status_code == 401
     assert client.get("/api/profiles").status_code == 401
     assert client.post("/api/equipment/disconnect").status_code == 401
     assert client.post("/api/solver/solve", json={"sync": True}).status_code == 401

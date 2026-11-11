@@ -701,6 +701,13 @@ export const en = {
     observer: "Only a paired owner device can guide.",
     noRig: "Connect a profile with a guide camera and a mount.",
     cameraTaken: "While connected, the guide camera is PHD2's: Live view shows its frames.",
+    // PHD2's fallback when its first frame after connecting does not arrive (its alert
+    // "exposure error. Trying to use streaming instead").
+    streaming:
+      "PHD2 takes the guide camera's video stream instead of exposures: its first frame after connecting did not arrive in time. Video guides worse, and only restarting PHD2 ends it.",
+    streamingManual: "NOCS does not run this PHD2: restart it where it runs.",
+    restart: "Restart PHD2",
+    restartingNow: "Restarting PHD2",
     starting: "Starting to guide",
     dithering: "Dithering",
     // While starting to guide or dithering, from PHD2's state rather than its English text.

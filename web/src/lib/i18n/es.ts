@@ -681,6 +681,11 @@ export const es: Messages = {
     observer: "Solo un dispositivo vinculado como dueño puede guiar.",
     noRig: "Conecta un perfil con cámara guía y montura.",
     cameraTaken: "Mientras está conectada, la cámara guía es de PHD2: En vivo muestra sus tomas.",
+    streaming:
+      "PHD2 usa el vídeo de la cámara guía en vez de exposiciones: su primera toma tras conectar no llegó a tiempo. Con vídeo guía peor, y solo reiniciar PHD2 lo corrige.",
+    streamingManual: "Este PHD2 no lo gestiona NOCS: reinícialo donde corre.",
+    restart: "Reiniciar PHD2",
+    restartingNow: "Reiniciando PHD2",
     starting: "Empezando a guiar",
     dithering: "Haciendo dither",
     findingStar: "Buscando una estrella guía",

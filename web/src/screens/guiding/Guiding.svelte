@@ -18,6 +18,7 @@
     disconnectGuiding,
     ditherNow,
     loopGuiding,
+    restartGuiding,
     setGuidingExposure,
     startGuiding,
     stopGuiding,
@@ -42,6 +43,7 @@
 
   // What PHD2 is doing while a guide or dither job runs, in the app's language.
   const progressLine = $derived.by(() => {
+    if (guiding?.restarting) return t.guiding.restartingNow;
     const step = guiding?.calibrating ?? null;
     if (step) {
       const n = formatPlain(step.step, locale);
@@ -149,7 +151,10 @@
   const calibration = $derived(guiding?.calibration ?? null);
   // The star's figures come from the last guide step (a dither or a lost frame has none).
   const lastStep = $derived([...guideGraph.entries].reverse().find((e) => e.kind === "step") ?? null);
-  const alert = $derived(guiding?.alert ?? null);
+  // A recognised alert has its own banner below, in the app's words.
+  const alert = $derived(guiding?.alert && !guiding.alert.code ? guiding.alert : null);
+  const streaming = $derived(guiding?.streaming ?? false);
+  const restarting = $derived(guiding?.restarting ?? false);
   let alertSeen = $state<string | null>(null);
 </script>
 
@@ -181,6 +186,23 @@
   </section>
 
   {#if guiding?.error}<Banner icon="alert" tone="error">{guiding.error}</Banner>{/if}
+  {#if streaming || restarting}
+    <Banner icon="alert" tone="warning">
+      {restarting ? t.guiding.restartingNow : t.guiding.streaming}
+      {#if !restarting && !guiding?.managed}{t.guiding.streamingManual}{/if}
+      {#snippet action()}
+        {#if guiding?.managed}
+          <Button
+            variant="text"
+            busy={busy || restarting}
+            disabled={!auth.owner || !reachable || !!job}
+            onclick={() => void act(restartGuiding)}>
+            {t.guiding.restart}
+          </Button>
+        {/if}
+      {/snippet}
+    </Banner>
+  {/if}
   {#if alert && alert.time !== alertSeen}
     <Banner icon="alert" tone={alert.kind === "error" ? "error" : "warning"}>
       {alert.message}
