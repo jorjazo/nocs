@@ -21,10 +21,10 @@ from nocs.api import create_app
 from nocs.api.schemas import AppState
 from nocs.config import Settings
 from nocs.guiding import Phd2Client, pixel_scale
+from nocs.mount.coords import sidereal_time
 
 pytestmark = [pytest.mark.indi, pytest.mark.phd2]
 
-SITE = {"name": "Lab", "latitude": -30.2, "longitude": -70.7, "elevation": 2400}
 
 SIMULATORS = json.loads(
     (Path(__file__).parents[2] / "dev" / "profiles" / "simulators.json").read_text()
@@ -132,6 +132,15 @@ def _new_preview(current: dict[str, Any], before: dict[str, Any] | None) -> dict
     return preview
 
 
+def site_with_orion_up() -> dict[str, Any]:
+    """A site where ORION is two hours west of the meridian now, high and on one side
+    of the pier: at a fixed site, CI lost the guide star while calibrating when ORION
+    was near the lower meridian (hour angle 11 h)."""
+    ra, _ = ORION
+    longitude = ((ra + 2 - sidereal_time(0.0, datetime.now(UTC))) * 15 + 180) % 360 - 180
+    return {"name": "Lab", "latitude": -30.2, "longitude": longitude, "elevation": 2400}
+
+
 def point_at_stars(api: TestClient) -> None:
     """Unpark the simulated mount and track a field rich in guide stars."""
     if state(api)["mount"]["parked"]:
@@ -171,7 +180,7 @@ def test_calibrate_guide_and_stop_for_the_mount(api: TestClient) -> None:
     wait(api, lambda s: s["guiding"]["settings"] == "applied", timeout=90)
     wait(api, lambda s: s["mount"] is not None)
     # For go to, later: the site cannot change while PHD2 holds the mount.
-    use_site(api, SITE)
+    use_site(api, site_with_orion_up())
     utc = datetime.now(UTC).isoformat()
     expect(api.post("/api/clock", json={"utc": utc, "utc_offset": -3}), 200)
     wait(api, lambda s: s["mount"]["site_sent"] and s["mount"]["time_sent"], timeout=10)
