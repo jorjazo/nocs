@@ -172,3 +172,15 @@ def test_solved_frames_for_the_framing_chart(client: TestClient, tmp_path: Path)
     assert client.get(frame.image).content == b"\xff\xd8 a JPEG"
     assert client.get("/api/frames/999/sky.jpg").status_code == 404
     assert client.get("/api/frames/solved", params={"ra": 25, "dec": 0}).status_code == 422
+
+
+def test_go_and_resume_guiding_is_refused_before_guiding_stops(client: TestClient) -> None:
+    """Checked first: a go to that cannot start must not stop guiding for nothing."""
+    goto = {"frame": "j2000", "ra": 0.5, "dec": -45, "resume_guiding": True}
+    response = client.post("/api/mount/goto", json=goto)
+    assert response.status_code == 503, response.text
+    assert "mount is not connected" in response.json()["detail"]
+    center = {"ra": 0.5, "dec": -45, "resume_guiding": True}
+    assert client.post("/api/solver/center", json=center).status_code == 503
+    jnow = {"frame": "altaz", "alt": 90, "az": 0, "resume_guiding": True}
+    assert client.post("/api/mount/goto", json=jnow).status_code == 422  # not for the zenith

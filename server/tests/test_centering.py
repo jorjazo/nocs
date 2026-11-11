@@ -364,3 +364,38 @@ async def test_another_job_centres_with_its_own_locks(rig: Rig) -> None:
     assert angles(rig.state()) == [pytest.approx(3, abs=0.01), pytest.approx(0, abs=0.01)]
     sky = rig.mount.sky
     assert separation(sky.ra, sky.dec, TARGET.ra, TARGET.dec) * 60 < 0.01
+
+
+async def test_afterwards_runs_in_the_job_once_centred(rig: Rig) -> None:
+    """What guides again after a centring: in the same job, holding the mount."""
+    ran: list[int] = []
+
+    async def afterwards(context: JobContext) -> Json:
+        assert rig.jobs.holder(Role.MOUNT.value) == context.id
+        assert rig.state()["state"] == "succeeded"
+        ran.append(len(rig.mount.slews))
+        return {"guiding": "again"}
+
+    job_id = rig.service.start(TARGET.ra, TARGET.dec, CenterOptions(), afterwards=afterwards)
+    await rig.jobs.wait(job_id)
+    job = rig.job(job_id)
+    assert job["state"] == "succeeded", job["error"]
+    assert job["result"]["afterwards"] == {"guiding": "again"}
+    assert ran == [2]
+
+
+async def test_check_passes_a_mount_held_by_guiding(rig: Rig) -> None:
+    """Go and centre, resuming guiding, is checked before guiding stops."""
+    token = rig.jobs.reserve("guiding", [Role.MOUNT.value])
+    rig.service.check(TARGET.ra, TARGET.dec, CenterOptions())
+    rig.mount.refusal = PointingError("the target is 12.0° below the horizon")
+    with pytest.raises(PointingError):
+        rig.service.check(TARGET.ra, TARGET.dec, CenterOptions())
+    rig.mount.refusal = None
+    camera = rig.jobs.reserve("expose", [Role.MAIN_CAMERA.value])
+    with pytest.raises(ResourceBusyError, match="main_camera"):
+        rig.service.check(TARGET.ra, TARGET.dec, CenterOptions())
+    rig.jobs.release(camera)
+    with pytest.raises(ResourceBusyError, match="mount is busy"):
+        rig.service.start(TARGET.ra, TARGET.dec, CenterOptions())
+    rig.jobs.release(token)

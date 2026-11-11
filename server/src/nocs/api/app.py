@@ -533,7 +533,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
     app.include_router(power_router(power))
     app.include_router(guiding_router(guiding))
     app.include_router(system_router(system))
-    app.include_router(solver_router(pointing, centering))
+    app.include_router(solver_router(pointing, centering, guiding))
     app.include_router(saved_frames_router(saved_frames))
     app.include_router(align_router(polar))
     app.include_router(accessories_router(focuser, filter_wheel, autofocus))

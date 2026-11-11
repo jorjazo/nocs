@@ -32,7 +32,7 @@ from nocs.devices import Coordinates, DeviceError, Location, Mount
 from nocs.equipment import EquipmentService, Role
 from nocs.equipment.service import IndiConnection
 from nocs.indi import IndiClient, IndiEvent, PropertyDefined, PropertyUpdated
-from nocs.jobs import JobContext, JobManager, ResourceBusyError
+from nocs.jobs import JobContext, JobFunction, JobManager, ResourceBusyError
 from nocs.mount.coords import (
     horizontal_to_jnow,
     j2000_to_jnow,
@@ -47,6 +47,8 @@ log = logging.getLogger(__name__)
 
 ROOT: Path = ("mount",)
 RESOURCE = Role.MOUNT.value
+AFTERWARDS_SETTLE = 2.0
+"""Seconds a go to waits after the slew before what comes ``afterwards``."""
 HORIZON = 0.0
 """Lowest altitude a go to may aim at without ``force``, degrees."""
 SITE_TOLERANCE = 0.1
@@ -175,25 +177,40 @@ class MountService:
             raise MountNotReadyError("the mount is not connected")
         return Mount(self._client, self._device)
 
-    def goto(self, ra: float, dec: float, frame: Frame = "j2000", *, force: bool = False) -> str:
+    def goto(
+        self,
+        ra: float,
+        dec: float,
+        frame: Frame = "j2000",
+        *,
+        force: bool = False,
+        afterwards: JobFunction | None = None,
+    ) -> str:
         """Slew to equatorial coordinates and track there; returns the job id.
 
         RA in hours, Dec in degrees. Refused below the horizon when the site and the
-        time are known, unless ``force``.
+        time are known, unless ``force``. ``afterwards`` runs in the job once the mount
+        is there (guiding again); its result is the job's ``afterwards``.
         """
         mount = self._check_goto(ra, dec, frame, force)
         self._jobs.check_free([RESOURCE])
 
         async def run(context: JobContext) -> Json:
             target = await self._goto(context, mount, ra, dec, frame)
-            return {"ra": target.ra, "dec": target.dec}
+            result: dict[str, Json] = {"ra": target.ra, "dec": target.dec}
+            if afterwards is not None:
+                await self.settle(AFTERWARDS_SETTLE)
+                result["afterwards"] = await afterwards(context)
+            return result
 
         return self._jobs.start("goto", [RESOURCE], run)
 
-    def check_goto(self, ra: float, dec: float, *, force: bool = False) -> None:
-        """Raise what a go to J2000 ``ra``, ``dec`` would raise now (for jobs that
-        go to later, so they are refused at once)."""
-        self._check_goto(ra, dec, "j2000", force)
+    def check_goto(
+        self, ra: float, dec: float, *, force: bool = False, frame: Frame = "j2000"
+    ) -> None:
+        """Raise what a go to ``ra``, ``dec`` would raise now, but for a busy mount (for
+        jobs that go to later, so they are refused at once)."""
+        self._check_goto(ra, dec, frame, force)
 
     async def slew(
         self,

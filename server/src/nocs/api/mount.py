@@ -25,8 +25,8 @@ from nocs.api.schemas import (
 )
 from nocs.clock import Clock
 from nocs.devices import DeviceError, Direction, Motion
-from nocs.guiding import GuidingService, Phd2Error
-from nocs.jobs import ResourceBusyError
+from nocs.guiding import GuidingNotReadyError, GuidingService, Phd2Error
+from nocs.jobs import JobFunction, ResourceBusyError
 from nocs.mount.pad import PadCommand, PadStatus, drive
 from nocs.mount.service import MountNotReadyError, MountService, PointingError
 
@@ -40,12 +40,7 @@ def mount_router(
     router = APIRouter(prefix="/api")
 
     async def stop_guiding(requested: bool) -> None:
-        """Stop PHD2 first when asked: the mount is held while it guides (ADR 0023)."""
-        if requested and guiding().guiding:
-            try:
-                await guiding().stop()
-            except (Phd2Error, TimeoutError) as e:
-                raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"PHD2: {e}") from e
+        await stop_guiding_first(guiding(), requested)
 
     @router.post("/clock")
     async def report_clock(request: ClockRequest) -> ClockReport:  # pyright: ignore[reportUnusedFunction]
@@ -57,12 +52,21 @@ def mount_router(
 
     @router.post("/mount/goto", status_code=status.HTTP_202_ACCEPTED)
     async def goto(request: GotoRequest) -> JobStarted:  # pyright: ignore[reportUnusedFunction]
-        await stop_guiding(request.stop_guiding)
+        if not isinstance(request, EquatorialGoto):
+            await stop_guiding(request.stop_guiding)
+            with _mount_errors():
+                return JobStarted(job=mount().goto_horizontal(request.alt, request.az))
+        afterwards = None
         with _mount_errors():
-            if isinstance(request, EquatorialGoto):
-                job = mount().goto(request.ra, request.dec, request.frame, force=request.force)
-            else:
-                job = mount().goto_horizontal(request.alt, request.az)
+            # Refused before guiding stops, not after: a target below the horizon.
+            mount().check_goto(request.ra, request.dec, force=request.force, frame=request.frame)
+            if request.resume_guiding:
+                afterwards = guide_afterwards(guiding())
+        await stop_guiding(request.stop_guiding or request.resume_guiding)
+        with _mount_errors():
+            job = mount().goto(
+                request.ra, request.dec, request.frame, force=request.force, afterwards=afterwards
+            )
         return JobStarted(job=job)
 
     @router.post("/mount/abort", status_code=status.HTTP_202_ACCEPTED)
@@ -164,6 +168,23 @@ def mount_router(
                     await websocket.close(REVOKED, "revoked")
 
     return router
+
+
+async def stop_guiding_first(guiding: GuidingService, requested: bool) -> None:
+    """Stop PHD2 first when asked: the mount is held while it guides (ADR 0023)."""
+    if requested and guiding.guiding:
+        try:
+            await guiding.stop()
+        except (Phd2Error, TimeoutError) as e:
+            raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"PHD2: {e}") from e
+
+
+def guide_afterwards(guiding: GuidingService) -> JobFunction:
+    """What guides again in a job that moves the mount; 503 when PHD2 is not there."""
+    try:
+        return guiding.guide_afterwards()
+    except GuidingNotReadyError as e:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, f"PHD2: {e}") from e
 
 
 @contextlib.contextmanager

@@ -1046,6 +1046,10 @@ export const en = {
     update: "Update tonight's target",
     goesToFrame: "Go and Go and centre go where the frame points, not the object's centre.",
     goHint: "Going there also makes it tonight's target.",
+    guidingRefused: "PHD2 is guiding and holds the mount. Resuming stops guiding, goes there and guides again on a new star.",
+    guidingRefusedCenter: "PHD2 is guiding and holds the mount. Resuming stops guiding, goes and centres, then guides again on a new star.",
+    goResumeGuiding: "Go and resume guiding",
+    goStopGuiding: "Go, stop guiding",
   },
   targetTypes: {
     star: "Star",

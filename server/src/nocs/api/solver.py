@@ -12,6 +12,7 @@ from fastapi import APIRouter, HTTPException, Query, Response, status
 from fastapi.responses import FileResponse
 
 from nocs.align.service import PolarAlignmentService, PolarOptions
+from nocs.api.mount import guide_afterwards, stop_guiding_first
 from nocs.api.schemas import (
     CenterRequest,
     JobStarted,
@@ -21,6 +22,7 @@ from nocs.api.schemas import (
     SolveRequest,
 )
 from nocs.devices import DeviceError
+from nocs.guiding import GuidingService
 from nocs.imaging import CameraNotReadyError
 from nocs.jobs import ResourceBusyError
 from nocs.mount.service import MountNotReadyError, PointingError
@@ -36,7 +38,9 @@ from nocs.storage import FrameUnavailableError, StorageError
 
 
 def solver_router(
-    pointing: Callable[[], PointingService], centering: Callable[[], CenteringService]
+    pointing: Callable[[], PointingService],
+    centering: Callable[[], CenteringService],
+    guiding: Callable[[], GuidingService],
 ) -> APIRouter:
     router = APIRouter(prefix="/api/solver")
 
@@ -65,7 +69,8 @@ def solver_router(
 
     @router.post("/center", status_code=status.HTTP_202_ACCEPTED)
     async def center(request: CenterRequest) -> JobStarted:  # pyright: ignore[reportUnusedFunction]
-        """Go to a J2000 target and centre it in the main camera's frame."""
+        """Go to a J2000 target and centre it in the main camera's frame; with
+        ``resume_guiding``, guide again on it in the same job."""
         options = CenterOptions(
             tolerance=request.tolerance,
             attempts=request.attempts,
@@ -75,8 +80,16 @@ def solver_router(
             binning=request.binning,
             force=request.force,
         )
+        afterwards = None
         with _errors():
-            return JobStarted(job=centering().start(request.ra, request.dec, options))
+            # Refused before guiding stops, not after: a target below the horizon.
+            centering().check(request.ra, request.dec, options)
+            if request.resume_guiding:
+                afterwards = guide_afterwards(guiding())
+        await stop_guiding_first(guiding(), request.stop_guiding or request.resume_guiding)
+        with _errors():
+            job = centering().start(request.ra, request.dec, options, afterwards=afterwards)
+        return JobStarted(job=job)
 
     return router
 

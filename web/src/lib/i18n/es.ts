@@ -1027,6 +1027,10 @@ export const es: Messages = {
     update: "Actualizar el objetivo",
     goesToFrame: "Ir e Ir y centrar van a donde apunta el cuadro, no al centro del objeto.",
     goHint: "Ir también lo deja como objetivo de esta noche.",
+    guidingRefused: "PHD2 está guiando y retiene la montura. Retomar detiene el guiado, va allí y vuelve a guiar con una estrella nueva.",
+    guidingRefusedCenter: "PHD2 está guiando y retiene la montura. Retomar detiene el guiado, va y centra, y vuelve a guiar con una estrella nueva.",
+    goResumeGuiding: "Ir y retomar el guiado",
+    goStopGuiding: "Ir, detener el guiado",
   },
   targetTypes: {
     star: "Estrella",

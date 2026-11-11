@@ -34,7 +34,7 @@ import anyio
 
 from nocs.devices import Coordinates
 from nocs.equipment import Role
-from nocs.jobs import JobContext, JobManager
+from nocs.jobs import JobContext, JobFunction, JobManager
 from nocs.pointing.solve import FrameSolve, Offset, PointingService, SolveOptions, offset
 from nocs.solving import Failure, SolveError
 from nocs.state import Json, Path, StateStore
@@ -160,22 +160,40 @@ class CenteringService:
         self._run: _Run | None = None
         store.set(ROOT, None)
 
-    def start(
+    def check(
         self, ra: float, dec: float, options: CenterOptions, role: Role = Role.MAIN_CAMERA
+    ) -> None:
+        """Raise what ``start`` would raise now, but for a busy mount (guiding, which
+        the caller stops first)."""
+        options.check()
+        self._pointing.check(options.solve_options, role)
+        self._mount.check_goto(ra, dec, force=options.force)
+        self._jobs.check_free(r for r in self._pointing.resources(role) if r != Role.MOUNT.value)
+
+    def start(
+        self,
+        ra: float,
+        dec: float,
+        options: CenterOptions,
+        role: Role = Role.MAIN_CAMERA,
+        *,
+        afterwards: JobFunction | None = None,
     ) -> str:
         """Centre J2000 ``ra``, ``dec`` in a job of its own; returns the job id.
 
         It locks what a solve does: the camera (with the main camera, the filter
-        wheel and the focuser) and the mount.
+        wheel and the focuser) and the mount. ``afterwards`` runs in the job once
+        the target is centred (guiding again); its result is the job's ``afterwards``.
         """
-        options.check()
-        self._pointing.check(options.solve_options, role)
-        self._mount.check_goto(ra, dec, force=options.force)
+        self.check(ra, dec, options, role)
         resources = self._pointing.resources(role)
         self._jobs.check_free(resources)
 
         async def job(context: JobContext) -> Json:
-            return await self.center(context, ra, dec, options, role)
+            result = await self.center(context, ra, dec, options, role)
+            if afterwards is not None:
+                result["afterwards"] = await afterwards(context)
+            return result
 
         return self._jobs.start("center", resources, job)
 

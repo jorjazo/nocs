@@ -1086,3 +1086,51 @@ def test_calibration_progress_comes_from_the_event_fields(
 ) -> None:
     # Events as recorded from PHD2 2.6.14 (dev/recordings/phd2-simulators-2026-10-31.jsonl).
     assert _calibration_progress(event) == shown
+
+
+@pytest.mark.parametrize(("after", "recalibrated"), [("west", False), ("east", True)])
+async def test_guiding_again_after_a_job_moves_the_mount(
+    phd2: FakePhd2, tmp_path: Path, after: str, recalibrated: bool
+) -> None:
+    """Go and resume guiding: stop, a job holding the mount moves it, then guides again
+    in that job; the calibration serves unless the mount changed sides of the pier."""
+    phd2.calibrated = True
+    async with applied(phd2, tmp_path) as (service, store, jobs, _, _):
+        await guiding_already(service, jobs)
+        store.set(("mount",), {"pier_side": "west"})
+        afterwards = service.guide_afterwards()
+        await service.stop()
+
+        async def goto(context: Any) -> Any:
+            store.set(("mount", "pier_side"), after)  # the slew
+            return await afterwards(context)
+
+        job_id = jobs.start("goto", [Role.MOUNT.value], goto)
+        await finished(service, jobs, job_id)
+        assert job(store, job_id)["state"] == "succeeded", job(store, job_id)
+        assert job(store, job_id)["result"]["recalibrated"] is recalibrated
+        assert phd2.params["guide"]["recalibrate"] is recalibrated
+        assert guiding(store, "app_state") == "Guiding"
+        # Once the job ends NOCS holds the mount for PHD2 again.
+        phd2.event("GuideStep", Timestamp=1.0, RADistanceRaw=0.1, DECDistanceRaw=0.1)
+        await until(lambda: jobs.holder(Role.MOUNT.value) not in (None, job_id))
+
+
+async def test_guiding_again_that_fails_says_the_mount_got_there(
+    phd2: FakePhd2, tmp_path: Path
+) -> None:
+    phd2.calibration_fails = True
+    async with applied(phd2, tmp_path) as (service, store, jobs, _, _):
+        afterwards = service.guide_afterwards()
+        job_id = jobs.start("goto", [Role.MOUNT.value], afterwards)
+        await finished(service, jobs, job_id)
+        error = job(store, job_id)["error"]
+        assert error.startswith("there, but guiding did not start again: calibration failed")
+
+
+async def test_guiding_again_needs_phd2(phd2: FakePhd2, tmp_path: Path) -> None:
+    async with applied(phd2, tmp_path) as (service, _, _, _, _):
+        await phd2.stop()
+        await until(lambda: service.phd2 is None)
+        with pytest.raises(GuidingNotReadyError):
+            service.guide_afterwards()

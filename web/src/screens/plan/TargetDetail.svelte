@@ -29,6 +29,7 @@
   import { holder } from "../../lib/camera.svelte";
   import { errorText } from "../../lib/errors";
   import { formatDecimal, formatDuration, formatTime } from "../../lib/format";
+  import { goRefusal } from "../../lib/goto";
   import { i18n } from "../../lib/i18n";
   import { live } from "../../lib/live.svelte";
   import { formatDec, formatRa, mountActivity } from "../../lib/mount.svelte";
@@ -203,7 +204,12 @@
 
   let busy = $state<string | null>(null);
   let error = $state("");
-  let refused = $state<"goto" | "center" | null>(null);
+  type Go = "goto" | "center";
+  // While PHD2 guides, a go to is refused: stop guiding for it and guide again on the
+  // new field ("resume", one job on the server), or just stop guiding (ADR 0023).
+  type Guiding = "resume" | "stop" | undefined;
+  let refused = $state<{ kind: Go; guiding: Guiding } | null>(null);
+  let guidingRefused = $state<Go | null>(null);
 
   const mountJob = $derived(holder(live.app.jobs, "mount"));
   const goReason = $derived.by((): string | null => {
@@ -241,19 +247,29 @@
     }
   }
 
-  async function go(kind: "goto" | "center", force = false): Promise<void> {
+  async function go(kind: Go, force = false, guiding: Guiding = undefined): Promise<void> {
     if (!object) return;
     const target = plannedTarget(object);
-    busy = kind;
+    busy = guiding ? `${kind}:${guiding}` : kind;
     error = "";
     refused = null;
+    guidingRefused = null;
+    const body = {
+      ra: target.ra,
+      dec: target.dec,
+      force,
+      stop_guiding: guiding === "stop",
+      resume_guiding: guiding === "resume",
+    };
     try {
-      if (kind === "center") await centerOn({ ra: target.ra, dec: target.dec, force });
-      else await gotoMount({ frame: "j2000", ra: target.ra, dec: target.dec, force });
+      if (kind === "center") await centerOn(body);
+      else await gotoMount({ frame: "j2000", ...body });
       // Going there makes it tonight's target, for Tonight's checklist and later the sequence.
       await makeTonights(target, object.label);
     } catch (e) {
-      if (e instanceof ApiError && e.status === 409 && e.message.includes("below the horizon")) refused = kind;
+      const why = e instanceof ApiError ? goRefusal(e.status, e.message) : null;
+      if (why === "horizon") refused = { kind, guiding };
+      else if (why === "guiding") guidingRefused = kind;
       else error = errorText(e, t);
     } finally {
       busy = null;
@@ -406,9 +422,19 @@
         <Banner icon="alert" tone="warning">
           {t.mount.belowHorizon}
           {#snippet action()}
-            <ConfirmButton label={t.mount.goAnyway} confirmLabel={t.mount.goAnywayConfirm} onconfirm={() => refused && void go(refused, true)} />
+            <ConfirmButton label={t.mount.goAnyway} confirmLabel={t.mount.goAnywayConfirm} onconfirm={() => refused && void go(refused.kind, true, refused.guiding)} />
           {/snippet}
         </Banner>
+      {/if}
+      {#if guidingRefused}
+        {@const kind = guidingRefused}
+        <Banner icon="alert" tone="warning">{kind === "center" ? t.plan.guidingRefusedCenter : t.plan.guidingRefused}</Banner>
+        <div class="buttons">
+          <Button variant="primary" disabled={goReason !== null} busy={busy === `${kind}:resume`} onclick={() => void go(kind, false, "resume")}>
+            {t.plan.goResumeGuiding}
+          </Button>
+          <Button disabled={goReason !== null} busy={busy === `${kind}:stop`} onclick={() => void go(kind, false, "stop")}>{t.plan.goStopGuiding}</Button>
+        </div>
       {/if}
       <div class="buttons">
         <Button variant="primary" disabled={centerReason !== null} busy={busy === "center"} onclick={() => void go("center")}>

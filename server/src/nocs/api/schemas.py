@@ -1328,6 +1328,11 @@ class EquatorialGoto(BaseModel):
     stop_guiding: bool = Field(
         default=False, description="Stop guiding first; refused while guiding otherwise (ADR 0023)."
     )
+    resume_guiding: bool = Field(
+        default=False,
+        description="Stop guiding first and guide again once there, in the same job: PHD2 "
+        "selects a new star, calibrating again only if the mount changed sides of the pier.",
+    )
 
 
 class HorizontalGoto(BaseModel):
@@ -1615,6 +1620,14 @@ class CenterRequest(BaseModel):
     )
     binning: int | None = Field(default=None, ge=1, description="For the frames only.")
     force: bool = Field(default=False, description="Go below the horizon.")
+    stop_guiding: bool = Field(
+        default=False, description="Stop guiding first; refused while guiding otherwise (ADR 0023)."
+    )
+    resume_guiding: bool = Field(
+        default=False,
+        description="Stop guiding first and guide again once centred, in the same job: PHD2 "
+        "selects a new star, calibrating again only if the mount changed sides of the pier.",
+    )
 
 
 class PolarAlignRequest(BaseModel):

@@ -3355,9 +3355,17 @@ export interface CenterRequest {
    */
   ra: number;
   /**
+   * Stop guiding first and guide again once centred, in the same job: PHD2 selects a new star, calibrating again only if the mount changed sides of the pier.
+   */
+  resume_guiding?: boolean;
+  /**
    * Seconds after each slew.
    */
   settle?: number;
+  /**
+   * Stop guiding first; refused while guiding otherwise (ADR 0023).
+   */
+  stop_guiding?: boolean;
   /**
    * Arcminutes.
    */
@@ -3866,6 +3874,10 @@ export interface EquatorialGoto {
    * Hours.
    */
   ra: number;
+  /**
+   * Stop guiding first and guide again once there, in the same job: PHD2 selects a new star, calibrating again only if the mount changed sides of the pier.
+   */
+  resume_guiding?: boolean;
   /**
    * Stop guiding first; refused while guiding otherwise (ADR 0023).
    */

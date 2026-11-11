@@ -356,7 +356,10 @@ Tonight and Plan (stage 3.6):
   frame's); dragging the sky frames off the object, which the caption says with a
   way back. Go and centre is the primary action, then Go and "Make tonight's
   target"; going also makes it tonight's target, and the centring card follows
-  the run.
+  the run. While PHD2 guides, a go is refused with "Go and resume guiding" (one
+  job on the box: stop guiding, go or centre, guide again on a new star,
+  calibrating again only if the mount changed sides of the pier) and "Go, stop
+  guiding".
 - The framing chart (stage 3.7b) draws the last solved frame dashed where it
   landed, and under the rotation slider says how far to turn the camera from that
   frame's angle to the framing's, with "Use the camera's angle". "Survey image" (off

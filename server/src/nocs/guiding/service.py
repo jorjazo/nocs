@@ -64,7 +64,7 @@ from nocs.guiding.phd2 import (
 from nocs.guiding.settings import GuideRig, Phd2Settings, render
 from nocs.guiding.stats import GuideEntry, GuideHistory, rms
 from nocs.indi import IndiClient
-from nocs.jobs import JobContext, JobManager, ResourceBusyError
+from nocs.jobs import JobContext, JobFunction, JobManager, ResourceBusyError
 from nocs.state import Json, Path, StateStore
 
 log = logging.getLogger(__name__)
@@ -82,6 +82,8 @@ while looping with a star selected, although its documentation says otherwise.""
 LOOPING_STATES = frozenset({"Looping", "Selected"})
 CAMERA = Role.GUIDE_CAMERA
 HOLDER = "phd2"
+SIDES = ("east", "west")
+"""Known sides of the pier, as the mount's state has them."""
 CONNECT_TIMEOUT = 60.0
 STOP_MARGIN = 15.0
 LOOP_STOPPED = 2.0
@@ -326,6 +328,32 @@ class GuidingService:
         finally:
             self._starting = None
             self._sync_mount_hold()
+
+    def guide_afterwards(self) -> JobFunction:
+        """What a job that moves the mount (a go to, a centring) runs once there to
+        guide again: PHD2 selects a new star, guides and settles.
+
+        Its calibration still serves unless the mount changed sides of the pier, as
+        after a meridian flip: then PHD2 calibrates again (ADR 0033). Raises
+        ``GuidingNotReadyError`` at once when PHD2 is not there.
+        """
+        self._client()  # fail now, not after the slew
+        before = self._store.get(("mount", "pier_side"))
+
+        async def run(context: JobContext) -> Json:
+            after = self._store.get(("mount", "pier_side"))
+            flipped = before in SIDES and after in SIDES and before != after
+            context.progress(None, "guiding again")
+            try:
+                done = await self.start(context, recalibrate=flipped)
+            except (GuidingError, GuidingNotReadyError, Phd2Error, Phd2ConnectionError) as e:
+                raise GuidingError(f"there, but guiding did not start again: {e}") from e
+            except TimeoutError as e:
+                message = "there, but guiding did not start again: PHD2 timed out"
+                raise GuidingError(message) from e
+            return {"guiding": done, "recalibrated": flipped}
+
+        return run
 
     def guide_under(self, job_id: str | None) -> None:
         """Guiding goes on under ``job_id``'s job, which holds the mount itself.

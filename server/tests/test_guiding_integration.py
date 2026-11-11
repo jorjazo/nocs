@@ -6,6 +6,7 @@ import asyncio
 import json
 import time
 from collections.abc import Callable, Iterator
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +15,7 @@ from conftest import Phd2Setup
 from fastapi.testclient import TestClient
 from owner import pair_owner
 from simfocus import ORION
+from sites import use_site
 
 from nocs.api import create_app
 from nocs.api.schemas import AppState
@@ -21,6 +23,8 @@ from nocs.config import Settings
 from nocs.guiding import Phd2Client, pixel_scale
 
 pytestmark = [pytest.mark.indi, pytest.mark.phd2]
+
+SITE = {"name": "Lab", "latitude": -30.2, "longitude": -70.7, "elevation": 2400}
 
 SIMULATORS = json.loads(
     (Path(__file__).parents[2] / "dev" / "profiles" / "simulators.json").read_text()
@@ -166,6 +170,11 @@ def test_calibrate_guide_and_stop_for_the_mount(api: TestClient) -> None:
     expect(api.post("/api/equipment/connect", json={"profile": "simulators"}), 202)
     wait(api, lambda s: s["guiding"]["settings"] == "applied", timeout=90)
     wait(api, lambda s: s["mount"] is not None)
+    # For go to, later: the site cannot change while PHD2 holds the mount.
+    use_site(api, SITE)
+    utc = datetime.now(UTC).isoformat()
+    expect(api.post("/api/clock", json={"utc": utc, "utc_offset": -3}), 200)
+    wait(api, lambda s: s["mount"]["site_sent"] and s["mount"]["time_sent"], timeout=10)
     point_at_stars(api)
     expect(api.post("/api/guiding/connect"), 204)
     expect(api.put("/api/guiding/exposure", json={"exposure": 1}), 204)
@@ -243,5 +252,23 @@ def test_calibrate_guide_and_stop_for_the_mount(api: TestClient) -> None:
     point_at_stars(api)
     result = start_guiding(api, settle=settle)
     assert result["calibrated"] is False
+
+    # Plan's "Go and resume guiding": one job stops guiding, goes, and guides again on
+    # a new star, with the calibration it has on the same side of the pier.
+    ra, dec = ORION
+    go = {"frame": "jnow", "ra": ra, "dec": dec + 0.3, "force": True}
+    refused = api.post("/api/mount/goto", json=go)
+    assert refused.status_code == 409, refused.text
+    assert "guiding" in refused.json()["detail"]
+    response = api.post("/api/mount/goto", json={**go, "resume_guiding": True})
+    expect(response, 202)
+    job_id = response.json()["job"]
+    wait(api, lambda s: s["jobs"][job_id]["state"] != "running", timeout=300)
+    job = state(api)["jobs"][job_id]
+    assert job["state"] == "succeeded", (job["error"], job["message"])
+    assert job["result"]["afterwards"]["recalibrated"] is False
+    assert job["result"]["afterwards"]["guiding"]["calibrated"] is False
+    assert state(api)["guiding"]["app_state"] == "Guiding"
+    assert abs(state(api)["mount"]["dec"] - (dec + 0.3)) < 0.1
     expect(api.post("/api/guiding/stop"), 204)
     expect(api.post("/api/guiding/disconnect"), 204)

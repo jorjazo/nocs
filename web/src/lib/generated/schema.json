@@ -2206,12 +2206,22 @@
           "minimum": 0,
           "type": "number"
         },
+        "resume_guiding": {
+          "default": false,
+          "description": "Stop guiding first and guide again once centred, in the same job: PHD2 selects a new star, calibrating again only if the mount changed sides of the pier.",
+          "type": "boolean"
+        },
         "settle": {
           "default": 2.0,
           "description": "Seconds after each slew.",
           "maximum": 60,
           "minimum": 0,
           "type": "number"
+        },
+        "stop_guiding": {
+          "default": false,
+          "description": "Stop guiding first; refused while guiding otherwise (ADR 0023).",
+          "type": "boolean"
         },
         "tolerance": {
           "default": 1.0,
@@ -3109,6 +3119,11 @@
           "exclusiveMaximum": 24,
           "minimum": 0,
           "type": "number"
+        },
+        "resume_guiding": {
+          "default": false,
+          "description": "Stop guiding first and guide again once there, in the same job: PHD2 selects a new star, calibrating again only if the mount changed sides of the pier.",
+          "type": "boolean"
         },
         "stop_guiding": {
           "default": false,
