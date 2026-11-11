@@ -115,6 +115,18 @@ class Optics(ProfileModel):
     )
 
 
+class Solving(ProfileModel):
+    """How NOCS plate solves to point (go and centre, solve, polar alignment)."""
+
+    exposure: float = Field(
+        default=2.0,
+        gt=0,
+        le=120,
+        description="Seconds of the frames it solves, whatever the camera is set to; a "
+        "request or a sequence step may ask for another.",
+    )
+
+
 class Profile(ProfileModel):
     name: str = Field(min_length=1, max_length=80)
     devices: dict[Role, DeviceConfig] = Field(default_factory=dict[Role, DeviceConfig])
@@ -127,6 +139,7 @@ class Profile(ProfileModel):
         description="The guide camera sees through the imaging optics: an off-axis guider, or "
         "a guide sensor built into the main camera. Guiding then uses the imaging optics.",
     )
+    solving: Solving = Field(default_factory=Solving)
 
     @property
     def guiding_optics(self) -> Optics | None:

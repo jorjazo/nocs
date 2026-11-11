@@ -6,7 +6,7 @@ import { listSequences } from "./api";
 import { formatDecimal, formatDuration, formatPlain, formatTemperature, formatTime } from "./format";
 import type { Messages } from "./i18n";
 import type { AutofocusTrigger, DitherTrigger, FlipTrigger, RecenterTrigger } from "./generated/api";
-import { frameName, newTemplate, sequenceId, triggerDue } from "./sequence";
+import { frameName, newTemplate, sequenceId, triggerDue, type CameraSettings } from "./sequence";
 import type { Container, Node, PlannedTarget, PowerOutput, SequenceEvent, SequenceRun, Template } from "./types";
 
 export { isActive, nextFilter, rowSeconds, sequenceId } from "./sequence";
@@ -26,9 +26,15 @@ class Builder {
   }
 
   // Edit the target's saved sequence, or a new one.
-  async open(target: PlannedTarget, filter: string | null, guide: boolean, solver: boolean): Promise<void> {
+  async open(
+    target: PlannedTarget,
+    filter: string | null,
+    guide: boolean,
+    solver: boolean,
+    camera?: CameraSettings,
+  ): Promise<void> {
     this.loading = true;
-    const fresh = newTemplate(target, filter, guide, solver);
+    const fresh = newTemplate(target, filter, guide, solver, camera);
     try {
       const stored = (await listSequences())[sequenceId(frameName(target))]?.template;
       this.draft = stored ? { ...fresh, ...stored } : fresh;

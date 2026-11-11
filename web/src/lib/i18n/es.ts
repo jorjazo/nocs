@@ -550,7 +550,8 @@ export const es: Messages = {
     solveShown: "Resolver este cuadro",
     sync: "Sincronizar la montura",
     synced: "Montura sincronizada",
-    hint: "Toma una imagen con la exposición de la cámara, averigua adónde apunta y puede decírselo a la montura.",
+    hint: (seconds: string) =>
+      `Toma una imagen de ${seconds} s (la exposición para resolver del perfil), averigua adónde apunta y puede decírselo a la montura.`,
     unavailable: "ASTAP, el resolvedor de placas, no está instalado en el equipo.",
     noDatabase: (field: string) => `Ninguna base de estrellas instalada resuelve un campo de ${field}.`,
     noMount: "Conecta una montura para sincronizarla.",
@@ -586,7 +587,8 @@ export const es: Messages = {
   center: {
     title: "Centrado",
     goCenter: "Ir y centrar",
-    hint: "Ir y centrar toma imágenes con la exposición de la cámara principal y corrige la montura hasta que el objetivo queda al medio.",
+    hint: (seconds: string) =>
+      `Ir y centrar toma imágenes de ${seconds} s (la exposición para resolver del perfil) y corrige la montura hasta que el objetivo queda al medio.`,
     noSolver: "Para centrar hace falta ASTAP, el resolvedor de placas, en el equipo.",
     noCamera: "Para centrar hace falta una cámara principal.",
     cameraBusy: "La cámara principal está ocupada.",
@@ -795,7 +797,7 @@ export const es: Messages = {
     atStart: "La montura está cerca",
     goStart: "Ir allí",
     exposure: "Exposición",
-    exposureHint: "Lo justo para unas decenas de estrellas. Vacío: la exposición de la cámara principal.",
+    exposureHint: "Lo justo para unas decenas de estrellas. Vacío: la exposición para resolver del perfil.",
     binning: "Binning",
     cameraBinning: "El de la cámara",
     rotation: "Giro del eje AR",
@@ -1087,6 +1089,10 @@ export const es: Messages = {
     aperture: "Apertura",
     reducer: "Reductor o barlow",
     reducerHint: "1 = ninguno; 0,8 para un reductor ×0,8.",
+    solving: "Resolución de placas",
+    solveExposure: "Exposición",
+    solveExposureHint:
+      "De las imágenes que NOCS resuelve para ir y centrar, resolver, alinear al polo y recentrar, tenga la cámara la exposición que tenga. Lo justo para unas decenas de estrellas. Vacío: 2 s.",
     save: "Guardar perfil",
     delete: "Borrar perfil",
     confirmDelete: "Toca otra vez para borrar",
@@ -1150,6 +1156,10 @@ export const es: Messages = {
     addFilter: "Añadir filtro",
     noFilter: "—",
     frames: (count, exposure) => `${count} × ${exposure}`,
+    rowSettings: (gain, offset) =>
+      gain === null && offset === null
+        ? "ganancia y offset de la cámara"
+        : `${gain === null ? "ganancia de la cámara" : `ganancia ${gain}`} · ${offset === null ? "offset de la cámara" : `offset ${offset}`}`,
     fewer: (filter) => `Menos tomas ${filter}`,
     more: (filter) => `Más tomas ${filter}`,
     edit: (filter) => `Editar las tomas ${filter}`,
@@ -1213,7 +1223,8 @@ export const es: Messages = {
       offset: "Offset",
       binning: "Binning",
       cameras: "El de la cámara",
-      settingHint: "Vacío: como esté la cámara.",
+      settingHint: (now) =>
+        `Vacío: como esté la cámara cuando empiece la fila, lo último que puso la vista en vivo${now === null ? "" : ` (ahora ${now})`}.`,
       remove: "Quitar",
       removeConfirm: "Toca otra vez para quitar",
       done: "Listo",

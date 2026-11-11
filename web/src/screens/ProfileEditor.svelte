@@ -1,8 +1,9 @@
 <script lang="ts">
   // Profile editor (ADR 0011): which device plays each role (driver from the
   // rig's INDI catalog, optional device name, serial port by its stable name),
-  // and the optics of both trains. Filter names are not here: they belong to each
-  // physical wheel (ADR 0016), nor is the site, which belongs to the box (ADR 0038).
+  // the optics of both trains, and the exposure it plate solves with. Filter names
+  // are not here: they belong to each physical wheel (ADR 0016), nor is the site,
+  // which belongs to the box (ADR 0038).
   import { untrack } from "svelte";
   import Banner from "../components/Banner.svelte";
   import Button from "../components/Button.svelte";
@@ -15,7 +16,7 @@
   import { deleteProfile, getProfile, listDriverDevices, listDrivers, listSerialPorts, putProfile } from "../lib/api";
   import { auth } from "../lib/auth.svelte";
   import { choiceFor, driverChoices, matches, type DriverChoice } from "../lib/drivers";
-  import { ROLE_ICONS, ROLES } from "../lib/equipment";
+  import { ROLE_ICONS, ROLES, SOLVE_EXPOSURE } from "../lib/equipment";
   import { errorText } from "../lib/errors";
   import { i18n } from "../lib/i18n";
   import { live } from "../lib/live.svelte";
@@ -62,10 +63,13 @@
   let guiding = $state<OpticsDraft>(opticsDraft(null));
   // An off-axis guider or a camera's own guide sensor: guiding uses the imaging optics.
   let throughImaging = $state(false);
+  // Seconds of the frames NOCS solves to point; empty: the server's 2 s.
+  let solveExposure = $state<number | null>(null);
   // Every number field reports whether its text is valid.
-  const NUMBERS = ["imaging", "guiding"].flatMap((train) =>
-    ["focal", "aperture", "reducer"].map((field) => `${train}-${field}`),
-  );
+  const NUMBERS = [
+    ...["imaging", "guiding"].flatMap((train) => ["focal", "aperture", "reducer"].map((field) => `${train}-${field}`)),
+    "solve-exposure",
+  ];
   let validity = $state<Record<string, boolean>>(Object.fromEntries(NUMBERS.map((key) => [key, true])));
 
   let drivers = $state<Driver[]>([]);
@@ -99,6 +103,7 @@
         imaging = opticsDraft(profile.imaging);
         guiding = opticsDraft(profile.guiding);
         throughImaging = profile.guiding_through_imaging ?? false;
+        solveExposure = profile.solving?.exposure ?? null;
         loaded = true;
       })
       .catch((e: unknown) => (loadError = errorText(e, t)));
@@ -217,6 +222,7 @@
       imaging: optics(imaging, original?.imaging),
       guiding: optics(guiding, original?.guiding),
       guiding_through_imaging: throughImaging,
+      solving: { ...original?.solving, exposure: solveExposure ?? SOLVE_EXPOSURE },
     };
   }
 
@@ -413,6 +419,19 @@
         hint={t.editor.throughImagingHint}
         checked={throughImaging}
         onchange={(value) => (throughImaging = value)} />
+    </fieldset>
+
+    <fieldset class="section" disabled={!auth.owner}>
+      <legend class="heading">{t.editor.solving}</legend>
+      <NumberField
+        label={t.editor.solveExposure}
+        bind:value={solveExposure}
+        bind:valid={validity["solve-exposure"]}
+        min={0.01}
+        max={120}
+        unit="s"
+        placeholder={String(SOLVE_EXPOSURE)}
+        hint={t.editor.solveExposureHint} />
     </fieldset>
 
     {#if auth.owner}

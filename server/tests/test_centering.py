@@ -40,6 +40,7 @@ class FakeCapture:
         self.jobs = jobs
         self.directory = directory
         self.taken = 0
+        self.seconds: list[float] = []
 
     def camera(self, role: Role) -> FakeCameraDevice:
         return FakeCameraDevice()
@@ -55,6 +56,7 @@ class FakeCapture:
         assert self.jobs.holder(role.value) == context.id
         await asyncio.sleep(0)
         self.taken += 1
+        self.seconds.append(seconds)
         path = self.directory / f"shot{self.taken}.fits"
         path.touch()
         return Shot(path, 0, FrameType.LIGHT, TAKEN, seconds, None)
@@ -175,7 +177,7 @@ class Rig:
         self.mount = FakeMount(self.jobs)
         self.solver = FakeSolver(self.mount)
         self.pointing = PointingService(
-            self.store, self.jobs, self.capture, self.solver, self.mount
+            self.store, self.jobs, self.capture, self.solver, self.mount, exposure=lambda: 3.0
         )
         self.service = CenteringService(self.store, self.jobs, self.pointing, self.mount)
 
@@ -229,6 +231,16 @@ async def test_sync_until_within_tolerance(rig: Rig) -> None:
     assert len(rig.mount.syncs) == 2  # the last frame too
     assert first["aim"] == second["aim"] == {"ra": TARGET.ra, "dec": TARGET.dec}
     assert second["solution"]["dec"] == pytest.approx(TARGET.dec)
+
+
+async def test_frames_of_the_profiles_solving_exposure_unless_asked(rig: Rig) -> None:
+    # The camera is at 5 s (Live view's): centring takes the profile's 3 s.
+    job = await rig.center()
+    assert job["state"] == "succeeded", job["error"]
+    assert rig.capture.seconds == [3.0, 3.0]
+    job = await rig.center(exposure=1.5)
+    assert job["state"] == "succeeded", job["error"]
+    assert rig.capture.seconds[2:] == [1.5]
 
 
 async def test_offset_aims_off_by_the_error_without_syncing(rig: Rig) -> None:

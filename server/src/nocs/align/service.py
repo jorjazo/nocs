@@ -124,7 +124,7 @@ class Clock(Protocol):
 @dataclass(frozen=True, slots=True)
 class PolarOptions:
     exposure: float | None = None
-    """Seconds; the camera's solving exposure when ``None``."""
+    """Seconds; the profile's solving exposure when ``None``."""
     binning: int | None = None
     step: float = 30.0
     """Degrees of each of the two turns of the RA axis."""

@@ -321,6 +321,12 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
         profile = ProfileStore(settings.config_dir).get(active) if active else None
         return profile.imaging.autofocus if profile and profile.imaging else None
 
+    def solve_exposure() -> float | None:
+        """The active profile's, as saved (its summary in the state): no reconnection."""
+        active = equipment().active
+        value = store.get(("equipment", "profiles", active, "solve_exposure")) if active else None
+        return float(value) if isinstance(value, int | float) else None
+
     async def record_focus_run(run: FocusRun) -> None:
         await anyio.to_thread.run_sync(storage().add_focus_run, run)
 
@@ -415,6 +421,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
             services.solver,
             services.mount,
             services.saved_frames,
+            exposure=solve_exposure,
         )
         services.centering = CenteringService(
             store, services.jobs, services.pointing, services.mount

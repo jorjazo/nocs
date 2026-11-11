@@ -1112,6 +1112,10 @@ export interface RoleState {
  */
 export interface ProfileSummary {
   name: string;
+  /**
+   * Seconds of the frames NOCS solves to point, as saved (`solving.exposure`).
+   */
+  solve_exposure: number;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -1898,7 +1902,7 @@ export interface PolarOptionsState {
   back: boolean;
   binning: number | null;
   /**
-   * Seconds; None: the camera's exposure.
+   * Seconds; None: the profile's solving exposure.
    */
   exposure: number | null;
   /**
@@ -3311,7 +3315,7 @@ export interface Center {
   attempts?: number;
   binning?: number | null;
   /**
-   * Seconds; the camera's current one when None.
+   * Seconds; the profile's solving exposure when None.
    */
   exposure?: number | null;
   kind?: "center";
@@ -3338,7 +3342,7 @@ export interface CenterRequest {
    */
   dec: number;
   /**
-   * Seconds; None: the camera's exposure.
+   * Seconds; None: the profile's solving exposure.
    */
   exposure?: number | null;
   /**
@@ -4517,7 +4521,7 @@ export interface PolarAlignRequest {
    */
   binning?: number | null;
   /**
-   * Seconds; None: the camera's exposure.
+   * Seconds; None: the profile's solving exposure.
    */
   exposure?: number | null;
   /**
@@ -4582,6 +4586,19 @@ export interface Profile {
    */
   imaging?: Optics | null;
   name: string;
+  solving?: Solving;
+}
+/**
+ * How NOCS plate solves to point (go and centre, solve, polar alignment).
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "Solving".
+ */
+export interface Solving {
+  /**
+   * Seconds of the frames it solves, whatever the camera is set to; a request or a sequence step may ask for another.
+   */
+  exposure?: number;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -5096,7 +5113,7 @@ export interface SolveRequest {
    */
   binning?: number | null;
   /**
-   * Seconds; None: the camera's exposure.
+   * Seconds; None: the profile's solving exposure.
    */
   exposure?: number | null;
   /**

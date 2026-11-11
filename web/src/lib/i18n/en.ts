@@ -567,7 +567,8 @@ export const en = {
     solveShown: "Solve this frame",
     sync: "Sync the mount",
     synced: "Mount synced",
-    hint: "Takes a frame with the camera's exposure, finds where it points, and can tell the mount.",
+    hint: (seconds: string) =>
+      `Takes a ${seconds} s frame (the profile's solving exposure), finds where it points, and can tell the mount.`,
     unavailable: "ASTAP, the plate solver, is not installed on the rig.",
     noDatabase: (field: string) => `No star database installed solves a ${field} field.`,
     noMount: "Connect a mount to sync it.",
@@ -603,7 +604,8 @@ export const en = {
   center: {
     title: "Centring",
     goCenter: "Go and centre",
-    hint: "Go and centre takes frames with the main camera's exposure and corrects the mount until the target is in the middle.",
+    hint: (seconds: string) =>
+      `Go and centre takes ${seconds} s frames (the profile's solving exposure) and corrects the mount until the target is in the middle.`,
     noSolver: "Centring needs ASTAP, the plate solver, on the rig.",
     noCamera: "Centring needs a main camera.",
     cameraBusy: "The main camera is busy.",
@@ -816,7 +818,7 @@ export const en = {
     atStart: "The mount is near there",
     goStart: "Go there",
     exposure: "Exposure",
-    exposureHint: "Long enough for a few dozen stars. Empty: the main camera's exposure.",
+    exposureHint: "Long enough for a few dozen stars. Empty: the profile's solving exposure.",
     binning: "Binning",
     cameraBinning: "Camera's",
     rotation: "Turn of the RA axis",
@@ -1105,6 +1107,10 @@ export const en = {
     aperture: "Aperture",
     reducer: "Reducer or barlow",
     reducerHint: "1 = none; 0.8 for a ×0.8 reducer.",
+    solving: "Plate solving",
+    solveExposure: "Exposure",
+    solveExposureHint:
+      "Of the frames NOCS solves to go and centre, solve, polar align and recentre, whatever the camera is set to. Long enough for a few dozen stars. Empty: 2 s.",
     save: "Save profile",
     delete: "Delete profile",
     confirmDelete: "Tap again to delete",
@@ -1168,6 +1174,11 @@ export const en = {
     addFilter: "Add filter",
     noFilter: "—",
     frames: (count: number, exposure: string) => `${count} × ${exposure}`,
+    // A row's gain and offset; null: the camera's when the row starts.
+    rowSettings: (gain: string | null, offset: string | null) =>
+      gain === null && offset === null
+        ? "camera's gain and offset"
+        : `${gain === null ? "camera's gain" : `gain ${gain}`} · ${offset === null ? "camera's offset" : `offset ${offset}`}`,
     fewer: (filter: string) => `Fewer ${filter} frames`,
     more: (filter: string) => `More ${filter} frames`,
     edit: (filter: string) => `Edit the ${filter} frames`,
@@ -1231,7 +1242,8 @@ export const en = {
       offset: "Offset",
       binning: "Binning",
       cameras: "Camera's",
-      settingHint: "Empty: as the camera is set.",
+      settingHint: (now: string | null) =>
+        `Empty: as the camera is set when the row starts, whatever Live view last set${now === null ? "" : ` (now ${now})`}.`,
       remove: "Remove",
       removeConfirm: "Tap again to remove",
       done: "Done",

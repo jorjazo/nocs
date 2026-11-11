@@ -126,12 +126,23 @@ class Rig:
     def __init__(self, directory: Path, astap: Astap | None) -> None:
         self.directory = directory
         self.store = StateStore()
-        self.store.set(("cameras",), {"main_camera": {"exposure": 5.0, "field": {"height": 2.34}}})
+        # A long light in Live view: solves must not take its exposure.
+        self.store.set(
+            ("cameras",), {"main_camera": {"exposure": 180.0, "field": {"height": 2.34}}}
+        )
+        self.profile_exposure: float | None = 5.0
         self.jobs = JobManager(self.store)
         self.capture = FakeCapture(self.jobs, directory)
         self.mount = FakeMounts(self.jobs)
         self.solver = SolverService(self.store, astap)
-        self.service = PointingService(self.store, self.jobs, self.capture, self.solver, self.mount)
+        self.service = PointingService(
+            self.store,
+            self.jobs,
+            self.capture,
+            self.solver,
+            self.mount,
+            exposure=lambda: self.profile_exposure,
+        )
 
     async def solve(self, **options: Any) -> dict[str, Any]:
         job_id = self.service.start(SolveOptions(**options))
@@ -171,7 +182,7 @@ async def test_solve_reports_the_offset_from_the_mount(rig: Rig) -> None:
     assert job["kind"] == "solve"
     # The mount must not move under the frame; an exposure's locks come along.
     assert job["resources"] == ["filter_wheel", "focuser", "main_camera", "mount"]
-    # The camera's exposure, its binning, and a hint from the mount.
+    # The profile's solving exposure (not the camera's), its binning, a hint from the mount.
     assert rig.capture.taken_with == [(5.0, 1)]
     [command] = calls(rig.directory)
     assert command[command.index("-ra") + 1] == f"{MOUNT.ra:.6f}"
@@ -189,6 +200,13 @@ async def test_solve_reports_the_offset_from_the_mount(rig: Rig) -> None:
     assert last["synced"] is False
     assert rig.mount.syncs == []
     assert not rig.capture.shots[0].path.exists()
+
+
+async def test_solve_without_a_profile_takes_two_seconds(rig: Rig) -> None:
+    rig.profile_exposure = None
+    job = await rig.solve()
+    assert job["state"] == "succeeded", job["error"]
+    assert rig.capture.taken_with == [(2.0, 1)]
 
 
 async def test_solve_and_sync(rig: Rig) -> None:

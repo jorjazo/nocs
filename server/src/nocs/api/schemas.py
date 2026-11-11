@@ -112,6 +112,9 @@ type DeviceStatusName = Literal[
 
 class ProfileSummary(StateModel):
     name: str
+    solve_exposure: float = Field(
+        description="Seconds of the frames NOCS solves to point, as saved (`solving.exposure`)."
+    )
 
 
 class RoleState(StateModel):
@@ -585,7 +588,7 @@ class PolarUpdate(StateModel):
 
 
 class PolarOptionsState(StateModel):
-    exposure: float | None = Field(description="Seconds; None: the camera's exposure.")
+    exposure: float | None = Field(description="Seconds; None: the profile's solving exposure.")
     binning: int | None
     step: float = Field(description="Degrees of each turn of the RA axis.")
     side: Literal["east", "west"] = Field(description="Where the RA axis turns to.")
@@ -1587,7 +1590,7 @@ class SolveRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     exposure: float | None = Field(
-        default=None, gt=0, le=600, description="Seconds; None: the camera's exposure."
+        default=None, gt=0, le=600, description="Seconds; None: the profile's solving exposure."
     )
     binning: int | None = Field(default=None, ge=1, description="For this frame only.")
     sync: bool = Field(default=False, description="Sync the mount to the solution.")
@@ -1608,7 +1611,7 @@ class CenterRequest(BaseModel):
     settle: float = Field(default=2.0, ge=0, le=60, description="Seconds after each slew.")
     method: Literal["sync", "offset"] = "sync"
     exposure: float | None = Field(
-        default=None, gt=0, le=600, description="Seconds; None: the camera's exposure."
+        default=None, gt=0, le=600, description="Seconds; None: the profile's solving exposure."
     )
     binning: int | None = Field(default=None, ge=1, description="For the frames only.")
     force: bool = Field(default=False, description="Go below the horizon.")
@@ -1618,7 +1621,7 @@ class PolarAlignRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     exposure: float | None = Field(
-        default=None, gt=0, le=600, description="Seconds; None: the camera's exposure."
+        default=None, gt=0, le=600, description="Seconds; None: the profile's solving exposure."
     )
     binning: int | None = Field(default=None, ge=1, description="For the frames only.")
     step: float = Field(default=30.0, ge=10, le=60, description="Degrees of each RA turn.")

@@ -2126,7 +2126,7 @@
             }
           ],
           "default": null,
-          "description": "Seconds; the camera's current one when None."
+          "description": "Seconds; the profile's solving exposure when None."
         },
         "kind": {
           "const": "center",
@@ -2185,7 +2185,7 @@
             }
           ],
           "default": null,
-          "description": "Seconds; None: the camera's exposure."
+          "description": "Seconds; None: the profile's solving exposure."
         },
         "force": {
           "default": false,
@@ -7085,7 +7085,7 @@
             }
           ],
           "default": null,
-          "description": "Seconds; None: the camera's exposure."
+          "description": "Seconds; None: the profile's solving exposure."
         },
         "min_altitude": {
           "default": 20.0,
@@ -7329,7 +7329,7 @@
               "type": "null"
             }
           ],
-          "description": "Seconds; None: the camera's exposure."
+          "description": "Seconds; None: the profile's solving exposure."
         },
         "side": {
           "description": "Where the RA axis turns to.",
@@ -7826,6 +7826,9 @@
           "maxLength": 80,
           "minLength": 1,
           "type": "string"
+        },
+        "solving": {
+          "$ref": "#/$defs/Solving"
         }
       },
       "required": [
@@ -7839,10 +7842,15 @@
       "properties": {
         "name": {
           "type": "string"
+        },
+        "solve_exposure": {
+          "description": "Seconds of the frames NOCS solves to point, as saved (`solving.exposure`).",
+          "type": "number"
         }
       },
       "required": [
-        "name"
+        "name",
+        "solve_exposure"
       ],
       "title": "ProfileSummary",
       "type": "object"
@@ -9400,7 +9408,7 @@
             }
           ],
           "default": null,
-          "description": "Seconds; None: the camera's exposure."
+          "description": "Seconds; None: the profile's solving exposure."
         },
         "frame": {
           "default": "new",
@@ -9608,6 +9616,21 @@
         "failure"
       ],
       "title": "SolverState",
+      "type": "object"
+    },
+    "Solving": {
+      "additionalProperties": false,
+      "description": "How NOCS plate solves to point (go and centre, solve, polar alignment).",
+      "properties": {
+        "exposure": {
+          "default": 2.0,
+          "description": "Seconds of the frames it solves, whatever the camera is set to; a request or a sequence step may ask for another.",
+          "exclusiveMinimum": 0,
+          "maximum": 120,
+          "type": "number"
+        }
+      },
+      "title": "Solving",
       "type": "object"
     },
     "StackBuilding": {

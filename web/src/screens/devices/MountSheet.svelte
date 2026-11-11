@@ -27,8 +27,9 @@
   import { guidingActive } from "../../lib/guiding.svelte";
   import { auth } from "../../lib/auth.svelte";
   import { holder } from "../../lib/camera.svelte";
+  import { solveExposure } from "../../lib/equipment";
   import { errorText } from "../../lib/errors";
-  import { formatDateTime, formatDecimal } from "../../lib/format";
+  import { formatDateTime, formatDecimal, formatPlain } from "../../lib/format";
   import { i18n } from "../../lib/i18n";
   import { live } from "../../lib/live.svelte";
   import { formatDec, formatRa, mountActivity, parseDec, parseRa } from "../../lib/mount.svelte";
@@ -255,7 +256,7 @@
           </Button>
         {/if}
       </div>
-      <p class="caption muted">{centerReason ?? t.center.hint}</p>
+      <p class="caption muted">{centerReason ?? t.center.hint(formatPlain(solveExposure(live.app.equipment), locale))}</p>
       <p class="caption muted">{t.mount.zenithHint}</p>
       {#if centering}<CenteringCard {centering} />{/if}
     </section>

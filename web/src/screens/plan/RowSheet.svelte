@@ -8,7 +8,9 @@
   import SegmentedControl from "../../components/SegmentedControl.svelte";
   import Sheet from "../../components/Sheet.svelte";
   import Stepper from "../../components/Stepper.svelte";
+  import { formatPlain } from "../../lib/format";
   import { i18n } from "../../lib/i18n";
+  import { live } from "../../lib/live.svelte";
   import type { PlanRow } from "../../lib/types";
 
   let {
@@ -26,6 +28,11 @@
   } = $props();
 
   const t = $derived(i18n.t);
+  const camera = $derived(live.app.cameras?.main_camera ?? null);
+  // What an empty field means: the camera's value when the row starts, not now's.
+  function now(value: number | null | undefined): string | null {
+    return value == null ? null : formatPlain(value, i18n.locale);
+  }
   const NONE = "\u0000";
 
   const initial = untrack(() => ({ ...row }));
@@ -63,8 +70,8 @@
     {/if}
     <NumberField label={t.sequence.row.exposure} bind:value={exposure} min={0.001} max={7200} unit="s" />
     <Stepper label={t.sequence.row.count} bind:value={count} min={1} max={10000} />
-    <NumberField label={t.sequence.row.gain} bind:value={gain} min={0} max={10000} hint={t.sequence.row.settingHint} />
-    <NumberField label={t.sequence.row.offset} bind:value={offset} min={0} max={10000} hint={t.sequence.row.settingHint} />
+    <NumberField label={t.sequence.row.gain} bind:value={gain} min={0} max={10000} hint={t.sequence.row.settingHint(now(camera?.gain))} />
+    <NumberField label={t.sequence.row.offset} bind:value={offset} min={0} max={10000} hint={t.sequence.row.settingHint(now(camera?.offset))} />
     <div class="group">
       <span class="label muted">{t.sequence.row.binning}</span>
       <SegmentedControl

@@ -53,7 +53,11 @@
     if (draft && draft.target.name === frameName(target) && draft.target.ra === target.ra && draft.target.dec === target.dec) {
       return;
     }
-    void builder.open(target, wheel?.filter ?? filters[0] ?? null, canGuide, live.app.solver?.available === true);
+    // A new sequence's first row takes the camera's gain and offset as they are now.
+    void builder.open(target, wheel?.filter ?? filters[0] ?? null, canGuide, live.app.solver?.available === true, {
+      gain: camera?.gain ?? null,
+      offset: camera?.offset ?? null,
+    });
   });
 
   const draft = $derived(builder.draft);
@@ -117,6 +121,8 @@
       filter: filters.length ? nextFilter(draft.rows, filters) : null,
       exposure: last?.exposure ?? 120,
       count: last?.count ?? 20,
+      gain: last ? (last.gain ?? null) : (camera?.gain ?? null),
+      offset: last ? (last.offset ?? null) : (camera?.offset ?? null),
     });
     editing = draft.rows.length - 1;
   }
@@ -193,7 +199,11 @@
               <span class="badge">{filterLabel(row)}</span>
               <span class="text">
                 <span class="mono">{t.sequence.frames(row.count, formatSeconds(row.exposure, locale))}</span>
-                <span class="muted small">{formatDuration(rowSeconds(row))}</span>
+                <span class="muted small"
+                  >{formatDuration(rowSeconds(row))} · {t.sequence.rowSettings(
+                    row.gain == null ? null : formatPlain(row.gain, locale),
+                    row.offset == null ? null : formatPlain(row.offset, locale),
+                  )}</span>
               </span>
             </button>
             <button type="button" class="nudge" aria-label={t.sequence.fewer(filterLabel(row))} disabled={row.count <= 1} onclick={() => changeCount(i, -1)}>

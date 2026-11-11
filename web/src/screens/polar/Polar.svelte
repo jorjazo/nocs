@@ -16,8 +16,9 @@
   import { cancelJob, finishPolarAlign, gotoMount, startPolarAlign } from "../../lib/api";
   import { auth } from "../../lib/auth.svelte";
   import { holder } from "../../lib/camera.svelte";
+  import { solveExposure } from "../../lib/equipment";
   import { errorText } from "../../lib/errors";
-  import { formatDecimal, formatTime } from "../../lib/format";
+  import { formatDecimal, formatPlain, formatTime } from "../../lib/format";
   import { i18n } from "../../lib/i18n";
   import { live } from "../../lib/live.svelte";
   import { advice, hourAngle, suggestedStart, type AxisError } from "../../lib/polar";
@@ -256,7 +257,7 @@
         max={600}
         unit="s"
         hint={t.polar.exposureHint}
-        placeholder={camera ? formatDecimal(camera.exposure, locale, 1) : ""} />
+        placeholder={formatPlain(solveExposure(live.app.equipment), locale)} />
       {#if binnings.length > 1}
         <div class="group">
           <span class="label muted">{t.polar.binning}</span>

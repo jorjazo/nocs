@@ -57,3 +57,12 @@ export function readyCount(equipment: EquipmentState): { ready: number; total: n
   const all = roles(equipment);
   return { ready: all.filter(([, device]) => device.status === "ready").length, total: all.length };
 }
+
+// Seconds of the frames NOCS solves to point (go and centre, solve, polar alignment):
+// the active profile's, as saved, and the server's default without one.
+export const SOLVE_EXPOSURE = 2;
+
+export function solveExposure(equipment: EquipmentState | null | undefined): number {
+  const active = equipment?.active;
+  return (active ? equipment.profiles[active]?.solve_exposure : undefined) ?? SOLVE_EXPOSURE;
+}

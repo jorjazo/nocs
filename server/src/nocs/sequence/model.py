@@ -98,7 +98,7 @@ class Center(SequenceModel):
     tolerance: float = Field(default=1.0, gt=0, le=60, description="Arcminutes.")
     attempts: int = Field(default=5, ge=1, le=10)
     exposure: float | None = Field(
-        default=None, gt=0, le=120, description="Seconds; the camera's current one when None."
+        default=None, gt=0, le=120, description="Seconds; the profile's solving exposure when None."
     )
     binning: int | None = Field(default=None, ge=1, le=8)
 

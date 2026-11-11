@@ -43,6 +43,17 @@ test("a new template images the target from dusk to dawn", () => {
   assert.equal(isActive(null), false);
 });
 
+test("a new template's row keeps the camera's gain and offset", () => {
+  const target = { name: "NGC 253", ra: 0.79, dec: -25.29 };
+  const [row] = newTemplate(target, "L", false, true, { gain: 100, offset: 50 }).rows;
+  assert.equal(row.gain, 100);
+  assert.equal(row.offset, 50);
+  // Without a camera, the row says "the camera's" (null) until edited.
+  const [blank] = newTemplate(target, "L", false).rows;
+  assert.equal(blank.gain, null);
+  assert.equal(blank.offset, null);
+});
+
 test("a run's progress adds its rows up", () => {
   const run = {
     run: "r",

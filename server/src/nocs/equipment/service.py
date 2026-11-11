@@ -605,7 +605,7 @@ class EquipmentService:
 
     def _publish_profiles(self) -> None:
         summary: dict[str, Json] = {
-            profile_id: {"name": profile.name}
+            profile_id: {"name": profile.name, "solve_exposure": profile.solving.exposure}
             for profile_id, profile in self._profiles.load_all().items()
         }
         self._store.set((*ROOT, "profiles"), summary)

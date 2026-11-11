@@ -9,8 +9,10 @@
   import Chip from "../../components/Chip.svelte";
   import { solve, syncToSolution } from "../../lib/api";
   import type { CameraJob } from "../../lib/camera.svelte";
-  import { formatDecimal } from "../../lib/format";
+  import { solveExposure } from "../../lib/equipment";
+  import { formatDecimal, formatPlain } from "../../lib/format";
   import { i18n } from "../../lib/i18n";
+  import { live } from "../../lib/live.svelte";
   import { formatDec, formatRa } from "../../lib/mount.svelte";
   import type { CameraField, MountState, SolverState } from "../../lib/types";
 
@@ -108,7 +110,7 @@
   {:else if mount && syncReason}
     <p class="caption muted">{syncReason}</p>
   {:else if !last}
-    <p class="caption muted">{t.solve.hint}</p>
+    <p class="caption muted">{t.solve.hint(formatPlain(solveExposure(live.app.equipment), locale))}</p>
   {/if}
 
   {#if failure && job}

@@ -167,7 +167,8 @@ def api(tmp_path_factory: pytest.TempPathFactory) -> Iterator[TestClient]:
         astap_db=Path(database) if database else None,
     )
     devices = {k: v for k, v in SIMULATORS["devices"].items() if k in {"main_camera", "mount"}}
-    profile = {**SIMULATORS, "devices": devices}
+    # Solves (and centring) take frames of the profile's exposure, not the camera's.
+    profile = {**SIMULATORS, "devices": devices, "solving": {"exposure": EXPOSURE}}
     with TestClient(create_app(settings)) as client:
         pair_owner(client)
         use_site(client, SITE)

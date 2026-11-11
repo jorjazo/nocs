@@ -73,7 +73,7 @@ class CenterOptions:
     """Seconds to wait after a slew before the frame."""
     method: Method = "sync"
     exposure: float | None = None
-    """Seconds; the camera's current exposure when ``None``."""
+    """Seconds; the profile's solving exposure when ``None``."""
     binning: int | None = None
     force: bool = False
     """Go below the horizon."""

@@ -293,7 +293,9 @@ Autofocus (stage 5.5):
 Plate solve (stage 3.2):
 
 - Live view puts "Plate solve" under the mount (main camera only): Solve, and
-  Solve and sync. Both take a frame with the camera's exposure; while the job
+  Solve and sync. Both take a frame of the profile's solving exposure (2 s unless
+  the profile editor says otherwise: not the camera's, which may be a long
+  light's, as on `v0.1.0rc2`'s night out); while the job
   runs the shutter shows its progress and stops it, and the status chip says
   Solving once the frame is in. A disabled button always comes with its reason
   (ASTAP missing, no star database for the field, no mount, parked, not tracking).
@@ -314,7 +316,7 @@ Plate solve (stage 3.2):
 Centre (stage 3.3):
 
 - The mount's sheet puts "Go and centre" between Go and Zenith, for the same
-  J2000 fields. It goes to the target, then takes frames with the main camera's
+  J2000 fields. It goes to the target, then takes frames of the profile's solving
   exposure and corrects the mount until the frame's centre is within 1′ of the
   target, at most 5 frames: by syncing the mount to each frame, or for later
   callers (after a meridian flip) by aiming off by what the frame missed. A

@@ -26,16 +26,21 @@ export function frameName(target: PlannedTarget): string {
   return target.id ? (target.name.split(" · ")[0] ?? target.name) : target.name;
 }
 
+// The camera's gain and offset as a new sequence's rows take them: written into the
+// rows, so that a later change in Live view does not change the sequence's frames.
+export type CameraSettings = { gain: number | null; offset: number | null };
+
 export function newTemplate(
   target: PlannedTarget,
   filter: string | null,
   guide: boolean,
   solver = false,
+  camera: CameraSettings = { gain: null, offset: null },
 ): Template {
   return {
     name: target.name,
     target: { name: frameName(target), ra: target.ra, dec: target.dec },
-    rows: [{ filter, exposure: DEFAULT_EXPOSURE, count: DEFAULT_COUNT }],
+    rows: [{ filter, exposure: DEFAULT_EXPOSURE, count: DEFAULT_COUNT, gain: camera.gain, offset: camera.offset }],
     order: "batches",
     batch: 5,
     start_at_dusk: true,

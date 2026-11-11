@@ -6,8 +6,10 @@ their own; ``start`` runs it in a ``solve`` job of its own for the API. A solve:
 
 1. reads where the mount says it points (J2000), the hint and the reference for
    the offset;
-2. takes a frame (a light, never saved nor previewed) and measures its stars in
-   the imaging worker, whose HFR chooses ASTAP's downsampling (ADR 0018);
+2. takes a frame (a light, never saved nor previewed) of the profile's solving
+   exposure (``solving.exposure``, 2 s by default: not the camera's, which may be
+   a long light's) and measures its stars in the imaging worker, whose HFR
+   chooses ASTAP's downsampling (ADR 0018);
 3. solves it near the hint, then over the whole sky;
 4. with ``sync``, syncs the mount to the solution, converted to JNow at the
    frame's mid-exposure (ADR 0015).
@@ -26,6 +28,7 @@ from __future__ import annotations
 import logging
 import math
 import os
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path as FsPath
@@ -46,6 +49,8 @@ log = logging.getLogger(__name__)
 MOVED = 1.0
 """Arcminutes the mount may have moved since a frame for a later sync to its solution."""
 MAX_EXPOSURE = 600.0
+EXPOSURE = 2.0
+"""Seconds of a solve's frame when nothing says otherwise (``Solving.exposure``)."""
 
 
 class CameraDevice(Protocol):
@@ -114,7 +119,7 @@ class Mounts(Protocol):
 @dataclass(frozen=True, slots=True)
 class SolveOptions:
     exposure: float | None = None
-    """Seconds; the camera's current exposure when ``None``."""
+    """Seconds; the profile's solving exposure when ``None``."""
     binning: int | None = None
     """For this frame only; the camera's current binning when ``None``."""
     sync: bool = False
@@ -177,13 +182,17 @@ class PointingService:
         solver: Solver,
         mount: Mounts,
         recorder: Recorder | None = None,
+        exposure: Callable[[], float | None] | None = None,
     ) -> None:
+        """``exposure`` gives the seconds of a frame a request leaves open: the active
+        profile's solving exposure, ``EXPOSURE`` without one."""
         self._store = store
         self._jobs = jobs
         self._capture = capture
         self._solver = solver
         self._mount = mount
         self._recorder = recorder
+        self._default_exposure = exposure
         self._last: FrameSolve | None = None
 
     def start(self, options: SolveOptions, role: Role = Role.MAIN_CAMERA) -> str:
@@ -280,7 +289,7 @@ class PointingService:
         mount = self._mount_position()
         if options.sync and mount is None:
             raise MountNotReadyError("the mount is not connected")
-        exposure = options.exposure or self._exposure(role)
+        exposure = options.exposure or self.exposure()
         fov = self._fov(role)
         hint = Hint(mount.ra, mount.dec) if mount is not None else None
 
@@ -380,9 +389,10 @@ class PointingService:
             log.debug("solving without the mount's position: %s", e)
             return None
 
-    def _exposure(self, role: Role) -> float:
-        value = self._store.get(("cameras", role.value, "exposure"))
-        return float(value) if isinstance(value, int | float) else 2.0
+    def exposure(self) -> float:
+        """Seconds of a solve's frame when its options name none."""
+        value = self._default_exposure() if self._default_exposure is not None else None
+        return value if value is not None else EXPOSURE
 
     def _fov(self, role: Role) -> float | None:
         """The frame's height in degrees, which binning does not change."""
