@@ -462,7 +462,8 @@ Session monitor (stage 5.14):
 - PC (from 1200 px, a wide page): the frame large on the left, at most as tall as
   the window leaves room for; the status beside it (frames done, the frame in
   progress, HFR / guiding RMS / sensor, the guiding graph, errors), which stays in
-  view while the page scrolls; the per-filter rows and the events under the frame.
+  view while the page scrolls when the window is at least 800 px tall (shorter, its
+  bottom would be out of reach); the per-filter rows and the events under the frame.
   From 1600 px they get a third column of their own, so the frame, the status and
   the lists all fit in the first screenful. Below the monitor, the past sessions
   sit beside the night's frames. The reading and keyboard order stays frame →

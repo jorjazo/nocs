@@ -4,7 +4,7 @@
   // HFR and stars, the sensor and guiding, the per-filter rows and the events;
   // pause, resume and stop. On a tablet: two columns, the latest frame large
   // with a strip of the recent frames (docs/ux.md §2). On a PC the page is wide
-  // and the long lists go under the frame, or into a third column (§7).
+  // and the long lists go under the frame, or into a third column (§5, §7).
   import Banner from "../../components/Banner.svelte";
   import Button from "../../components/Button.svelte";
   import Icon from "../../components/Icon.svelte";
@@ -137,7 +137,7 @@
   </header>
 
   <div class="columns">
-    <div class="visual">
+    <div class="visual" class:toggled={!!stack?.preview}>
       {#if stack?.preview}
         <SegmentedControl
           label={t.stack.show}
@@ -482,7 +482,10 @@
   .rows li {
     grid-column: 1 / -1;
     display: grid;
+    /* Without subgrid (older browsers) each row sizes its own badge column. */
+    grid-template-columns: minmax(56px, max-content) 80px minmax(0, 1fr);
     grid-template-columns: subgrid;
+    column-gap: var(--space-2);
     align-items: center;
     min-height: 36px;
   }
@@ -654,9 +657,9 @@
       display: none;
     }
   }
-  /* A PC (the page is wide from here, docs/ux.md §7): the status beside the frame
-     and the long lists under the frame, so neither column runs long. The frame
-     stays within the window's height. */
+  /* A PC (the page is wide from here, docs/ux.md §5, §7): the status beside the
+     frame and the long lists under the frame, so neither column runs long. The
+     frame stays within the window's height. */
   @media (min-width: 1200px) {
     .columns {
       grid-template-columns: minmax(0, 3fr) minmax(340px, 2fr);
@@ -666,13 +669,22 @@
     .visual {
       position: static;
     }
-    .status {
-      position: sticky;
-      top: var(--space-4);
-    }
     .latest {
       width: min(100%, calc((100dvh - var(--frame-chrome)) * 3 / 2));
       margin-inline: auto;
+    }
+    /* Live stacking adds the stack / frame switch above the frame. */
+    .toggled .latest {
+      width: min(100%, calc((100dvh - var(--frame-chrome) - 52px) * 3 / 2));
+    }
+  }
+  /* The status stays in view while the page scrolls only where the window is tall
+     enough for all of it (restarts, an error and the guiding graph: ~620 px), so
+     its bottom is never out of reach on a laptop. */
+  @media (min-width: 1200px) and (min-height: 800px) {
+    .status {
+      position: sticky;
+      top: var(--space-4);
     }
   }
   /* Large screens: the frame, the status and the lists in three columns. */

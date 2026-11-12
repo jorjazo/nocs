@@ -1,4 +1,4 @@
-// How wide a screen's page may grow (docs/ux.md §7, "Page width").
+// How wide a screen's page may grow (docs/ux.md §5, "Breakpoints and page width").
 //
 // - "narrow": one readable column, at most --page-width (forms, lists, settings).
 // - "wide": from 1200 px, up to --page-width-wide, for screens laid out in columns

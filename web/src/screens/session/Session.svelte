@@ -1,7 +1,7 @@
 <script lang="ts">
   // The Session tab: the sequence's monitor (stage 5.14) above the night's saved
   // frames and their downloads, which only the owner's devices may list (ADR 0014).
-  // On a PC the page is wide (docs/ux.md §7): the past sessions sit beside the frames.
+  // On a PC the page is wide (docs/ux.md §5): the past sessions sit beside the frames.
   import Button from "../../components/Button.svelte";
   import EmptyState from "../../components/EmptyState.svelte";
   import RigStatus from "../../components/RigStatus.svelte";
@@ -55,7 +55,7 @@
     margin-top: var(--space-6);
     min-width: 0;
   }
-  /* A PC (the page is wide, docs/ux.md §7): the past sessions beside the night's
+  /* A PC (the page is wide, docs/ux.md §5): the past sessions beside the night's
      frames rather than two lists the page's whole width. */
   @media (min-width: 1200px) {
     .archive {
@@ -64,12 +64,12 @@
       column-gap: var(--space-8);
       align-items: start;
     }
-    /* No past sessions yet: the frames alone. */
-    .archive:has(> .past:empty) {
-      grid-template-columns: minmax(0, 1fr);
-    }
+    /* No past sessions yet: the frames alone, the page's whole width. */
     .past:empty {
       display: none;
+    }
+    .past:empty + .frames {
+      grid-column: 1 / -1;
     }
   }
 </style>

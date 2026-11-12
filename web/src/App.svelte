@@ -196,7 +196,7 @@
       margin-left: var(--rail-width);
     }
   }
-  /* A PC's screen: screens laid out in columns take its width (docs/ux.md §7). */
+  /* A PC's screen: screens laid out in columns take its width (docs/ux.md §5). */
   @media (min-width: 1200px) {
     .wide {
       max-width: var(--page-width-wide);
