@@ -11,6 +11,7 @@
     busy = false,
     wide = false,
     label,
+    describedby,
     onclick,
     children,
   }: {
@@ -22,6 +23,8 @@
     wide?: boolean;
     // Accessible name when the visible content is not enough.
     label?: string;
+    // The id of the text that explains it (why it is disabled, say).
+    describedby?: string;
     onclick?: (event: MouseEvent) => void;
     children: Snippet;
   } = $props();
@@ -34,6 +37,7 @@
   disabled={disabled || busy}
   aria-busy={busy}
   aria-label={label}
+  aria-describedby={describedby}
   {onclick}>
   {#if busy}<span class="spinner" aria-hidden="true"></span>{/if}
   {@render children()}

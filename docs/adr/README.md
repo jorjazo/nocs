@@ -47,5 +47,6 @@ that supersedes the old one.
 | [0039](0039-smb-share.md) | An SMB share of the frames for desktop computers | Proposed |
 | [0040](0040-live-stacking.md) | Live stacking (EAA) | Proposed |
 | [0041](0041-preparation-steps-run-when-they-can.md) | Tonight's checklist offers a step only when it can run; the server says what blocks it | Proposed |
+| [0042](0042-site-from-the-mount-and-first-run.md) | A new site from the mount or the GPS, and a site step in the first run | Proposed |
 
 Template: Context → Decision → Consequences.

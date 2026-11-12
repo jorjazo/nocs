@@ -1,20 +1,19 @@
 <script lang="ts">
-  // A saved site (ADR 0038): its name and position, filled by hand or from a USB
-  // GPS's fix. A new site may become the active one as it is saved. The horizon
-  // is kept as it is: the app does not edit it yet.
+  // A saved site (ADR 0038): its name and position, typed by hand or filled from the
+  // mount's own site or a USB GPS's fix (ADR 0042). A new site may become the active
+  // one as it is saved. The horizon is kept as it is: the app does not edit it yet.
   import { untrack } from "svelte";
   import Banner from "../components/Banner.svelte";
   import Button from "../components/Button.svelte";
   import ConfirmButton from "../components/ConfirmButton.svelte";
   import Icon from "../components/Icon.svelte";
-  import NumberField from "../components/NumberField.svelte";
   import ScreenHeader from "../components/ScreenHeader.svelte";
+  import SitePosition from "../components/SitePosition.svelte";
   import TextField from "../components/TextField.svelte";
   import Toggle from "../components/Toggle.svelte";
   import { activateSite, addSite, deleteSite, putSite } from "../lib/api";
   import { auth } from "../lib/auth.svelte";
   import { errorText } from "../lib/errors";
-  import { formatDecimal, formatPlain } from "../lib/format";
   import { i18n } from "../lib/i18n";
   import { live } from "../lib/live.svelte";
   import { href, router } from "../lib/router.svelte";
@@ -36,31 +35,14 @@
   let elevation = $state<number | null>(original?.elevation ?? null);
   // New sites are usually where the rig stands now.
   let activate = $state(true);
-  let validity = $state({ latitude: true, longitude: true, elevation: true });
-
-  // A USB GPS with a fix offers its position (ADR 0029); the fields show it once
-  // they are made again.
-  const gps = $derived.by(() => {
-    const gps = live.app.gps;
-    return gps?.connected && gps.latitude !== null && gps.longitude !== null
-      ? { latitude: gps.latitude, longitude: gps.longitude, elevation: gps.elevation }
-      : null;
-  });
-  let fills = $state(0);
-
-  function useGps(): void {
-    if (!gps) return;
-    [latitude, longitude] = [gps.latitude, gps.longitude];
-    if (gps.elevation !== null) elevation = gps.elevation;
-    fills += 1;
-  }
+  let positionValid = $state(true);
 
   const problem = $derived.by(() => {
     if (!name.trim()) return t.sites.needName;
     if (latitude === null || longitude === null) return t.sites.needPosition;
     return "";
   });
-  const valid = $derived(!problem && Object.values(validity).every(Boolean));
+  const valid = $derived(!problem && positionValid);
 
   let busy = $state<"save" | "delete" | null>(null);
   let error = $state("");
@@ -124,46 +106,7 @@
 
     <fieldset class="section" disabled={!auth.owner}>
       <legend class="heading">{t.sites.position}</legend>
-      {#if gps}
-        {@const locale = i18n.locale}
-        <div class="gps">
-          <Button onclick={useGps}>{t.sites.useGps}</Button>
-          <span class="caption muted">
-            {t.sites.gpsPosition(
-              `${formatDecimal(gps.latitude, locale, 4)}°`,
-              `${formatDecimal(gps.longitude, locale, 4)}°`,
-              gps.elevation === null ? null : `${formatPlain(gps.elevation, locale)} m`,
-            )}
-          </span>
-        </div>
-      {/if}
-      {#key fills}
-        <div class="grid">
-          <NumberField
-            label={t.sites.latitude}
-            bind:value={latitude}
-            bind:valid={validity.latitude}
-            min={-90}
-            max={90}
-            unit="°"
-            hint={t.sites.latitudeHint} />
-          <NumberField
-            label={t.sites.longitude}
-            bind:value={longitude}
-            bind:valid={validity.longitude}
-            min={-180}
-            max={180}
-            unit="°"
-            hint={t.sites.longitudeHint} />
-          <NumberField
-            label={t.sites.elevation}
-            bind:value={elevation}
-            bind:valid={validity.elevation}
-            min={-500}
-            max={9000}
-            unit="m" />
-        </div>
-      {/key}
+      <SitePosition bind:latitude bind:longitude bind:elevation bind:valid={positionValid} editing={id} />
     </fieldset>
 
     {#if id === null}
@@ -218,17 +161,6 @@
   legend {
     padding: 0;
     margin-bottom: var(--space-1);
-  }
-  .grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-    gap: var(--space-3);
-  }
-  .gps {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-2) var(--space-3);
   }
   .actions {
     display: flex;
