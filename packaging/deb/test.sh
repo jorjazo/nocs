@@ -4,7 +4,8 @@
 # through the FIFO, reaches nocs-system (which reboots nothing on a PC), and PHD2
 # listens (ADR 0025, ADR 0027). Given nocs-appliance too, it then installs it and
 # checks that the box became the appliance: the firewall, nocsd on port 80, every
-# operation of nocs-system, the SMB share switched on and off.
+# operation of nocs-system, the login user nocs and SSH (ADR 0043), the SMB share
+# switched on and off.
 #
 #   packaging/deb/test.sh packaging/out/nocs_<version>_<arch>.deb [nocs-appliance_<version>_all.deb]
 #
@@ -55,12 +56,14 @@ for unit in nocsd nocs-indiserver nocs-phd2 nocs-system; do
     [[ $(systemctl is-active "$unit") == active ]] || fail "$unit is not active"
 done
 [[ $(systemctl is-enabled nocsd) == enabled ]] || fail "nocsd is not enabled"
-[[ $(stat -c %U /var/lib/nocs /var/lib/nocs/config) == $'nocs\nnocs' ]] || fail "/var/lib/nocs is not nocs's"
-id -nG nocs | grep -qw dialout || fail "nocs is not in dialout"
+[[ $(stat -c %U /var/lib/nocs /var/lib/nocs/config) == $'nocsd\nnocsd' ]] || fail "/var/lib/nocs is not nocsd's"
+id -nG nocsd | grep -qw dialout || fail "nocsd is not in dialout"
+# The login user nocs is the appliance's alone (ADR 0043).
+! getent passwd nocs >/dev/null || fail "the nocs package created a login user"
 curl -fsS -H 'Host: localhost' http://127.0.0.1:8000/ | grep -q '<div id="app">' || fail "no web app"
-# nocs-system answers nocs, nocsd reaches it, and on a PC it performs nothing.
-runuser -u nocs -- /opt/nocs/venv/bin/nocs-system call hello | grep -q '"operations": \["services.restart"\]' \
-    || fail "nocs-system does not answer nocs, or performs more than restarting services on a PC"
+# nocs-system answers nocsd, nocsd reaches it, and on a PC it performs nothing.
+runuser -u nocsd -- /opt/nocs/venv/bin/nocs-system call hello | grep -q '"operations": \["services.restart"\]' \
+    || fail "nocs-system does not answer nocsd, or performs more than restarting services on a PC"
 # nocsd runs under systemd's watchdog (Type=notify): it said it is ready, and keeps it fed.
 [[ $(systemctl show -p WatchdogUSec --value nocsd) == 30s ]] || fail "nocsd is not watched"
 api=(-H 'Host: localhost' -b /tmp/jar -c /tmp/jar)
@@ -82,9 +85,9 @@ code=$(curl -s -o /dev/null -w '%{http_code}' "${api[@]}" -X POST \
     || fail "indiserver was not restarted"
 for _ in $(seq 60); do health 2>/dev/null | grep -q '"indi_connected":true' && break; sleep 1; done
 health | grep -q '"indi_connected":true' || fail "nocsd did not reconnect to the restarted indiserver"
-runuser -u nocs -- sh -c 'echo start indi_simulator_telescope > /run/indi/fifo'
-for _ in $(seq 30); do pgrep -u nocs -f indi_simulator_telescope >/dev/null && break; sleep 1; done
-pgrep -u nocs -f indi_simulator_telescope >/dev/null || fail "indiserver did not start a driver from the FIFO"
+runuser -u nocsd -- sh -c 'echo start indi_simulator_telescope > /run/indi/fifo'
+for _ in $(seq 30); do pgrep -u nocsd -f indi_simulator_telescope >/dev/null && break; sleep 1; done
+pgrep -u nocsd -f indi_simulator_telescope >/dev/null || fail "indiserver did not start a driver from the FIFO"
 for _ in $(seq 60); do (echo > /dev/tcp/127.0.0.1/4400) 2>/dev/null && break; sleep 1; done
 (echo > /dev/tcp/127.0.0.1/4400) 2>/dev/null || fail "PHD2 does not listen on 4400"
 # An upgrade (here: the same version again) restarts nocsd and leaves indiserver alone.
@@ -112,8 +115,44 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y /debs/appliance/*.deb >/dev/nu
 health() { curl -fsS -H 'Host: localhost' http://127.0.0.1/api/health; }
 for _ in $(seq 60); do health 2>/dev/null | grep -q '"indi_connected":true' && break; sleep 1; done
 health | grep -q '"indi_connected":true' || fail "nocsd does not answer on port 80"
-runuser -u nocs -- /opt/nocs/venv/bin/nocs-system call hello | grep -q '"network.status"' \
+runuser -u nocsd -- /opt/nocs/venv/bin/nocs-system call hello | grep -q '"network.status"' \
     || fail "nocs-system does not offer the appliance's operations"
+# The login user (ADR 0043): locked until the owner passphrase is set up, in sudo, with
+# passwords over SSH for it alone. Setting it up here would set its password; the
+# passphrase was set up before nocs-appliance was installed, so it is still locked.
+[[ $(passwd -S nocs | cut -d' ' -f2) == L ]] || fail "the login user nocs is not locked"
+id -nG nocs | grep -qw sudo || fail "nocs is not in sudo"
+[[ $(getent passwd nocs | cut -d: -f6,7) == /home/nocs:/bin/bash ]] || fail "nocs has no home or shell"
+ssh-keygen -q -t ed25519 -N '' -f /tmp/hostkey
+install -d -m 755 /run/sshd
+# Whole output first: grep -q stops reading at a match, and under pipefail the
+# writer's SIGPIPE would fail the check.
+sshd_for() {
+    local settings
+    settings=$(/usr/sbin/sshd -T -h /tmp/hostkey -C "user=$1,host=client,addr=10.42.0.2")
+    grep -qix "$2" <<<"$settings"
+}
+sshd_for nocs 'passwordauthentication yes' || fail "sshd refuses nocs a password"
+sshd_for someone 'passwordauthentication no' || fail "sshd takes passwords from anyone"
+sshd_for root 'permitrootlogin no' || fail "sshd lets root in"
+# The passphrase changes: nocs's password follows it.
+api=(-H 'Host: localhost' -b /tmp/jar -c /tmp/jar)
+login() { curl -fsS "${api[@]}" http://127.0.0.1/api/state | grep -o '"login":{[^}]*}'; }
+for _ in $(seq 15); do
+    [[ $(login) == '"login":{"user":"nocs","password":"locked"}' ]] && break
+    sleep 1
+done
+[[ $(login) == '"login":{"user":"nocs","password":"locked"}' ]] \
+    || fail "the state does not say the login is locked: $(login)"
+curl -fsS "${api[@]}" -X PUT -H 'Content-Type: application/json' \
+    -d '{"current": "test passphrase", "new": "new test passphrase"}' \
+    http://127.0.0.1/api/auth/passphrase || fail "the passphrase does not change"
+[[ $(passwd -S nocs | cut -d' ' -f2) == P ]] || fail "the login user has no password after a change of passphrase"
+[[ $(login) == '"login":{"user":"nocs","password":"set"}' ]] \
+    || fail "the state does not say the login has a password: $(login)"
+stored=$(getent shadow nocs | cut -d: -f2)
+[[ $(perl -e 'print crypt($ARGV[0], $ARGV[1])' "new test passphrase" "$stored") == "$stored" ]] \
+    || fail "the login password is not the passphrase"
 # The SMB share (ADR 0039): off, Samba's own services masked, nothing on 445.
 listening() { (echo > /dev/tcp/127.0.0.1/445) 2>/dev/null; }
 for unit in smbd nmbd; do
@@ -121,13 +160,13 @@ for unit in smbd nmbd; do
     [[ $(systemctl is-active "$unit") != active ]] || fail "$unit runs"
 done
 ! listening || fail "something listens on 445 with the share off"
-share() { local args=${2:-'{}'}; runuser -u nocs -- /opt/nocs/venv/bin/nocs-system call "share.$1" "$args"; }
+share() { local args=${2:-'{}'}; runuser -u nocsd -- /opt/nocs/venv/bin/nocs-system call "share.$1" "$args"; }
 share enable '{"on": true}' | grep -q '"on": true' || fail "the share does not switch on"
 for _ in $(seq 30); do listening && break; sleep 1; done
 [[ $(systemctl is-active nocs-share nocs-wsdd) == $'active\nactive' ]] \
     || { journalctl --no-pager -n 40 -u nocs-share -u nocs-wsdd; fail "smbd or wsdd is not running"; }
 DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends smbclient >/dev/null 2>&1
-install -d -o nocs -g nocs /var/lib/nocs/NOCS/2026-11-01
+install -d -o nocsd -g nocsd /var/lib/nocs/NOCS/2026-11-01
 echo frame > /var/lib/nocs/NOCS/2026-11-01/a.fits
 smbclient -N -L //127.0.0.1 2>/dev/null | grep -q 'Internal *Disk' || fail "the share does not list Internal to a guest"
 smbclient -N //127.0.0.1/Internal -c 'get 2026-11-01/a.fits /tmp/a.fits' >/dev/null 2>&1 \

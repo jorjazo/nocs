@@ -14,6 +14,7 @@ import re
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
+from subprocess import CompletedProcess
 from typing import cast
 
 import anyio
@@ -41,8 +42,12 @@ class Context:
     media: Path = Path("/media/nocs")
     """Where drives are mounted, one directory per filesystem UUID."""
     sys_class_block: Path = Path("/sys/class/block")
-    owner: str = "nocs"
+    owner: str = "nocsd"
     """The user served, who must be able to write to the drives mounted for it."""
+    login: str = "nocs"
+    """The appliance's login user, whose password is the owner passphrase (ADR 0043)."""
+    shadow: Path = Path("/etc/shadow")
+    """Where the login's password is, to tell whether it has one."""
     network: Network | None = None
     """The Wi-Fi's actor, where the network group is on (ADR 0028)."""
     updates: Updates | None = None
@@ -54,16 +59,43 @@ class Context:
 type Operation = Callable[[Context, Message], Awaitable[Message]]
 
 
-async def run(*argv: str) -> str:
-    """Run a tool; its standard output, or ``HelperError("failed")`` with its message."""
+async def run(*argv: str, stdin: bytes | None = None, secret: str | None = None) -> str:
+    """Run a tool; its standard output, or ``HelperError("failed")`` with its message
+    (``secret``, given on ``stdin``, masked in it: the message reaches nocsd's log)."""
     try:
-        result = await anyio.run_process(list(argv), check=False)
+        if stdin is None:
+            result = await anyio.run_process(list(argv), check=False)
+        else:
+            result = await _run_with_input(argv, stdin)
     except FileNotFoundError as e:
         raise HelperError("failed", f"{argv[0]} is not installed") from e
     if result.returncode != 0:
         detail = result.stderr.decode(errors="replace").strip()
+        if secret:
+            detail = detail.replace(secret, "***")
         raise HelperError("failed", f"{argv[0]}: {detail or f'exit status {result.returncode}'}")
     return result.stdout.decode(errors="replace")
+
+
+PIPE_CAPACITY = 65536
+"""Bytes a pipe holds before its writer waits (Linux's default)."""
+
+
+async def _run_with_input(argv: tuple[str, ...], data: bytes) -> CompletedProcess[bytes]:
+    """Run a tool with ``data`` on its standard input, written into the pipe before it
+    starts: a tool that exits without reading it (chpasswd that cannot lock
+    /etc/shadow) is then a failure with its own message, not a broken pipe."""
+    if len(data) > PIPE_CAPACITY:
+        raise HelperError("invalid", "too much input for a tool")
+    read, write = os.pipe()
+    try:
+        try:
+            os.write(write, data)
+        finally:
+            os.close(write)
+        return await anyio.run_process(list(argv), stdin=read, check=False)
+    finally:
+        os.close(read)
 
 
 def _no_args(args: Message) -> None:
@@ -388,6 +420,66 @@ async def share_refresh(context: Context, args: Message) -> Message:
     return await _share(context).refresh(args)
 
 
+# -- the appliance's login (ADR 0043) ---------------------------------------------
+
+LOGIN_UID_MIN = 1000
+"""Ubuntu's first uid for people (``UID_MIN``): system users are never logins."""
+MAX_PASSWORD = 1024
+"""The owner passphrase's own limit (ADR 0014)."""
+
+
+async def set_login_password(context: Context, args: Message) -> Message:
+    """Make ``password`` (the owner passphrase) the password of the appliance's login
+    user, which ``nocs-appliance`` creates locked. chpasswd reads it on its standard
+    input, never on a command line, where any user could see it."""
+    password = args.get("password")
+    if not isinstance(password, str) or set(args) != {"password"}:
+        raise HelperError("invalid", "the arguments are {password: <the owner passphrase>}")
+    if not 1 <= len(password) <= MAX_PASSWORD or any(c in password for c in "\n\r\0"):
+        raise HelperError(
+            "invalid", f"a login password is 1 to {MAX_PASSWORD} characters on one line"
+        )
+    user = await anyio.to_thread.run_sync(_login_user, context)
+    await run("chpasswd", stdin=f"{user}:{password}\n".encode(), secret=password)
+    log.info("the password of %s is the owner passphrase now", user)
+    return {"user": user}
+
+
+async def login_status(context: Context, args: Message) -> Message:
+    """Whether the login user has a password (``set``) or none that logs in
+    (``locked``: locked, or empty, which sshd refuses). Read from /etc/shadow, where
+    nocs-system reads the field and nothing else: the hash never leaves it."""
+    _no_args(args)
+    user = await anyio.to_thread.run_sync(_login_user, context)
+    try:
+        usable = await anyio.to_thread.run_sync(_has_password, context.shadow, user)
+    except OSError as e:
+        raise HelperError("failed", f"cannot read {context.shadow}: {e.strerror}") from e
+    return {"user": user, "password": "set" if usable else "locked"}
+
+
+def _has_password(shadow: Path, user: str) -> bool:
+    """``user``'s password field in ``shadow`` holds a hash: not locked (``!``), not
+    ``*`` and not empty."""
+    for line in shadow.read_text().splitlines():
+        name, _, rest = line.partition(":")
+        if name == user:
+            field = rest.partition(":")[0]
+            return bool(field) and field[0] not in "!*"
+    raise HelperError("failed", f"{user} has no entry in {shadow}")
+
+
+def _login_user(context: Context) -> str:
+    """The login user, if it is one: never root, a system user or the user served."""
+    try:
+        user = pwd.getpwnam(context.login)
+    except KeyError as e:
+        raise HelperError("failed", f"there is no user {context.login} to log in as") from e
+    if user.pw_uid < LOGIN_UID_MIN or user.pw_name == context.owner:
+        raise HelperError("failed", f"{user.pw_name} is not a login user: NOCS leaves it alone")
+    return user.pw_name
+
+
 OPERATIONS: dict[str, Operation] = {
     "power.reboot": reboot,
     "power.poweroff": power_off,
@@ -409,4 +501,6 @@ OPERATIONS: dict[str, Operation] = {
     "share.status": share_status,
     "share.enable": share_enable,
     "share.refresh": share_refresh,
+    "account.password": set_login_password,
+    "account.status": login_status,
 }

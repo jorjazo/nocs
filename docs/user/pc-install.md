@@ -24,7 +24,7 @@ sudo apt install nocs indi-3rdparty-drivers phd2 xvfb
 ```
 
 The package installs nocsd with its own Python in `/opt/nocs`, and runs nocsd,
-indiserver and PHD2 as the system user `nocs`. Open `http://<this computer>:8000`
+indiserver and PHD2 as the system user `nocsd`. Open `http://<this computer>:8000`
 (or <http://localhost:8000> on the computer itself) and set up as in the
 [quick start](quick-start.md), step 3.
 
@@ -53,7 +53,7 @@ finds them. Without them, NOCS says so when a frame has to be solved.
   to the internal storage.
 
 USB drives that the desktop mounts under `/media/<user>/` are only usable if the
-`nocs` user may write to them.
+`nocsd` user may write to them.
 
 ## Logs
 

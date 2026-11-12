@@ -6,8 +6,8 @@ Documentation=https://github.com/jorjazo/nocs
 After=network.target
 
 [Service]
-User=nocs
-Group=nocs
+User=nocsd
+Group=nocsd
 RuntimeDirectory=indi
 RuntimeDirectoryMode=0750
 ExecStartPre=/usr/bin/mkfifo -m 0660 /run/indi/fifo

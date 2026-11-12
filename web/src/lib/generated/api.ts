@@ -2798,6 +2798,10 @@ export interface SystemState {
    */
   hostname: string;
   /**
+   * None where there is no login user that NOCS manages: a PC, or nocs-system without its account group.
+   */
+  login: SystemLogin | null;
+  /**
    * What nocs-system performs here: power.reboot, power.poweroff, hostname.set. Empty on a PC unless its owner enables them.
    */
   operations: string[];
@@ -2841,6 +2845,22 @@ export interface SystemHealth {
    * Most serious first: hot from 80 °C, memory from 90 %, disk under 2 GB.
    */
   warnings: HealthWarningName[];
+}
+/**
+ * The appliance's login user, whose password follows the owner passphrase (ADR 0043).
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "SystemLogin".
+ */
+export interface SystemLogin {
+  /**
+   * set: it has a password (the owner passphrase, unless changed on the box); locked: none logs in yet, until the passphrase is set up or entered again; failed: setting it to the passphrase failed when it was last set or changed, so it may still be the old one or locked (nocsd's log says why).
+   */
+  password: "locked" | "set" | "failed";
+  /**
+   * Its name, for ssh <user>@<hostname>.local.
+   */
+  user: string;
 }
 /**
  * Updates of the appliance from apt, installed only when the owner asks (ADR 0025).

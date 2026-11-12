@@ -10,13 +10,14 @@ import subprocess
 import sys
 from collections.abc import Generator, Iterator
 from contextlib import contextmanager
+from dataclasses import replace
 from pathlib import Path
 
 import anyio
 import pytest
 from anyio.from_thread import start_blocking_portal
 from fastapi.testclient import TestClient
-from owner import pair_owner
+from owner import PASSPHRASE, pair_owner
 
 from nocs.api import create_app
 from nocs.api.schemas import SystemState
@@ -25,7 +26,14 @@ from nocs.jobs import JobManager
 from nocs.services.system import OperationUnavailableError, SystemBusyError, SystemService
 from nocs.state import StateStore
 from nocs.system.client import HelperUnavailableError, call
-from nocs.system.operations import Context, eject, mount, update_hosts
+from nocs.system.operations import (
+    Context,
+    eject,
+    login_status,
+    mount,
+    set_login_password,
+    update_hosts,
+)
 from nocs.system.protocol import HelperError, redact
 from nocs.system.server import Config, Helper, load_config
 
@@ -477,3 +485,260 @@ async def test_a_client_that_leaves_early_does_not_stop_the_helper(helper: Confi
         await stream.send(b'{"id": 1, "op": "hello"}\n')
         await stream.aclose()  # gone before the reply
     assert (await call("hello", socket=helper.socket))["version"] == 1
+
+
+# -- the appliance's login (ADR 0043) ----------------------------------------------
+
+ME = pwd.getpwuid(os.getuid())
+PASSPHRASE_TOO = "a passphrase: with spaces, colons and ünïcode"
+login_user = pytest.mark.skipif(
+    ME.pw_uid < 1000, reason="the login must be a user for people (uid >= 1000)"
+)
+
+
+HASH = "$y$j9T$salt$hashofthepassphrase"
+"""What the fake chpasswd writes in the fake /etc/shadow."""
+
+
+def shadow_line(password: str, user: str = ME.pw_name) -> str:
+    return f"{user}:{password}:20404:0:99999:7:::\n"
+
+
+@pytest.fixture
+def chpasswd(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """A fake chpasswd that keeps its arguments and its standard input in the returned
+    directory, so that tests can see where the password went, and gives the login a
+    hash in the fake shadow (``tmp_path / "shadow"``, where the login starts locked)."""
+    seen = tmp_path / "chpasswd"
+    seen.mkdir()
+    bin_dir = tmp_path / "chpasswd-bin"
+    bin_dir.mkdir()
+    shadow = tmp_path / "shadow"
+    shadow.write_text(shadow_line("*", "root") + shadow_line("!"))
+    script = bin_dir / "chpasswd"
+    script.write_text(
+        f'#!/bin/sh\necho "$@" >> "{seen}/argv"\ncat >> "{seen}/stdin"\n'
+        f"printf '%s' '{shadow_line(HASH)}' > \"{shadow}\"\n"
+    )
+    script.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
+    return seen
+
+
+def account_config(tmp_path: Path, login: str = ME.pw_name) -> Config:
+    """nocs-system as nocs-appliance runs it, with the user running the tests as the
+    login (chpasswd and /etc/shadow are fake) and a served user of another name."""
+    base = config(tmp_path, enabled=frozenset({"account"}))
+    context = replace(base.context, login=login, owner="nocsd", shadow=tmp_path / "shadow")
+    return replace(base, context=context)
+
+
+@login_user
+async def test_the_login_password_goes_to_chpasswd_on_stdin(
+    tmp_path: Path, chpasswd: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level("INFO", "nocs.system")
+    with serving(account_config(tmp_path)) as cfg:
+        operations = (await call("hello", socket=cfg.socket))["operations"]
+        assert operations == ["account.password", "account.status"]
+        result = await call("account.password", {"password": PASSPHRASE_TOO}, socket=cfg.socket)
+    assert result == {"user": ME.pw_name}
+    assert (chpasswd / "stdin").read_text() == f"{ME.pw_name}:{PASSPHRASE_TOO}\n"
+    assert (chpasswd / "argv").read_text() == "\n"  # nothing on the command line
+    assert "account.password" in caplog.text
+    assert PASSPHRASE_TOO not in caplog.text
+
+
+@pytest.mark.parametrize(
+    "args",
+    [{}, {"password": ""}, {"password": 7}, {"password": "a\nroot:x"}, {"password": "a\rb"},
+     {"password": "x" * 1025}, {"password": "secret", "user": "root"}],
+)  # fmt: skip
+async def test_bad_login_passwords_run_nothing(
+    tmp_path: Path, chpasswd: Path, args: dict[str, object]
+) -> None:
+    with pytest.raises(HelperError) as refused:
+        await set_login_password(account_config(tmp_path).context, args)
+    assert refused.value.code == "invalid"
+    assert not (chpasswd / "argv").exists()
+
+
+@pytest.mark.parametrize("login", ["root", "nocsd", "no-such-user-here"])
+async def test_only_a_login_user_gets_a_password(
+    tmp_path: Path, chpasswd: Path, login: str
+) -> None:
+    context = account_config(tmp_path, login=login).context
+    with pytest.raises(HelperError, match=r"no user|not a login user") as refused:
+        await set_login_password(context, {"password": PASSPHRASE_TOO})
+    assert refused.value.code == "failed"
+    assert not (chpasswd / "argv").exists()
+
+
+@login_user
+async def test_a_failing_chpasswd_never_tells_the_password(tmp_path: Path, chpasswd: Path) -> None:
+    script = tmp_path / "chpasswd-bin" / "chpasswd"
+    script.write_text('#!/bin/sh\necho "chpasswd: line 1: bad input $(cat)" >&2\nexit 1\n')
+    with pytest.raises(HelperError) as failed:
+        await set_login_password(account_config(tmp_path).context, {"password": PASSPHRASE_TOO})
+    assert failed.value.code == "failed"
+    assert PASSPHRASE_TOO not in str(failed.value)
+    assert "chpasswd: line 1: bad input" in str(failed.value)
+
+
+@login_user
+@pytest.mark.parametrize(
+    ("field", "password"),
+    [("!", "locked"), ("!" + HASH, "locked"), ("*", "locked"), ("!*", "locked"),
+     ("", "locked"), (HASH, "set")],
+)  # fmt: skip
+async def test_the_login_status_tells_a_password_from_none(
+    tmp_path: Path, field: str, password: str
+) -> None:
+    (tmp_path / "shadow").write_text(shadow_line(HASH, "root") + shadow_line(field))
+    status = await login_status(account_config(tmp_path).context, {})
+    assert status == {"user": ME.pw_name, "password": password}
+    assert "salt" not in json.dumps(status)  # never the hash
+
+
+@login_user
+async def test_the_login_status_through_the_helper(tmp_path: Path, chpasswd: Path) -> None:
+    with serving(account_config(tmp_path)) as cfg:
+        assert await call("account.status", socket=cfg.socket) == {
+            "user": ME.pw_name,
+            "password": "locked",
+        }
+        with pytest.raises(HelperError, match="unexpected arguments"):
+            await call("account.status", {"user": "root"}, socket=cfg.socket)
+        await call("account.password", {"password": PASSPHRASE_TOO}, socket=cfg.socket)
+        status = await call("account.status", socket=cfg.socket)
+    assert status["password"] == "set"
+
+
+@pytest.mark.parametrize("login", ["root", "nocsd", "no-such-user-here"])
+async def test_only_a_login_user_has_a_status(tmp_path: Path, login: str) -> None:
+    (tmp_path / "shadow").write_text(shadow_line(HASH, login))
+    with pytest.raises(HelperError, match=r"no user|not a login user") as refused:
+        await login_status(account_config(tmp_path, login=login).context, {})
+    assert refused.value.code == "failed"
+
+
+@login_user
+async def test_a_login_missing_from_shadow_or_an_unreadable_shadow_fails(tmp_path: Path) -> None:
+    context = account_config(tmp_path).context
+    with pytest.raises(HelperError, match="cannot read"):
+        await login_status(context, {})
+    (tmp_path / "shadow").write_text(shadow_line(HASH, "root"))
+    with pytest.raises(HelperError, match="no entry"):
+        await login_status(context, {})
+
+
+def account_api(tmp_path: Path, socket: Path) -> TestClient:
+    settings = Settings(
+        indi_host="127.0.0.1",
+        indi_port=9,
+        config_dir=tmp_path / "config",
+        data_dir=tmp_path / "data",
+        system_socket=socket,
+    )
+    return TestClient(create_app(settings))
+
+
+def login_state(client: TestClient) -> dict[str, object] | None:
+    """The state's login, once the system's state validates against its schema."""
+    login = SystemState.model_validate(client.get("/api/state").json()["state"]["system"]).login
+    return None if login is None else login.model_dump()
+
+
+@login_user
+def test_setting_up_and_changing_the_passphrase_sets_the_login_password(
+    tmp_path: Path, chpasswd: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level("INFO")
+    with serving(account_config(tmp_path)) as cfg, account_api(tmp_path, cfg.socket) as client:
+        pair_owner(client)
+        assert (chpasswd / "stdin").read_text() == f"{ME.pw_name}:{PASSPHRASE}\n"
+        assert login_state(client) == {"user": ME.pw_name, "password": "set"}
+        new = {"current": PASSPHRASE, "new": PASSPHRASE_TOO}
+        assert client.put("/api/auth/passphrase", json=new).status_code == 204
+        assert (chpasswd / "stdin").read_text().splitlines()[1] == f"{ME.pw_name}:{PASSPHRASE_TOO}"
+        wrong = {"current": "not the passphrase", "new": "another passphrase"}
+        assert client.put("/api/auth/passphrase", json=wrong).status_code == 403
+        assert len((chpasswd / "stdin").read_text().splitlines()) == 2  # not on a refusal
+        state = json.dumps(client.get("/api/state").json())
+    assert "account.password" in state  # what nocs-system offers, never the password
+    for secret in (PASSPHRASE, PASSPHRASE_TOO):
+        assert secret not in state
+        assert secret not in caplog.text
+
+
+@login_user
+def test_a_login_password_that_fails_still_sets_the_passphrase(
+    tmp_path: Path, chpasswd: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    script = tmp_path / "chpasswd-bin" / "chpasswd"
+    script.write_text("#!/bin/sh\necho 'chpasswd: cannot lock /etc/shadow' >&2\nexit 1\n")
+    with serving(account_config(tmp_path)) as cfg, account_api(tmp_path, cfg.socket) as client:
+        pair_owner(client)  # 201 all the same
+        assert login_state(client) == {"user": ME.pw_name, "password": "failed"}
+        new = {"current": PASSPHRASE, "new": PASSPHRASE_TOO}
+        assert client.put("/api/auth/passphrase", json=new).status_code == 204
+        state = json.dumps(client.get("/api/state").json())
+        assert '"password": "failed"' in state
+        assert "cannot lock" not in state  # why stays in the log
+        # Fixed: entering the same passphrase again sets it.
+        script.write_text(f"#!/bin/sh\nprintf '%s' '{shadow_line(HASH)}' > \"{tmp_path}/shadow\"\n")
+        again = {"current": PASSPHRASE_TOO, "new": PASSPHRASE_TOO}
+        assert client.put("/api/auth/passphrase", json=again).status_code == 204
+        assert login_state(client) == {"user": ME.pw_name, "password": "set"}
+    assert caplog.text.count("cannot lock /etc/shadow") == 2
+    assert "not the owner passphrase" in caplog.text
+
+
+@login_user
+def test_a_login_added_after_the_setup_is_locked_until_the_passphrase_is_entered_again(
+    tmp_path: Path, chpasswd: Path
+) -> None:
+    """nocs-appliance installed on a box whose passphrase was already set up."""
+    with account_api(tmp_path, tmp_path / "missing.sock") as client:
+        pair_owner(client)
+        assert login_state(client) is None
+    with serving(account_config(tmp_path)) as cfg, account_api(tmp_path, cfg.socket) as client:
+        pair_owner(client)  # pairing does not set it
+        assert login_state(client) == {"user": ME.pw_name, "password": "locked"}
+        assert not (chpasswd / "argv").exists()
+        same = {"current": PASSPHRASE, "new": PASSPHRASE}
+        assert client.put("/api/auth/passphrase", json=same).status_code == 204
+        assert (chpasswd / "stdin").read_text() == f"{ME.pw_name}:{PASSPHRASE}\n"
+        assert login_state(client) == {"user": ME.pw_name, "password": "set"}
+
+
+@login_user
+async def test_a_passphrase_set_while_nocs_system_is_down_is_a_failure(
+    tmp_path: Path, chpasswd: Path
+) -> None:
+    store = StateStore()
+    with serving(account_config(tmp_path)) as cfg:
+        service = SystemService(store, JobManager(store), cfg.socket)
+        await service.refresh()
+        assert SystemState.model_validate(store.get(("system",))).login is not None
+    await service.refresh()  # nocs-system is down: the last reading stands
+    state = SystemState.model_validate(store.get(("system",)))
+    assert (state.helper, state.login is not None) == (False, True)
+    await service.set_login_password(PASSPHRASE)
+    state = SystemState.model_validate(store.get(("system",)))
+    assert state.login is not None
+    assert (state.login.user, state.login.password) == (ME.pw_name, "failed")
+    assert not (chpasswd / "argv").exists()
+
+
+def test_without_the_operation_the_passphrase_sets_no_login_password(
+    tmp_path: Path, chpasswd: Path
+) -> None:
+    """A PC: nocs-system without the account group, or no nocs-system at all."""
+    with serving(config(tmp_path)) as cfg, account_api(tmp_path, cfg.socket) as client:
+        pair_owner(client)
+        assert login_state(client) is None
+    with account_api(tmp_path / "2", tmp_path / "missing.sock") as client:
+        pair_owner(client)
+        assert login_state(client) is None
+    assert not (chpasswd / "argv").exists()

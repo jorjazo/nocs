@@ -4,7 +4,8 @@ Samba's ``smbd`` runs as ``nocs-share.service`` on a configuration this module
 writes, and ``wsdd`` as ``nocs-wsdd.service`` so that Windows finds the box; both
 only while the owner has the share on, which the OS keeps as those units being
 enabled. Read-only, for guests and for the published login ``nocs`` / ``nocs``, as
-the user served (``nocs``).
+the user served (``nocsd``). The login is the appliance's login user (ADR 0043), whose
+Samba password is apart from its own.
 
 Only the folders where frames are saved are shared, one share per volume: its
 ``NOCS`` folder. ``Internal`` is the internal destination's; each drive mounted at
@@ -38,7 +39,9 @@ FRAMES = "NOCS"
 """The folder below each destination that holds the frames (ADR 0013)."""
 LOGIN = "nocs"
 """The published login, user and password alike: it protects nothing, and is there
-for Windows 11, which refuses guests (ADR 0039)."""
+for Windows 11, which refuses guests (ADR 0039). Samba wants a system user of that
+name: the appliance's login user (ADR 0043). Its Samba password is Samba's own, never
+its login password."""
 MAX_NAME = 32
 _UUID = re.compile(r"[A-Za-z0-9-]{1,64}")
 _UNSAFE = re.compile(r"[^A-Za-z0-9 _.-]+")
@@ -113,6 +116,9 @@ def smb_conf(shared: list[Folder], paths: SharePaths, owner: str) -> str:
         "map to guest = Bad User",
         f"guest account = {owner}",
         f"passdb backend = tdbsam:{paths.private / 'passdb.tdb'}",
+        # The default, said aloud: the login's published Samba password must never
+        # become its system password, which logs in over SSH with sudo (ADR 0043).
+        "unix password sync = no",
         f"private dir = {paths.private}",
         f"lock directory = {run / 'lock'}",
         f"state directory = {run / 'state'}",
@@ -144,9 +150,13 @@ def smb_conf(shared: list[Folder], paths: SharePaths, owner: str) -> str:
 
 
 class Share:
-    def __init__(self, paths: SharePaths | None = None, owner: str = "nocs") -> None:
+    def __init__(
+        self, paths: SharePaths | None = None, owner: str = "nocsd", login: str = LOGIN
+    ) -> None:
         self._paths = paths or SharePaths()
         self._owner = owner
+        """The user served: guests and the login read the frames as this user."""
+        self._login_user = login
         self._shared: list[Folder] = []
         self._lock = anyio.Lock()
 
@@ -256,7 +266,7 @@ class Share:
     async def _login(self) -> None:
         """Put the published login in Samba's passdb, on smbpasswd's standard input."""
         await _run(
-            "smbpasswd", "-c", str(self._paths.config), "-s", "-a", self._owner,
+            "smbpasswd", "-c", str(self._paths.config), "-s", "-a", self._login_user,
             stdin=f"{LOGIN}\n{LOGIN}\n".encode(),
         )  # fmt: skip
 

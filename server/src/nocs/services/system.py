@@ -3,7 +3,7 @@ and host name.
 
 State under ``("system",)``::
 
-    {hostname, helper, operations, error, health}
+    {hostname, helper, operations, error, health, login}
 
 nocsd reads what needs no privileges itself: the host name and the health
 (``nocs.services.health``), sampled every few seconds and rounded so that the state
@@ -11,6 +11,10 @@ changes only when something does. ``operations`` lists what nocs-system performs
 here, which is nothing on a PC unless its owner enables it. Rebooting or powering
 off is refused while a job runs, unless forced: it would end the exposure, the slew
 or the sequence.
+
+``login`` is the appliance's login user (ADR 0043) and whether its password is set:
+read from nocs-system when it answers, and after each attempt to set it, which says
+``failed`` until one succeeds. Never the password, nor why it failed (the log says).
 """
 
 from __future__ import annotations
@@ -49,6 +53,10 @@ SCAN_TIMEOUT = 30.0
 """Seconds a Wi-Fi scan gets; nocs-system gives NetworkManager 20 of them."""
 UPDATES_ROOT = ("updates",)
 SHARE_ROOT = ("share",)
+LOGIN_PASSWORD = "account.password"
+"""Sets the appliance's login password: only nocs-appliance enables it (ADR 0043)."""
+LOGIN_STATUS = "account.status"
+"""Whether the login user has a password."""
 
 
 class SystemBusyError(Exception):
@@ -84,6 +92,13 @@ class SystemService:
         self._share: Json = None
         self._network: Json = None
         self._updates: Json = None
+        self._login: dict[str, Json] | None = None
+        """The login user and whether it has a password, as last read; None where there
+        is no login."""
+        self._login_error: str | None = None
+        """Why the login's status could not be read, as last logged."""
+        self._login_failed = False
+        """The last attempt to set the login's password in this run failed."""
         self._publish()
         store.set(NETWORK_ROOT, None)
         store.set(UPDATES_ROOT, None)
@@ -144,6 +159,29 @@ class SystemService:
                 if isinstance(operations, list)
                 else []
             )
+            await self.read_login()
+        self._publish()
+
+    async def read_login(self) -> None:
+        """Read whether the login user has a password (ADR 0043). Only once nocs-system
+        answered: while it is down, the last reading stands."""
+        if not self.offers(LOGIN_STATUS):
+            self._login = None
+        else:
+            try:
+                status = await client.call(LOGIN_STATUS, socket=self._socket)
+            except HelperUnavailableError as e:
+                log.info("cannot read the login user's password status: %s", e)
+            except HelperError as e:
+                if self._login is not None or self._login_error != str(e):
+                    log.warning("cannot tell whether the login user has a password: %s", e)
+                self._login, self._login_error = None, str(e)
+            else:
+                self._login_error = None
+                self._login = {
+                    "user": str(status.get("user", "")),
+                    "password": "set" if status.get("password") == "set" else "locked",
+                }
         self._publish()
 
     def offers(self, op: str) -> bool:
@@ -228,6 +266,38 @@ class SystemService:
         await self._call("share.enable", {"on": on})
         await self.read_share()
 
+    async def set_login_password(self, passphrase: str) -> None:
+        """Make the owner passphrase the password of the appliance's login user, for SSH
+        and sudo (ADR 0043). Nothing where nocs-system does not do it (a PC, or no
+        nocs-system). A failure is logged, never raised: the passphrase is the app's
+        either way, and the state's login says ``failed``. The passphrase itself is
+        never logged nor kept."""
+        if not self.offers(LOGIN_PASSWORD):
+            await self.refresh()  # nocs-system may have started since the last look
+            if not self.offers(LOGIN_PASSWORD):
+                if self._login is not None:  # a login, but nocs-system is down
+                    log.warning(
+                        "the login user's password is not the owner passphrase: %s",
+                        self._error or "nocs-system does not set it",
+                    )
+                    self._login_failed = True
+                    self._publish()
+                return
+        try:
+            result = await client.call(
+                LOGIN_PASSWORD, {"password": passphrase}, socket=self._socket
+            )
+        except (HelperUnavailableError, HelperError) as e:
+            log.warning("the login user's password is not the owner passphrase: %s", e)
+            self._login_failed = True
+        else:
+            log.info(
+                "the password of the login user %s is the owner passphrase now",
+                result.get("user"),
+            )
+            self._login_failed = False
+        await self.read_login()
+
     async def update(self, task: str, *, force: bool = False) -> None:
         """Check for updates, install them or go back to the previous NOCS. Installing
         restarts nocsd and maybe indiserver and PHD2: refused while a job runs, unless
@@ -292,6 +362,9 @@ class SystemService:
             "operations": list[Json](self._operations),
             "error": self._error,
             "health": self._health,
+            "login": None
+            if self._login is None
+            else self._login | ({"password": "failed"} if self._login_failed else {}),
         }
         if state != self._published:  # refreshed every minute, mostly unchanged
             self._published = state

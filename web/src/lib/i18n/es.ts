@@ -39,6 +39,7 @@ export const es: Messages = {
     show: "Mostrar la frase de acceso",
     hide: "Ocultar la frase de acceso",
     tooShort: "Usa al menos 8 caracteres.",
+    tooLong: "Usa como máximo 1024 caracteres.",
     wrong: "Esa frase de acceso no es correcta.",
     locked: (seconds) => `Demasiados intentos. Vuelve a intentarlo en ${seconds} s.`,
   },
@@ -164,6 +165,24 @@ export const es: Messages = {
     devices: "Otros dispositivos emparejados",
     noDevices: "No hay otros dispositivos.",
     observerNote: "Estás mirando sin emparejar. Empareja este dispositivo para controlar el equipo.",
+    passphrase: "Frase de acceso del propietario",
+    changePassphrase: "Cambiar",
+    passphraseHint:
+      "Se pide para emparejar teléfonos o computadores nuevos. Al cambiarla, todos los dispositivos siguen emparejados.",
+    sshNote: (user, host) =>
+      `En esta caja también es la contraseña del usuario SSH ${user} (ssh ${user}@${host}.local) y de sudo.`,
+    current: "Frase de acceso actual",
+    currentMissing: "Escribe la frase de acceso actual.",
+    next: "Frase de acceso nueva",
+    nextHint: "Al menos 8 caracteres.",
+    again: "Repite la frase de acceso nueva",
+    mismatch: "Las dos frases de acceso nuevas no son iguales.",
+    resyncHint: (user) =>
+      `Para darle la frase de acceso al usuario SSH ${user} sin cambiarla, escribe tu frase de acceso actual en los tres campos.`,
+    save: "Cambiar la frase de acceso",
+    cancel: "Cancelar",
+    changed: "Frase de acceso cambiada.",
+    changedSsh: (user) => `Ahora también es la contraseña del usuario SSH ${user}.`,
   },
   prefs: {
     title: "Esta pantalla",
@@ -334,6 +353,13 @@ export const es: Messages = {
     save: "Guardar",
     cancel: "Cancelar",
     renamed: (name: string) => `Nombre cambiado. Abre ${name}.local y vuelve a emparejar este dispositivo.`,
+    ssh: "SSH",
+    loginLocked: (user: string) =>
+      `El usuario SSH ${user} todavía no tiene contraseña: dale la frase de acceso del propietario para poder entrar.`,
+    loginFailed: (user: string) =>
+      `El usuario SSH ${user} no recibió la frase de acceso del propietario como contraseña: puede que siga con la anterior, o sin ninguna. El registro del diagnóstico dice por qué.`,
+    setLoginPassword: "Asignarla",
+    retryLoginPassword: "Reintentar",
     restart: "Reiniciar",
     confirmRestart: "Toca de nuevo para reiniciar",
     restartAnyway: "Reiniciar de todos modos",

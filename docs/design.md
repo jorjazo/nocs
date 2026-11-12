@@ -97,7 +97,7 @@ Principles:
 
 ### 4.1 nocsd (core daemon)
 
-A single Python asyncio process running as an unprivileged `nocs` user. It owns
+A single Python asyncio process running as an unprivileged `nocsd` user. It owns
 all session state and is the only component clients talk to.
 
 Internal modules, with dependencies flowing downward only:

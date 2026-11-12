@@ -12,6 +12,7 @@
   import { suggestDeviceName } from "../lib/device";
   import { errorText } from "../lib/errors";
   import { i18n } from "../lib/i18n";
+  import { passphraseRule } from "../lib/passphrase";
   import { LOCALES, prefs } from "../lib/prefs.svelte";
 
   let { mode }: { mode: "setup" | "pair" } = $props();
@@ -45,9 +46,10 @@
     event.preventDefault();
     error = "";
     passphraseError = "";
-    // The server counts characters after NFC normalization.
-    if ([...passphrase.normalize("NFC")].length < 8) {
-      passphraseError = t.passphrase.tooShort;
+    // Counted as the server counts them; only a new passphrase can be too long.
+    const rule = passphraseRule(passphrase);
+    if (rule === "tooShort" || (rule === "tooLong" && setup)) {
+      passphraseError = t.passphrase[rule];
       return;
     }
     busy = true;

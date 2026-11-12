@@ -10786,6 +10786,31 @@
       "title": "SystemHealth",
       "type": "object"
     },
+    "SystemLogin": {
+      "additionalProperties": false,
+      "description": "The appliance's login user, whose password follows the owner passphrase (ADR 0043).",
+      "properties": {
+        "password": {
+          "description": "set: it has a password (the owner passphrase, unless changed on the box); locked: none logs in yet, until the passphrase is set up or entered again; failed: setting it to the passphrase failed when it was last set or changed, so it may still be the old one or locked (nocsd's log says why).",
+          "enum": [
+            "locked",
+            "set",
+            "failed"
+          ],
+          "type": "string"
+        },
+        "user": {
+          "description": "Its name, for ssh <user>@<hostname>.local.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "user",
+        "password"
+      ],
+      "title": "SystemLogin",
+      "type": "object"
+    },
     "SystemState": {
       "additionalProperties": false,
       "description": "The box NOCS runs on (ADR 0027).",
@@ -10820,6 +10845,17 @@
           "description": "Also its mDNS name, <hostname>.local.",
           "type": "string"
         },
+        "login": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SystemLogin"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "None where there is no login user that NOCS manages: a PC, or nocs-system without its account group."
+        },
         "operations": {
           "description": "What nocs-system performs here: power.reboot, power.poweroff, hostname.set. Empty on a PC unless its owner enables them.",
           "items": {
@@ -10833,7 +10869,8 @@
         "helper",
         "operations",
         "error",
-        "health"
+        "health",
+        "login"
       ],
       "title": "SystemState",
       "type": "object"

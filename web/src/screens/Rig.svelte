@@ -43,6 +43,7 @@
   import MountSheet from "./devices/MountSheet.svelte";
   import PowerSheet from "./devices/PowerSheet.svelte";
   import NetworkSection from "./NetworkSection.svelte";
+  import PassphraseSection from "./PassphraseSection.svelte";
   import ShareSection from "./ShareSection.svelte";
   import SiteSection from "./SiteSection.svelte";
   import StorageDrives from "./StorageDrives.svelte";
@@ -484,6 +485,7 @@
                 await auth.refresh();
               })} />
         </div>
+        <PassphraseSection />
         <h3 class="label muted subsection">{t.access.devices}</h3>
         {#if devices && others.length === 0}
           <p class="muted">{t.access.noDevices}</p>

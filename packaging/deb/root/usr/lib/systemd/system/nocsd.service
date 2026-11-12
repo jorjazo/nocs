@@ -9,8 +9,8 @@ Wants=nocs-indiserver.service nocs-phd2.service nocs-system.service
 After=network.target nocs-indiserver.service nocs-phd2.service nocs-system.service
 
 [Service]
-User=nocs
-Group=nocs
+User=nocsd
+Group=nocsd
 Environment=NOCS_HOST=0.0.0.0
 Environment=NOCS_PORT=8000
 Environment=NOCS_CONFIG_DIR=/var/lib/nocs/config

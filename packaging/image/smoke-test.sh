@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Boot an image's root filesystem in a container and check that NOCS comes up
 # (ADR 0026): its services run, nocsd answers and is connected to indiserver,
-# indiserver starts a driver through the FIFO, PHD2 listens, ASTAP has D50, and
-# chrony reads a GPS through gpsd (ADR 0029).
+# indiserver starts a driver through the FIFO, PHD2 listens, ASTAP has D50,
+# chrony reads a GPS through gpsd (ADR 0029), and the login user nocs is locked
+# (ADR 0043).
 #
 #   sudo packaging/image/smoke-test.sh <mounted root filesystem>
 #
@@ -48,9 +49,9 @@ echo "health: $(health)"
 for unit in nocsd nocs-indiserver nocs-system avahi-daemon; do
     [[ $(systemctl is-active "$unit") == active ]] || fail "$unit is not active"
 done
-runuser -u nocs -- sh -c 'echo start indi_simulator_telescope > /run/indi/fifo'
-for _ in $(seq 30); do pgrep -u nocs -f indi_simulator_telescope >/dev/null && break; sleep 1; done
-pgrep -u nocs -f indi_simulator_telescope >/dev/null || fail "indiserver did not start a driver"
+runuser -u nocsd -- sh -c 'echo start indi_simulator_telescope > /run/indi/fifo'
+for _ in $(seq 30); do pgrep -u nocsd -f indi_simulator_telescope >/dev/null && break; sleep 1; done
+pgrep -u nocsd -f indi_simulator_telescope >/dev/null || fail "indiserver did not start a driver"
 for _ in $(seq 60); do (echo > /dev/tcp/127.0.0.1/4400) 2>/dev/null && break; sleep 1; done
 (echo > /dev/tcp/127.0.0.1/4400) 2>/dev/null || fail "PHD2 does not listen on 4400"
 [[ -x /opt/astap/astap_cli ]] || fail "no ASTAP"
@@ -64,17 +65,34 @@ done
 [[ $(systemctl is-enabled systemd-networkd.service) == disabled ]] || fail "systemd-networkd still runs"
 nft list chain inet nocs input | grep -q 'policy drop' || fail "no firewall"
 [[ -f /etc/avahi/services/nocs.service ]] || fail "the box does not announce itself over mDNS"
-runuser -u nocs -- /opt/nocs/venv/bin/nocs-system call network.status | grep -q '"ap_ssid": "NOCS-' \
+runuser -u nocsd -- /opt/nocs/venv/bin/nocs-system call network.status | grep -q '"ap_ssid": "NOCS-' \
     || fail "nocs-system does not manage the network"
-runuser -u nocs -- /opt/nocs/venv/bin/nocs-system call hello | grep -q '"time.set"' \
+runuser -u nocsd -- /opt/nocs/venv/bin/nocs-system call hello | grep -q '"time.set"' \
     || fail "nocs-system does not offer the appliance's operations"
 # The SMB share is off on a new box, and Samba's own services never run (ADR 0039).
 [[ $(systemctl is-enabled smbd 2>/dev/null) == masked ]] || fail "smbd is not masked"
 [[ $(systemctl is-enabled nocs-share 2>/dev/null) == disabled ]] || fail "the SMB share is not off"
 ! (echo > /dev/tcp/127.0.0.1/445) 2>/dev/null || fail "something listens on 445"
-runuser -u nocs -- /opt/nocs/venv/bin/nocs-system call share.status | grep -q '"on": false' \
+runuser -u nocsd -- /opt/nocs/venv/bin/nocs-system call share.status | grep -q '"on": false' \
     || fail "nocs-system does not run the SMB share"
 [[ ! -e /snap ]] && ! command -v snap >/dev/null || fail "snapd is still there"
+# Services run as nocsd; nocs is the login user, locked until the owner passphrase is
+# set up, in sudo, and SSH takes its password alone (ADR 0043).
+[[ $(systemctl show -p User --value nocsd) == nocsd ]] || fail "nocsd does not run as nocsd"
+[[ $(passwd -S nocs | cut -d' ' -f2) == L ]] || fail "the login user nocs is not locked"
+id -nG nocs | grep -qw sudo || fail "nocs is not in sudo"
+systemctl is-enabled ssh.socket ssh.service 2>/dev/null | grep -qx enabled || fail "SSH is off"
+ssh-keygen -q -t ed25519 -N '' -f /tmp/hostkey
+install -d -m 755 /run/sshd
+# Whole output first: grep -q stops reading at a match, and under pipefail the
+# writer's SIGPIPE would fail the check.
+sshd_for() {
+    local settings
+    settings=$(/usr/sbin/sshd -T -h /tmp/hostkey -C "user=$1,host=client,addr=10.42.0.2")
+    grep -qix "$2" <<<"$settings"
+}
+sshd_for nocs 'passwordauthentication yes' || fail "sshd refuses nocs a password"
+sshd_for someone 'passwordauthentication no' || fail "sshd takes passwords from anyone"
 echo PASS
 CHECK
 

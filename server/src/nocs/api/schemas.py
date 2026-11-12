@@ -965,6 +965,18 @@ class SystemHealth(StateModel):
     )
 
 
+class SystemLogin(StateModel):
+    """The appliance's login user, whose password follows the owner passphrase (ADR 0043)."""
+
+    user: str = Field(description="Its name, for ssh <user>@<hostname>.local.")
+    password: Literal["locked", "set", "failed"] = Field(
+        description="set: it has a password (the owner passphrase, unless changed on the"
+        " box); locked: none logs in yet, until the passphrase is set up or entered again;"
+        " failed: setting it to the passphrase failed when it was last set or changed, so"
+        " it may still be the old one or locked (nocsd's log says why)."
+    )
+
+
 class SystemState(StateModel):
     """The box NOCS runs on (ADR 0027)."""
 
@@ -976,6 +988,10 @@ class SystemState(StateModel):
     )
     error: str | None = Field(description="Why nocs-system does not answer.")
     health: SystemHealth | None = Field(description="None until the first reading.")
+    login: SystemLogin | None = Field(
+        description="None where there is no login user that NOCS manages: a PC, or"
+        " nocs-system without its account group."
+    )
 
 
 class SequencePlanRow(StateModel):

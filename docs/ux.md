@@ -574,6 +574,14 @@ Appliance (phase 6):
 - Rig gains "This computer" (health, name, restart, shut down, INDI and PHD2
   restarts, diagnostics) and "Network" (where the box is, known networks, joining
   one, the access point, the mode); USB drives with Eject sit under Storage.
+- Rig → Access has the owner passphrase for the owner: a Change button opens the
+  current passphrase, the new one and the new one again (8 characters at least, as
+  the server counts them; wrong, throttled and too short said at their field). On the
+  appliance a caption says it is also the password of the SSH user `nocs` and of sudo
+  (ADR 0043); "This computer" shows `ssh nocs@<name>.local` and, while that password
+  is not the passphrase (locked, or the last attempt failed), a warning banner whose
+  button opens the form, which then says to type the current passphrase in all three
+  fields.
 - Updates, in "This computer" where nocs-system installs them (ADR 0025), are for a
   decision, not a dump of apt (rc2's field notes): NOCS first (installed version,
   the new one with a "New version" chip, or "Up to date"), then INDI and PHD2 as one

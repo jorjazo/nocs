@@ -14,4 +14,4 @@ Description: web-first control of astrophotography rigs over INDI
  autofocus and sequences, on top of INDI drivers.
  .
  This package holds nocsd with its own Python runtime, the web app and the
- systemd units that run nocsd, indiserver and PHD2 as the user nocs.
+ systemd units that run nocsd, indiserver and PHD2 as the system user nocsd.

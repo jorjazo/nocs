@@ -24,6 +24,7 @@ computer is needed at the telescope.
    SSD.
 3. Optional, under **Edit settings**: your home Wi-Fi (the box joins it whenever it
    is in range), a host name, and a public SSH key. NOCS does not need any of them.
+   Imager also asks for a user: do not call it `nocs`, the box's own login (step 3).
 4. Write. To boot from a USB SSD, write the SSD and take the microSD card out of the
    Pi.
 
@@ -53,7 +54,12 @@ If you gave Imager your home Wi-Fi, join that network instead and open
 
 1. **Owner passphrase.** Name this phone and choose a passphrase of at least 8
    characters. It pairs this phone, which then stays signed in. You need the
-   passphrase again only to pair another phone or computer.
+   passphrase again only to pair another phone or computer. It is also the password
+   of the box's login, `nocs`, for a terminal: `ssh nocs@nocs.local`, and `sudo`
+   asks for it too. If the passphrase changes, so does that password; until you set
+   it, nothing can log in. Change it on Rig → Access → Owner passphrase; Rig → This
+   computer shows the `ssh` command, and warns when that password is not the
+   passphrase.
 2. **Set up this box**, in steps; **Back** returns to an earlier one, and nothing
    changes until the last.
    1. **Access point**: your country, and a password of your own for the box's

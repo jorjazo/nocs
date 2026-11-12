@@ -50,6 +50,7 @@ import type {
   OutputRequest,
   PairedDevice,
   PairRequest,
+  PassphraseRequest,
   PlannedTarget,
   PolarAlignRequest,
   Profile,
@@ -168,6 +169,12 @@ export function listDevices(): Promise<PairedDevice[]> {
 
 export function revokeDevice(id: string): Promise<void> {
   return request("DELETE", `/api/auth/devices/${encodeURIComponent(id)}`);
+}
+
+// Refused with 403 when the current passphrase is wrong, 429 while attempts are
+// throttled, 422 when the new one is too short or too long.
+export function changePassphrase(body: PassphraseRequest): Promise<void> {
+  return request("PUT", "/api/auth/passphrase", body);
 }
 
 export function setObserver(enabled: boolean): Promise<void> {

@@ -535,7 +535,13 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
 
     app = FastAPI(title="NOCS", version=__version__, lifespan=lifespan)
     app.add_middleware(AuthMiddleware, auth=auth, hostnames=settings.hostnames)
-    app.include_router(auth_router(auth, sockets))
+
+    async def passphrase_set(passphrase: str) -> None:
+        """The appliance's login password follows the owner passphrase (ADR 0043)."""
+        if services.system is not None:
+            await services.system.set_login_password(passphrase)
+
+    app.include_router(auth_router(auth, sockets, passphrase_set))
     app.include_router(mount_router(mount, clock, sockets, guiding))
     app.include_router(power_router(power))
     app.include_router(guiding_router(guiding))

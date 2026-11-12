@@ -7,7 +7,7 @@ Configuration in ``/etc/nocs/system.conf`` (``NOCS_SYSTEM_CONFIG``), then the fi
 in ``/etc/nocs/system.conf.d/``::
 
     [helper]
-    user = nocs                 # the only user served, besides root
+    user = nocsd                # the only user served, besides root
     [operations]
     enabled = power hostname storage    # groups of operations to perform
     [share]
@@ -73,11 +73,11 @@ class Config:
 
 def load_config(path: Path, socket_path: Path = SOCKET) -> Config:
     """Read ``path``, then ``<path>.d/*.conf`` in order, later settings winning (the
-    appliance switches its operations on there); none serves ``nocs`` with every
+    appliance switches its operations on there); none serves ``nocsd`` with every
     operation off."""
     parser = configparser.ConfigParser(inline_comment_prefixes=("#",))
     parser.read([path, *sorted(path.with_name(f"{path.name}.d").glob("*.conf"))])
-    user = pwd.getpwnam(parser.get("helper", "user", fallback="nocs"))
+    user = pwd.getpwnam(parser.get("helper", "user", fallback="nocsd"))
     groups = parser.get("operations", "enabled", fallback="").replace(",", " ").split()
     known = set(GROUPS.values())
     for group in sorted(set(groups) - known):

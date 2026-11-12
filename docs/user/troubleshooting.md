@@ -35,14 +35,16 @@ it knows it, or a network cable) and set a new one on Rig → Network → Access
 Otherwise, write the image again.
 
 **I forgot the owner passphrase.** Paired phones keep working: nothing needs it until
-you pair another device. To reset it you need a shell on the box (an SSH key given
-through Raspberry Pi Imager):
+you pair another device. To reset it you need a shell on the box, and the `nocs`
+login's password is the passphrase you forgot: log in with the user or SSH key given
+through Raspberry Pi Imager, if you gave one (otherwise, write the image again):
 
 ```sh
 sudo rm /var/lib/nocs/config/auth.json && sudo systemctl restart nocsd
 ```
 
-The next visit sets a new passphrase; every device has to pair again.
+The next visit sets a new passphrase, which becomes the `nocs` login's password too;
+every device has to pair again.
 
 ## Warnings in the app
 
@@ -52,6 +54,19 @@ one; a long or thin cable has the same effect. NOCS also says when it happened l
 
 **"The CPU runs slower than it can" / "The CPU is hot".** Give the Pi an active
 cooler, and shade it during the day.
+
+**"The SSH user nocs has no password yet".** The box's login (`ssh nocs@nocs.local`)
+gets the owner passphrase as its password when the passphrase is set up or changed;
+this box's passphrase was set up before that login existed (NOCS installed on a box
+already in use, for example). Tap **Set it**, or open Rig → Access → Owner passphrase
+→ Change, and type your current passphrase in all three fields: the passphrase stays
+the same, and the login gets it.
+
+**"The SSH user nocs did not get the owner passphrase as its password".** NOCS
+changed the passphrase but could not give it to the login, which may still have the
+old password, or none. Try again the same way (**Try again**, then your current
+passphrase in all three fields). If it keeps failing, Rig → This computer → Download
+diagnostics: nocsd's log in it says why.
 
 **"System disk almost full".** Save frames to a USB drive, or download and delete old
 nights.

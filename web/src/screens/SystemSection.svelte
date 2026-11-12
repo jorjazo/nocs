@@ -28,6 +28,8 @@
   } from "../lib/format";
   import { i18n } from "../lib/i18n";
   import { live } from "../lib/live.svelte";
+  import { loginWarning } from "../lib/passphrase";
+  import { showPassphraseForm } from "../lib/passphraseform.svelte";
   import { installedCount, isToday, summarize } from "../lib/updates";
 
   const t = $derived(i18n.t);
@@ -45,6 +47,9 @@
     return parts.join(" · ");
   });
   const can = (op: string) => auth.owner && (system?.operations.includes(op) ?? false);
+  // The appliance's SSH login (ADR 0043): only the owner can give it the passphrase.
+  const login = $derived(auth.owner ? (system?.login ?? null) : null);
+  const loginProblem = $derived(loginWarning(login));
 
   const readouts = $derived.by(() => {
     if (!health) return [];
@@ -157,6 +162,16 @@
     {#each health?.warnings ?? [] as warning (warning)}
       <Banner icon="alert" tone={warning === "under_voltage" ? "error" : "warning"}>{t.system.warnings[warning]}</Banner>
     {/each}
+    {#if login && loginProblem}
+      <Banner icon="alert" tone="warning">
+        {loginProblem === "locked" ? t.system.loginLocked(login.user) : t.system.loginFailed(login.user)}
+        {#snippet action()}
+          <Button variant="text" onclick={showPassphraseForm}>
+            {loginProblem === "locked" ? t.system.setLoginPassword : t.system.retryLoginPassword}
+          </Button>
+        {/snippet}
+      </Banner>
+    {/if}
     {#if health?.under_voltage === false && health.under_voltage_seen}
       <p class="muted">{t.system.underVoltageSeen(formatTime(health.under_voltage_seen, locale))}</p>
     {/if}
@@ -208,6 +223,13 @@
       {/if}
       {#if renamed}<p class="muted">{t.system.renamed(renamed)}</p>{/if}
     </div>
+
+    {#if login}
+      <div class="name">
+        <span class="label muted">{t.system.ssh}</span>
+        <span class="mono ssh">ssh {login.user}@{system.hostname}.local</span>
+      </div>
+    {/if}
 
     {#if auth.owner}
       {#if can("power.reboot") || can("power.poweroff")}
@@ -455,6 +477,11 @@
     gap: var(--space-3);
     flex-wrap: wrap;
     font-size: 17px;
+  }
+  .ssh {
+    font-size: 17px;
+    overflow-wrap: anywhere;
+    user-select: all;
   }
   .rename {
     display: flex;

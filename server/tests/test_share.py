@@ -125,14 +125,15 @@ def test_the_configuration_shares_only_frames_read_only(tmp_path: Path) -> None:
         Folder("Internal", Path("/var/lib/nocs/NOCS"), "internal"),
         Folder("SSD", Path("/media/nocs/AB12-CD34/NOCS"), "AB12-CD34", "SSD"),
     ]
-    text = smb_conf(shared, SharePaths(), "nocs")
+    text = smb_conf(shared, SharePaths(), "nocsd")
     assert shares_in_text(text) == ["global", "Internal", "SSD"]
     for setting in (
         "disable netbios = yes",
         "server min protocol = SMB2_10",
         "map to guest = Bad User",
-        "guest account = nocs",
+        "guest account = nocsd",
         "passdb backend = tdbsam:/var/lib/nocs-share/passdb.tdb",
+        "unix password sync = no",  # the login's SSH password is the owner passphrase
         "lock directory = /run/nocs-share/lock",
         "logging = systemd",
         "load printers = no",
@@ -159,7 +160,7 @@ async def test_switching_on(tmp_path: Path, tools: Path) -> None:
     assert (tmp_path / "data/NOCS").is_dir()  # made for the user served
     assert (tmp_path / "private").stat().st_mode & 0o777 == 0o700
     assert calls(tools, "smbpasswd", "systemctl")[-2:] == [
-        f"smbpasswd -c {config} -s -a {OWNER}",
+        f"smbpasswd -c {config} -s -a nocs",  # the login, though the frames are OWNER's
         "systemctl enable --now nocs-share.service nocs-wsdd.service",
     ]
     assert (tools / "smbpasswd.stdin").read_text() == "nocs\nnocs\n"

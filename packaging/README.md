@@ -29,7 +29,7 @@ What it installs:
 | `/opt/nocs/python`, `/opt/nocs/venv` | nocsd and its own Python |
 | `/opt/nocs/web` | the web app |
 | `/opt/nocs/libexec/nocs-phd2` | PHD2's entrypoint ([dev/phd2/entrypoint.sh](../dev/phd2/entrypoint.sh)) |
-| `nocsd.service`, `nocs-indiserver.service`, `nocs-phd2.service` | run as the system user `nocs`; nocsd starts the other two |
+| `nocsd.service`, `nocs-indiserver.service`, `nocs-phd2.service` | run as the system user `nocsd`; nocsd starts the other two |
 | `nocs-system.service` | the privileged helper, as root, on `/run/nocs-system/socket` ([ADR 0027](../docs/adr/0027-nocs-system.md)) |
 | `/etc/nocs/nocsd.env` | settings (`NOCS_*`), kept across upgrades |
 | `/etc/nocs/system.conf` | what nocs-system may do: nothing on a PC by default |
@@ -44,7 +44,7 @@ sudo add-apt-repository ppa:mutlaqja/ppa
 sudo add-apt-repository ppa:pch/phd2
 sudo apt install ./packaging/out/nocs_<version>_amd64.deb indi-3rdparty-drivers phd2 xvfb
 # http://<this computer>:8000; logs: journalctl -u nocsd -u nocs-indiserver -u nocs-phd2
-# what nocs-system offers here (as nocs): sudo -u nocs /opt/nocs/venv/bin/nocs-system call hello
+# what nocs-system offers here (as nocsd): sudo -u nocsd /opt/nocs/venv/bin/nocs-system call hello
 ```
 
 ASTAP and its star databases are installed as [ADR 0018](../docs/adr/0018-plate-solving-with-astap.md)
@@ -91,7 +91,8 @@ updating ([ADR 0025](../docs/adr/0025-packaging-and-updates.md)).
 | unattended-upgrades only downloads, needrestart only lists | `/etc/apt/apt.conf.d/52nocs-unattended-upgrades`, `/etc/needrestart/conf.d/nocs.conf` |
 | A USB GPS as chrony's reference clock ([ADR 0029](../docs/adr/0029-system-time-and-site.md)) | a drop-in for `gpsd.service`, `/etc/chrony/conf.d/nocs-gps.conf` |
 | The hardware watchdog ([ADR 0030](../docs/adr/0030-supervision.md)) | `/usr/lib/systemd/system.conf.d/nocs-appliance-watchdog.conf` |
-| `_http._tcp` over mDNS; SSH with keys only | `/etc/avahi/services/nocs.service`, `/etc/ssh/sshd_config.d/50-nocs.conf` |
+| `_http._tcp` over mDNS; SSH with keys, and with a password for `nocs` alone | `/etc/avahi/services/nocs.service`, `/etc/ssh/sshd_config.d/50-nocs.conf` |
+| The login user `nocs` (in `sudo`, `adm`, `nocsd`), locked until nocs-system makes the owner passphrase its password ([ADR 0043](../docs/adr/0043-ssh-login-with-the-owner-passphrase.md)) | the package's `postinst` |
 
 Network changes take effect at the next boot, so installing it never cuts off
 whoever is connected. `test.sh` installs it after `nocs` when given its path.
@@ -108,12 +109,13 @@ Ubuntu's own preinstalled server image for the Raspberry Pi (checked against its
 `SHA256SUMS`), grows its root filesystem and, in a chroot that starts no services,
 adds the INDI and PHD2 PPAs, installs `nocs`, `nocs-appliance`, INDI's drivers and
 PHD2, puts ASTAP and D50 in `/opt/astap`, removes snapd, names the box `nocs`,
-replaces the boot partition's `user-data` with one that creates no login user, and
+replaces the boot partition's `user-data` with one that creates no user of its own
+(the login user `nocs` is `nocs-appliance`'s), and
 empties the machine id and SSH host keys so each Pi makes its own.
 
 [`smoke-test.sh`](image/smoke-test.sh) then boots the root filesystem with
 `systemd-nspawn` in a throwaway overlay and checks the services, nocsd's health, a
-driver started through the FIFO, PHD2 and D50. The outputs are
+driver started through the FIFO, PHD2, D50, and the login user `nocs`, locked. The outputs are
 `nocs-<version>-pi5-arm64.img.xz`, its SHA-256 and a manifest of every package
 in it. Write it with Raspberry Pi Imager ("Use custom"), whose customisation
 (Wi-Fi, SSH key) cloud-init applies at first boot; booting it on a Pi 5, from a

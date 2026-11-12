@@ -152,12 +152,18 @@ fi
 echo nocs > "$root/etc/hostname"
 sed -i '/^127\.0\.1\.1/d' "$root/etc/hosts"
 sed -i '/^127\.0\.0\.1/a 127.0.1.1\tnocs' "$root/etc/hosts"
-# No login user and no password (ADR 0026). Raspberry Pi Imager writes its own
-# user-data instead of this one when the image is customised (Wi-Fi, SSH key).
+# No user of cloud-init's and no password in the image: the only login is nocs-appliance's
+# user nocs, locked until the owner passphrase is set up in the app (ADR 0043). cloud-init
+# never removes a user, so `users: []` (no default user) leaves it alone, and
+# `ssh_pwauth: false` (keys only) yields to its Match block in 50-nocs.conf. Raspberry
+# Pi Imager writes its own user-data instead of this one when the image is customised
+# (Wi-Fi, SSH key, a user of its own: if it is called nocs, cloud-init only adds to
+# the existing one, and the owner passphrase replaces its password once set up).
 cat > "$root/boot/firmware/user-data" <<'EOF'
 #cloud-config
-# NOCS: no login user and no password. Raspberry Pi Imager replaces this file with
-# its own when you customise the image (Wi-Fi, host name, SSH key).
+# NOCS: no default user and no password. The login user nocs gets the owner passphrase
+# as its password when it is set up in the app. Raspberry Pi Imager replaces this
+# file with its own when you customise the image (Wi-Fi, host name, SSH key).
 hostname: nocs
 users: []
 disable_root: true

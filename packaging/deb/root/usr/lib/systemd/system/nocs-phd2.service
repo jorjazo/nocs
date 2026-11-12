@@ -8,8 +8,8 @@ ConditionPathExists=/usr/bin/phd2
 ConditionPathExists=/usr/bin/Xvfb
 
 [Service]
-User=nocs
-Group=nocs
+User=nocsd
+Group=nocsd
 Environment=PHD2_SETTINGS=/var/lib/nocs/phd2.phd
 PrivateTmp=yes
 ExecStart=/opt/nocs/libexec/nocs-phd2

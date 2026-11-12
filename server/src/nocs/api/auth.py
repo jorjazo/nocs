@@ -5,7 +5,7 @@ from __future__ import annotations
 import contextlib
 import ipaddress
 import math
-from collections.abc import Generator, Iterable
+from collections.abc import Awaitable, Callable, Generator, Iterable
 from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Literal
@@ -34,6 +34,7 @@ from nocs.auth import (
     ThrottledError,
     WrongPassphraseError,
 )
+from nocs.auth.store import check_passphrase
 
 COOKIE = "nocs_device"
 COOKIE_MAX_AGE = timedelta(days=400)
@@ -206,7 +207,18 @@ class Sockets:
                 socket.revoked.set()
 
 
-def auth_router(auth: AuthStore, sockets: Sockets) -> APIRouter:
+type PassphraseSet = Callable[[str], Awaitable[None]]
+
+
+async def _nothing(_: str) -> None:
+    pass
+
+
+def auth_router(
+    auth: AuthStore, sockets: Sockets, passphrase_set: PassphraseSet = _nothing
+) -> APIRouter:
+    """``passphrase_set`` gets the owner passphrase whenever it is set up or changed,
+    once it is: the appliance's login password follows it (ADR 0043)."""
     router = APIRouter(prefix="/api/auth")
 
     @router.get("")
@@ -229,6 +241,7 @@ def auth_router(auth: AuthStore, sockets: Sockets) -> APIRouter:
     ) -> PairedDevice:
         with _auth_errors():
             device, token = await auth.setup(body.passphrase, body.name)
+        await passphrase_set(check_passphrase(body.passphrase))
         _set_cookie(request, response, token)
         return _paired(device, Identity(role="owner", device=device))
 
@@ -261,6 +274,7 @@ def auth_router(auth: AuthStore, sockets: Sockets) -> APIRouter:
     async def change_passphrase(body: PassphraseRequest) -> Response:  # pyright: ignore[reportUnusedFunction]
         with _auth_errors():
             await auth.change_passphrase(body.current, body.new)
+        await passphrase_set(check_passphrase(body.new))
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     @router.put("/observer", status_code=status.HTTP_204_NO_CONTENT)

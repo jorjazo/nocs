@@ -8,6 +8,16 @@ set -e
 
 unit=nocs-firewall.service
 
+if [ "$1" = "configure" ] && ! getent passwd nocs >/dev/null; then
+    # The login user (ADR 0043), for SSH and sudo (which asks for its password). Its
+    # password is the owner passphrase: nocs-system sets it when the owner sets the
+    # passphrase up or changes it in the app. Locked until then, so nothing logs in
+    # as it. adm reads the logs; nocsd's group reads the frames in /var/lib/nocs.
+    useradd --create-home --home-dir /home/nocs --shell /bin/bash --user-group \
+        --comment "NOCS" --groups sudo,adm,nocsd nocs
+    usermod --lock nocs
+fi
+
 if [ "$1" = "configure" ] || [ "$1" = "abort-upgrade" ] || [ "$1" = "abort-deconfigure" ] || [ "$1" = "abort-remove" ]; then
     deb-systemd-helper unmask "$unit" >/dev/null || true
     if deb-systemd-helper --quiet was-enabled "$unit"; then
@@ -26,6 +36,11 @@ if [ "$1" = "configure" ] && [ -z "$2" ]; then
     # renderer in /usr/lib/netplan/01-nocs-network-manager.yaml).
     systemctl disable systemd-networkd.service systemd-networkd.socket \
         systemd-networkd-wait-online.service >/dev/null 2>&1 || true
+    # SSH on, for the login user (ADR 0043). Ubuntu's sshd listens on ssh.socket.
+    if ! systemctl is-enabled --quiet ssh.socket 2>/dev/null \
+        && ! systemctl is-enabled --quiet ssh.service 2>/dev/null; then
+        systemctl enable ssh.socket >/dev/null 2>&1 || systemctl enable ssh.service >/dev/null 2>&1 || true
+    fi
 fi
 
 if [ -d /run/systemd/system ]; then
@@ -36,9 +51,10 @@ if [ -d /run/systemd/system ]; then
     systemctl stop smbd.service nmbd.service samba-ad-dc.service >/dev/null 2>&1 || true
     # A share left on picks up its new units.
     deb-systemd-invoke try-restart nocs-share.service nocs-wsdd.service >/dev/null || true
+    # sshd reads its settings (50-nocs.conf) when it starts, not at each connection.
+    deb-systemd-invoke reload ssh.service >/dev/null 2>&1 || true
     if [ "$1" = "configure" ] && [ -z "$2" ]; then
-        # nocsd moves to port 80; sshd, chrony and gpsd read their new settings.
+        # nocsd moves to port 80; chrony and gpsd read their new settings.
         deb-systemd-invoke try-restart nocsd.service chrony.service gpsd.service >/dev/null || true
-        deb-systemd-invoke reload ssh.service >/dev/null 2>&1 || true
     fi
 fi

@@ -4,7 +4,7 @@ Architecture: all
 Maintainer: Jorge Valencia <jorjazo@gmail.com>
 Installed-Size: @SIZE@
 Depends: nocs, network-manager, dnsmasq-base, iw, nftables, chrony, gpsd, avahi-daemon,
- samba, wsdd
+ samba, wsdd, openssh-server, sudo, passwd
 Section: science
 Priority: optional
 Homepage: https://github.com/jorjazo/nocs
@@ -18,5 +18,6 @@ Description: make this computer a dedicated NOCS box
  port 80, the privileged helper may do everything nocsd asks, updates are only
  downloaded, a USB GPS sets the clock, and the frames can be shared read-only
  with desktop computers on the network when the owner switches it on (Samba's
- own services are masked). Do not install it on a computer that is used for
- anything else.
+ own services are masked). It creates the login user nocs, in sudo, whose
+ password is the owner passphrase once it is set up, for SSH. Do not install it
+ on a computer that is used for anything else.

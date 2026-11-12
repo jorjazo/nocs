@@ -39,6 +39,8 @@ GROUPS: dict[str, str] = {
     "share.status": "share",
     "share.enable": "share",
     "share.refresh": "share",
+    "account.password": "account",
+    "account.status": "account",
 }
 """Every operation nocs-system knows, with the group that enables it."""
 
