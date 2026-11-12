@@ -26,8 +26,9 @@ reason under them:
 
 - **Few lights** (fewer than 5): test frames, such as the exposures you tried while
   framing or focusing.
-- **Taken warm**: more than 5 °C above the night's coldest group, usually lights
-  taken while the camera was still cooling.
+- **Taken warm**: more than 5 °C above the camera's coldest group of 5 lights or
+  more, usually lights taken while the camera was still cooling. A camera without
+  cooling keeps all its groups on.
 
 Turn a group on or off and the sheet says again how many frames that is and about
 how long it takes (cooling not included). Start asks a second tap, "It is covered:

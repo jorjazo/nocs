@@ -164,8 +164,9 @@ class Report:
         unknown = sorted(set(keys) - known)
         if unknown:
             raise KeyError(unknown[0])
-        chosen = [m for g in self.dark_groups if g.key in keys for m in g.members]
-        return _needs(chosen, self.wanted)
+        members = {id(m) for g in self.dark_groups if g.key in keys for m in g.members}
+        # In the groups' order, as ``_dark_groups`` merged them.
+        return _needs([g for g in self.groups if id(g) in members], self.wanted)
 
     @property
     def frames(self) -> list[int]:
@@ -429,7 +430,9 @@ def _dark_groups(groups: list[Group], wanted: Wanted, choose: bool) -> list[Dark
                 members=members,
             )
         )
-    found.sort(key=lambda g: (g.setup.camera, g.temperature or 0, g.exposure))
+    found.sort(
+        key=lambda g: (g.setup.camera, g.temperature is None, g.temperature or 0, g.exposure)
+    )
     return found
 
 

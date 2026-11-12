@@ -11,7 +11,7 @@
   import Sheet from "../../components/Sheet.svelte";
   import Stepper from "../../components/Stepper.svelte";
   import Toggle from "../../components/Toggle.svelte";
-  import { getCalibration, makeCalibrationSequence, planCalibrationSequence, startSequence } from "../../lib/api";
+  import { ApiError, getCalibration, makeCalibrationSequence, planCalibrationSequence, startSequence } from "../../lib/api";
   import { errorText } from "../../lib/errors";
   import { formatDuration, formatPlain, formatSeconds, formatTemperature } from "../../lib/format";
   import { i18n } from "../../lib/i18n";
@@ -47,6 +47,8 @@
   let plan = $state<CalibrationPlan | null>(null);
   let planning = $state(false);
   let planned = 0;
+  // Errors while the sheet is open: the page's banner is behind its backdrop.
+  let sheetError = $state("");
 
   // Again when a frame is saved: the darks sequence and the flats fill the gaps.
   const saved = $derived(live.app.cameras?.main_camera?.last_frame?.id ?? null);
@@ -99,9 +101,16 @@
     return line;
   }
 
+  // The server's default choice; a covered group in it takes nothing, and takes its
+  // darks again when the counts are raised past what the library has.
+  function defaults(groups: CalibrationDarkGroup[]): string[] {
+    return groups.filter((g) => g.reason === null).map((g) => g.key);
+  }
+
   function openSheet(): void {
-    chosen = (report?.dark_groups ?? []).filter((g) => g.reason === null && !covered(g)).map((g) => g.key);
+    chosen = defaults(report?.dark_groups ?? []);
     plan = null;
+    sheetError = "";
     sheet = true;
   }
 
@@ -126,13 +135,27 @@
       const found = await planCalibrationSequence(body);
       if (call !== planned) return;
       plan = found;
-      error = "";
+      sheetError = "";
     } catch (e) {
       if (call !== planned) return;
       plan = null;
-      error = errorText(e, t);
+      sheetError = errorText(e, t);
+      if (e instanceof ApiError && e.status === 409) void refreshChoice();
     } finally {
       if (call === planned) planning = false;
+    }
+  }
+
+  // After a 409 (the camera, or lights saved since the sheet opened): the groups
+  // again, and the default choice when a chosen group is gone.
+  async function refreshChoice(): Promise<void> {
+    try {
+      const fresh = await getCalibration({ night: nightId });
+      report = fresh;
+      const keys = new Set(fresh.dark_groups.map((g) => g.key));
+      if (chosen.some((k) => !keys.has(k))) chosen = defaults(fresh.dark_groups);
+    } catch {
+      // The plan's error stays in the sheet.
     }
   }
 
@@ -153,7 +176,7 @@
       error = "";
       scrollTo({ top: 0, behavior: "smooth" });
     } catch (e) {
-      error = errorText(e, t);
+      sheetError = errorText(e, t);
     } finally {
       busy = false;
     }
@@ -220,6 +243,7 @@
 {#if sheet}
   <Sheet title={t.calibration.sheetTitle} onclose={() => (sheet = false)}>
     <Banner icon="alert" tone="warning">{t.calibration.cover}</Banner>
+    {#if sheetError}<Banner icon="alert" tone="error">{sheetError}</Banner>{/if}
     <h3 class="label muted subsection">{t.calibration.groups}</h3>
     <p class="caption muted">{t.calibration.groupsHint}</p>
     <div class="choices">

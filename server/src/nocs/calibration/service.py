@@ -79,7 +79,7 @@ class CalibrationService:
         night = night_of(self._now(), self._longitude())
         cooling = sequence.template.cooling if sequence.template is not None else None
         lights: list[Light] = []
-        for _, plan, _ in plans(sequence):
+        for _, plan, target in plans(sequence):
             if plan.frame_type != "light":
                 continue
             for row in plan.rows:
@@ -92,7 +92,17 @@ class CalibrationService:
                     row.gain if row.gain is not None else camera.gain,
                     row.offset if row.offset is not None else camera.offset,
                 )
-                lights.append(Light(setup, row.filter, row.exposure, cooling, night, row.count))
+                lights.append(
+                    Light(
+                        setup,
+                        row.filter,
+                        row.exposure,
+                        cooling,
+                        night,
+                        row.count,
+                        target=target.name if target is not None else None,
+                    )
+                )
         storage = self._storage()
         cameras = [camera.name]
         return report(lights, storage.calibration_frames(cameras), wanted, choose=False)

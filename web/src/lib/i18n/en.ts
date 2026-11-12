@@ -1620,13 +1620,14 @@ export const en = {
     groupsHint: "Each group needs darks of its exposure and temperature. Test frames and lights taken warm are off: turn a group on to take its darks.",
     lights: (n: number) => (n === 1 ? "1 light" : `${n} lights`),
     takes: (darks: number, bias: number) =>
-      [darks ? `${darks} darks` : "", bias ? `${bias} bias` : ""].filter(Boolean).join(" + "),
-    covered: (n: number) => `covered: ${n} darks`,
+      [darks ? (darks === 1 ? "1 dark" : `${darks} darks`) : "", bias ? `${bias} bias` : ""].filter(Boolean).join(" + "),
+    covered: (n: number) => (n === 1 ? "covered: 1 dark" : `covered: ${n} darks`),
     fewLights: "Few lights: test frames?",
     warmLights: "Taken warm: while the camera cooled?",
     planning: "Counting…",
     nothing: "Nothing to take: turn a group on.",
-    total: (frames: number, time: string) => `${frames} frames, about ${time} and the cooling`,
+    total: (frames: number, time: string) =>
+      `${frames === 1 ? "1 frame" : `${frames} frames`}, about ${time} and the cooling`,
     cover: "Cover the telescope or the camera: no light may reach the sensor while they are taken.",
     darksCount: "Darks per exposure",
     biasCount: "Bias",

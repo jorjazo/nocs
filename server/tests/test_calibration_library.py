@@ -268,11 +268,22 @@ def test_warm_is_measured_from_the_coldest_well_filled_group() -> None:
     rows += [row("light", exposure=60, temperature=24.0) for _ in range(10)]
     rows += [row("light", exposure=30, temperature=None) for _ in range(10)]
     found = report(lights_of(rows), [], Wanted())
-    reasons = {(g.exposure, g.temperature): g.reason for g in found.dark_groups}
-    assert reasons == {(300, 18.0): None, (60, 24.0): "warm", (30, None): None}
+    reasons = [(g.exposure, g.temperature, g.reason) for g in found.dark_groups]
+    assert reasons == [(300, 18.0, None), (60, 24.0, "warm"), (30, None, None)]
 
 
 def test_planned_lights_are_all_chosen() -> None:
     lights = [Light(SETUP, "L", 300, -10, date(2026, 11, 1), count=2)]
     found = report(lights, [], Wanted(), choose=False)
     assert [g.reason for g in found.dark_groups] == [None]
+
+
+def test_chosen_needs_merge_as_the_dark_groups_do() -> None:
+    """Groups sort by filter, dark groups by temperature: the needs follow the former."""
+    rows = [row("light", filter=f, temperature=t) for f, t in (("B", -8), ("L", -10), ("R", -12))]
+    found = report(lights_of(rows), [], Wanted())
+    assert [(g.temperature, g.filters) for g in found.dark_groups] == [
+        (-12.0, ["R"]),
+        (-8.0, ["B", "L"]),
+    ]
+    assert found.chosen_needs([g.key for g in found.dark_groups]) == found.needs
