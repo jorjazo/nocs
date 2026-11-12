@@ -1838,11 +1838,37 @@ class CalibrationNeed(WireModel):
     filter: str | None = Field(description="For flats.")
 
 
+class CalibrationDarkGroup(WireModel):
+    """Lights of any filter that share their darks: what *Take darks and bias* lets the
+    user choose. Its bias are those its lights' flats need."""
+
+    key: str = Field(description="Names it in a request's `groups`.")
+    setup: CalibrationSetup
+    exposure: float = Field(description="Seconds.")
+    temperature: float | None = Field(description="°C, the darks'.")
+    lights: int = Field(description="Saved, or planned for a sequence.")
+    filters: list[str | None]
+    targets: list[str]
+    nights: list[str] = Field(description="The lights' nights, newest first.")
+    darks: int = Field(description="Matching darks found.")
+    missing_darks: int = Field(description="Darks it would take for the wanted count.")
+    missing_bias: int = Field(
+        description="Bias it would take; groups at a temperature share theirs."
+    )
+    reason: Literal["few_lights", "warm"] | None = Field(
+        description="Why it is left out by default (test frames; lights taken more than "
+        "5 °C above the camera's coldest group of 5 lights or more); None: chosen."
+    )
+
+
 class CalibrationReport(WireModel):
     night: str | None = Field(description="The night's date; None for a planned sequence.")
     groups: list[CalibrationGroup]
     needs: list[CalibrationNeed] = Field(description="What is missing, merged across groups.")
     frames: int = Field(description="Matched calibration frames, each counted once.")
+    dark_groups: list[CalibrationDarkGroup] = Field(
+        description="The groups *Take darks and bias* chooses from."
+    )
 
 
 class CalibrationSequenceRequest(BaseModel):
@@ -1853,14 +1879,23 @@ class CalibrationSequenceRequest(BaseModel):
     darks: int = Field(default=20, ge=0, le=500, description="Wanted per exposure.")
     bias: int = Field(default=50, ge=0, le=500)
     warm: bool = Field(default=True, description="Warm the camera at the end.")
+    groups: list[str] | None = Field(
+        default=None,
+        max_length=500,
+        description="Keys of the dark groups to take; None: those chosen by default.",
+    )
 
 
-class CalibrationSequence(WireModel):
-    id: str = Field(description="The sequence kept; start it as any other.")
+class CalibrationPlan(WireModel):
     frames: int
+    seconds: float = Field(description="The frames' time, cooling not included.")
     left_out: list[CalibrationNeed] = Field(
         description="Darks and bias it cannot take: another camera, or a region of the sensor."
     )
+
+
+class CalibrationSequence(CalibrationPlan):
+    id: str = Field(description="The sequence kept; start it as any other.")
 
 
 class TwilightWindow(WireModel):

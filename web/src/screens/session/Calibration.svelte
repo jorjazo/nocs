@@ -11,13 +11,20 @@
   import Sheet from "../../components/Sheet.svelte";
   import Stepper from "../../components/Stepper.svelte";
   import Toggle from "../../components/Toggle.svelte";
-  import { getCalibration, makeCalibrationSequence, startSequence } from "../../lib/api";
+  import { getCalibration, makeCalibrationSequence, planCalibrationSequence, startSequence } from "../../lib/api";
   import { errorText } from "../../lib/errors";
-  import { formatPlain, formatSeconds, formatTemperature } from "../../lib/format";
+  import { formatDuration, formatPlain, formatSeconds, formatTemperature } from "../../lib/format";
   import { i18n } from "../../lib/i18n";
   import { live } from "../../lib/live.svelte";
   import { router } from "../../lib/router.svelte";
-  import type { CalibrationGroup, CalibrationMatch, CalibrationReport, NightInfo } from "../../lib/types";
+  import type {
+    CalibrationDarkGroup,
+    CalibrationGroup,
+    CalibrationMatch,
+    CalibrationPlan,
+    CalibrationReport,
+    NightInfo,
+  } from "../../lib/types";
 
   let { night }: { night: NightInfo } = $props();
 
@@ -35,6 +42,11 @@
   let warm = $state(true);
   let busy = $state(false);
   let leftOut = $state(0);
+  // The dark groups chosen in the sheet, by key, and what they would take.
+  let chosen = $state<string[]>([]);
+  let plan = $state<CalibrationPlan | null>(null);
+  let planning = $state(false);
+  let planned = 0;
 
   // Again when a frame is saved: the darks sequence and the flats fill the gaps.
   const saved = $derived(live.app.cameras?.main_camera?.last_frame?.id ?? null);
@@ -59,15 +71,67 @@
   const darksMissing = $derived(report?.needs.some((n) => n.kind === "dark" || n.kind === "bias") ?? false);
   const flatsMissing = $derived(report?.needs.some((n) => n.kind === "flat") ?? false);
 
-  function groupName(g: CalibrationGroup): string {
+  function groupName(g: CalibrationGroup | CalibrationDarkGroup): string {
     const parts = [
-      g.filter,
+      "filter" in g ? g.filter : null,
       formatSeconds(g.exposure, locale),
       g.temperature !== null ? formatTemperature(g.temperature, locale) : null,
       g.setup.gain !== null ? `G${formatPlain(g.setup.gain, locale)}` : null,
+      "filter" in g || g.setup.offset === null ? null : `O${formatPlain(g.setup.offset, locale)}`,
       g.setup.binning !== null && g.setup.binning > 1 ? `${g.setup.binning}×${g.setup.binning}` : null,
     ];
     return parts.filter(Boolean).join(" · ");
+  }
+
+  const covered = (g: CalibrationDarkGroup): boolean => g.missing_darks === 0 && g.missing_bias === 0;
+
+  function darkHint(g: CalibrationDarkGroup): string {
+    const filters = g.filters.filter((f) => f !== null);
+    const what = [t.calibration.lights(g.lights), filters.join(", "), g.targets.join(", ")].filter(Boolean);
+    if (covered(g)) {
+      what.push(t.calibration.covered(g.darks));
+    } else {
+      what.push(t.calibration.takes(g.missing_darks, g.missing_bias));
+    }
+    const line = what.join(" · ");
+    if (g.reason === "few_lights") return `${line}. ${t.calibration.fewLights}`;
+    if (g.reason === "warm") return `${line}. ${t.calibration.warmLights}`;
+    return line;
+  }
+
+  function openSheet(): void {
+    chosen = (report?.dark_groups ?? []).filter((g) => g.reason === null && !covered(g)).map((g) => g.key);
+    plan = null;
+    sheet = true;
+  }
+
+  function choose(key: string, on: boolean): void {
+    chosen = on ? [...chosen, key] : chosen.filter((k) => k !== key);
+  }
+
+  // What the choice takes, again as groups and counts change.
+  $effect(() => {
+    if (!sheet || darks === null || bias === null) return;
+    const body = { night: night.id, darks, bias, warm, groups: [...chosen] };
+    planning = true;
+    const timer = setTimeout(() => void loadPlan(body), 250);
+    return () => clearTimeout(timer);
+  });
+
+  async function loadPlan(body: { night: number; darks: number; bias: number; warm: boolean; groups: string[] }): Promise<void> {
+    const call = ++planned;
+    try {
+      const found = await planCalibrationSequence(body);
+      if (call !== planned) return;
+      plan = found;
+      error = "";
+    } catch (e) {
+      if (call !== planned) return;
+      plan = null;
+      error = errorText(e, t);
+    } finally {
+      if (call === planned) planning = false;
+    }
   }
 
   function newest(match: CalibrationMatch): string {
@@ -80,7 +144,7 @@
     if (darks === null || bias === null) return;
     busy = true;
     try {
-      const made = await makeCalibrationSequence({ night: night.id, darks, bias, warm });
+      const made = await makeCalibrationSequence({ night: night.id, darks, bias, warm, groups: [...chosen] });
       leftOut = made.left_out.length;
       await startSequence(made.id);
       sheet = false;
@@ -133,7 +197,7 @@
     {/if}
     <div class="actions">
       {#if darksMissing}
-        <Button disabled={running} onclick={() => (sheet = true)}>{t.calibration.takeDarks}</Button>
+        <Button disabled={running} onclick={openSheet}>{t.calibration.takeDarks}</Button>
       {/if}
       {#if flatsMissing}
         <Button disabled={running} onclick={() => router.go({ screen: "flats", night: night.id })}>
@@ -154,13 +218,38 @@
 {#if sheet}
   <Sheet title={t.calibration.sheetTitle} onclose={() => (sheet = false)}>
     <Banner icon="alert" tone="warning">{t.calibration.cover}</Banner>
+    <h3 class="label muted subsection">{t.calibration.groups}</h3>
+    <p class="caption muted">{t.calibration.groupsHint}</p>
+    <div class="choices">
+      {#each report?.dark_groups ?? [] as g (g.key)}
+        <Toggle
+          label={groupName(g)}
+          hint={darkHint(g)}
+          checked={!covered(g) && chosen.includes(g.key)}
+          disabled={covered(g)}
+          onchange={(on) => choose(g.key, on)} />
+      {/each}
+    </div>
     <Stepper label={t.calibration.darksCount} bind:value={darks} min={1} max={200} />
     <Stepper label={t.calibration.biasCount} bind:value={bias} min={1} max={500} step={10} />
     <Toggle label={t.calibration.warm} checked={warm} onchange={(on) => (warm = on)} />
+    <p class="body total" aria-live="polite">
+      {#if plan === null}
+        {planning ? t.calibration.planning : ""}
+      {:else if plan.frames === 0}
+        {t.calibration.nothing}
+      {:else}
+        {t.calibration.total(plan.frames, formatDuration(plan.seconds))}
+      {/if}
+    </p>
+    {#if plan && plan.left_out.length > 0}
+      <Banner icon="alert" tone="warning">{t.calibration.leftOut(plan.left_out.length)}</Banner>
+    {/if}
     {#snippet actions()}
       <ConfirmButton
         label={t.calibration.start}
         confirmLabel={t.calibration.confirm}
+        disabled={planning || plan === null || plan.frames === 0}
         {busy}
         onconfirm={() => void takeDarks()} />
     {/snippet}
@@ -210,6 +299,17 @@
     display: flex;
     flex-wrap: wrap;
     gap: var(--space-2);
+  }
+  .subsection {
+    margin: var(--space-2) 0 0;
+  }
+  .choices {
+    display: flex;
+    flex-direction: column;
+  }
+  .total {
+    min-height: 1.5em;
+    font-weight: 600;
   }
   .download {
     display: inline-flex;

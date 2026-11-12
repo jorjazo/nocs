@@ -105,10 +105,18 @@ def test_darks_and_bias_for_a_night(api: TestClient) -> None:
         ("dark", 2),
         ("flat", 20),
     ]
-    response = api.post(
-        "/api/calibration/sequence",
-        json={"night": night["id"], "darks": 2, "bias": 3, "warm": False},
-    )
+    # Two lights are test frames: left out unless chosen.
+    [group] = report["dark_groups"]
+    assert group["reason"] == "few_lights"
+    request = {"night": night["id"], "darks": 2, "bias": 3, "warm": False}
+    response = api.post("/api/calibration/plan", json=request)
+    assert response.status_code == 200, response.text
+    assert response.json()["frames"] == 0
+    request["groups"] = [group["key"]]
+    response = api.post("/api/calibration/plan", json=request)
+    assert response.status_code == 200, response.text
+    assert response.json()["frames"] == 5
+    response = api.post("/api/calibration/sequence", json=request)
     assert response.status_code == 200, response.text
     created = response.json()
     assert (created["id"], created["frames"], created["left_out"]) == ("calibration", 5, [])

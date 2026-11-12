@@ -4,7 +4,9 @@ from dataclasses import replace
 from datetime import date
 from pathlib import PurePosixPath
 
-from nocs.calibration.darks import darks_sequence, frames
+import pytest
+
+from nocs.calibration.darks import darks_sequence, duration, frames
 from nocs.calibration.library import Light, Setup, Wanted, lights_of, report
 from nocs.sequence.model import Container
 from nocs.storage import FrameRow
@@ -22,11 +24,12 @@ def row(
     temperature: float | None = -10.0,
     gain: float | None = 100.0,
     rotation: float | None = None,
+    target: str | None = None,
 ) -> FrameRow:
     return FrameRow(
         id=next(_ids),
         night=night,
-        target=None,
+        target=target,
         volume="v",
         volume_label="v",
         directory=PurePosixPath("."),
@@ -193,3 +196,83 @@ def test_darks_sequence_cools_takes_bias_then_darks_and_warms() -> None:
     ]
     assert [n.kind for n in sequence.end.children] == ["warm"]
     assert frames(sequence) == 30 + 20 + 30 + 10
+
+
+def test_dark_groups_leave_out_test_frames_and_warm_lights() -> None:
+    """rc2's night: the lights that mattered, test frames, and lights taken while cooling."""
+    rows = [row("light", exposure=120, target="NGC 253") for _ in range(112)]
+    rows += [row("light", exposure=e, target="NGC 253") for e in (2, 5, 5, 10, 300)]
+    rows += [row("light", exposure=120, temperature=15.0 + i / 10) for i in range(6)]
+    rows += [row("light", exposure=300, temperature=25.0) for _ in range(2)]
+    found = report(lights_of(rows), [], Wanted())
+    groups = [(g.exposure, g.temperature, g.lights, g.reason) for g in found.dark_groups]
+    assert groups == [
+        (2, -10.0, 1, "few_lights"),
+        (5, -10.0, 2, "few_lights"),
+        (10, -10.0, 1, "few_lights"),
+        (120, -10.0, 112, None),
+        (300, -10.0, 1, "few_lights"),
+        (120, 15.2, 6, "warm"),
+        (300, 25.0, 2, "few_lights"),
+    ]
+    chosen = found.dark_groups[3]
+    assert (chosen.targets, chosen.missing_darks, chosen.missing_bias) == (["NGC 253"], 20, 50)
+
+    needs = found.chosen_needs(None)
+    assert [(n.kind, n.count, n.exposure, n.temperature) for n in needs] == [
+        ("bias", 50, None, -10.0),
+        ("dark", 20, 120, -10.0),
+        ("flat", 20, None, None),
+    ]
+    sequence, _ = darks_sequence(
+        needs,
+        camera=SETUP.camera,
+        sensor=(6248, 4176),
+        bias_exposure=0.001,
+        warm=True,
+        name="Darks",
+    )
+    assert frames(sequence) == 70
+    assert duration(sequence) == pytest.approx(50 * 3.001 + 20 * 123)
+
+    # All of them: what it built for rc2's night, bias at both temperatures.
+    every = found.chosen_needs([g.key for g in found.dark_groups])
+    assert sum(n.count for n in every if n.kind == "dark") == 7 * 20
+    assert [n.temperature for n in every if n.kind == "bias"] == [-10.0, 15.2, 25.0]
+    assert found.chosen_needs([]) == []
+    with pytest.raises(KeyError):
+        found.chosen_needs(["nothing"])
+
+
+def test_dark_groups_merge_filters_and_say_when_covered() -> None:
+    lights = lights_of(
+        [row("light", filter=f, target=t) for f in ("R", "L") for t in ("M 42", "M 43")]
+        + [row("light", filter="L", exposure=60, target="M 42")]
+    )
+    darks = [row("dark") for _ in range(20)]
+    found = report(lights, darks, Wanted(bias=0, flats=0))
+    [short, long] = found.dark_groups
+    assert (long.exposure, long.filters, long.targets, long.lights) == (
+        300.0,
+        ["L", "R"],
+        ["M 42", "M 43"],
+        4,
+    )
+    assert (long.darks, long.covered, long.reason) == (20, True, "few_lights")
+    assert (short.darks, short.covered) == (0, False)
+
+
+def test_warm_is_measured_from_the_coldest_well_filled_group() -> None:
+    """An uncooled camera: every group warm, none left out for it."""
+    rows = [row("light", temperature=18.0) for _ in range(10)]
+    rows += [row("light", exposure=60, temperature=24.0) for _ in range(10)]
+    rows += [row("light", exposure=30, temperature=None) for _ in range(10)]
+    found = report(lights_of(rows), [], Wanted())
+    reasons = {(g.exposure, g.temperature): g.reason for g in found.dark_groups}
+    assert reasons == {(300, 18.0): None, (60, 24.0): "warm", (30, None): None}
+
+
+def test_planned_lights_are_all_chosen() -> None:
+    lights = [Light(SETUP, "L", 300, -10, date(2026, 11, 1), count=2)]
+    found = report(lights, [], Wanted(), choose=False)
+    assert [g.reason for g in found.dark_groups] == [None]

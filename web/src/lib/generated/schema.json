@@ -1221,6 +1221,106 @@
       "title": "BlobInfo",
       "type": "object"
     },
+    "CalibrationDarkGroup": {
+      "description": "Lights of any filter that share their darks: what *Take darks and bias* lets the\nuser choose. Its bias are those its lights' flats need.",
+      "properties": {
+        "darks": {
+          "description": "Matching darks found.",
+          "type": "integer"
+        },
+        "exposure": {
+          "description": "Seconds.",
+          "type": "number"
+        },
+        "filters": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "type": "array"
+        },
+        "key": {
+          "description": "Names it in a request's `groups`.",
+          "type": "string"
+        },
+        "lights": {
+          "description": "Saved, or planned for a sequence.",
+          "type": "integer"
+        },
+        "missing_bias": {
+          "description": "Bias it would take; groups at a temperature share theirs.",
+          "type": "integer"
+        },
+        "missing_darks": {
+          "description": "Darks it would take for the wanted count.",
+          "type": "integer"
+        },
+        "nights": {
+          "description": "The lights' nights, newest first.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "enum": [
+                "few_lights",
+                "warm"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Why it is left out by default (test frames; lights taken more than 5 \u00b0C above the camera's coldest group of 5 lights or more); None: chosen."
+        },
+        "setup": {
+          "$ref": "#/$defs/CalibrationSetup"
+        },
+        "targets": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "temperature": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "\u00b0C, the darks'."
+        }
+      },
+      "required": [
+        "key",
+        "setup",
+        "exposure",
+        "temperature",
+        "lights",
+        "filters",
+        "targets",
+        "nights",
+        "darks",
+        "missing_darks",
+        "missing_bias",
+        "reason"
+      ],
+      "title": "CalibrationDarkGroup",
+      "type": "object"
+    },
     "CalibrationGroup": {
       "description": "Lights that share their darks and flats, and what matches them (ADR 0036).",
       "properties": {
@@ -1392,8 +1492,40 @@
       "title": "CalibrationNeed",
       "type": "object"
     },
+    "CalibrationPlan": {
+      "properties": {
+        "frames": {
+          "type": "integer"
+        },
+        "left_out": {
+          "description": "Darks and bias it cannot take: another camera, or a region of the sensor.",
+          "items": {
+            "$ref": "#/$defs/CalibrationNeed"
+          },
+          "type": "array"
+        },
+        "seconds": {
+          "description": "The frames' time, cooling not included.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "frames",
+        "seconds",
+        "left_out"
+      ],
+      "title": "CalibrationPlan",
+      "type": "object"
+    },
     "CalibrationReport": {
       "properties": {
+        "dark_groups": {
+          "description": "The groups *Take darks and bias* chooses from.",
+          "items": {
+            "$ref": "#/$defs/CalibrationDarkGroup"
+          },
+          "type": "array"
+        },
         "frames": {
           "description": "Matched calibration frames, each counted once.",
           "type": "integer"
@@ -1427,7 +1559,8 @@
         "night",
         "groups",
         "needs",
-        "frames"
+        "frames",
+        "dark_groups"
       ],
       "title": "CalibrationReport",
       "type": "object"
@@ -1447,12 +1580,17 @@
             "$ref": "#/$defs/CalibrationNeed"
           },
           "type": "array"
+        },
+        "seconds": {
+          "description": "The frames' time, cooling not included.",
+          "type": "number"
         }
       },
       "required": [
-        "id",
         "frames",
-        "left_out"
+        "seconds",
+        "left_out",
+        "id"
       ],
       "title": "CalibrationSequence",
       "type": "object"
@@ -1472,6 +1610,22 @@
           "maximum": 500,
           "minimum": 0,
           "type": "integer"
+        },
+        "groups": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 500,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Keys of the dark groups to take; None: those chosen by default."
         },
         "night": {
           "anyOf": [

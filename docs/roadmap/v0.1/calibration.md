@@ -66,6 +66,28 @@ Left for the field test (steps 22–23 of [field-test.md](field-test.md)):
 flats with real light (a panel, a white screen or the twilight sky) and their
 per-channel levels; sky flats at dusk or dawn; darks with the filter wheel present.
 
+## Choosing the groups (after rc2)
+
+rc2's night built 330 frames (~4 h) of darks and bias: every exposure among its
+lights, test frames included, and groups taken warm while the camera cooled, when
+only the 112 × 120 s lights at −10 °C mattered. *Take darks and bias* now lists the
+night's **dark groups** (lights of any filter that share their darks: camera, size,
+binning, gain, offset, exposure, temperature) with a switch each, and takes only
+those switched on; the bias follow them (the bias of the chosen groups' setups and
+temperatures). Defaults, from the library (`nocs.calibration.library`):
+
+- off: groups of fewer than 5 lights (`FEW_LIGHTS`), test frames;
+- off: groups more than 5 °C (`WARM`) above the camera's coldest group of 5 lights
+  or more, taken while it cooled; an uncooled camera's groups all stay on;
+- a group whose darks and bias are all in the library reads "covered";
+- a saved sequence's planned lights are all on.
+
+`GET /api/calibration` lists them as `dark_groups` (key, lights, filters, targets,
+darks found, darks and bias it would take, why it is off); `POST /api/calibration/plan`
+says what a choice takes (frames, seconds with 3 s a frame, cooling not counted, sets
+left out) and `POST /api/calibration/sequence` takes `groups` (keys; none: the
+defaults). A key the lights no longer have is refused (409).
+
 ## Notes
 
 - Shared files kept small: `api/schemas.py` (calibration and flats state and

@@ -12,7 +12,7 @@ Pure functions over catalog rows: the caller reads the catalog in a thread.
 from __future__ import annotations
 
 import statistics
-from collections.abc import Iterable
+from collections.abc import Collection, Iterable
 from dataclasses import dataclass, field
 from datetime import date
 from typing import Literal
@@ -28,6 +28,11 @@ DARK_DAYS = 180
 FLAT_DAYS = 30
 FLAT_ROTATION = 1.0
 """Degrees, modulo 180 (a meridian flip turns the image, not the camera)."""
+FEW_LIGHTS = 5
+"""Lights below which a dark group is left out by default: test frames."""
+WARM = 5.0
+"""°C above the camera's coldest well-filled group past which a group is left out by
+default: lights taken while the camera cooled."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,6 +66,7 @@ class Light:
     count: int = 1
     rotation: float | None = None
     focus: int | None = None
+    target: str | None = None
 
 
 @dataclass(slots=True)
@@ -102,6 +108,7 @@ class Group:
     nights: set[date]
     focus: int | None = None
     """The focuser's position for the newest of these lights: their flats' position."""
+    targets: set[str] = field(default_factory=set[str])
     darks: Match = field(default_factory=Match)
     flats: Match = field(default_factory=Match)
     bias: Match = field(default_factory=Match)
@@ -110,10 +117,55 @@ class Group:
     """Bias or darks for the matched flats."""
 
 
+type Reason = Literal["few_lights", "warm"]
+
+
+@dataclass(frozen=True, slots=True)
+class DarkGroup:
+    """Groups of lights that share their darks (any filter): what *Take darks and bias*
+    lets the user choose. Its bias are those of its groups' flats."""
+
+    key: str
+    setup: Setup
+    exposure: float
+    temperature: float | None
+    lights: int
+    filters: list[str | None]
+    targets: list[str]
+    nights: list[date]
+    darks: int
+    """Matching darks found (the fewest among its groups)."""
+    missing_darks: int
+    missing_bias: int
+    reason: Reason | None
+    """Why it is left out by default; ``None`` when it is chosen."""
+    members: list[Group] = field(repr=False)
+
+    @property
+    def covered(self) -> bool:
+        return self.missing_darks == 0 and self.missing_bias == 0
+
+
 @dataclass(frozen=True, slots=True)
 class Report:
     groups: list[Group]
     needs: list[Need]
+    dark_groups: list[DarkGroup] = field(default_factory=list[DarkGroup])
+    wanted: Wanted = Wanted()
+
+    def chosen_needs(self, keys: Collection[str] | None) -> list[Need]:
+        """The needs of the chosen dark groups (by default when ``keys`` is ``None``).
+
+        Raises ``KeyError`` for a key no dark group has.
+        """
+        known = {g.key for g in self.dark_groups}
+        if keys is None:
+            keys = {g.key for g in self.dark_groups if g.reason is None}
+        unknown = sorted(set(keys) - known)
+        if unknown:
+            raise KeyError(unknown[0])
+        chosen = [m for g in self.dark_groups if g.key in keys for m in g.members]
+        return _needs(chosen, self.wanted)
 
     @property
     def frames(self) -> list[int]:
@@ -140,17 +192,22 @@ def lights_of(rows: Iterable[FrameRow]) -> list[Light]:
             date.fromisoformat(row.night),
             rotation=row.rotation,
             focus=row.focus_position,
+            target=row.target,
         )
         for row in rows
         if row.frame_type == "light"
     ]
 
 
-def report(lights: list[Light], calibration: list[FrameRow], wanted: Wanted) -> Report:
+def report(
+    lights: list[Light], calibration: list[FrameRow], wanted: Wanted, *, choose: bool = True
+) -> Report:
+    """``choose``: leave out test frames and warm lights by default (saved lights); a
+    sequence's planned lights are all chosen."""
     groups = _groups(lights)
     for group in groups:
         _match(group, calibration, lights)
-    return Report(groups, _needs(groups, wanted))
+    return Report(groups, _needs(groups, wanted), _dark_groups(groups, wanted, choose), wanted)
 
 
 def _same_exposure(a: float, b: float) -> bool:
@@ -213,6 +270,7 @@ def _groups(lights: list[Light]) -> list[Group]:
                     sum(m.count for m in cluster),
                     {m.night for m in cluster},
                     _newest_focus(members, cluster),
+                    {m.target for m in cluster if m.target},
                 )
             )
     groups.sort(key=lambda g: (g.setup.camera, g.filter or "", g.exposure, g.temperature or 0))
@@ -312,6 +370,79 @@ def _median(values: list[float | None]) -> float | None:
     return round(statistics.median(known), 1) if known else None
 
 
+def _same_darks(group: Group, setup: Setup, exposure: float, temperature: float | None) -> bool:
+    return (
+        group.setup == setup
+        and _same_exposure(exposure, group.exposure)
+        and _near(temperature, group.temperature, DARK_TEMPERATURE)
+    )
+
+
+def _dark_groups(groups: list[Group], wanted: Wanted, choose: bool) -> list[DarkGroup]:
+    """Groups merged as ``_needs`` merges their darks, in the same order."""
+    merged: list[list[Group]] = []
+    for group in groups:
+        same = next(
+            (m for m in merged if _same_darks(group, m[0].setup, m[0].exposure, m[0].temperature)),
+            None,
+        )
+        if same is None:
+            merged.append([group])
+        else:
+            same.append(group)
+    coldest: dict[str, float] = {}
+    for members in merged:
+        first = members[0]
+        lights = sum(m.lights for m in members)
+        if first.temperature is not None and lights >= FEW_LIGHTS:
+            camera = first.setup.camera
+            coldest[camera] = min(coldest.get(camera, first.temperature), first.temperature)
+    found: list[DarkGroup] = []
+    for members in merged:
+        first = members[0]
+        lights = sum(m.lights for m in members)
+        needs = _needs(members, wanted)
+        reason: Reason | None = None
+        if choose and lights < FEW_LIGHTS:
+            reason = "few_lights"
+        elif (
+            choose
+            and first.temperature is not None
+            and first.setup.camera in coldest
+            and first.temperature > coldest[first.setup.camera] + WARM
+        ):
+            reason = "warm"
+        found.append(
+            DarkGroup(
+                key=_key(first),
+                setup=first.setup,
+                exposure=first.exposure,
+                temperature=first.temperature,
+                lights=lights,
+                filters=sorted({m.filter for m in members}, key=lambda f: f or ""),
+                targets=sorted({t for m in members for t in m.targets}),
+                nights=sorted({n for m in members for n in m.nights}, reverse=True),
+                darks=min(len(m.darks.frames) for m in members),
+                missing_darks=sum(n.count for n in needs if n.kind == "dark"),
+                missing_bias=sum(n.count for n in needs if n.kind == "bias"),
+                reason=reason,
+                members=members,
+            )
+        )
+    found.sort(key=lambda g: (g.setup.camera, g.temperature or 0, g.exposure))
+    return found
+
+
+def _key(group: Group) -> str:
+    """A dark group's name for the API: stable while its lights do not change."""
+    s = group.setup
+    temperature = "-" if group.temperature is None else f"{group.temperature:g}"
+    return (
+        f"{s.camera}|{s.width}x{s.height}|{s.binning}|{s.gain}|{s.offset}"
+        f"|{group.exposure:g}|{temperature}"
+    )
+
+
 def _needs(groups: list[Group], wanted: Wanted) -> list[Need]:
     """What to take, merged across groups: one set of darks serves every filter."""
     darks: dict[tuple[Setup, float, float | None], int] = {}
@@ -320,13 +451,7 @@ def _needs(groups: list[Group], wanted: Wanted) -> list[Need]:
     for group in groups:
         setup = group.setup
         dark_key = next(
-            (
-                k
-                for k in darks
-                if k[0] == setup
-                and _same_exposure(k[1], group.exposure)
-                and _near(k[2], group.temperature, DARK_TEMPERATURE)
-            ),
+            (k for k in darks if _same_darks(group, *k)),
             (setup, group.exposure, group.temperature),
         )
         missing = max(0, wanted.darks - len(group.darks.frames))
