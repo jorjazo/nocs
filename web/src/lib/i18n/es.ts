@@ -1134,6 +1134,7 @@ export const es: Messages = {
     driverPlaceholder: "Escribe un modelo o marca, p. ej. AM5",
     clearDriver: "Borrar el campo para buscar de nuevo",
     otherDrivers: "Otros drivers",
+    noDrivers: "El catálogo INDI del equipo no tiene drivers.",
     noDriver: (query) => `Ningún driver coincide con «${query}».`,
     driverMatches: (count) => (count === 1 ? "1 driver" : `${count} drivers`),
     deviceName: "Nombre del dispositivo",

@@ -1158,6 +1158,7 @@ export const en = {
     driverPlaceholder: "Type a model or maker, e.g. AM5",
     clearDriver: "Clear the field to search again",
     otherDrivers: "Other drivers",
+    noDrivers: "The rig's INDI catalog lists no driver.",
     noDriver: (query: string) => `No driver matches “${query}”.`,
     driverMatches: (count: number) => (count === 1 ? "1 driver" : `${count} drivers`),
     deviceName: "Device name",

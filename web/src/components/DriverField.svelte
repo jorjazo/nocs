@@ -12,6 +12,7 @@
 
   let {
     label,
+    context,
     choices,
     groups,
     current,
@@ -19,6 +20,8 @@
     autofocus = false,
   }: {
     label: string;
+    // What the field is for (the role), in its accessible name: every role's field is "Driver".
+    context?: string;
     choices: readonly DriverChoice[];
     // The role's catalog groups, offered first.
     groups: readonly string[];
@@ -30,6 +33,7 @@
 
   const id = $props.id();
   const t = $derived(i18n.t);
+  const name = $derived(context ? `${context}: ${label}` : label);
 
   let field = $state<HTMLElement>();
   let input = $state<HTMLInputElement>();
@@ -46,6 +50,9 @@
 
   // The list just opened on the current choice: it shows it in its middle.
   let centre = false;
+  // The mouse made the option active: it is in sight already, and scrolling the list
+  // under the mouse would make another one active.
+  let pointed = false;
 
   function show(): void {
     if (!open) {
@@ -136,6 +143,10 @@
     if (!open || active < 0 || !listbox) return;
     const option = listbox.querySelector<HTMLElement>(`#${CSS.escape(`${id}-${active}`)}`);
     if (!option) return;
+    if (pointed) {
+      pointed = false;
+      return;
+    }
     const top = option.offsetTop - GROUP_LABEL;
     const bottom = option.offsetTop + option.offsetHeight;
     if (centre) {
@@ -172,7 +183,8 @@
       aria-expanded={open}
       aria-controls="{id}-list"
       aria-activedescendant={open && active >= 0 ? `${id}-${active}` : undefined}
-      aria-describedby={current ? `${id}-driver` : undefined}
+      aria-label={context ? name : undefined}
+      aria-describedby={current && !open ? `${id}-driver` : undefined}
       placeholder={t.editor.driverPlaceholder}
       value={text}
       {oninput}
@@ -203,7 +215,7 @@
     class="list"
     id="{id}-list"
     role="listbox"
-    aria-label={label}
+    aria-label={name}
     tabindex="-1"
     hidden={!open}
     bind:this={listbox}
@@ -225,7 +237,11 @@
               role="option"
               tabindex="-1"
               aria-selected={choice.key === current?.key}
-              onpointermove={() => (active = index)}
+              onpointermove={() => {
+                if (index === active) return;
+                pointed = true;
+                active = index;
+              }}
               onclick={() => {
                 choose(choice);
                 // A tap closes the phone's keyboard; a key goes on in the field.
@@ -242,13 +258,12 @@
           {/each}
         </div>
       {:else}
-        <p class="empty">{t.editor.noDriver(query ?? "")}</p>
+        <p class="empty">{query?.trim() ? t.editor.noDriver(query) : t.editor.noDrivers}</p>
       {/each}
     {/if}
   </div>
-  {#if open}
-    <span class="visually-hidden" role="status">{t.editor.driverMatches(flat.length)}</span>
-  {/if}
+  <!-- Always there: a live region added with its text may not be announced. -->
+  <span class="visually-hidden" role="status">{open ? t.editor.driverMatches(flat.length) : ""}</span>
 </div>
 
 <style>

@@ -307,6 +307,7 @@
               <div class="role-fields">
                 <DriverField
                   label={t.editor.driver}
+                  context={t.roles[role]}
                   {choices}
                   groups={ROLE_GROUPS[role]}
                   current={choiceFor(choices, draft.driver, draft.model)}
