@@ -364,8 +364,12 @@ Tonight and Plan (stage 3.6):
   landed, and under the rotation slider says how far to turn the camera from that
   frame's angle to the framing's, with "Use the camera's angle". "Survey image" (off
   by default, kept per device) puts a DSS image under the chart, fetched by the
-  phone itself from CDS, or NASA SkyView when CDS does not answer; in Night mode
-  it is drawn in red only.
+  phone itself from CDS, or NASA SkyView when CDS does not answer; the service that
+  worked last is asked first. A view wider than 5° gets an image of its middle only
+  (SkyView is too slow for more). While loading, the caption names the service
+  being asked; without an image it says why, per service ("CDS not answering ·
+  SkyView too slow for this view", "cannot be reached. No internet on this
+  device?", "this device is offline"). In Night mode it is drawn in red only.
 
 Sequence builder (stage 5.13):
 
