@@ -5,7 +5,7 @@ Blocking methods read the catalog: call them from a thread.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -79,7 +79,7 @@ class CalibrationService:
         night = night_of(self._now(), self._longitude())
         cooling = sequence.template.cooling if sequence.template is not None else None
         lights: list[Light] = []
-        for _, plan, _ in plans(sequence):
+        for _, plan, target in plans(sequence):
             if plan.frame_type != "light":
                 continue
             for row in plan.rows:
@@ -92,16 +92,34 @@ class CalibrationService:
                     row.gain if row.gain is not None else camera.gain,
                     row.offset if row.offset is not None else camera.offset,
                 )
-                lights.append(Light(setup, row.filter, row.exposure, cooling, night, row.count))
+                lights.append(
+                    Light(
+                        setup,
+                        row.filter,
+                        row.exposure,
+                        cooling,
+                        night,
+                        row.count,
+                        target=target.name if target is not None else None,
+                    )
+                )
         storage = self._storage()
         cameras = [camera.name]
-        return report(lights, storage.calibration_frames(cameras), wanted)
+        return report(lights, storage.calibration_frames(cameras), wanted, choose=False)
 
-    def darks(
-        self, night: int | None, sequence: str | None, wanted: Wanted, warm: bool
-    ) -> tuple[Sequence, list[Need]]:
-        """Keep the darks and bias missing for a night's or a sequence's lights as the
-        ``calibration`` sequence; also what it could not include."""
+    def plan(
+        self,
+        night: int | None,
+        sequence: str | None,
+        wanted: Wanted,
+        warm: bool,
+        groups: Collection[str] | None = None,
+    ) -> tuple[Sequence, list[Need], Report]:
+        """The darks and bias missing for a night's or a sequence's lights, for the dark
+        groups chosen (``None``: those chosen by default), as a sequence not kept; also
+        what it cannot include, and the report it comes from. Raises ``KeyError`` for an
+        unknown night or sequence, ``CalibrationError`` for an unknown group.
+        """
         camera = self._camera()
         if camera is None:
             raise CalibrationError("connect the main camera to take darks and bias")
@@ -112,8 +130,12 @@ class CalibrationService:
             assert sequence is not None
             found = self.for_sequence(sequence, wanted)
             name = f"Darks and bias for {sequence}"
+        try:
+            needs = found.chosen_needs(groups)
+        except KeyError as e:
+            raise CalibrationError(f"the lights changed: no group {e.args[0]!r}") from e
         built, left = darks_sequence(
-            found.needs,
+            needs,
             camera=camera.name,
             sensor=(camera.width, camera.height),
             bias_exposure=camera.min_exposure
@@ -122,7 +144,21 @@ class CalibrationService:
             warm=warm,
             name=name,
         )
+        return built, left, found
+
+    def darks(
+        self,
+        night: int | None,
+        sequence: str | None,
+        wanted: Wanted,
+        warm: bool,
+        groups: Collection[str] | None = None,
+    ) -> tuple[Sequence, list[Need]]:
+        """``plan``, kept as the ``calibration`` sequence."""
+        built, left, _ = self.plan(night, sequence, wanted, warm, groups)
         if not built.targets.children:
+            if groups is not None:
+                raise CalibrationError("the chosen groups miss no darks or bias")
             raise CalibrationError("no darks or bias are missing")
         self._put(SEQUENCE_ID, built)
         return built, left

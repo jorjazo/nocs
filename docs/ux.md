@@ -456,10 +456,15 @@ Calibration frames (ADR 0036):
   "2/20" when short, amber "Missing" when there is none. Matches come from any
   night (darks and bias for 180 days; flats the same night, or the same rotation).
 - *Take darks and bias…* opens a sheet: a warning to cover the telescope or the
-  camera, darks per exposure, bias, warm at the end; Start asks a second tap ("It
-  is covered: start"), builds the `calibration` sequence and starts it, so the
-  Session monitor shows it like any sequence. Sets it cannot take (another camera,
-  a region of the sensor) are named in a banner.
+  camera; the lights to calibrate, one switch per group that shares its darks
+  (exposure, temperature, gain, offset, binning; its lights, filters and targets,
+  and the darks and bias it would take or "covered"), test frames (fewer than 5
+  lights) and lights taken warm off by default with the reason; darks per
+  exposure, bias, warm at the end; the frames and the time the choice takes,
+  updated as it changes. Start asks a second tap ("It is covered: start"), builds
+  the `calibration` sequence and starts it, so the Session monitor shows it like
+  any sequence. Sets it cannot take (another camera, a region of the sensor) are
+  named in a banner.
 - *Take flats…* opens the flats wizard (`#/flats/<night>`, full screen): Panel or
   Twilight sky with what each does; for the sky, the next dusk and dawn windows;
   the night's filters, each with its focuser position and a count (on for those

@@ -10,9 +10,11 @@ import anyio
 from fastapi import APIRouter, HTTPException, Query, status
 
 from nocs.api.schemas import (
+    CalibrationDarkGroup,
     CalibrationGroup,
     CalibrationMatch,
     CalibrationNeed,
+    CalibrationPlan,
     CalibrationReport,
     CalibrationSequence,
     CalibrationSequenceRequest,
@@ -21,9 +23,9 @@ from nocs.api.schemas import (
     JobStarted,
     TwilightWindow,
 )
-from nocs.calibration.darks import SEQUENCE_ID, frames
+from nocs.calibration.darks import SEQUENCE_ID, duration, frames
 from nocs.calibration.flats import FlatPlan, FlatsError, FlatsService
-from nocs.calibration.library import Match, Need, Report, Setup, Wanted
+from nocs.calibration.library import DarkGroup, Match, Need, Report, Setup, Wanted
 from nocs.calibration.service import CalibrationError, CalibrationService
 from nocs.imaging import CameraNotReadyError
 from nocs.jobs import ResourceBusyError
@@ -88,22 +90,59 @@ def calibration_router(
             found = await anyio.to_thread.run_sync(service.for_sequence, sequence, wanted)
             return wire(found, None)
 
+    @router.post("/calibration/plan")
+    async def plan(request: CalibrationSequenceRequest) -> CalibrationPlan:  # pyright: ignore[reportUnusedFunction]
+        """What ``/calibration/sequence`` would take for the chosen groups, not kept."""
+        _check(request)
+        wanted = Wanted(request.darks, request.bias, 0)
+        service = calibration()
+        with _errors():
+            built, left, found = await anyio.to_thread.run_sync(
+                service.plan,
+                request.night,
+                request.sequence,
+                wanted,
+                request.warm,
+                request.groups,
+            )
+        return CalibrationPlan(
+            frames=frames(built),
+            seconds=duration(built),
+            left_out=[_need(n) for n in left],
+            dark_groups=[_dark_group(g) for g in found.dark_groups],
+        )
+
     @router.post("/calibration/sequence")
     async def darks(request: CalibrationSequenceRequest) -> CalibrationSequence:  # pyright: ignore[reportUnusedFunction]
-        """Keep the missing darks and bias as the ``calibration`` sequence (not started)."""
-        if (request.night is None) == (request.sequence is None):
-            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "give a night or a sequence")
+        """Keep the missing darks and bias of the chosen groups as the ``calibration``
+        sequence (not started)."""
+        _check(request)
         wanted = Wanted(request.darks, request.bias, 0)
         service = calibration()
         with _errors():
             built, left = await anyio.to_thread.run_sync(
-                service.darks, request.night, request.sequence, wanted, request.warm
+                service.darks,
+                request.night,
+                request.sequence,
+                wanted,
+                request.warm,
+                request.groups,
             )
         return CalibrationSequence(
-            id=SEQUENCE_ID, frames=frames(built), left_out=[_need(n) for n in left]
+            id=SEQUENCE_ID,
+            frames=frames(built),
+            seconds=duration(built),
+            left_out=[_need(n) for n in left],
         )
 
     return router
+
+
+def _check(request: CalibrationSequenceRequest) -> None:
+    if (request.night is None) == (request.sequence is None):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "give a night or a sequence")
+    if request.groups is not None and len(set(request.groups)) != len(request.groups):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "a group is named twice")
 
 
 def _need(n: Need) -> CalibrationNeed:
@@ -137,6 +176,24 @@ def wire(report: Report, night: str | None) -> CalibrationReport:
         ],
         needs=[_need(n) for n in report.needs],
         frames=len(report.frames),
+        dark_groups=[_dark_group(g) for g in report.dark_groups],
+    )
+
+
+def _dark_group(g: DarkGroup) -> CalibrationDarkGroup:
+    return CalibrationDarkGroup(
+        key=g.key,
+        setup=_setup(g.setup),
+        exposure=g.exposure,
+        temperature=g.temperature,
+        lights=g.lights,
+        filters=g.filters,
+        targets=g.targets,
+        nights=[n.isoformat() for n in g.nights],
+        darks=g.darks,
+        missing_darks=g.missing_darks,
+        missing_bias=g.missing_bias,
+        reason=g.reason,
     )
 
 

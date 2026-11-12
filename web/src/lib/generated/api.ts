@@ -3097,6 +3097,71 @@ export interface AutofocusTrigger {
   temperature_change?: number | null;
 }
 /**
+ * Lights of any filter that share their darks: what *Take darks and bias* lets the
+ * user choose. Its bias are those its lights' flats need.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "CalibrationDarkGroup".
+ */
+export interface CalibrationDarkGroup {
+  /**
+   * Matching darks found.
+   */
+  darks: number;
+  /**
+   * Seconds.
+   */
+  exposure: number;
+  filters: (string | null)[];
+  /**
+   * Names it in a request's `groups`.
+   */
+  key: string;
+  /**
+   * Saved, or planned for a sequence.
+   */
+  lights: number;
+  /**
+   * Bias it would take; groups at a temperature share theirs.
+   */
+  missing_bias: number;
+  /**
+   * Darks it would take for the wanted count.
+   */
+  missing_darks: number;
+  /**
+   * The lights' nights, newest first.
+   */
+  nights: string[];
+  /**
+   * Why it is left out by default (test frames; lights taken more than 5 °C above the camera's coldest group of 5 lights or more); None: chosen.
+   */
+  reason: ("few_lights" | "warm") | null;
+  setup: CalibrationSetup;
+  targets: string[];
+  /**
+   * °C, the darks'.
+   */
+  temperature: number | null;
+}
+/**
+ * What calibration frames share with their lights (flats need not share gain and offset).
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "CalibrationSetup".
+ */
+export interface CalibrationSetup {
+  binning: number | null;
+  camera: string;
+  gain: number | null;
+  height: number | null;
+  offset: number | null;
+  /**
+   * Pixels, as saved (after binning).
+   */
+  width: number | null;
+}
+/**
  * Lights that share their darks and flats, and what matches them (ADR 0036).
  *
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -3179,23 +3244,6 @@ export interface CalibrationMatch2 {
   temperature: number | null;
 }
 /**
- * What calibration frames share with their lights (flats need not share gain and offset).
- *
- * This interface was referenced by `NOCSAPI`'s JSON-Schema
- * via the `definition` "CalibrationSetup".
- */
-export interface CalibrationSetup {
-  binning: number | null;
-  camera: string;
-  gain: number | null;
-  height: number | null;
-  offset: number | null;
-  /**
-   * Pixels, as saved (after binning).
-   */
-  width: number | null;
-}
-/**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "CalibrationNeed".
  */
@@ -3220,10 +3268,32 @@ export interface CalibrationNeed {
   temperature: number | null;
 }
 /**
+ * What ``/calibration/sequence`` would keep for the same request.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "CalibrationPlan".
+ */
+export interface CalibrationPlan {
+  /**
+   * The groups, with what each would take at the request's counts.
+   */
+  dark_groups: CalibrationDarkGroup[];
+  frames: number;
+  left_out: CalibrationNeed[];
+  /**
+   * The frames' time, cooling not included.
+   */
+  seconds: number;
+}
+/**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "CalibrationReport".
  */
 export interface CalibrationReport {
+  /**
+   * The groups *Take darks and bias* chooses from.
+   */
+  dark_groups: CalibrationDarkGroup[];
   /**
    * Matched calibration frames, each counted once.
    */
@@ -3252,6 +3322,10 @@ export interface CalibrationSequence {
    * Darks and bias it cannot take: another camera, or a region of the sensor.
    */
   left_out: CalibrationNeed[];
+  /**
+   * The frames' time, cooling not included.
+   */
+  seconds: number;
 }
 /**
  * Darks and bias missing for a night's lights, or for a saved sequence's.
@@ -3265,6 +3339,10 @@ export interface CalibrationSequenceRequest {
    * Wanted per exposure.
    */
   darks?: number;
+  /**
+   * Keys of the dark groups to take; None: those chosen by default.
+   */
+  groups?: string[] | null;
   night?: number | null;
   sequence?: string | null;
   /**

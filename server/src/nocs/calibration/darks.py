@@ -10,6 +10,7 @@ from __future__ import annotations
 from nocs.calibration.library import Need
 from nocs.sequence import Sequence
 from nocs.sequence.model import Container, Cool, ExposurePlan, Node, PlanRow, Warm
+from nocs.sequence.template import FRAME_OVERHEAD
 
 SEQUENCE_ID = "calibration"
 
@@ -85,10 +86,20 @@ def _row(need: Need, exposure: float) -> PlanRow:
 
 def frames(sequence: Sequence) -> int:
     """Frames the sequence takes."""
-    total = 0
-    for container in sequence.targets.children:
-        if isinstance(container, Container):
-            for child in container.children:
-                if isinstance(child, ExposurePlan):
-                    total += sum(row.count for row in child.rows)
-    return total
+    return sum(row.count for row in _rows(sequence))
+
+
+def duration(sequence: Sequence) -> float:
+    """Seconds its frames take, with ``FRAME_OVERHEAD`` each; cooling not included."""
+    return sum(row.count * (row.exposure + FRAME_OVERHEAD) for row in _rows(sequence))
+
+
+def _rows(sequence: Sequence) -> list[PlanRow]:
+    return [
+        row
+        for container in sequence.targets.children
+        if isinstance(container, Container)
+        for child in container.children
+        if isinstance(child, ExposurePlan)
+        for row in child.rows
+    ]

@@ -7,8 +7,9 @@
     label,
     confirmLabel,
     busy = false,
+    disabled = false,
     onconfirm,
-  }: { label: string; confirmLabel: string; busy?: boolean; onconfirm: () => void } = $props();
+  }: { label: string; confirmLabel: string; busy?: boolean; disabled?: boolean; onconfirm: () => void } = $props();
 
   let armed = $state(false);
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -28,7 +29,7 @@
 </script>
 
 <span aria-live="polite">
-  <Button variant={armed ? "danger" : "secondary"} {busy} onclick={press}>
+  <Button variant={armed ? "danger" : "secondary"} {busy} {disabled} onclick={press}>
     {armed ? confirmLabel : label}
   </Button>
 </span>

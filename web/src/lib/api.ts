@@ -72,6 +72,7 @@ import type {
   TargetRequest,
   Template,
   TrackingRequest,
+  CalibrationPlan,
   CalibrationReport,
   CalibrationSequence,
   CalibrationSequenceRequest,
@@ -685,6 +686,11 @@ export function sessionCsvUrl(id: number): string {
 export function getCalibration(query: { night: number } | { sequence: string }): Promise<CalibrationReport> {
   const params = new URLSearchParams(Object.entries(query).map(([k, v]) => [k, String(v)]));
   return request("GET", `/api/calibration?${params}`);
+}
+
+// What the "calibration" sequence would take for the chosen groups, not kept.
+export function planCalibrationSequence(body: CalibrationSequenceRequest): Promise<CalibrationPlan> {
+  return request("POST", "/api/calibration/plan", body);
 }
 
 // Keeps the missing darks and bias as the "calibration" sequence, not started.

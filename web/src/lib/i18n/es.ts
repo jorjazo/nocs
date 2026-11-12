@@ -1605,6 +1605,18 @@ export const es: Messages = {
     download: "Descargar con calibración",
     downloadHint: "El zip de la noche y los darks, flats y bias de otras noches que le corresponden.",
     sheetTitle: "Darks y bias",
+    groups: "Lights a calibrar",
+    groupsHint: "Cada grupo necesita darks de su exposición y temperatura. Los frames de prueba y las lights tomadas en caliente quedan apagados: enciende un grupo para tomar sus darks.",
+    lights: (n: number) => (n === 1 ? "1 light" : `${n} lights`),
+    takes: (darks: number, bias: number) =>
+      [darks ? (darks === 1 ? "1 dark" : `${darks} darks`) : "", bias ? `${bias} bias` : ""].filter(Boolean).join(" + "),
+    covered: (n: number) => (n === 1 ? "cubierto: 1 dark" : `cubierto: ${n} darks`),
+    fewLights: "Pocas lights: ¿frames de prueba?",
+    warmLights: "Tomadas en caliente: ¿mientras la cámara enfriaba?",
+    planning: "Contando…",
+    nothing: "Nada que tomar: enciende un grupo.",
+    total: (frames: number, time: string) =>
+      `${frames === 1 ? "1 frame" : `${frames} frames`}, unos ${time} más el enfriamiento`,
     cover: "Tapa el telescopio o la cámara: no debe llegar luz al sensor mientras se toman.",
     darksCount: "Darks por exposición",
     biasCount: "Bias",

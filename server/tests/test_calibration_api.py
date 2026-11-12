@@ -117,6 +117,11 @@ def test_the_library_of_a_night(tmp_path: Path) -> None:
             ("flat", 19),
         ]
         assert report["frames"] == 3
+        [dark_group] = report["dark_groups"]
+        assert dark_group["lights"] == 3
+        assert (dark_group["filters"], dark_group["targets"]) == (["L"], ["NGC 253"])
+        assert (dark_group["missing_darks"], dark_group["missing_bias"]) == (3, 50)
+        assert dark_group["reason"] == "few_lights"
 
         zipped = client.get(f"/api/nights/{night['id']}/zip", params={"calibration": True})
         assert zipped.status_code == 200, zipped.text
@@ -138,3 +143,7 @@ def test_the_library_of_a_night(tmp_path: Path) -> None:
         assert response.status_code == 503, response.text
         response = client.post("/api/calibration/sequence", json={"night": night["id"]})
         assert response.status_code == 409, response.text
+        response = client.post("/api/calibration/plan", json={"night": night["id"]})
+        assert response.status_code == 409, response.text
+        twice = {"night": night["id"], "groups": [dark_group["key"]] * 2}
+        assert client.post("/api/calibration/plan", json=twice).status_code == 422
