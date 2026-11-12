@@ -1404,8 +1404,8 @@ export const es: Messages = {
       focusReason: {
         filter: (name) => `el filtro cambió a ${name}`,
         temperature: (change) => `la temperatura cambió ${change}`,
-        minutes: (minutes) => `${minutes} min desde el último`,
-        frames: (frames) => `${frames} ${frames === 1 ? "toma" : "tomas"} desde el último`,
+        minutes: (minutes) => `${minutes} min desde el último enfoque`,
+        frames: (frames) => `${frames} ${frames === 1 ? "toma" : "tomas"} desde el último enfoque`,
         hfr: (percent) => `las estrellas crecieron un ${percent} %`,
       },
       ditherDue: (frames) => `Toca dither: ${frames} ${frames === 1 ? "toma" : "tomas"} desde el último`,

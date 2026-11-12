@@ -176,8 +176,6 @@ function capitalize(text: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
-// One line of the session's timeline, from the event's kind and data (the
-// server's messages are English).
 // Why an autofocus was due, in the reader's words (the runner says it in English).
 export function describeFocusReason(reason: string, t: Messages, locale: string): string {
   const r = t.session.event.focusReason;
@@ -198,6 +196,8 @@ export function describeFocusReason(reason: string, t: Messages, locale: string)
   }
 }
 
+// One line of the session's timeline, from the event's kind and data (the
+// server's messages are English).
 export function describeEvent(event: SequenceEvent, t: Messages, locale: string): string {
   const e = t.session.event;
   const n = t.sequence.node;

@@ -14,5 +14,5 @@ test("an autofocus that is due says why in the reader's words", () => {
   const r = en.session.event.focusReason;
   assert.equal(en.session.event.focusDue(r.frames(3)), "Autofocus due: 3 frames since the last");
   assert.equal(r.filter("Ha"), "the filter changed to Ha");
-  assert.equal(es.session.event.focusDue(es.session.event.focusReason.frames(1)), "Toca enfocar: 1 toma desde el último");
+  assert.equal(es.session.event.focusDue(es.session.event.focusReason.frames(1)), "Toca enfocar: 1 toma desde el último enfoque");
 });
