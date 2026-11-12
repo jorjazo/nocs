@@ -982,7 +982,8 @@ class SequenceEvent(StateModel):
     message: str
     path: str | None
     data: dict[str, Any] = Field(
-        description="A frame's row, stars and HFR; an autofocus run's position and HFR…"
+        description="A frame's row, filter (None: none), exposure, done and count of its "
+        "row, stars and HFR; an autofocus run's position and HFR…"
     )
 
 

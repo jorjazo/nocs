@@ -8449,7 +8449,7 @@
       "properties": {
         "data": {
           "additionalProperties": true,
-          "description": "A frame's row, stars and HFR; an autofocus run's position and HFR\u2026",
+          "description": "A frame's row, filter (None: none), exposure, done and count of its row, stars and HFR; an autofocus run's position and HFR\u2026",
           "type": "object"
         },
         "kind": {

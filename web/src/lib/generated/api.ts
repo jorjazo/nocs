@@ -2104,7 +2104,7 @@ export interface SequenceState {
  */
 export interface SequenceEvent {
   /**
-   * A frame's row, stars and HFR; an autofocus run's position and HFR…
+   * A frame's row, filter (None: none), exposure, done and count of its row, stars and HFR; an autofocus run's position and HFR…
    */
   data: {
     [k: string]: unknown;

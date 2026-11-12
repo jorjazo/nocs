@@ -266,6 +266,14 @@ async def test_a_night_runs_start_targets_and_end_in_order() -> None:
     assert events[0].kind is EventKind.STARTED
     assert events[-1].kind is EventKind.ENDED
     assert [e.data["row"] for e in events if e.kind is EventKind.FRAME] == [0, 1, 0]
+    first = next(e for e in events if e.kind is EventKind.FRAME)
+    assert first.message == "L 60 s 1/2"
+    assert {k: first.data[k] for k in ("filter", "exposure", "done", "count")} == {
+        "filter": "L",
+        "exposure": 60,
+        "done": 1,
+        "count": 2,
+    }
     status = runner.status()
     assert status["outcome"] == "completed"
     assert status["plans"] == {

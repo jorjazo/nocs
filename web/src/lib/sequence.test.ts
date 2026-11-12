@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   currentRow,
+  focusReason,
+  frameLabel,
   frameName,
   isActive,
   newTemplate,
@@ -91,4 +93,21 @@ test("a trigger event names the trigger that fired", () => {
   assert.deepEqual(triggerDue("flip: waiting 4.5 min for the meridian"), { kind: "flip", waiting: 4.5 });
   assert.deepEqual(triggerDue("flip: +5.2 min past the meridian"), { kind: "flip", waiting: null });
   assert.deepEqual(triggerDue("something new"), { kind: "other", message: "something new" });
+});
+
+test("an autofocus trigger's reason is told apart", () => {
+  assert.deepEqual(focusReason("filter Ha"), { why: "filter", filter: "Ha" });
+  assert.deepEqual(focusReason("temperature -1.2 °C"), { why: "temperature", change: -1.2 });
+  assert.deepEqual(focusReason("temperature +0.8 °C"), { why: "temperature", change: 0.8 });
+  assert.deepEqual(focusReason("45 min"), { why: "minutes", minutes: 45 });
+  assert.deepEqual(focusReason("3 frames"), { why: "frames", frames: 3 });
+  assert.deepEqual(focusReason("HFR +12%"), { why: "hfr", percent: 12 });
+  assert.deepEqual(focusReason("something new"), { why: "other", text: "something new" });
+});
+
+test("a frame's label names its filter, or only its number without one", () => {
+  assert.equal(frameLabel({ filter: "R", done: 11, count: 15 }), "R 11");
+  assert.equal(frameLabel({ filter: null, done: 5, count: 20 }), "#5");
+  assert.equal(frameLabel({ filter: "", done: 5 }), "#5");
+  assert.equal(frameLabel({ filter: "L" }), "L");
 });

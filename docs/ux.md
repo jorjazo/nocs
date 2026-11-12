@@ -409,10 +409,11 @@ Session monitor (stage 5.14):
   of 15", a countdown and its bar; between frames, what the run is doing (a slew,
   autofocus, waiting for dusk). Tiles for the latest HFR, the guiding RMS and the
   sensor's temperature; the guiding graph while PHD2 guides; each filter's frames
-  with a bar; the events, newest first (six, then all of them), in this language.
+  with a bar (each exposure's when no row has a filter: the filter is left out of
+  the text, never shown as a dash); the events, newest first (six, then all of them), in this language.
 - Pause waits for the frame in progress, and while it waits offers Pause now;
   Resume takes the rig back or says what holds it. Stop… asks how: after this
-  frame then park and warm, now then park and warm, or now leaving the rig as it is.
+  frame or now, each either then parking and warming or leaving the rig as it is.
   On a phone Pause and Stop stay docked above the tab bar; on a tablet they sit in
   the header.
 - Tablet (from 1000 px): two columns, the latest frame large with its exposure, HFR

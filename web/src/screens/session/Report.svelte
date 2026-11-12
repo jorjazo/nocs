@@ -12,7 +12,7 @@
   import { formatDateTime, formatDecimal, formatDuration, formatPlain, formatTime } from "../../lib/format";
   import { i18n } from "../../lib/i18n";
   import { router } from "../../lib/router.svelte";
-  import { describeEvent } from "../../lib/sequence.svelte";
+  import { describeEvent, describeFocusReason } from "../../lib/sequence.svelte";
   import type { SessionReport } from "../../lib/types";
   import TimeChart, { type Series } from "./TimeChart.svelte";
 
@@ -47,7 +47,7 @@
       points: lights.flatMap((f) =>
         f.hfr === null
           ? []
-          : [{ t: seconds(f.started), v: f.hfr, title: `${f.filter ?? ""} · HFR ${formatDecimal(f.hfr, locale, 2)}${f.clouds ? ` · ${t.report.clouds}` : ""}` }],
+          : [{ t: seconds(f.started), v: f.hfr, title: [f.filter, `HFR ${formatDecimal(f.hfr, locale, 2)}`, f.clouds ? t.report.clouds : ""].filter(Boolean).join(" · ") }],
       ),
     },
   ]);
@@ -179,7 +179,7 @@
               <span class="mono muted time">{formatTime(run.time, locale)}</span>
               <span class="small">
                 {run.position !== null ? t.report.focusAt(formatPlain(run.position, locale), number(run.hfr)) : t.sequence.autofocus}
-                {run.filter ? ` · ${run.filter}` : ""} · {run.reason ?? t.report.focusStep}
+                {run.filter ? ` · ${run.filter}` : ""} · {run.reason !== null ? describeFocusReason(run.reason, t, locale) : t.report.focusStep}
               </span>
             </li>
           {/each}
