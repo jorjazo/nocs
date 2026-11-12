@@ -410,7 +410,6 @@
     line-height: 20px;
   }
   .blockers a {
-    margin-left: var(--space-1);
     white-space: nowrap;
   }
 </style>
