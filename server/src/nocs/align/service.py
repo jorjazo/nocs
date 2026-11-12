@@ -107,6 +107,7 @@ class Mounts(Protocol):
     """The mount role (``MountService``)."""
 
     def position_jnow(self) -> Coordinates: ...
+    def parked(self) -> bool: ...
     async def slew(
         self,
         context: JobContext,
@@ -280,6 +281,8 @@ class PolarAlignmentService:
             raise PointingError(
                 "polar alignment needs the site, if only roughly: choose or add one"
             )
+        if self._mount.parked():
+            raise PointingError("the mount is parked: unpark it first")
         start = self._mount.position_jnow()
         if abs(start.dec) > MAX_POLE_DEC:
             raise ValueError(

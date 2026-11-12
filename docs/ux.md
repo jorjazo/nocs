@@ -23,7 +23,7 @@ Navigation follows the night, not the device tree.
 - Guided flows (first run, polar alignment, autofocus) open full screen with a
   close button and a step indicator, and return to where they were started.
 - The checklist on **Tonight** is the primary path for new users:
-  connect → polar align → focus → frame → sequence. Each step shows its last
+  connect → polar align → focus → frame → guide → sequence. Each step shows its last
   result, and the next step carries the single primary button: the first one not
   done that can run. A step that cannot run yet shows what blocks it (the site, the
   plate solver, a device not ready, a parked mount, PHD2) with a link to where it is

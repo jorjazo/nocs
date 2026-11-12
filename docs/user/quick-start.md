@@ -92,10 +92,11 @@ clock is right in the field even without network or RTC battery.
 **Tonight** leads through the night with its checklist: connect, polar alignment,
 focus, framing the target and guiding. The next step, with the big button, is the
 first one not done that can run; a step that cannot run yet says what is missing (the
-site, the plate solver, a device that is not ready, a parked mount) and links to where
-to fix it, and the checklist moves on to the next step that can. **Live** takes single frames and loops. **Session** shows what the box
-is doing. The box runs the night by itself: you can lock the phone, or close the
-browser, and come back to it later.
+site, the plate solver, a device that is not ready, a parked mount) and links to
+where to fix it, and the checklist moves on to the next step that can. **Live** takes
+single frames and loops. **Session** shows what the box is doing. The box runs the
+night by itself: you can lock the phone, or close the browser, and come back to it
+later.
 
 Frames go to `NOCS/<night>/<type>/<target>/<filter>/` on the USB drive (or the card),
 and you can download them from the app. At home, a computer can also open them as a

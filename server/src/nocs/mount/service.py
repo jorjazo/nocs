@@ -278,6 +278,9 @@ class MountService:
         """Where the mount says it points, JNow, as it says it."""
         return self.mount().coordinates
 
+    def parked(self) -> bool:
+        return self.mount().parked
+
     async def sync(
         self,
         ra: float,

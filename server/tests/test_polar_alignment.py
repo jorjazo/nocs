@@ -51,6 +51,7 @@ class FakeMount:
         self.sent = Coordinates(self.ra_at(-0.5), -60.0)
         """JNow; the mount points 30 min east of the meridian at -60°."""
         self.tracking = False
+        self.parked_ = False
         self.slews: list[Coordinates] = []
 
     def ra_at(self, hour_angle: float) -> float:
@@ -58,6 +59,9 @@ class FakeMount:
 
     def position_jnow(self) -> Coordinates:
         return self.sent
+
+    def parked(self) -> bool:
+        return self.parked_
 
     def sky(self) -> Coordinates:
         """Where it truly points now (J2000)."""
@@ -315,11 +319,15 @@ async def test_the_horizon_profile_is_respected(rig: Rig) -> None:
         rig.service.start(PolarOptions())
 
 
-async def test_refused_without_a_site_or_while_the_mount_is_held(rig: Rig) -> None:
+async def test_refused_without_a_site_parked_or_while_the_mount_is_held(rig: Rig) -> None:
     rig.site = None
     with pytest.raises(PointingError, match="needs the site, if only roughly"):
         rig.service.start(PolarOptions())
     rig.site = SITE
+    rig.mount.parked_ = True
+    with pytest.raises(PointingError, match="parked"):
+        rig.service.start(PolarOptions())
+    rig.mount.parked_ = False
     token = rig.jobs.reserve("guiding", [Role.MOUNT.value])
     with pytest.raises(ResourceBusyError):
         rig.service.start(PolarOptions())

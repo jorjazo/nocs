@@ -93,9 +93,12 @@ class FakeSolver:
         self.available = True
         self.covers = (0.2, 3.0)
         self.asked: list[float | None] = []
+        self.broken = False
 
     def check(self, fov: float | None) -> object:
         self.asked.append(fov)
+        if self.broken:
+            raise RuntimeError("broken")
         if not self.available:
             raise SolveError("ASTAP is not installed", Failure.UNAVAILABLE)
         if fov is not None and not self.covers[0] <= fov <= self.covers[1]:
@@ -168,6 +171,15 @@ async def test_the_service_follows_the_state_as_it_changes() -> None:
         box.store.set(("mount", "ra"), 1.0)
         await asyncio.sleep(0)
         assert box.store.version == version + 1
+        # A failure is logged and the service carries on.
+        box.solver.broken = True
+        box.store.set(("sites",), {})
+        await asyncio.sleep(0)
+        assert not task.done()
+        box.solver.broken = False
+        box.store.set(("mount", "parked"), False)
+        await asyncio.sleep(0)
+        assert box.state().polar_align.blockers == []
     finally:
         task.cancel()
         with pytest.raises(asyncio.CancelledError):

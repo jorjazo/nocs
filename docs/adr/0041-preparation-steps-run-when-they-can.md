@@ -35,9 +35,10 @@ workflow ([rc4 field notes](../roadmap/v0.1/rc4-field-notes.md), 22:55). Facts:
   in the state as `preparation`: for `polar_align`, `focus`, `frame` and `guide`,
   whether it `applies` (the active profile has the devices it uses) and its
   `blockers`, the most basic first, each with a `reason`, the `role` for a device
-  that is not ready, and a message (`nocs.preparation`). The services that run the
-  steps refuse on the same grounds, so the checklist, the steps' screens and the
-  server agree.
+  that is not ready, and a message (`nocs.preparation`). Polar alignment's start
+  refuses on the same grounds (no site, no solver or database, a device not ready, a
+  parked mount); framing and guiding meet a parked mount or a missing solver only
+  when their jobs run, so for them the checklist is the earlier warning.
 - **Blockers are what the user fixes elsewhere**, and where:
 
   | Reason | Steps | Fixed in |

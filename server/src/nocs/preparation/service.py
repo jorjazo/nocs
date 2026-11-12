@@ -207,13 +207,21 @@ class PreparationService:
         """Follow the state until cancelled."""
         subscription = self._store.subscribe()
         try:
-            self.refresh()
+            self._refresh_logged()
             while True:
                 patch = await subscription.get()
                 if not isinstance(patch, Patch) or any(_watched(op.path) for op in patch.ops):
-                    self.refresh()
+                    self._refresh_logged()
         finally:
             subscription.close()
+
+    def _refresh_logged(self) -> None:
+        """``refresh``, logging a failure instead of ending ``run``: the blockers would
+        stay stale until a restart."""
+        try:
+            self.refresh()
+        except Exception:
+            log.exception("could not work out what blocks the preparation steps")
 
 
 def _watched(path: Path) -> bool:
