@@ -180,7 +180,7 @@ export const es: Messages = {
   boxSetup: {
     title: "Configura este equipo",
     stepOf: (step: number, total: number) => `Paso ${step} de ${total}`,
-    steps: { accessPoint: "Punto de acceso", wifi: "Wi-Fi de casa", name: "Nombre", review: "Revisar y aplicar" },
+    steps: { accessPoint: "Punto de acceso", wifi: "Wi-Fi de casa", name: "Nombre", site: "Sitio", review: "Revisar y aplicar" },
     body: (ap: string) =>
       `Antes que nada, dale al punto de acceso ${ap} una contraseña propia: mientras no lo hagas, cualquiera cerca puede entrar con la que trae la guía rápida.`,
     usb: "Deja los dispositivos USB desconectados durante esta configuración, y siempre que uses el punto de acceso: los puertos y cables USB 3 ahogan el Wi-Fi de 2,4 GHz, la única banda del punto de acceso.",
@@ -200,6 +200,14 @@ export const es: Messages = {
     nameBody: "Teléfonos y computadores encuentran el equipo por su nombre. Si tienes más de un equipo, dale a cada uno un nombre propio.",
     name: "Nombre",
     nameHint: (host: string) => `Letras, números y guiones: el equipo queda en http://${host}.local.`,
+    siteBody:
+      "Dónde está el equipo: el cielo de esta noche, el go to y la alineación polar lo necesitan. Basta una posición aproximada: unos kilómetros de diferencia no cambian nada, así que sirven las coordenadas del pueblo más cercano sacadas de un mapa.",
+    siteToggle: "Indicar el sitio ahora",
+    siteToggleHint: "O más tarde en Equipo → Sitio: la lista de Esta noche lo pide antes de la alineación polar.",
+    site: "Sitio",
+    siteInvalid: "Corrige primero la posición.",
+    noSite: "Ninguno por ahora: agrégalo más tarde en Equipo",
+    siteValue: (name: string, latitude: string, longitude: string) => `${name}, en ${latitude}, ${longitude}`,
     reviewBody: "Todavía no ha cambiado nada: revisa lo que hará el equipo.",
     accessPoint: "Punto de acceso",
     accessPointValue: (ap: string, country: string) => `${ap}, en ${country}, con su contraseña nueva`,
@@ -1194,9 +1202,21 @@ export const es: Messages = {
     longitude: "Longitud",
     longitudeHint: "Grados, este positivo (el oeste es negativo).",
     elevation: "Altitud",
-    useGps: "Usar la posición del GPS",
-    gpsPosition: (latitude: string, longitude: string, elevation: string | null) =>
-      `GPS: ${latitude}, ${longitude}${elevation === null ? " (aún sin altitud)" : `, ${elevation}`}`,
+    fromMount: "Desde la montura",
+    fromGps: "Desde el GPS",
+    mount: "Montura",
+    gps: "GPS",
+    sourcePosition: (source: string, latitude: string, longitude: string, elevation: string | null) =>
+      `${source}: ${latitude}, ${longitude}${elevation === null ? " (aún sin altitud)" : `, ${elevation}`}.`,
+    sourceProblem: {
+      noMount: "Conecta la montura para tomar su sitio.",
+      noMountSite: "La montura no informa un sitio.",
+      mountUnset: "La montura no tiene un sitio propio (0°, 0°).",
+      noGps: "Sin GPS: conecta uno para tomar su posición.",
+      noFix: "El GPS aún no tiene posición: dale cielo abierto.",
+    },
+    nearActive: (name: string) => `Es el sitio activo, ${name}.`,
+    nearSaved: (name: string) => `Está a menos de 500 m de ${name}, ya guardado.`,
     activate: "Hacerlo el sitio activo",
     activateHint: "La montura lo recibe al momento. No mientras corre un go to, una secuencia o la alineación polar.",
     isActive: "Es el sitio activo: los cambios llegan a la montura al momento.",

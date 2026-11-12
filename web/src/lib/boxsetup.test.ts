@@ -1,10 +1,20 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { hostName, setupSteps, wifiPassword } from "./boxsetup.ts";
+import { hostName, setupSteps, siteProblem, wifiPassword } from "./boxsetup.ts";
 
-test("the name is a step only where the box can be renamed, and the review is last", () => {
-  assert.deepEqual(setupSteps({ rename: true }), ["accessPoint", "wifi", "name", "review"]);
-  assert.deepEqual(setupSteps({ rename: false }), ["accessPoint", "wifi", "review"]);
+test("the name is a step only where the box can be renamed, the site always, and the review is last", () => {
+  assert.deepEqual(setupSteps({ rename: true }), ["accessPoint", "wifi", "name", "site", "review"]);
+  assert.deepEqual(setupSteps({ rename: false }), ["accessPoint", "wifi", "site", "review"]);
+});
+
+test("the site may be left for later or a saved one chosen; a new one needs a name and a position", () => {
+  assert.equal(siteProblem(null), null);
+  assert.equal(siteProblem({ saved: "abc12345" }), null);
+  const draft = { name: "Backyard", latitude: -30, longitude: -70.7, elevation: null };
+  assert.equal(siteProblem({ new: draft }), null);
+  assert.equal(siteProblem({ new: { ...draft, name: "  " } }), "name");
+  assert.equal(siteProblem({ new: { ...draft, latitude: null } }), "position");
+  assert.equal(siteProblem({ new: { ...draft, longitude: null } }), "position");
 });
 
 test("host names are checked as nocs-system checks them", () => {

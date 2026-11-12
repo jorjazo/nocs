@@ -1,22 +1,31 @@
 <script lang="ts">
   // The appliance's first run (ADR 0028), right after the owner pairs: in steps, the
   // access point's country and own password, maybe a home network, the box's name,
-  // and a last look at what will happen. Nothing is sent before that last step: the
-  // access point restarts (and this phone drops off it) only once its instructions
-  // are on screen. Full screen, before anything else.
+  // maybe its site (ADR 0042), and a last look at what will happen. Nothing is sent
+  // before that last step: the access point restarts (and this phone drops off it)
+  // only once its instructions are on screen. Full screen, before anything else.
   import Banner from "../components/Banner.svelte";
   import Button from "../components/Button.svelte";
   import CountrySelect from "../components/CountrySelect.svelte";
   import Icon from "../components/Icon.svelte";
   import TextField from "../components/TextField.svelte";
+  import SitePosition from "../components/SitePosition.svelte";
   import ThemeButton from "../components/ThemeButton.svelte";
   import Toggle from "../components/Toggle.svelte";
   import WifiPicker from "../components/WifiPicker.svelte";
   import { auth } from "../lib/auth.svelte";
-  import { hostName, setupSteps, wifiPassword as checkWifiPassword, type SetupStep } from "../lib/boxsetup";
-  import { setUpNetwork } from "../lib/api";
+  import {
+    hostName,
+    setupSteps,
+    siteProblem,
+    wifiPassword as checkWifiPassword,
+    type SetupStep,
+    type SiteChoice,
+  } from "../lib/boxsetup";
+  import { activateSite, addSite, putSite, setUpNetwork } from "../lib/api";
   import { isCountry } from "../lib/countries";
   import { errorText } from "../lib/errors";
+  import { formatDecimal } from "../lib/format";
   import { i18n } from "../lib/i18n";
   import { live } from "../lib/live.svelte";
   import { boxSetup, guessCountry } from "../lib/setup.svelte";
@@ -46,6 +55,41 @@
   // network or a cable, where the access point takes the new password next time.
   const onAp = $derived(network?.mode === "ap");
 
+  // The site: the active one if the box has one already (it may have been set up
+  // before), or a new one typed in, or filled from a mount or GPS that happens to be
+  // connected; or none for now.
+  const sites = $derived(live.app.sites ?? null);
+  const savedSites = $derived(
+    Object.entries(sites?.saved ?? {}).sort(([, a], [, b]) => (a.name || "").localeCompare(b.name || "")),
+  );
+  let siteNow = $state(true);
+  let sitePick = $state<string | null>(null);
+  const siteSelected = $derived(sitePick ?? sites?.active ?? "new");
+  let siteName = $state("");
+  let latitude = $state<number | null>(null);
+  let longitude = $state<number | null>(null);
+  let elevation = $state<number | null>(null);
+  let positionValid = $state(true);
+  // A new site saved by an apply that then failed: a retry edits it instead.
+  let created = $state<string | null>(null);
+  const siteChoice = $derived<SiteChoice>(
+    !siteNow
+      ? null
+      : siteSelected !== "new" && sites?.saved[siteSelected]
+        ? { saved: siteSelected }
+        : { new: { name: siteName, latitude, longitude, elevation } },
+  );
+  const siteSummary = $derived.by(() => {
+    if (siteChoice === null) return t.boxSetup.noSite;
+    const site = "saved" in siteChoice ? sites?.saved[siteChoice.saved] : siteChoice.new;
+    if (!site || site.latitude === null || site.longitude === null) return t.boxSetup.noSite;
+    return t.boxSetup.siteValue(
+      (site.name ?? "").trim() || t.sites.unnamed,
+      `${formatDecimal(site.latitude, i18n.locale, 4)}°`,
+      `${formatDecimal(site.longitude, i18n.locale, 4)}°`,
+    );
+  });
+
   let busy = $state(false);
   let error = $state("");
   let fieldError = $state("");
@@ -70,6 +114,12 @@
       if (!openNetwork) return passwordProblem(wifiPassword);
     }
     if (step === "name" && hostName(nameShown) === null) return t.system.nameInvalid;
+    if (step === "site") {
+      const problem = siteProblem(siteChoice);
+      if (problem === "name") return t.sites.needName;
+      if (problem === "position") return t.sites.needPosition;
+      if (siteChoice !== null && "new" in siteChoice && !positionValid) return t.boxSetup.siteInvalid;
+    }
     return "";
   }
 
@@ -81,6 +131,21 @@
     index = Math.max(0, Math.min(to, steps.length - 1));
     // The new step's title takes the focus, so a screen reader starts there.
     queueMicrotask(() => heading?.focus());
+  }
+
+  // The site first: it is quick, and the network may drop this phone right after.
+  async function saveSite(): Promise<void> {
+    if (siteChoice === null) return;
+    if ("saved" in siteChoice) {
+      if (siteChoice.saved !== sites?.active) await activateSite(siteChoice.saved);
+      return;
+    }
+    const { name: siteNamed, latitude: lat, longitude: lon, elevation: elev } = siteChoice.new;
+    if (lat === null || lon === null) return;
+    const site = { name: siteNamed.trim(), latitude: lat, longitude: lon, elevation: elev ?? 0 };
+    if (created === null) created = await addSite(site);
+    else await putSite(created, site);
+    if (created !== sites?.active) await activateSite(created);
   }
 
   async function next(event: SubmitEvent): Promise<void> {
@@ -97,6 +162,7 @@
     const renamed = wanted !== null && wanted !== current;
     busy = true;
     try {
+      await saveSite();
       await setUpNetwork({
         country,
         password,
@@ -158,6 +224,8 @@
           <p class="body">{t.boxSetup.wifiBody}</p>
         {:else if step === "name"}
           <p class="body">{t.boxSetup.nameBody}</p>
+        {:else if step === "site"}
+          <p class="body">{t.boxSetup.siteBody}</p>
         {:else}
           <p class="body">{t.boxSetup.reviewBody}</p>
         {/if}
@@ -206,6 +274,37 @@
           bind:value={() => nameShown, (v) => (name = v)}
           required
           maxlength={63} />
+      {:else if step === "site"}
+        <Toggle
+          label={t.boxSetup.siteToggle}
+          hint={t.boxSetup.siteToggleHint}
+          checked={siteNow}
+          onchange={(on) => {
+            siteNow = on;
+            fieldError = "";
+          }} />
+        {#if siteNow}
+          {#if savedSites.length > 0}
+            <label class="select">
+              <span class="label muted">{t.boxSetup.site}</span>
+              <select value={siteSelected} onchange={(event) => (sitePick = event.currentTarget.value)}>
+                {#each savedSites as [id, site] (id)}
+                  <option value={id}>{site.name || t.sites.unnamed}</option>
+                {/each}
+                <option value="new">{t.sites.newSite}</option>
+              </select>
+            </label>
+          {/if}
+          {#if siteChoice !== null && "new" in siteChoice}
+            <TextField
+              label={t.sites.name}
+              bind:value={siteName}
+              maxlength={80}
+              placeholder={t.sites.namePlaceholder} />
+            <SitePosition bind:latitude bind:longitude bind:elevation bind:valid={positionValid} available />
+          {/if}
+          {#if fieldError}<Banner icon="alert" tone="error">{fieldError}</Banner>{/if}
+        {/if}
       {:else}
         <dl class="summary">
           <div>
@@ -219,6 +318,10 @@
           <div>
             <dt class="label muted">{t.boxSetup.address}</dt>
             <dd class="mono">http://{host}.local</dd>
+          </div>
+          <div>
+            <dt class="label muted">{t.boxSetup.site}</dt>
+            <dd>{siteSummary}</dd>
           </div>
         </dl>
         <p class="body note">
@@ -335,6 +438,24 @@
   .note {
     font-size: 15px;
     line-height: 22px;
+  }
+  .select {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+  .select .label {
+    font-size: 15px;
+  }
+  select {
+    min-height: var(--primary-height);
+    width: 100%;
+    padding: 0 var(--space-4);
+    border-radius: var(--radius-button);
+    border: 1px solid var(--line);
+    background: var(--surface);
+    font-size: 17px;
+    text-overflow: ellipsis;
   }
   .summary {
     display: flex;
