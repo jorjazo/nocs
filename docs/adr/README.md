@@ -46,5 +46,6 @@ that supersedes the old one.
 | [0038](0038-saved-sites.md) | Sites belong to the box: a list of saved sites and one active site | Proposed |
 | [0039](0039-smb-share.md) | An SMB share of the frames for desktop computers | Proposed |
 | [0040](0040-live-stacking.md) | Live stacking (EAA) | Proposed |
+| [0041](0041-preparation-steps-run-when-they-can.md) | Tonight's checklist offers a step only when it can run; the server says what blocks it | Proposed |
 
 Template: Context → Decision → Consequences.

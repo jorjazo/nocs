@@ -1,8 +1,9 @@
 <script lang="ts">
   // Tonight (stage 3.6), the home screen: conditions, the night from sunset to
   // sunrise with the dark window and the Moon, tonight's target, and the
-  // get-ready checklist whose next pending step carries the one primary button
-  // (docs/ux.md §1). The sequence joins it in phase 5.
+  // get-ready checklist whose next step carries the one primary button (docs/ux.md
+  // §1): the first one not done that can run. One that cannot says why and where to
+  // fix it, from what the server says each step needs (ADR 0041).
   import Button from "../../components/Button.svelte";
   import Chip from "../../components/Chip.svelte";
   import NightBar from "../../components/NightBar.svelte";
@@ -12,6 +13,16 @@
   import { getVisibility } from "../../lib/api";
   import { plannedName } from "../../lib/catalog.svelte";
   import { auth } from "../../lib/auth.svelte";
+  import {
+    applies,
+    blockerText,
+    blockersOf,
+    fixRoute,
+    statuses,
+    type Blocker,
+    type StepKey,
+    type StepStatus,
+  } from "../../lib/checklist";
   import { errorText } from "../../lib/errors";
   import { formatDecimal, formatDuration, formatTime } from "../../lib/format";
   import { guidingActive } from "../../lib/guiding.svelte";
@@ -84,15 +95,18 @@
   // -- Checklist ----------------------------------------------------------------------
 
   interface Step {
-    key: string;
+    key: StepKey;
     title: string;
     detail: string;
     done: boolean;
     action: string;
     route: Route;
+    blockers: Blocker[];
   }
 
   const nightStart = $derived(almanac ? Date.parse(almanac.start) : now - 12 * 3600_000);
+  const preparation = $derived(live.app.preparation ?? null);
+  const savedSites = $derived(Object.keys(live.app.sites?.saved ?? {}).length);
   const steps = $derived.by((): Step[] => {
     const connected = equipment?.connection === "connected";
     const list: Step[] = [
@@ -103,9 +117,10 @@
         done: connected,
         action: t.tonight.openRig,
         route: { screen: "rig" },
+        blockers: [],
       },
     ];
-    if (live.app.mount && live.app.cameras?.main_camera) {
+    if (applies(preparation, "polar")) {
       const run = live.app.polar_alignment ?? null;
       const tonightRun = run?.finished && Date.parse(run.finished) > nightStart && run.axis ? run : null;
       const aligned = !!tonightRun?.aligned;
@@ -121,9 +136,10 @@
         done: aligned,
         action: t.tonight.polarAlign,
         route: { screen: "polar" },
+        blockers: blockersOf(preparation, "polar", savedSites),
       });
     }
-    if (live.app.focuser) {
+    if (applies(preparation, "focus")) {
       const run = live.app.autofocus ?? null;
       const tonightRun = run?.finished && Date.parse(run.finished) > nightStart ? run : null;
       const focused = tonightRun?.state === "succeeded";
@@ -138,24 +154,11 @@
         done: focused,
         action: t.tonight.focus,
         route: { screen: "focus" },
+        blockers: blockersOf(preparation, "focus", savedSites),
       });
     }
-    const centering = live.app.centering ?? null;
-    const centred =
-      !!planned &&
-      centering?.state === "succeeded" &&
-      !!centering.finished &&
-      Date.parse(centering.finished) > nightStart &&
-      separation(centering.target, planned) * 60 <= Math.max(5, 2 * centering.tolerance);
-    list.push({
-      key: "frame",
-      title: t.tonight.steps.frame,
-      detail: !planned ? t.tonight.noTarget : centred ? t.tonight.centred(plannedName(planned, locale)) : t.tonight.notCentred(plannedName(planned, locale)),
-      done: centred,
-      action: planned ? t.tonight.openTarget : t.tonight.chooseTarget,
-      route: planned?.id ? { screen: "target", id: planned.id } : { screen: "plan" },
-    });
-    if (live.app.cameras?.guide_camera || live.app.guiding?.equipment) {
+    if (applies(preparation, "frame")) list.push(frameStep());
+    if (applies(preparation, "guide")) {
       const guiding = guidingActive(live.app.guiding);
       list.push({
         key: "guide",
@@ -164,11 +167,37 @@
         done: guiding,
         action: t.tonight.openGuiding,
         route: { screen: "guiding" },
+        blockers: blockersOf(preparation, "guide", savedSites),
       });
     }
     return list;
   });
-  const next = $derived(steps.find((s) => !s.done)?.key ?? null);
+
+  function frameStep(): Step {
+    const centering = live.app.centering ?? null;
+    const centred =
+      !!planned &&
+      centering?.state === "succeeded" &&
+      !!centering.finished &&
+      Date.parse(centering.finished) > nightStart &&
+      separation(centering.target, planned) * 60 <= Math.max(5, 2 * centering.tolerance);
+    return {
+      key: "frame",
+      title: t.tonight.steps.frame,
+      detail: !planned ? t.tonight.noTarget : centred ? t.tonight.centred(plannedName(planned, locale)) : t.tonight.notCentred(plannedName(planned, locale)),
+      done: centred,
+      action: planned ? t.tonight.openTarget : t.tonight.chooseTarget,
+      route: planned?.id ? { screen: "target", id: planned.id } : { screen: "plan" },
+      // Choosing a target needs nothing.
+      blockers: planned ? blockersOf(preparation, "frame", savedSites) : [],
+    };
+  }
+
+  const status = $derived(statuses(steps.map((s) => ({ done: s.done, blocked: s.blockers.length > 0 }))));
+
+  function statusText(value: StepStatus | undefined): string {
+    return value === "done" ? t.tonight.stepDone : value === "blocked" ? t.tonight.stepBlocked : t.tonight.stepPending;
+  }
 </script>
 
 <ScreenHeader title={t.tabs.tonight}>
@@ -253,17 +282,30 @@
   <section class="card" aria-labelledby="checklist-title">
     <h2 id="checklist-title">{t.tonight.checklist}</h2>
     <ol class="steps">
-      {#each steps as step (step.key)}
-        <li class:done={step.done}>
+      {#each steps as step, i (step.key)}
+        {@const stepState = status[i]}
+        <li class:done={step.done} class:blocked={stepState === "blocked"} data-step={step.key} data-status={stepState}>
           <span class="mark" aria-hidden="true">{step.done ? "✓" : ""}</span>
           <div class="text">
             <span class="title">{step.title}</span>
             <span class="muted">{step.detail}</span>
+            {#if stepState === "blocked"}
+              <ul class="blockers">
+                {#each step.blockers as blocker (`${blocker.reason}:${blocker.role}`)}
+                  <li>
+                    {blockerText(t, blocker)}
+                    {#if blocker.fix && auth.owner}
+                      <a href={href(fixRoute(blocker.fix))}>{t.preparation.fixes[blocker.fix]}</a>
+                    {/if}
+                  </li>
+                {/each}
+              </ul>
+            {/if}
           </div>
-          {#if !step.done || step.key === "frame"}
-            <Button variant={step.key === next ? "primary" : "text"} onclick={() => router.go(step.route)}>{step.action}</Button>
+          {#if stepState === "next" || stepState === "ready" || (step.key === "frame" && step.done)}
+            <Button variant={stepState === "next" ? "primary" : "text"} onclick={() => router.go(step.route)}>{step.action}</Button>
           {/if}
-          <span class="visually-hidden">{step.done ? t.tonight.stepDone : t.tonight.stepPending}</span>
+          <span class="visually-hidden">{statusText(stepState)}</span>
         </li>
       {/each}
     </ol>
@@ -321,7 +363,7 @@
     display: flex;
     flex-direction: column;
   }
-  .steps li {
+  .steps > li {
     display: flex;
     align-items: center;
     gap: var(--space-3);
@@ -329,7 +371,7 @@
     padding: var(--space-2) 0;
     border-top: 1px solid var(--line);
   }
-  .steps li:first-child {
+  .steps > li:first-child {
     border-top: none;
   }
   .mark {
@@ -356,5 +398,19 @@
   }
   .title {
     font-weight: 500;
+  }
+  .blocked .mark {
+    border-style: dashed;
+  }
+  .blockers {
+    list-style: none;
+    margin: var(--space-1) 0 0;
+    padding: 0;
+    font-size: 14px;
+    line-height: 20px;
+  }
+  .blockers a {
+    margin-left: var(--space-1);
+    white-space: nowrap;
   }
 </style>

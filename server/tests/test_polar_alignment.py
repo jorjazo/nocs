@@ -46,7 +46,6 @@ class FakeMount:
     def __init__(self, jobs: JobManager, clock: FakeClock) -> None:
         self.jobs = jobs
         self.clock = clock
-        self.site_: Location | None = SITE
         self.error = (45.0, -30.0)
         """Arcminutes: altitude (up) and azimuth (east, on the sky) of the axis."""
         self.sent = Coordinates(self.ra_at(-0.5), -60.0)
@@ -56,9 +55,6 @@ class FakeMount:
 
     def ra_at(self, hour_angle: float) -> float:
         return (sidereal_time(SITE.longitude, self.clock.now()) - hour_angle) % 24
-
-    def site(self) -> Location | None:
-        return self.site_
 
     def position_jnow(self) -> Coordinates:
         return self.sent
@@ -164,12 +160,15 @@ class Rig:
         self.mount = FakeMount(self.jobs, self.clock)
         self.pointing = FakePointing(self.jobs, self.mount, self.clock)
         self.horizon: list[HorizonPoint] | None = None
+        self.site: Location | None = SITE
+        """The box's active site."""
         self.service = PolarAlignmentService(
             self.store,
             self.jobs,
             self.pointing,
             self.mount,
             self.clock,
+            site=lambda: self.site,
             horizon=lambda: self.horizon,
         )
 
@@ -317,10 +316,10 @@ async def test_the_horizon_profile_is_respected(rig: Rig) -> None:
 
 
 async def test_refused_without_a_site_or_while_the_mount_is_held(rig: Rig) -> None:
-    rig.mount.site_ = None
-    with pytest.raises(PointingError, match="site"):
+    rig.site = None
+    with pytest.raises(PointingError, match="needs the site, if only roughly"):
         rig.service.start(PolarOptions())
-    rig.mount.site_ = SITE
+    rig.site = SITE
     token = rig.jobs.reserve("guiding", [Role.MOUNT.value])
     with pytest.raises(ResourceBusyError):
         rig.service.start(PolarOptions())

@@ -617,6 +617,39 @@ class PolarAlignmentState(StateModel):
     finished: str | None
 
 
+type PreparationReason = Literal[
+    "not_connected", "no_site", "no_solver", "no_database", "parked", "no_phd2"
+]
+
+
+class PreparationBlocker(StateModel):
+    reason: PreparationReason = Field(
+        description="not_connected: the profile (role None) or that role's device is not"
+        " ready; no_site: the box has no active site; no_solver: ASTAP is not installed;"
+        " no_database: no star database solves the main camera's field; parked: the mount"
+        " is parked; no_phd2: NOCS cannot reach PHD2."
+    )
+    role: Role | None = Field(description="With not_connected: the device that is not ready.")
+    message: str
+
+
+class PreparationStep(StateModel):
+    applies: bool = Field(description="The active profile has the devices the step uses.")
+    blockers: list[PreparationBlocker] = Field(
+        description="What stops the step now, the most basic first; empty: it can run."
+    )
+
+
+class PreparationState(StateModel):
+    """Whether each step of Tonight's checklist can run (ADR 0041). What a step settles
+    on its own screen (where the mount points, a target to frame) is not a blocker."""
+
+    polar_align: PreparationStep
+    focus: PreparationStep
+    frame: PreparationStep
+    guide: PreparationStep
+
+
 class PlanState(StateModel):
     """What the Plan screen chose for tonight (stage 3.6)."""
 
@@ -1143,6 +1176,7 @@ class AppState(StateModel):
     polar_alignment: PolarAlignmentState | None = Field(
         default=None, description="None: never run."
     )
+    preparation: PreparationState | None = None
     plan: PlanState | None = None
     stack: StackState | None = None
     guiding: GuidingState | None = None

@@ -120,6 +120,7 @@ from nocs.power.service import (
     PowerService,
     WeatherService,
 )
+from nocs.preparation import PreparationService
 from nocs.sequence import CheckpointFile, SequenceStore
 from nocs.sequence.rig import Parts
 from nocs.sequence.service import RESOURCES as SEQUENCE_RESOURCES
@@ -432,7 +433,11 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
             services.pointing,
             services.mount,
             services.clock,
+            site=lambda: sites().location(),
             horizon=lambda: sites().horizon(),
+        )
+        services.preparation = PreparationService(
+            store, services.solver, site=lambda: sites().location()
         )
         services.plan = PlanService(store, settings.config_dir)
         services.capture.use_guider(services.guiding)
@@ -477,6 +482,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
         time_task = asyncio.create_task(time_keeper.run(), name="timekeeping")
         services.gps = GpsService(store, services.sites, settings.gpsd_host, settings.gpsd_port)
         gps_task = asyncio.create_task(services.gps.run(), name="gpsd")
+        preparation_task = asyncio.create_task(services.preparation.run(), name="preparation")
         watchdog_task = asyncio.create_task(watchdog.run(), name="systemd-watchdog")
         recovery_task = asyncio.create_task(
             services.sequences.recover(connect_rig, rig_ready), name="sequence-recovery"
@@ -490,6 +496,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
             with contextlib.suppress(Exception):
                 await stacking().close()
             for background in (
+                preparation_task,
                 stacking_task,
                 recovery_task,
                 watchdog_task,
@@ -928,6 +935,7 @@ class _Services:
     saved_frames: SavedFrames | None = None
     centering: CenteringService | None = None
     polar: PolarAlignmentService | None = None
+    preparation: PreparationService | None = None
     plan: PlanService | None = None
     autofocus: AutofocusService | None = None
     guiding: GuidingService | None = None

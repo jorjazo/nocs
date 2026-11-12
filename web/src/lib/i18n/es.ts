@@ -819,6 +819,11 @@ export const es: Messages = {
     hourAngle: "Ángulo horario",
     dec: "Dec",
     latitude: "Latitud",
+    siteFrom: (name) =>
+      `El sitio es ${name}. Basta con un sitio aproximado: el error total no depende de él, y un grado de diferencia gira el reparto entre los dos tornillos más o menos un grado.`,
+    noSiteTitle: "La alineación polar necesita el sitio",
+    noSiteBody:
+      "Su latitud y longitud, solo aproximadas: unos kilómetros de diferencia no cambian nada que se pueda medir. Elige un sitio, o añade uno, en Equipo.",
     last: (time, error) => `Última vez a las ${time}: a ${error} del polo.`,
     lastAligned: (time, error) => `Última vez a las ${time}: alineado, a ${error} del polo.`,
     where: "Dónde empezar",
@@ -845,10 +850,6 @@ export const es: Messages = {
     backHint: "Al detener, la montura siempre se queda donde está.",
     start: "Empezar la alineación polar",
     observer: "Solo el dueño emparejado puede hacer la alineación polar.",
-    noRig: "Conecta una montura y la cámara principal para alinear.",
-    noSolver: "La alineación polar resuelve tomas: instala ASTAP y una base de estrellas.",
-    noSite: "La montura no conoce el sitio: elígelo en Equipo.",
-    parked: "Primero saca la montura de la posición de aparcado.",
     busy: "La montura o la cámara están ocupadas con otra tarea.",
     point: (n) => `Punto ${n}`,
     here: "donde apunta la montura",
@@ -1020,6 +1021,19 @@ export const es: Messages = {
     polarAlign: "Alinear al polo",
     stepDone: "Hecho",
     stepPending: "Pendiente",
+    stepBlocked: "Bloqueado",
+  },
+  preparation: {
+    blockers: {
+      not_connected: "Primero conecta.",
+      no_site: "Necesita el sitio; basta con uno aproximado.",
+      no_solver: "Necesita ASTAP, el resolvedor de placas, en la caja.",
+      no_database: "Ninguna base de estrellas de la caja resuelve el campo de la cámara principal.",
+      parked: "La montura está aparcada.",
+      no_phd2: "NOCS no llega a PHD2.",
+    },
+    notReady: (device) => `${device}: todavía no está disponible.`,
+    fixes: { rig: "Abrir Equipo", addSite: "Añadir un sitio", chooseSite: "Elegir un sitio", guiding: "Abrir guiado" },
   },
   plan: {
     tonightsTarget: "Objetivo de esta noche",
