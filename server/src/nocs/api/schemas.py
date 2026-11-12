@@ -1886,7 +1886,8 @@ class CalibrationSequenceRequest(BaseModel):
     )
 
 
-class CalibrationPlan(WireModel):
+class CalibrationSequence(WireModel):
+    id: str = Field(description="The sequence kept; start it as any other.")
     frames: int
     seconds: float = Field(description="The frames' time, cooling not included.")
     left_out: list[CalibrationNeed] = Field(
@@ -1894,8 +1895,15 @@ class CalibrationPlan(WireModel):
     )
 
 
-class CalibrationSequence(CalibrationPlan):
-    id: str = Field(description="The sequence kept; start it as any other.")
+class CalibrationPlan(WireModel):
+    """What ``/calibration/sequence`` would keep for the same request."""
+
+    frames: int
+    seconds: float = Field(description="The frames' time, cooling not included.")
+    left_out: list[CalibrationNeed]
+    dark_groups: list[CalibrationDarkGroup] = Field(
+        description="The groups, with what each would take at the request's counts."
+    )
 
 
 class TwilightWindow(WireModel):

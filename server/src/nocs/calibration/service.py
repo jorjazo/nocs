@@ -104,11 +104,11 @@ class CalibrationService:
         wanted: Wanted,
         warm: bool,
         groups: Collection[str] | None = None,
-    ) -> tuple[Sequence, list[Need]]:
+    ) -> tuple[Sequence, list[Need], Report]:
         """The darks and bias missing for a night's or a sequence's lights, for the dark
         groups chosen (``None``: those chosen by default), as a sequence not kept; also
-        what it cannot include. Raises ``KeyError`` for an unknown night or sequence,
-        ``CalibrationError`` for an unknown group.
+        what it cannot include, and the report it comes from. Raises ``KeyError`` for an
+        unknown night or sequence, ``CalibrationError`` for an unknown group.
         """
         camera = self._camera()
         if camera is None:
@@ -124,7 +124,7 @@ class CalibrationService:
             needs = found.chosen_needs(groups)
         except KeyError as e:
             raise CalibrationError(f"the lights changed: no group {e.args[0]!r}") from e
-        return darks_sequence(
+        built, left = darks_sequence(
             needs,
             camera=camera.name,
             sensor=(camera.width, camera.height),
@@ -134,6 +134,7 @@ class CalibrationService:
             warm=warm,
             name=name,
         )
+        return built, left, found
 
     def darks(
         self,
@@ -144,7 +145,7 @@ class CalibrationService:
         groups: Collection[str] | None = None,
     ) -> tuple[Sequence, list[Need]]:
         """``plan``, kept as the ``calibration`` sequence."""
-        built, left = self.plan(night, sequence, wanted, warm, groups)
+        built, left, _ = self.plan(night, sequence, wanted, warm, groups)
         if not built.targets.children:
             if groups is not None:
                 raise CalibrationError("the chosen groups miss no darks or bias")

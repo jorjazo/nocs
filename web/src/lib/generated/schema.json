@@ -1493,12 +1493,19 @@
       "type": "object"
     },
     "CalibrationPlan": {
+      "description": "What ``/calibration/sequence`` would keep for the same request.",
       "properties": {
+        "dark_groups": {
+          "description": "The groups, with what each would take at the request's counts.",
+          "items": {
+            "$ref": "#/$defs/CalibrationDarkGroup"
+          },
+          "type": "array"
+        },
         "frames": {
           "type": "integer"
         },
         "left_out": {
-          "description": "Darks and bias it cannot take: another camera, or a region of the sensor.",
           "items": {
             "$ref": "#/$defs/CalibrationNeed"
           },
@@ -1512,7 +1519,8 @@
       "required": [
         "frames",
         "seconds",
-        "left_out"
+        "left_out",
+        "dark_groups"
       ],
       "title": "CalibrationPlan",
       "type": "object"
@@ -1587,10 +1595,10 @@
         }
       },
       "required": [
+        "id",
         "frames",
         "seconds",
-        "left_out",
-        "id"
+        "left_out"
       ],
       "title": "CalibrationSequence",
       "type": "object"

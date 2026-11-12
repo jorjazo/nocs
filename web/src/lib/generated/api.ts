@@ -3220,14 +3220,17 @@ export interface CalibrationNeed {
   temperature: number | null;
 }
 /**
+ * What ``/calibration/sequence`` would keep for the same request.
+ *
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "CalibrationPlan".
  */
 export interface CalibrationPlan {
-  frames: number;
   /**
-   * Darks and bias it cannot take: another camera, or a region of the sensor.
+   * The groups, with what each would take at the request's counts.
    */
+  dark_groups: CalibrationDarkGroup[];
+  frames: number;
   left_out: CalibrationNeed[];
   /**
    * The frames' time, cooling not included.

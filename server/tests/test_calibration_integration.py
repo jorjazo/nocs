@@ -116,6 +116,8 @@ def test_darks_and_bias_for_a_night(api: TestClient) -> None:
     response = api.post("/api/calibration/plan", json=request)
     assert response.status_code == 200, response.text
     assert response.json()["frames"] == 5
+    [planned] = response.json()["dark_groups"]
+    assert (planned["missing_darks"], planned["missing_bias"]) == (2, 3)
     response = api.post("/api/calibration/sequence", json=request)
     assert response.status_code == 200, response.text
     created = response.json()

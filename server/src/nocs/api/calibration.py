@@ -97,7 +97,7 @@ def calibration_router(
         wanted = Wanted(request.darks, request.bias, 0)
         service = calibration()
         with _errors():
-            built, left = await anyio.to_thread.run_sync(
+            built, left, found = await anyio.to_thread.run_sync(
                 service.plan,
                 request.night,
                 request.sequence,
@@ -106,7 +106,10 @@ def calibration_router(
                 request.groups,
             )
         return CalibrationPlan(
-            frames=frames(built), seconds=duration(built), left_out=[_need(n) for n in left]
+            frames=frames(built),
+            seconds=duration(built),
+            left_out=[_need(n) for n in left],
+            dark_groups=[_dark_group(g) for g in found.dark_groups],
         )
 
     @router.post("/calibration/sequence")

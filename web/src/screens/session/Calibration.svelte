@@ -109,10 +109,12 @@
     chosen = on ? [...chosen, key] : chosen.filter((k) => k !== key);
   }
 
-  // What the choice takes, again as groups and counts change.
+  // What the choice takes, again as groups and counts change (not as the night's
+  // object is replaced by a state update).
+  const nightId = $derived(night.id);
   $effect(() => {
     if (!sheet || darks === null || bias === null) return;
-    const body = { night: night.id, darks, bias, warm, groups: [...chosen] };
+    const body = { night: nightId, darks, bias, warm, groups: [...chosen] };
     planning = true;
     const timer = setTimeout(() => void loadPlan(body), 250);
     return () => clearTimeout(timer);
@@ -221,7 +223,7 @@
     <h3 class="label muted subsection">{t.calibration.groups}</h3>
     <p class="caption muted">{t.calibration.groupsHint}</p>
     <div class="choices">
-      {#each report?.dark_groups ?? [] as g (g.key)}
+      {#each plan?.dark_groups ?? report?.dark_groups ?? [] as g (g.key)}
         <Toggle
           label={groupName(g)}
           hint={darkHint(g)}
