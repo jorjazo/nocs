@@ -4344,14 +4344,20 @@ export interface NetworkModeRequest {
 }
 /**
  * The first run on the appliance (ADR 0028): the access point's country and new
- * password, and optionally a network to join. Accepted at once (202): the access
- * point restarts with the new password, or the box leaves it to join the network.
+ * password, optionally a network to join and a new name for the box. Everything is
+ * checked before anything changes; accepted at once (202): the box takes its new name,
+ * then the access point restarts with the new password, or the box leaves it to join
+ * the network.
  *
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "NetworkSetupRequest".
  */
 export interface NetworkSetupRequest {
   country: WifiCountry;
+  /**
+   * The box's new name (one DNS label), also its mDNS name <hostname>.local; None keeps it.
+   */
+  hostname?: string | null;
   join?: NetworkJoinRequest | null;
   /**
    * The access point's new password, 8 to 63 characters.

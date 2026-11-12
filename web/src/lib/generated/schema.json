@@ -6169,10 +6169,22 @@
     },
     "NetworkSetupRequest": {
       "additionalProperties": false,
-      "description": "The first run on the appliance (ADR 0028): the access point's country and new\npassword, and optionally a network to join. Accepted at once (202): the access\npoint restarts with the new password, or the box leaves it to join the network.",
+      "description": "The first run on the appliance (ADR 0028): the access point's country and new\npassword, optionally a network to join and a new name for the box. Everything is\nchecked before anything changes; accepted at once (202): the box takes its new name,\nthen the access point restarts with the new password, or the box leaves it to join\nthe network.",
       "properties": {
         "country": {
           "$ref": "#/$defs/WifiCountry"
+        },
+        "hostname": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The box's new name (one DNS label), also its mDNS name <hostname>.local; None keeps it."
         },
         "join": {
           "anyOf": [

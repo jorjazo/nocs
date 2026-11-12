@@ -1453,14 +1453,21 @@ class AccessPointRequest(BaseModel):
 
 class NetworkSetupRequest(BaseModel):
     """The first run on the appliance (ADR 0028): the access point's country and new
-    password, and optionally a network to join. Accepted at once (202): the access
-    point restarts with the new password, or the box leaves it to join the network."""
+    password, optionally a network to join and a new name for the box. Everything is
+    checked before anything changes; accepted at once (202): the box takes its new name,
+    then the access point restarts with the new password, or the box leaves it to join
+    the network."""
 
     model_config = ConfigDict(extra="forbid")
 
     country: WifiCountry
     password: str = Field(description="The access point's new password, 8 to 63 characters.")
     join: NetworkJoinRequest | None = None
+    hostname: str | None = Field(
+        default=None,
+        description="The box's new name (one DNS label), also its mDNS name <hostname>.local;"
+        " None keeps it.",
+    )
 
 
 class NetworkModeRequest(BaseModel):

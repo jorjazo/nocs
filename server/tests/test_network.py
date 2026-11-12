@@ -16,6 +16,7 @@ from test_system import config, serving
 from nocs.api import create_app
 from nocs.config import Settings
 from nocs.system import network as network_module
+from nocs.system import operations as operations_module
 from nocs.system.network import (
     AP_ID,
     BOOT_GRACE,
@@ -432,3 +433,59 @@ def test_the_api_publishes_and_joins(nm: FakeNetworkManager, paths: Paths, tmp_p
                 {"ssid": "Home", "signal": 64, "secured": True},
                 {"ssid": "Plaza", "signal": 20, "secured": False},
             ]
+
+
+def test_the_first_run_names_the_box_and_checks_everything_first(
+    nm: FakeNetworkManager, paths: Paths, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    renamed: list[tuple[str, ...]] = []
+
+    async def run(*argv: str) -> str:
+        renamed.append(argv)
+        return ""
+
+    monkeypatch.setattr(operations_module, "run", run)
+    cfg = config(tmp_path, enabled=frozenset({"network", "hostname"}))
+    cfg = Config(
+        uid=cfg.uid,
+        gid=cfg.gid,
+        enabled=cfg.enabled,
+        socket=cfg.socket,
+        context=Context(hosts=cfg.context.hosts, network=Network(paths)),
+    )
+    with serving(cfg):
+        settings = Settings(
+            indi_host="127.0.0.1",
+            indi_port=9,
+            gpsd_port=9,
+            config_dir=tmp_path / "config",
+            data_dir=tmp_path / "data",
+            system_socket=cfg.socket,
+        )
+        with TestClient(create_app(settings)) as client:
+            pair_owner(client)
+            setup = {"country": "CL", "password": "dark-skies-1"}
+            # A mistake in any step changes nothing, the name included.
+            for bad, detail in (
+                ({"hostname": "rig 2"}, "hyphens"),
+                ({"hostname": "rig-2", "password": "short"}, "8 to 63"),
+                ({"hostname": "rig-2", "join": {"ssid": "a;b"}}, "no control characters"),
+                ({"hostname": "rig-2", "join": {"ssid": "Home", "password": "short"}}, "8 to 63"),
+            ):
+                response = client.post("/api/system/network/setup", json=setup | bad)
+                assert response.status_code == 422, bad
+                assert detail in response.json()["detail"]
+            assert renamed == []
+            assert client.get("/api/state").json()["state"]["network"]["set_up"] is False
+            # The name it has already: not renamed again.
+            response = client.post("/api/system/network/setup", json=setup | {"hostname": "nocs"})
+            assert response.status_code == 202, response.text
+            assert renamed == []
+            response = client.post(
+                "/api/system/network/setup",
+                json=setup | {"hostname": " Rig-West ", "join": {"ssid": "Home", "password": None}},
+            )
+            assert response.status_code == 202, response.text
+            assert renamed == [("hostnamectl", "set-hostname", "rig-west")]
+            assert "127.0.1.1\trig-west" in cfg.context.hosts.read_text()
+            assert client.get("/api/state").json()["state"]["network"]["set_up"] is True

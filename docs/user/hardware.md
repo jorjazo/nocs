@@ -41,6 +41,13 @@ not, are welcome: send the diagnostics bundle (see [troubleshooting](troubleshoo
   FAT, exFAT, NTFS, ext4, btrfs or XFS are mounted when plugged in.
 - **Wi-Fi:** the Pi's own. A USB hub with its own power helps when the camera, the
   guide camera, the focuser, the filter wheel and the mount all hang off the Pi.
+- **USB 3 next to the Pi** interferes with its Wi-Fi: USB 3 ports, cables and devices
+  (cameras, drives, hubs) radiate in the 2.4 GHz band, the only band of the box's
+  access point. On the rig, with two USB 3 devices on the Pi, neither a laptop nor a
+  phone a metre away could join `NOCS-xxxx`; unplugged, both joined every time. Keep
+  USB 3 cables short, shielded and away from the Pi, prefer the USB 2 ports for
+  devices that do not need the speed (focuser, filter wheel, mount, power box, GPS),
+  and use a cable or the home Wi-Fi where you can.
 - **USB GPS receivers** that gpsd reads (most NMEA ones, e.g. u-blox) give the box
   its time and offer their position as the site.
 - **A PC** with Ubuntu 26.04 works too: see [installing on a PC](pc-install.md).

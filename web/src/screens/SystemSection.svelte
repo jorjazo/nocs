@@ -15,6 +15,7 @@
     setHostname,
   } from "../lib/api";
   import { auth } from "../lib/auth.svelte";
+  import { hostName } from "../lib/boxsetup";
   import { errorText } from "../lib/errors";
   import { formatBytes, formatDecimal, formatPlain, formatTemperature, formatTime } from "../lib/format";
   import { i18n } from "../lib/i18n";
@@ -62,8 +63,6 @@
   let name = $state("");
   let nameError = $state("");
   let renamed = $state<string | null>(null);
-  // One DNS label, as nocs-system checks it: the box is also <name>.local.
-  const HOSTNAME = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
 
   // -- Actions --------------------------------------------------------------------
 
@@ -97,8 +96,8 @@
 
   async function rename(event: SubmitEvent): Promise<void> {
     event.preventDefault();
-    const wanted = name.trim().toLowerCase();
-    if (!HOSTNAME.test(wanted)) {
+    const wanted = hostName(name);
+    if (wanted === null) {
       nameError = t.system.nameInvalid;
       return;
     }
