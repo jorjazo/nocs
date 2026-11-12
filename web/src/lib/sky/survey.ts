@@ -95,7 +95,9 @@ export class SourceMemory {
   #preferred(): Source | null {
     const last = this.#last;
     if (!last) return null;
-    return last.source === DEFAULT || this.#now() - last.at < FALLBACK_KEPT_MS ? last.source : null;
+    // A time ahead of the clock (the device's clock was wrong) has run out too.
+    const age = this.#now() - last.at;
+    return last.source === DEFAULT || (age >= 0 && age < FALLBACK_KEPT_MS) ? last.source : null;
   }
 }
 

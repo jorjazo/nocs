@@ -116,6 +116,12 @@ test("while CDS stays down, the fallback is preferred again each night", async (
   assert.deepEqual(new SourceMemory(saved, () => now).order(), ["skyview", "cds"]);
 });
 
+test("a preference saved with the clock ahead runs out", () => {
+  const saved = store();
+  new SourceMemory(saved, () => 5e12).worked("skyview");
+  assert.deepEqual(new SourceMemory(saved, () => 1e12).order(), ["cds", "skyview"]);
+});
+
 test("unreadable or blocked storage falls back to the default order", () => {
   assert.deepEqual(new SourceMemory(store({ "nocs.surveySource": "{bad" })).order(), ["cds", "skyview"]);
   assert.deepEqual(new SourceMemory(store({ "nocs.surveySource": '{"source":"x","at":1}' })).order(), ["cds", "skyview"]);
