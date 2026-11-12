@@ -215,8 +215,8 @@ Focuser, filter wheel and profile editor (stage 2.8):
   latitude, longitude and elevation, filled with "From the mount" from the
   connected mount's own site or "From the GPS" from a USB GPS's fix, each disabled
   with its reason when it has nothing to give and naming the saved site within
-  500 m when there is one (ADR 0042); delete) or adds one (`#/rig/site/new`), made active as it is saved unless the
-  owner turns that off. A GPS with a 3D fix offers, under the list, the saved site
+  500 m when there is one (ADR 0042); delete) or adds one (`#/rig/site/new`), made
+  active as it is saved unless the owner turns that off. A GPS with a 3D fix offers, under the list, the saved site
   within 500 m when it is not the active one, or else to save its position as a
   new site. The server refuses another active site while a job holds the mount.
 

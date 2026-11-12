@@ -206,6 +206,8 @@ export const es: Messages = {
     siteToggleHint: "O más tarde en Equipo → Sitio: la lista de Esta noche lo pide antes de la alineación polar.",
     site: "Sitio",
     siteInvalid: "Corrige primero la posición.",
+    siteFailed: "Desactiva Indicar el sitio ahora, en el paso Sitio, para seguir sin él.",
+    siteKept: (name: string) => `${name} quedó guardado en el intento anterior y sigue en Equipo → Sitio.`,
     noSite: "Ninguno por ahora: agrégalo más tarde en Equipo",
     siteValue: (name: string, latitude: string, longitude: string) => `${name}, en ${latitude}, ${longitude}`,
     reviewBody: "Todavía no ha cambiado nada: revisa lo que hará el equipo.",

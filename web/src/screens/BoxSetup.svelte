@@ -79,6 +79,12 @@
         ? { saved: siteSelected }
         : { new: { name: siteName, latitude, longitude, elevation } },
   );
+  // A site an earlier apply saved, which the choice no longer names: it stays saved.
+  const createdLeft = $derived.by(() => {
+    if (created === null) return null;
+    if (siteChoice !== null && !("saved" in siteChoice && siteChoice.saved !== created)) return null;
+    return sites?.saved[created]?.name || t.sites.unnamed;
+  });
   const siteSummary = $derived.by(() => {
     if (siteChoice === null) return t.boxSetup.noSite;
     const site = "saved" in siteChoice ? sites?.saved[siteChoice.saved] : siteChoice.new;
@@ -163,6 +169,13 @@
     busy = true;
     try {
       await saveSite();
+    } catch (e) {
+      // The network waits for the site; without it, the owner can go on.
+      error = `${errorText(e, t)} ${t.boxSetup.siteFailed}`;
+      busy = false;
+      return;
+    }
+    try {
       await setUpNetwork({
         country,
         password,
@@ -322,6 +335,7 @@
           <div>
             <dt class="label muted">{t.boxSetup.site}</dt>
             <dd>{siteSummary}</dd>
+            {#if createdLeft !== null}<dd class="caption muted">{t.boxSetup.siteKept(createdLeft)}</dd>{/if}
           </div>
         </dl>
         <p class="body note">

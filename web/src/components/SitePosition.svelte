@@ -29,6 +29,7 @@
     available?: boolean;
   } = $props();
 
+  const id = $props.id();
   const t = $derived(i18n.t);
   const locale = $derived(i18n.locale);
   const saved = $derived(live.app.sites?.saved ?? {});
@@ -79,8 +80,8 @@
   <div class="sources">
     {#each shown as { key, label, name, source } (key)}
       <div class="source">
-        <Button disabled={!("position" in source)} onclick={() => fill(source)}>{label}</Button>
-        <span class="caption muted">{describe(name, source)}</span>
+        <Button disabled={!("position" in source)} describedby="{id}-{key}" onclick={() => fill(source)}>{label}</Button>
+        <span class="caption muted" id="{id}-{key}">{describe(name, source)}</span>
       </div>
     {/each}
   </div>

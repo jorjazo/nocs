@@ -224,6 +224,8 @@ export const en = {
     siteToggleHint: "Or later in Rig → Site: Tonight's checklist asks for it before polar alignment.",
     site: "Site",
     siteInvalid: "Correct the position first.",
+    siteFailed: "Turn off Set the site now, in the Site step, to go on without it.",
+    siteKept: (name: string) => `${name} was saved by the earlier attempt and stays in Rig → Site.`,
     noSite: "None for now: add it later in Rig",
     siteValue: (name: string, latitude: string, longitude: string) => `${name}, at ${latitude}, ${longitude}`,
     reviewBody: "Nothing has changed yet: check what the box will do.",
