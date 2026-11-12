@@ -75,8 +75,9 @@ If you gave Imager your home Wi-Fi, join that network instead and open
 On **Rig**:
 
 1. **New profile**: pick the driver of each device (main camera, guide camera,
-   mount, focuser, filter wheel, power box), the serial ports of the mount and the
-   power box, and the optics (focal length, aperture, reducer).
+   mount, focuser, filter wheel, power box): type its model or maker in the driver
+   field, e.g. `AM5`, and tap it in the list under the field. Then the serial ports
+   of the mount and the power box, and the optics (focal length, aperture, reducer).
 2. **Site**: add the place where the rig stands (latitude, longitude, elevation)
    and make it the active one. It belongs to the box, not to the profile, and the
    mount gets it when it connects. Tonight's sky and polar alignment need it, but

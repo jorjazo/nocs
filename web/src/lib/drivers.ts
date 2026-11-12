@@ -62,11 +62,42 @@ function fold(text: string): string {
   return text.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
 }
 
+function words(query: string): string[] {
+  return fold(query).split(/\s+/).filter(Boolean);
+}
+
+function contains(text: string, query: string): boolean {
+  const haystack = fold(text);
+  return words(query).every((word) => haystack.includes(word));
+}
+
 // Every word of the query in the model, its manufacturer or the driver's executable.
 export function matches(choice: DriverChoice, query: string): boolean {
-  const haystack = fold(`${choice.text} ${choice.manufacturer} ${choice.driver}`);
-  return fold(query)
-    .split(/\s+/)
-    .filter(Boolean)
-    .every((word) => haystack.includes(word));
+  return contains(`${choice.text} ${choice.manufacturer} ${choice.driver}`, query);
+}
+
+// A group of the driver list: one of the catalog's, or null for every other driver.
+export type DriverGroup = { group: string | null; choices: DriverChoice[] };
+
+// What the profile editor offers for a role: the role's own catalog groups first, in
+// their order, then every other driver. Within each, choices whose model or maker
+// match the query come before those that match only by executable (`lx200` finds
+// the ZWO AM5), then by name. A current choice the catalog lacks (a driver
+// installed by hand) is offered first among the others.
+export function driverOptions(
+  choices: readonly DriverChoice[],
+  wanted: readonly string[],
+  query: string,
+  current: DriverChoice | null,
+): DriverGroup[] {
+  const extra = current && !choices.some((c) => c.key === current.key) ? [current] : [];
+  const shown = [...extra, ...choices].filter((c) => matches(c, query));
+  const byName = (c: DriverChoice) => (contains(`${c.text} ${c.manufacturer}`, query) ? 0 : 1);
+  const ranked = shown
+    .map((choice, index) => ({ choice, rank: byName(choice), index }))
+    .sort((a, b) => a.rank - b.rank || a.index - b.index)
+    .map(({ choice }) => choice);
+  const groups: DriverGroup[] = wanted.map((group) => ({ group, choices: ranked.filter((c) => c.group === group) }));
+  groups.push({ group: null, choices: ranked.filter((c) => !wanted.includes(c.group)) });
+  return groups.filter((g) => g.choices.length > 0);
 }

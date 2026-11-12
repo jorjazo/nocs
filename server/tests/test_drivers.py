@@ -52,6 +52,12 @@ CATALOG = """<?xml version='1.0' encoding='utf-8'?>
             <driver name="ZWO AM5">indi_lx200am5</driver>
         </device>
         <device label="Broken"><driver name="x">rm -rf /</driver></device>
+        <device label="iOptron SkyGuider Pro" manufacturer="iOptron">
+            <driver name="Telescope Simulator">indi_simulator_telescope</driver>
+        </device>
+        <device label="Telescope Simulator" manufacturer="Simulator">
+            <driver name="Telescope Simulator">indi_simulator_telescope</driver>
+        </device>
     </devGroup>
     <devGroup group="CCDs">
         <device label="ZWO CCD" manufacturer="ZWO">
@@ -69,13 +75,16 @@ def test_catalog(tmp_path: Path) -> None:
     (tmp_path / "indi_tcfs_sk.xml").write_text("<INDIDriver><defSwitchVector/></INDIDriver>")
     (tmp_path / "garbage.xml").write_text("<driversList>")
     entries = load_catalog(tmp_path)
+    # INDI lists the SkyGuider Pro (a tracker) under the Telescope Simulator's driver:
+    # in NOCS it would be a simulated mount under a real name.
     assert [(e.group, e.label, e.driver) for e in entries] == [
         ("CCDs", "ZWO CCD", "indi_asi_ccd"),
+        ("Telescopes", "Telescope Simulator", "indi_simulator_telescope"),
         ("Telescopes", "ZWO AM5 USB", "indi_lx200am5"),
         ("Telescopes", "ZWO AM5 WiFi", "indi_lx200am5"),
     ]
-    assert entries[1].name == "ZWO AM5"
-    assert entries[1].manufacturer == "ZWO"
+    assert entries[2].name == "ZWO AM5"
+    assert entries[2].manufacturer == "ZWO"
 
 
 def test_catalog_missing_directory(tmp_path: Path) -> None:
