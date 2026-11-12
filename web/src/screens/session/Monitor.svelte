@@ -472,11 +472,18 @@
     margin: 0;
     padding: 0;
   }
-  .rows li {
+  /* One badge column as wide as the longest filter name ("Luminance"), shared by
+     every row. */
+  .rows {
     display: grid;
-    grid-template-columns: 56px 80px 1fr;
+    grid-template-columns: minmax(56px, max-content) 80px minmax(0, 1fr);
+    column-gap: var(--space-2);
+  }
+  .rows li {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: subgrid;
     align-items: center;
-    gap: var(--space-2);
     min-height: 36px;
   }
   .rows .bar {
@@ -486,6 +493,7 @@
     height: 24px;
     display: grid;
     place-items: center;
+    padding: 0 var(--space-2);
     border-radius: 8px;
     background: var(--raised);
     font-size: 13px;

@@ -45,6 +45,7 @@ Navigation follows the night, not the device tree.
 | Sequence | Template: target, exposures per filter, behaviors during the night, end-of-session actions, time and disk estimates. |
 | Session | Progress, current exposure countdown, HFR / guiding / sensor, guiding graph, event timeline, pause / stop. |
 | Session (tablet) | Same content in two columns, with the latest frame large and a filmstrip of recent frames. |
+| Session (PC) | The page takes the screen's width: the frame large, the status beside it, the lists under it or in a third column. |
 
 ## 3. Themes
 
@@ -99,6 +100,24 @@ Rules:
 - Radii: tiles 10, buttons 12, cards 16, chips and toggles fully rounded.
 - Primary actions 48–52 px tall; no touch target under 44 × 44 px.
 - No hover-only affordances. One primary (accent) button per screen.
+
+Breakpoints and page width (`web/src/styles/tokens.css`; media queries cannot read
+custom properties, so the breakpoints are written out where they are used):
+
+| From | What changes |
+|---|---|
+| 420 px | Cards get their full side padding (small phones below) |
+| 768 px | The navigation rail replaces the bottom tab bar; screen headers fit one line |
+| 1000 px | Tablet: screens with a visual lay out in two columns (Session) |
+| 1200 px | PC: "wide" pages grow from `--page-width` (760 px) to `--page-width-wide` (2400 px) |
+| 1600 px | Large screens: wide pages may use a third column (Session) |
+
+Each screen's page is one of three widths (`web/src/lib/layout.ts`): **narrow**,
+one readable column of at most 760 px (forms, lists, settings; most screens);
+**wide**, the same below 1200 px and up to 2400 px from there, for screens laid
+out in columns (Session); **full**, edge to edge without the page's margins (Live
+view). A screen becomes wide only with a layout of its own for that width:
+widening a single column only makes its lines longer.
 
 ## 6. Components (initial set)
 
@@ -440,6 +459,14 @@ Session monitor (stage 5.14):
   and stars on the left, and under it a strip of the recent frames (filter, number
   and HFR: the server keeps no thumbnail of each frame); everything else on the
   right.
+- PC (from 1200 px, a wide page): the frame large on the left, at most as tall as
+  the window leaves room for; the status beside it (frames done, the frame in
+  progress, HFR / guiding RMS / sensor, the guiding graph, errors), which stays in
+  view while the page scrolls; the per-filter rows and the events under the frame.
+  From 1600 px they get a third column of their own, so the frame, the status and
+  the lists all fit in the first screenful. Below the monitor, the past sessions
+  sit beside the night's frames. The reading and keyboard order stays frame →
+  status → lists on every width.
 - A running or paused sequence puts a dot on the Session tab (accent, or amber
   while paused), from any screen.
 - "Pause the sequence and do it" (design §6): Live view, the mount, focuser and
@@ -523,6 +550,10 @@ Live stacking (ADR 0040, after v1.0):
   in Live view since stage 2.7).
 - Spanish copy review: text lengths in Spanish are ~20–30 % longer; layouts must
   be checked with both languages.
+- Other screens on a PC: only Session has a wide layout so far. Plan (the target's
+  framing chart beside its details), the session report (its charts) and Tonight
+  could use one; Live view is already edge to edge, and its rework is a topic of its
+  own. Each needs its own layout for that width, not just a wider column.
 
 Appliance (phase 6):
 
