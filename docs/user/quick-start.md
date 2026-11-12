@@ -29,8 +29,14 @@ computer is needed at the telescope.
 
 ## 2. First boot
 
-Plug the equipment in and power the Pi on. The first boot takes one or two
-minutes. Without a known network, the Pi then starts its own Wi-Fi:
+Power the Pi on with **its USB devices unplugged**: cameras, USB drives and hubs,
+USB 3 ones above all. USB 3 ports and cables drown out 2.4 GHz Wi-Fi, the only band
+of the box's own network, and with them plugged in a phone a metre away may see the
+network yet never manage to join it. Plug them in once the setup is done (and see
+[troubleshooting](troubleshooting.md#reaching-the-box) for the field).
+
+The first boot takes one or two minutes. Without a known network, the Pi then starts
+its own Wi-Fi:
 
 | Network | `NOCS-xxxx` (the last four characters of the Pi's serial number) |
 |---|---|
@@ -48,10 +54,21 @@ If you gave Imager your home Wi-Fi, join that network instead and open
 1. **Owner passphrase.** Name this phone and choose a passphrase of at least 8
    characters. It pairs this phone, which then stays signed in. You need the
    passphrase again only to pair another phone or computer.
-2. **Set up this box.** Choose your country and a password of your own for the
-   box's Wi-Fi. Optionally, give it your home Wi-Fi too. When you save, the box
-   restarts its Wi-Fi with the new password (or joins your home network): follow it
-   from the phone, as the screen says, and open <http://nocs.local> again.
+2. **Set up this box**, in steps; **Back** returns to an earlier one, and nothing
+   changes until the last.
+   1. **Access point**: your country, and a password of your own for the box's
+      Wi-Fi (you may keep `nocsnocs`).
+   2. **Home Wi-Fi** (optional): a network the box joins whenever it is in range,
+      your home's for example.
+   3. **Name**: the box's name, `nocs` until you change it. Phones and computers
+      reach it as `http://<name>.local`; give each box a name of its own if you
+      have more than one.
+   4. **Check and apply**: what the box will do. When you apply, it restarts its
+      Wi-Fi with the new password (or leaves it for your home network), and the
+      phone drops off it: follow it as the screen says, and open
+      `http://<name>.local` again. After a new name the box asks for your
+      passphrase once more.
+3. Now plug the USB devices in.
 
 ## 4. Your equipment
 

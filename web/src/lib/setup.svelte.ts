@@ -1,10 +1,17 @@
-// The appliance's first run (ADR 0028): shown while the access point keeps its
-// default password, and kept up after saving so that its instructions stay on
+// The appliance's first run (ADR 0028): shown until nocs-system records it
+// (`network.set_up`), and kept up after applying so that its instructions stay on
 // screen until the user moves on.
 
 import { isCountry } from "./countries";
 
-export type SetupDone = { ssid: string | null; accessPoint: string; host: string };
+export type SetupDone = {
+  ssid: string | null;
+  accessPoint: string;
+  host: string;
+  renamed: boolean;
+  // The box was on its access point, which then restarts.
+  onAp: boolean;
+};
 
 class BoxSetup {
   done: SetupDone | null = $state(null);

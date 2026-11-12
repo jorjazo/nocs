@@ -502,11 +502,16 @@ Live stacking (ADR 0040, after v1.0):
 Appliance (phase 6):
 
 - On the appliance, the first run continues after pairing with "Set up this box"
-  (full screen, before anything else, while the access point keeps its default
-  password): country, the access point's own password, and optionally a home
-  network. The instructions for following the box (join the access point again,
-  or switch to the home network, and open `http://<name>.local`) stay on screen
-  after saving, since the phone may lose the box for a moment.
+  (full screen, before anything else, until nocs-system records it), in steps with
+  a step indicator and Back/Next: the access point (country, its own password, and
+  a warning to leave USB devices unplugged: USB 3 drowns out its 2.4 GHz Wi-Fi), a
+  home network (optional), the box's name (where nocs-system may rename it), and a
+  last step that shows what will happen. Nothing is sent before that last step, so
+  the phone loses the access point only once the instructions for following the box
+  (join the access point again, or switch to the home network, and open
+  `http://<name>.local`, pairing again after a new name) are on screen; they stay
+  there after applying. A later step (the site, say) is one more entry in
+  `lib/boxsetup.ts` and its own section of the screen.
 - Rig gains "This computer" (health, name, restart, shut down, INDI and PHD2
   restarts, diagnostics) and "Network" (where the box is, known networks, joining
   one, the access point, the mode); USB drives with Eject sit under Storage.

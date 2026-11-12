@@ -27,6 +27,9 @@ from nocs.system.updates import Updates
 
 log = logging.getLogger("nocs.system")
 
+MDNS_UNIT = "avahi-daemon.service"
+"""Announces <hostname>.local, under the name it read when it started."""
+
 
 @dataclass(frozen=True, slots=True)
 class Context:
@@ -85,6 +88,12 @@ async def set_hostname(context: Context, args: Message) -> Message:
     name = validate_hostname(name)
     await run("hostnamectl", "set-hostname", name)
     await anyio.to_thread.run_sync(update_hosts, context.hosts, name)
+    # avahi-daemon keeps announcing the name it started with: <name>.local would not
+    # resolve until a reboot.
+    try:
+        await run("systemctl", "try-restart", MDNS_UNIT)
+    except HelperError as e:
+        log.warning("mDNS: %s", e)
     if context.share is not None:  # smbd and wsdd announce the name they started with
         try:
             await run("systemctl", "try-restart", *SHARE_UNITS)

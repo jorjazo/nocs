@@ -7,6 +7,14 @@ equipment, so check it before posting it publicly.
 
 ## Reaching the box
 
+**The phone or laptop cannot join `NOCS-xxxx`.** It sees the network, or sees it
+now and then, but joining never completes. USB 3 devices on the Pi are the usual
+cause: they drown out 2.4 GHz Wi-Fi, the only band of the access point (see
+[hardware](hardware.md#the-computer)). Unplug the USB devices, USB 3 ones above all,
+and join again; plug them back once the phone is on. If the box must stay on the
+access point with them plugged in, move USB 3 cables away from the Pi, use shielded
+ones, or put the devices that do not need USB 3 on the USB 2 ports.
+
 **`nocs.local` does not open.**
 - On the box's own Wi-Fi (`NOCS-xxxx`), open <http://10.42.0.1> instead.
 - On another network, some phones do not resolve `.local` names. Find the box's

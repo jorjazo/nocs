@@ -4,6 +4,7 @@ ADR 0028), share its frames (ADR 0039); diagnostics."""
 from __future__ import annotations
 
 import contextlib
+import socket
 from collections.abc import Callable, Generator
 from typing import Literal
 
@@ -22,7 +23,8 @@ from nocs.api.schemas import (
 )
 from nocs.services.system import OperationUnavailableError, SystemBusyError, SystemService
 from nocs.system.client import HelperUnavailableError
-from nocs.system.protocol import HelperError
+from nocs.system.network import check_password, check_ssid
+from nocs.system.protocol import HelperError, validate_hostname
 
 
 def system_router(system: Callable[[], SystemService]) -> APIRouter:
@@ -73,8 +75,13 @@ def system_router(system: Callable[[], SystemService]) -> APIRouter:
 
     @router.post("/network/setup", status_code=status.HTTP_202_ACCEPTED)
     async def network_setup(request: NetworkSetupRequest) -> Response:  # pyright: ignore[reportUnusedFunction]
-        """The first run: country and password of the access point, then maybe a network."""
+        """The first run: the box's name, the country and password of the access point,
+        then maybe a network. All of it is checked first, so that a mistake changes
+        nothing; the name goes first, so that the access point restarts under it."""
         with _system_errors():
+            name = _check_setup(request)
+            if name is not None and name != socket.gethostname():
+                await system().set_hostname(name)
             await system().network(
                 "network.access_point",
                 {"country": request.country, "password": request.password},
@@ -138,6 +145,20 @@ def system_router(system: Callable[[], SystemService]) -> APIRouter:
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     return router
+
+
+def _check_setup(request: NetworkSetupRequest) -> str | None:
+    """What nocs-system would refuse, refused before the first step is applied; the new
+    host name as it will be stored."""
+    try:
+        check_password(request.password)
+        if request.join is not None:
+            check_ssid(request.join.ssid)
+            if request.join.password is not None:
+                check_password(request.join.password)
+        return None if request.hostname is None else validate_hostname(request.hostname)
+    except HelperError as e:
+        raise ValueError(str(e)) from e
 
 
 @contextlib.contextmanager
