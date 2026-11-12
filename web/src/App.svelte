@@ -10,6 +10,7 @@
   import { errorText } from "./lib/errors";
   import { formatDuration } from "./lib/format";
   import { i18n } from "./lib/i18n";
+  import { pageWidth } from "./lib/layout";
   import { live } from "./lib/live.svelte";
   import { router } from "./lib/router.svelte";
   import { boxSetup } from "./lib/setup.svelte";
@@ -80,8 +81,8 @@
   const setupBox = $derived(
     auth.owner && (live.app.network?.set_up === false || boxSetup.done !== null),
   );
-  // Live view uses the whole width: the preview is edge to edge.
-  const full = $derived(router.route.screen === "live");
+  // How wide the page grows: Live view edge to edge, Session in columns on a PC.
+  const width = $derived(pageWidth(router.route));
 </script>
 
 {#if view === "loading"}
@@ -109,7 +110,7 @@
   <Flats {offline} night={router.route.night} />
 {:else}
   <NavBar />
-  <main class="content" class:full>
+  <main class="content" class:full={width === "full"} class:wide={width === "wide"}>
     {#if offline}
       <div class="banner"><Banner icon="offline" tone="warning">{t.link.offline}</Banner></div>
     {/if}
@@ -166,7 +167,7 @@
     padding: 0 var(--margin);
   }
   .content {
-    max-width: 760px;
+    max-width: var(--page-width);
     margin: 0 auto;
     padding: env(safe-area-inset-top) var(--margin) calc(var(--tabbar-height) + env(safe-area-inset-bottom) + var(--space-6));
   }
@@ -187,12 +188,19 @@
   @media (min-width: 768px) {
     .content {
       padding: var(--space-4) var(--space-8) var(--space-8);
-      margin-left: max(var(--rail-width), calc((100vw - 760px) / 2));
+      margin-left: max(var(--rail-width), calc((100vw - var(--page-width)) / 2));
       margin-right: auto;
     }
     .full {
       padding: 0;
       margin-left: var(--rail-width);
+    }
+  }
+  /* A PC's screen: screens laid out in columns take its width (docs/ux.md §5). */
+  @media (min-width: 1200px) {
+    .wide {
+      max-width: var(--page-width-wide);
+      margin-left: max(var(--rail-width), calc((100vw - var(--page-width-wide)) / 2));
     }
   }
 </style>

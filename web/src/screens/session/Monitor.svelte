@@ -3,7 +3,8 @@
   // progress, the frame being taken with a countdown, the latest frame with its
   // HFR and stars, the sensor and guiding, the per-filter rows and the events;
   // pause, resume and stop. On a tablet: two columns, the latest frame large
-  // with a strip of the recent frames (docs/ux.md §2).
+  // with a strip of the recent frames (docs/ux.md §2). On a PC the page is wide
+  // and the long lists go under the frame, or into a third column (§5, §7).
   import Banner from "../../components/Banner.svelte";
   import Button from "../../components/Button.svelte";
   import Icon from "../../components/Icon.svelte";
@@ -136,7 +137,7 @@
   </header>
 
   <div class="columns">
-    <div class="visual">
+    <div class="visual" class:toggled={!!stack?.preview}>
       {#if stack?.preview}
         <SegmentedControl
           label={t.stack.show}
@@ -176,7 +177,7 @@
       {/if}
     </div>
 
-    <div class="details">
+    <div class="status">
       <div class="progress">
         <div class="line">
           <span class="mono">{t.session.frames(progress.done, progress.total)}</span>
@@ -233,6 +234,12 @@
         </figure>
       {/if}
 
+      {#if run.restarts > 0}<p class="muted small">{t.session.restarts(run.restarts)}</p>{/if}
+      {#if run.error}<Banner icon="alert" tone="error">{run.error}</Banner>{/if}
+      {#if error}<Banner icon="alert" tone="error">{error}</Banner>{/if}
+    </div>
+
+    <div class="lists">
       <section aria-labelledby="per-filter">
         <h3 id="per-filter" class="muted small">{filtered ? t.session.perFilter : t.session.perExposure}</h3>
         <ul class="rows">
@@ -245,10 +252,6 @@
           {/each}
         </ul>
       </section>
-
-      {#if run.restarts > 0}<p class="muted small">{t.session.restarts(run.restarts)}</p>{/if}
-      {#if run.error}<Banner icon="alert" tone="error">{run.error}</Banner>{/if}
-      {#if error}<Banner icon="alert" tone="error">{error}</Banner>{/if}
 
       <section aria-labelledby="events">
         <h3 id="events" class="muted small">{t.session.events}</h3>
@@ -311,6 +314,9 @@
 
 <style>
   .monitor {
+    /* What the window's height loses above and under the frame on a PC: the
+       headers, the strip of recent frames and the margins. */
+    --frame-chrome: 260px;
     display: flex;
     flex-direction: column;
     gap: var(--space-3);
@@ -383,7 +389,8 @@
   .wide-only {
     display: none;
   }
-  .details {
+  .status,
+  .lists {
     display: flex;
     flex-direction: column;
     gap: var(--space-3);
@@ -465,11 +472,21 @@
     margin: 0;
     padding: 0;
   }
-  .rows li {
+  /* One badge column as wide as the longest filter name ("Luminance"), shared by
+     every row. */
+  .rows {
     display: grid;
-    grid-template-columns: 56px 80px 1fr;
+    grid-template-columns: minmax(56px, max-content) 80px minmax(0, 1fr);
+    column-gap: var(--space-2);
+  }
+  .rows li {
+    grid-column: 1 / -1;
+    display: grid;
+    /* Without subgrid (older browsers) each row sizes its own badge column. */
+    grid-template-columns: minmax(56px, max-content) 80px minmax(0, 1fr);
+    grid-template-columns: subgrid;
+    column-gap: var(--space-2);
     align-items: center;
-    gap: var(--space-2);
     min-height: 36px;
   }
   .rows .bar {
@@ -479,6 +496,7 @@
     height: 24px;
     display: grid;
     place-items: center;
+    padding: 0 var(--space-2);
     border-radius: 8px;
     background: var(--raised);
     font-size: 13px;
@@ -615,19 +633,70 @@
     .columns {
       display: grid;
       grid-template-columns: minmax(0, 3fr) minmax(320px, 2fr);
-      gap: var(--space-6);
+      grid-template-rows: auto 1fr;
+      grid-template-areas: "visual status" "visual lists";
+      gap: var(--space-3) var(--space-6);
       align-items: start;
     }
     .visual {
+      grid-area: visual;
       display: block;
       position: sticky;
       top: var(--space-4);
+    }
+    .status {
+      grid-area: status;
+    }
+    .lists {
+      grid-area: lists;
     }
     .wide-only {
       display: flex;
     }
     .phone-only {
       display: none;
+    }
+  }
+  /* A PC (the page is wide from here, docs/ux.md §5, §7): the status beside the
+     frame and the long lists under the frame, so neither column runs long. The
+     frame stays within the window's height. */
+  @media (min-width: 1200px) {
+    .columns {
+      grid-template-columns: minmax(0, 3fr) minmax(340px, 2fr);
+      grid-template-areas: "visual status" "lists status";
+      row-gap: var(--space-6);
+    }
+    .visual {
+      position: static;
+    }
+    .latest {
+      width: min(100%, calc((100dvh - var(--frame-chrome)) * 3 / 2));
+      margin-inline: auto;
+    }
+    /* Live stacking adds the stack / frame switch above the frame. */
+    .toggled .latest {
+      width: min(100%, calc((100dvh - var(--frame-chrome) - 52px) * 3 / 2));
+    }
+  }
+  /* The status stays in view while the page scrolls only where the window is tall
+     enough for all of it (restarts, an error and the guiding graph: ~620 px), so
+     its bottom is never out of reach on a laptop. */
+  @media (min-width: 1200px) and (min-height: 800px) {
+    .status {
+      position: sticky;
+      top: var(--space-4);
+    }
+  }
+  /* Large screens: the frame, the status and the lists in three columns. */
+  @media (min-width: 1600px) {
+    .columns {
+      grid-template-columns: minmax(0, 5fr) minmax(340px, 2fr) minmax(320px, 2fr);
+      grid-template-rows: auto;
+      grid-template-areas: "visual status lists";
+    }
+    .visual {
+      position: sticky;
+      top: var(--space-4);
     }
   }
 </style>

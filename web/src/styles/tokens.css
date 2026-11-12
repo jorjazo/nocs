@@ -40,6 +40,13 @@
   --tabbar-height: 64px;
   --rail-width: 96px;
 
+  /* Page widths (docs/ux.md §5, "Breakpoints and page width"). Breakpoints cannot
+     be custom properties; they are 420 px (small phone), 768 px (rail instead of
+     the tab bar), 1000 px (tablet: two columns), 1200 px (PC: wide pages grow) and
+     1600 px (three columns). */
+  --page-width: 760px;
+  --page-width-wide: 2400px;
+
   color-scheme: dark;
 }
 
