@@ -3,6 +3,7 @@
   // the network, restart, shut down and the diagnostics bundle (ADR 0027).
   import Banner from "../components/Banner.svelte";
   import Button from "../components/Button.svelte";
+  import Chip from "../components/Chip.svelte";
   import ConfirmButton from "../components/ConfirmButton.svelte";
   import TextField from "../components/TextField.svelte";
   import {
@@ -17,9 +18,17 @@
   import { auth } from "../lib/auth.svelte";
   import { hostName } from "../lib/boxsetup";
   import { errorText } from "../lib/errors";
-  import { formatBytes, formatDecimal, formatPlain, formatTemperature, formatTime } from "../lib/format";
+  import {
+    formatBytes,
+    formatDateTime,
+    formatDecimal,
+    formatPlain,
+    formatTemperature,
+    formatTime,
+  } from "../lib/format";
   import { i18n } from "../lib/i18n";
   import { live } from "../lib/live.svelte";
+  import { installedCount, isToday, summarize } from "../lib/updates";
 
   const t = $derived(i18n.t);
   const locale = $derived(i18n.locale);
@@ -117,7 +126,20 @@
     }
   }
 
+  // -- Updates (ADR 0025): NOCS, then INDI and PHD2, then the system as counts ------
+
   const updates = $derived(live.app.updates ?? null);
+  const summary = $derived(summarize(updates?.packages ?? []));
+  const installedSummary = $derived(summarize(updates?.upgraded ?? []));
+  const checkedText = $derived.by(() => {
+    const checked = updates?.checked;
+    if (!checked) return null;
+    return t.system.checkedAt(isToday(checked) ? formatTime(checked, locale) : formatDateTime(checked, locale));
+  });
+  const names = (kinds: { kind: "indi" | "phd2" }[]) =>
+    new Intl.ListFormat(locale, { type: "conjunction" }).format(kinds.map((c) => t.system.component[c.kind]));
+  // The server refuses to install while a job runs (it would end it): say so first.
+  const jobRunning = $derived(Object.values(live.app.jobs ?? {}).some((job) => job.state === "running"));
 
   async function update(task: "check" | "install" | "rollback", force = false): Promise<void> {
     await act(task, () => runUpdate(task, force));
@@ -237,46 +259,143 @@
       {#if done}<p class="muted" role="status">{t.system[done]}</p>{/if}
 
       {#if updates}
+        {@const canInstall = summary.total > 0 && updates.state !== "installing" && updates.state !== "checking"}
         <div class="updates">
-          <h3 class="label muted">{t.system.updates}</h3>
-          <p>
-            {#if updates.installed}<span class="mono">{t.system.version(updates.installed)}</span> ·{/if}
+          <div class="updates-head">
+            <h3 class="label muted">{t.system.updates}</h3>
             {#if updates.state === "checking"}
-              {t.system.checking}
-            {:else if updates.checked}
-              {updates.packages.length ? t.system.available(updates.packages.length) : t.system.upToDate}
-              <span class="muted">({t.system.checkedAt(formatTime(updates.checked, locale))})</span>
-            {:else}
-              <span class="muted">{t.system.neverChecked}</span>
+              <span class="caption muted" role="status">{t.system.checking}</span>
+            {:else if checkedText}
+              <span class="caption muted">{checkedText}</span>
             {/if}
-          </p>
-          {#if updates.packages.length && updates.state !== "installing"}
-            <p class="caption muted mono">
-              {updates.packages.map((p) => `${p.name} ${p.to}`).join(" · ")}
-            </p>
+          </div>
+          {#if !updates.checked && updates.state !== "checking"}
+            <p class="muted">{t.system.neverChecked}</p>
           {/if}
+
+          <ul class="components">
+            <li class="component">
+              <span class="what">{t.system.nocs}</span>
+              <span class="detail">
+                <span class="versions mono">
+                  {#if summary.nocs}
+                    {summary.nocs.from} → {summary.nocs.to}
+                  {:else}
+                    {updates.installed ?? "—"}
+                  {/if}
+                </span>
+                {#if summary.nocs}
+                  <Chip tone="accent">{t.system.newVersion}</Chip>
+                {:else if updates.checked && updates.installed}
+                  <Chip tone="ok">{t.system.upToDate}</Chip>
+                {/if}
+              </span>
+            </li>
+            {#if updates.checked}
+              {#each summary.components as component (component.kind)}
+                <li class="component">
+                  <span class="what">{t.system.component[component.kind]}</span>
+                  <span class="detail">
+                    <span class="versions mono">{component.from} → {component.to}</span>
+                    {#if component.count > 1}<span class="caption muted">{t.system.packages(component.count)}</span>{/if}
+                  </span>
+                </li>
+              {:else}
+                <li class="component">
+                  <span class="what">{t.system.rigUpToDate}</span>
+                  <span class="detail"><Chip tone="ok">{t.system.upToDate}</Chip></span>
+                </li>
+              {/each}
+              <li class="component">
+                <span class="what">{t.system.system}</span>
+                <span class="detail">
+                  {#if summary.system.count}
+                    <span>{t.system.systemUpdates(summary.system.count, summary.system.security)}</span>
+                  {:else}
+                    <Chip tone="ok">{t.system.upToDate}</Chip>
+                  {/if}
+                </span>
+              </li>
+            {/if}
+          </ul>
+
+          {#if summary.total > 0}
+            <details class="packages">
+              <summary>{t.system.showPackages(summary.total)}</summary>
+              {#each summary.groups as group (group.kind)}
+                <h4 class="label muted">{t.system.group[group.kind]}</h4>
+                <ul class="package-list">
+                  <!-- By index: apt lists a name once per architecture on a multiarch PC. -->
+                  {#each group.packages as pkg, i (i)}
+                    <li>
+                      <span class="package-name mono">{pkg.name}</span>
+                      {#if pkg.security}<span class="security caption">{t.system.security}</span>{/if}
+                      <span class="package-versions caption muted mono">{pkg.from} → {pkg.to}</span>
+                    </li>
+                  {/each}
+                </ul>
+              {/each}
+            </details>
+          {/if}
+
           {#if updates.state === "installing"}
             <p role="status">{t.system.installing}</p>
           {:else if updates.state === "succeeded"}
-            <p class="muted">{t.system.installed}</p>
+            <p class="muted">
+              {t.system.installed(updates.task === "install" ? installedCount(updates.upgraded, updates.packages) : 0)}
+              {#if installedSummary.components.length && !updates.reboot_required}
+                {t.system.restartRig(names(installedSummary.components))}
+              {/if}
+            </p>
+            {#if updates.error}<p class="error">{updates.error}</p>{/if}
           {:else if updates.state === "failed"}
             <p class="error">{t.system.installFailed} {updates.error ?? ""}</p>
           {:else if updates.error}
             <p class="error">{updates.error}</p>
           {/if}
+          {#if updates.reboot_required}
+            <Banner icon="alert" tone="warning">{t.system.rebootRequired}</Banner>
+            {#if can("power.reboot") && updates.state !== "installing"}
+              <div class="buttons">
+                <ConfirmButton
+                  label={t.system.restart}
+                  confirmLabel={t.system.confirmRestart}
+                  busy={busy === "restart"}
+                  onconfirm={() => restart()} />
+              </div>
+            {/if}
+          {/if}
           {#if updates.log.length && updates.state !== "idle"}
             <pre class="log">{updates.log.slice(-8).join("\n")}</pre>
           {/if}
+
+          {#if canInstall}
+            <div class="effects caption">
+              <span class="label muted">{t.system.effectsTitle}</span>
+              <ul>
+                <li>{summary.nocs ? t.system.effectNocs : t.system.effectNoNocs}</li>
+                {#if summary.components.length}<li>{t.system.effectRig(names(summary.components))}</li>{/if}
+                {#if summary.reboot}<li>{t.system.effectKernel}</li>{/if}
+                <li>{t.system.effectNight}</li>
+              </ul>
+            </div>
+            {#if jobRunning}<Banner icon="alert" tone="warning">{t.system.running}</Banner>{/if}
+          {/if}
+
           <div class="buttons">
             <Button
               busy={busy === "check" || updates.state === "checking"}
               disabled={updates.state === "installing"}
               onclick={() => update("check")}>{t.system.check}</Button>
-            {#if updates.packages.length && updates.state !== "installing"}
+            {#if canInstall}
               {#if refused === "install"}
                 <ConfirmButton label={t.system.installAnyway} confirmLabel={t.system.confirmInstall} onconfirm={() => update("install", true)} />
               {:else}
-                <ConfirmButton label={t.system.install} confirmLabel={t.system.confirmInstall} busy={busy === "install"} onconfirm={() => update("install")} />
+                <ConfirmButton
+                  label={t.system.install(summary.total)}
+                  confirmLabel={summary.nocs ? t.system.confirmInstallNocs : t.system.confirmInstall}
+                  busy={busy === "install"}
+                  onconfirm={() => update("install")} />
               {/if}
             {/if}
             {#if updates.previous && updates.previous !== updates.installed && updates.state !== "installing"}
@@ -355,6 +474,98 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
+  }
+  .updates-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+  }
+  .updates h3,
+  .packages h4 {
+    margin: 0;
+  }
+  .packages h4:not(:first-of-type) {
+    margin-top: var(--space-2);
+  }
+  .components,
+  .package-list,
+  .effects ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .components {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+  .component {
+    display: grid;
+    grid-template-columns: 72px minmax(0, 1fr);
+    align-items: baseline;
+    gap: var(--space-3);
+  }
+  .what {
+    font-weight: 600;
+  }
+  .detail {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-1) var(--space-2);
+    min-height: 28px;
+  }
+  .versions {
+    overflow-wrap: anywhere;
+  }
+  .packages summary {
+    display: list-item;
+    padding: 10px 0;
+    color: var(--accent);
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .packages[open] {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding-bottom: var(--space-2);
+  }
+  .package-list li {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0 var(--space-2);
+    padding: var(--space-1) 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .package-name {
+    font-size: 15px;
+    overflow-wrap: anywhere;
+  }
+  .package-versions {
+    flex-basis: 100%;
+    overflow-wrap: anywhere;
+  }
+  .security {
+    color: var(--warning);
+    font-weight: 600;
+  }
+  .effects {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .effects li {
+    position: relative;
+    padding-left: var(--space-3);
+  }
+  .effects li::before {
+    content: "·";
+    position: absolute;
+    left: 2px;
   }
   .log {
     margin: 0;

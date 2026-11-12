@@ -574,6 +574,20 @@ Appliance (phase 6):
 - Rig gains "This computer" (health, name, restart, shut down, INDI and PHD2
   restarts, diagnostics) and "Network" (where the box is, known networks, joining
   one, the access point, the mode); USB drives with Eject sit under Storage.
+- Updates, in "This computer" where nocs-system installs them (ADR 0025), are for a
+  decision, not a dump of apt (rc2's field notes): NOCS first (installed version,
+  the new one with a "New version" chip, or "Up to date"), then INDI and PHD2 as one
+  line each (the version of `indi-bin`/`phd2` shortened to what people know, and how
+  many packages INDI's update spans), then the system as one count ("180 updates,
+  112 of them security"). Every package sits behind a disclosure ("All 187
+  packages"), one row each (name, a Security mark, old → new), grouped as above.
+  When it was last checked sits by the heading (a date when not today), with "Check
+  now". Before Install, a short list says what installing does: NOCS restarts or
+  keeps running, INDI and PHD2 keep their old version until restarted, a new kernel
+  needs a restart of the box, and NOCS refuses while something runs (a banner says
+  so when something does; a refusal offers "Install anyway"). After it: how many
+  were installed, what is left (apt is asked again), and when Ubuntu asks for a
+  restart, a banner with Restart. ASTAP is not an apt package and is not shown.
 - Rig's "File sharing" (ADR 0039), below Network, where nocs-system runs the share: a
   switch ("Share frames with computers", saying it is read-only and open to anyone on
   the network); while on, a chip with the computers connected, how to open it from

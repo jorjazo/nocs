@@ -185,6 +185,7 @@ export type {
   TwilightWindow,
   UnmountedDrive,
   UpdatesState,
+  UpgradablePackage,
   WeatherState,
   WifiCountry,
   WifiNetwork,
