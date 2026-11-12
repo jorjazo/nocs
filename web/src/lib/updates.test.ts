@@ -68,9 +68,10 @@ test("a check today shows its time only", () => {
   assert.equal(isToday(new Date(2026, 10, 11, 23, 59).toISOString(), now), false);
 });
 
-test("what apt still lists at the same version was not installed", () => {
+test("what apt still lists was not installed", () => {
   const kept = pkg("apt", "system", "3.2.0", "3.2.1ubuntu0.1");
   assert.equal(installedCount(listed, [kept]), listed.length - 1);
-  assert.equal(installedCount(listed, [{ ...kept, to: "3.2.2" }]), listed.length); // a newer one since
+  // apt's lists refreshed between the check and the install: still not installed.
+  assert.equal(installedCount(listed, [{ ...kept, to: "3.2.2" }]), listed.length - 1);
   assert.equal(installedCount(listed, []), listed.length);
 });

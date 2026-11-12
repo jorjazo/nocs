@@ -57,11 +57,12 @@ export function summarize(packages: UpgradablePackage[]): UpdateSummary {
   };
 }
 
-// What an install upgraded: what it was to upgrade, less what apt still lists at
-// the same version (phased or kept back).
+// What an install upgraded: what it was to upgrade, less what apt still lists
+// (phased or kept back). The relist reads the lists the install used, so a package
+// still listed was not upgraded, whatever version it is listed at now.
 export function installedCount(upgraded: UpgradablePackage[], left: UpgradablePackage[]): number {
-  const still = new Set(left.map((p) => `${p.name} ${p.to}`));
-  return upgraded.filter((p) => !still.has(`${p.name} ${p.to}`)).length;
+  const still = new Set(left.map((p) => p.name));
+  return upgraded.filter((p) => !still.has(p.name)).length;
 }
 
 // A Debian version as people know it: no epoch ("1:"), no packaging suffix

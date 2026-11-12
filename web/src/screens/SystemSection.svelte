@@ -347,6 +347,7 @@
                 {t.system.restartRig(names(installedSummary.components))}
               {/if}
             </p>
+            {#if updates.error}<p class="error">{updates.error}</p>{/if}
           {:else if updates.state === "failed"}
             <p class="error">{t.system.installFailed} {updates.error ?? ""}</p>
           {:else if updates.error}
