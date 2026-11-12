@@ -244,3 +244,46 @@ async def test_nocsd_classifies_the_packages(
     ]
     assert (state["upgraded"], state["reboot_required"]) == ([], False)
     UpdatesState.model_validate(state)  # as the state documents it
+
+
+async def test_apt_is_read_without_its_translations(tools: Tools, paths: UpdatePaths) -> None:
+    apt = tools.dir / "apt"
+    apt.write_text(
+        '#!/bin/sh\n[ "$LC_ALL" = C ] && exec /bin/cat "$0-list.out"\n'
+        'echo "nocs/stable 0.1.1 arm64 [actualizable desde: 0.1.0]"\n'
+    )
+    updates = Updates(paths)
+    await updates.check({})
+    await drive(updates)
+    assert len(cast(list[object], (await updates.status({}))["upgradable"])) == 3
+
+
+async def test_no_check_while_installing(tools: Tools, paths: UpdatePaths) -> None:
+    updates = Updates(paths)
+    await updates.check({})
+    await drive(updates)
+    await updates.install({})
+    await drive(updates)
+    tools.answer("systemctl", "show", "active\n")
+    tools.answer("apt", "list", "Listing...\n")
+    await updates.check({})
+    await drive(updates)
+    status = await updates.status({})
+    assert (status["state"], status["task"]) == ("installing", "install")
+    assert status["error"] == "an update is being installed"
+    assert len(cast(list[object], status["upgraded"])) == 3
+    assert sum(call == "apt-get update" for call in tools.calls()) == 1
+
+
+async def test_an_install_that_never_started_is_no_success(
+    tools: Tools, paths: UpdatePaths
+) -> None:
+    (tools.dir / "systemd-run").write_text("#!/bin/sh\necho 'Failed to start' >&2\nexit 1\n")
+    updates = Updates(paths)
+    await updates.check({})
+    await drive(updates)
+    await updates.install({})
+    await drive(updates)
+    status = await updates.status({})
+    assert (status["state"], status["task"], status["upgraded"]) == ("idle", None, [])
+    assert status["error"] == "systemd-run: Failed to start"

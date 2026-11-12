@@ -28,7 +28,7 @@
   } from "../lib/format";
   import { i18n } from "../lib/i18n";
   import { live } from "../lib/live.svelte";
-  import { isToday, summarize } from "../lib/updates";
+  import { installedCount, isToday, summarize } from "../lib/updates";
 
   const t = $derived(i18n.t);
   const locale = $derived(i18n.locale);
@@ -325,7 +325,8 @@
               {#each summary.groups as group (group.kind)}
                 <h4 class="label muted">{t.system.group[group.kind]}</h4>
                 <ul class="package-list">
-                  {#each group.packages as pkg (pkg.name)}
+                  <!-- By index: apt lists a name once per architecture on a multiarch PC. -->
+                  {#each group.packages as pkg, i (i)}
                     <li>
                       <span class="package-name mono">{pkg.name}</span>
                       {#if pkg.security}<span class="security caption">{t.system.security}</span>{/if}
@@ -341,7 +342,7 @@
             <p role="status">{t.system.installing}</p>
           {:else if updates.state === "succeeded"}
             <p class="muted">
-              {updates.task === "install" ? t.system.installed(updates.upgraded.length) : t.system.installed(0)}
+              {t.system.installed(updates.task === "install" ? installedCount(updates.upgraded, updates.packages) : 0)}
               {#if installedSummary.components.length && !updates.reboot_required}
                 {t.system.restartRig(names(installedSummary.components))}
               {/if}
@@ -519,9 +520,8 @@
     overflow-wrap: anywhere;
   }
   .packages summary {
-    display: flex;
-    align-items: center;
-    min-height: var(--touch);
+    display: list-item;
+    padding: 10px 0;
     color: var(--accent);
     font-weight: 600;
     cursor: pointer;

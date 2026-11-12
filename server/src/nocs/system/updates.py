@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 import time
 from dataclasses import dataclass
@@ -129,6 +130,10 @@ class Updates:
                 self._pending = None
 
     async def _check(self) -> None:
+        # apt-get update beside the upgrade would fail on apt's lock, or replace the list
+        # and lose what the install upgraded.
+        if await self._unit() in ("active", "activating"):
+            raise HelperError("invalid", "an update is being installed")
         self._checking, self._pending = True, None
         self._saved["task"] = None  # what was installed last is old news after a new look
         try:
@@ -160,16 +165,18 @@ class Updates:
     async def _install(self) -> None:
         if await self._unit() in ("active", "activating"):
             raise HelperError("invalid", "an update is already being installed")
+        previous = await _nocs_version()
+        await self._start(
+            "apt-get", "-y", "-o", "Dpkg::Options::=--force-confold", "upgrade", "--with-new-pkgs"
+        )
+        # Only once it started: a unit that never ran must not read as a success.
         self._saved |= {
             "task": "install",
-            "previous": await _nocs_version(),
+            "previous": previous,
             "upgraded": self._saved.get("upgradable", []),
             "relist": True,
         }
         self._save()
-        await self._start(
-            "apt-get", "-y", "-o", "Dpkg::Options::=--force-confold", "upgrade", "--with-new-pkgs"
-        )
 
     async def _rollback(self) -> None:
         previous = str(self._saved["previous"])
@@ -178,9 +185,9 @@ class Updates:
         if not debs:
             raise HelperError("failed", f"NOCS {previous} is no longer in apt's cache")
         appliance = sorted(self._paths.archives.glob(f"nocs-appliance_{version}_all.deb"))
+        await self._start("dpkg", "-i", str(debs[0]), *(str(deb) for deb in appliance[:1]))
         self._saved |= {"task": "rollback", "upgraded": [], "relist": True}
         self._save()
-        await self._start("dpkg", "-i", str(debs[0]), *(str(deb) for deb in appliance[:1]))
 
     async def _start(self, *argv: str) -> None:
         """Run ``argv`` as the ``nocs-update`` unit, outside nocs-system's own cgroup."""
@@ -244,7 +251,8 @@ async def _nocs_version() -> str | None:
 
 async def _run(*argv: str, check: bool = True) -> str:
     try:
-        result = await anyio.run_process(list(argv), check=False)
+        # apt translates "[upgradable from: …]": its output is parsed, so no locale.
+        result = await anyio.run_process(list(argv), check=False, env={**os.environ, "LC_ALL": "C"})
     except FileNotFoundError as e:
         if check:
             raise HelperError("failed", f"{argv[0]} is not installed") from e

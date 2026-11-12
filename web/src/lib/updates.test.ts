@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { UpgradablePackage } from "./types.ts";
-import { isToday, shortVersion, summarize, versions } from "./updates.ts";
+import { installedCount, isToday, shortVersion, summarize, versions } from "./updates.ts";
 
 function pkg(name: string, kind: UpgradablePackage["kind"], from: string, to: string, extra: Partial<UpgradablePackage> = {}): UpgradablePackage {
   return { name, kind, from, to, security: false, reboot: false, ...extra };
@@ -66,4 +66,11 @@ test("a check today shows its time only", () => {
   const now = new Date(2026, 10, 12, 22, 0);
   assert.equal(isToday(new Date(2026, 10, 12, 10, 48).toISOString(), now), true);
   assert.equal(isToday(new Date(2026, 10, 11, 23, 59).toISOString(), now), false);
+});
+
+test("what apt still lists at the same version was not installed", () => {
+  const kept = pkg("apt", "system", "3.2.0", "3.2.1ubuntu0.1");
+  assert.equal(installedCount(listed, [kept]), listed.length - 1);
+  assert.equal(installedCount(listed, [{ ...kept, to: "3.2.2" }]), listed.length); // a newer one since
+  assert.equal(installedCount(listed, []), listed.length);
 });

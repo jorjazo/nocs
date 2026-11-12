@@ -57,6 +57,13 @@ export function summarize(packages: UpgradablePackage[]): UpdateSummary {
   };
 }
 
+// What an install upgraded: what it was to upgrade, less what apt still lists at
+// the same version (phased or kept back).
+export function installedCount(upgraded: UpgradablePackage[], left: UpgradablePackage[]): number {
+  const still = new Set(left.map((p) => `${p.name} ${p.to}`));
+  return upgraded.filter((p) => !still.has(`${p.name} ${p.to}`)).length;
+}
+
 // A Debian version as people know it: no epoch ("1:"), no packaging suffix
 // ("+202610040455~ubuntu26.04.1") or revision ("-0ppa1~ubuntu26.04").
 export function shortVersion(version: string): string {
