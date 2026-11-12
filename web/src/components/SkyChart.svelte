@@ -141,7 +141,7 @@
 
   // CDS hips2fits (colour) or NASA SkyView (DSS2 red), the one that worked last in
   // this browser first (lib/sky/survey.ts). Both give a gnomonic image, north up, east left.
-  type SurveyImage = { image: HTMLImageElement; ra: number; dec: number; fov: number; source: Source };
+  type SurveyImage = { image: HTMLImageElement; ra: number; dec: number; fov: number; width: number; source: Source };
   let surveyImage: SurveyImage | null = $state(null);
   let surveyStatus:
     | { kind: "off" }
@@ -165,7 +165,7 @@
       return;
     }
     const wanted = surveyRequest(view, window.devicePixelRatio || 1);
-    const near = (image: { ra: number; dec: number; fov: number }) =>
+    const near = (image: { ra: number; dec: number; fov: number; width: number }) =>
       serves(image, wanted, separation(wanted, image));
     const shown = untrack(() => surveyImage);
     if (shown && near(shown)) {
@@ -207,7 +207,7 @@
     surveyAsked = null;
     surveyMissed = "image" in result ? null : request;
     if ("image" in result) {
-      surveyImage = { image: result.image, ra: request.ra, dec: request.dec, fov: request.fov, source: result.source };
+      surveyImage = { image: result.image, ...request, source: result.source };
       surveyStatus = { kind: "ready" };
     } else {
       surveyStatus = { kind: "failed", ...result };

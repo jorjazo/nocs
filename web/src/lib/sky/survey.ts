@@ -40,7 +40,8 @@ export function classify(outcome: "error" | "timeout", probe: Probe): Miss {
 // -- Which service first ----------------------------------------------------------
 
 const KEY = "nocs.surveySource";
-// A preference for the fallback lasts this long: the next night tries CDS (colour) first again.
+// A preference for the fallback lasts this long from its first success: the next
+// night tries CDS (colour) first again.
 export const FALLBACK_KEPT_MS = 20 * 3600 * 1000;
 
 export type KeyValueStore = { getItem(key: string): string | null; setItem(key: string, value: string): void };
@@ -78,7 +79,10 @@ export class SourceMemory {
     return [first, ...SOURCES.filter((source) => source !== first)];
   }
 
+  // The time is that of the first success in a row, so a preference for the
+  // fallback runs out the next day even when it kept working all night.
   worked(source: Source): void {
+    if (this.#last?.source === source) return;
     this.#last = { source, at: this.#now() };
     try {
       this.#store?.setItem(KEY, JSON.stringify(this.#last));
@@ -129,9 +133,16 @@ export function surveyRequest(v: View, pixelRatio: number): SurveyRequest {
   };
 }
 
-// An image (shown or on its way) still serves a request: about the same place and size.
-export function serves(image: { ra: number; dec: number; fov: number }, wanted: SurveyRequest, separation: number): boolean {
-  return separation < wanted.fov * 0.25 && Math.abs(image.fov / wanted.fov - 1) < 0.3;
+// An image (shown or on its way) still serves a request: about the same place and
+// size, and sharp enough. Past MAX_FIELD every view asks for the same field, with
+// the pixels it covers on screen: zooming in from a wide view needs more of them.
+export function serves(
+  image: { fov: number; width: number },
+  wanted: SurveyRequest,
+  separation: number,
+): boolean {
+  const sharp = image.width / image.fov >= 0.7 * (wanted.width / wanted.fov);
+  return separation < wanted.fov * 0.25 && Math.abs(image.fov / wanted.fov - 1) < 0.3 && sharp;
 }
 
 export function surveyUrl(source: Source, r: SurveyRequest): string {

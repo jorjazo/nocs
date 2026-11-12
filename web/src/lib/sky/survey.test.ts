@@ -88,6 +88,18 @@ test("the fallback is preferred for a night, then CDS is tried first again", () 
   assert.deepEqual(new SourceMemory(saved, () => now).order(), ["cds", "skyview"]);
 });
 
+test("a fallback that keeps working still gives way to CDS the next night", () => {
+  let now = 1_000_000;
+  const saved = store();
+  const memory = new SourceMemory(saved, () => now);
+  memory.worked("skyview");
+  // Every chart of the night got its image from SkyView, the last one 18 h before the next night.
+  now += 2 * 3600 * 1000;
+  memory.worked("skyview");
+  now += 18 * 3600 * 1000;
+  assert.deepEqual(new SourceMemory(saved, () => now).order(), ["cds", "skyview"]);
+});
+
 test("unreadable or blocked storage falls back to the default order", () => {
   assert.deepEqual(new SourceMemory(store({ "nocs.surveySource": "{bad" })).order(), ["cds", "skyview"]);
   assert.deepEqual(new SourceMemory(store({ "nocs.surveySource": '{"source":"x","at":1}' })).order(), ["cds", "skyview"]);
@@ -205,4 +217,16 @@ test("an image serves views about its own place and size", () => {
   assert.ok(!serves({ ...wanted }, wanted, 0.6));
   // Zooming out past the cap asks for nothing new.
   assert.ok(serves(surveyRequest(view(8), 1), surveyRequest(view(12), 1), 0));
+});
+
+test("zooming in from a wide view asks again for a sharper image", () => {
+  // Past the cap every view asks for the same field, with fewer pixels the wider it is.
+  const wide = surveyRequest(view(20), 1);
+  assert.deepEqual([wide.fov, wide.width], [MAX_FIELD, 200]);
+  for (const degrees of [8, 6, 5, 4]) {
+    const wanted = surveyRequest(view(degrees), 1);
+    assert.ok(!serves(wide, wanted, 0), `${degrees}°`);
+  }
+  // A little closer is still sharp enough.
+  assert.ok(serves(surveyRequest(view(12), 1), surveyRequest(view(10), 1), 0));
 });

@@ -119,8 +119,10 @@ position angle of its top east of north as a plate solution gives it (ADR 0018).
   view's longer side (its middle, where the frame is: about 12 s, under half of
   SkyView's 30 s), at the view's own pixels up to 800. The service that gave the last
   image is tried first, by every chart and after a reload (kept in the browser);
-  a preference for SkyView lasts 20 h, so the next night asks CDS (colour) first
-  again. A request on its way is not started over by a small pan or zoom, and a
+  a preference for SkyView lasts 20 h from its first success in a row, so the next
+  night asks CDS (colour) first again. An image is asked again when the view moves
+  or zooms past it, or needs 1.4× its pixels per degree (zooming in from a view wider
+  than 5°). A request on its way is not started over by a small pan or zoom, and a
   failed one is not asked again until the view moves on or the device comes back
   online. When no service gives an image, the chart says why per service, told
   apart in the browser: an `<img>` does not give the HTTP status (SkyView allows no
