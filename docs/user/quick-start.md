@@ -63,11 +63,15 @@ If you gave Imager your home Wi-Fi, join that network instead and open
    3. **Name**: the box's name, `nocs` until you change it. Phones and computers
       reach it as `http://<name>.local`; give each box a name of its own if you
       have more than one.
-   4. **Check and apply**: what the box will do. When you apply, it restarts its
-      Wi-Fi with the new password (or leaves it for your home network), and the
-      phone drops off it: follow it as the screen says, and open
-      `http://<name>.local` again. After a new name the box asks for your
-      passphrase once more.
+   4. **Site** (optional): where the rig stands, by name, latitude, longitude and
+      elevation. A rough position is enough: a few kilometres off changes nothing,
+      so the nearest town's coordinates from a map will do. Tonight's sky, go to
+      and polar alignment need it; you may also leave it for later, in Rig.
+   5. **Check and apply**: what the box will do. When you apply, it saves the site
+      and makes it the active one, restarts its Wi-Fi with the new password (or
+      leaves it for your home network), and the phone drops off it: follow it as
+      the screen says, and open `http://<name>.local` again. After a new name the
+      box asks for your passphrase once more.
 3. Now plug the USB devices in.
 
 ## 4. Your equipment
@@ -77,10 +81,14 @@ On **Rig**:
 1. **New profile**: pick the driver of each device (main camera, guide camera,
    mount, focuser, filter wheel, power box), the serial ports of the mount and the
    power box, and the optics (focal length, aperture, reducer).
-2. **Site**: add the place where the rig stands (latitude, longitude, elevation)
-   and make it the active one. It belongs to the box, not to the profile, and the
-   mount gets it when it connects. Tonight's sky and polar alignment need it, but
-   only roughly: a few kilometres off changes nothing. A USB GPS can fill it in.
+2. **Site**, unless you set it up in the first run: add the place where the rig
+   stands (latitude, longitude, elevation) and make it the active one. It belongs
+   to the box, not to the profile, and the mount gets it when it connects.
+   Tonight's sky and polar alignment need it, but only roughly: a few kilometres
+   off changes nothing. **From the mount** fills it in from the site the connected
+   mount already has (one set with its hand controller or its own app, say), and
+   **From the GPS** from a USB GPS's fix; you can still edit the values before
+   saving.
 3. **Connect**. Every device should end up ready; a device that fails says why, and
    the others carry on.
 

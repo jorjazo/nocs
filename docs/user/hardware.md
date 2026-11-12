@@ -49,7 +49,9 @@ not, are welcome: send the diagnostics bundle (see [troubleshooting](troubleshoo
   devices that do not need the speed (focuser, filter wheel, mount, power box, GPS),
   and use a cable or the home Wi-Fi where you can.
 - **USB GPS receivers** that gpsd reads (most NMEA ones, e.g. u-blox) give the box
-  its time and offer their position as the site.
+  its time and offer their position as the site (Rig → Site, or *From the GPS* in a
+  new site). A mount's own site (set with its hand controller or app) fills a new
+  site with *From the mount*.
 - **A PC** with Ubuntu 26.04 works too: see [installing on a PC](pc-install.md).
 
 ## Plate solving

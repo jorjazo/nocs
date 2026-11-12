@@ -212,8 +212,10 @@ Focuser, filter wheel and profile editor (stage 2.8):
 - The site belongs to the box, not to a profile (ADR 0038). Rig lists the saved
   sites under the trains, each with its position, the active one marked and the
   others with "Use"; the owner opens one to edit it (`#/rig/site/<id>`: name,
-  latitude, longitude and elevation, filled from a USB GPS's fix with one button;
-  delete) or adds one (`#/rig/site/new`), made active as it is saved unless the
+  latitude, longitude and elevation, filled with "From the mount" from the
+  connected mount's own site or "From the GPS" from a USB GPS's fix, each disabled
+  with its reason when it has nothing to give and naming the saved site within
+  500 m when there is one (ADR 0042); delete) or adds one (`#/rig/site/new`), made active as it is saved unless the
   owner turns that off. A GPS with a 3D fix offers, under the list, the saved site
   within 500 m when it is not the active one, or else to save its position as a
   new site. The server refuses another active site while a job holds the mount.
@@ -517,12 +519,14 @@ Appliance (phase 6):
   (full screen, before anything else, until nocs-system records it), in steps with
   a step indicator and Back/Next: the access point (country, its own password, and
   a warning to leave USB devices unplugged: USB 3 drowns out its 2.4 GHz Wi-Fi), a
-  home network (optional), the box's name (where nocs-system may rename it), and a
-  last step that shows what will happen. Nothing is sent before that last step, so
-  the phone loses the access point only once the instructions for following the box
-  (join the access point again, or switch to the home network, and open
-  `http://<name>.local`, pairing again after a new name) are on screen; they stay
-  there after applying. A later step (the site, say) is one more entry in
+  home network (optional), the box's name (where nocs-system may rename it), the
+  site (optional, ADR 0042: a saved one, or a new one typed in or filled from a
+  mount or GPS that happens to be connected; "a rough position is enough"), and a
+  last step that shows what will happen. Nothing is sent before that last step,
+  which saves the site first, so the phone loses the access point only once the
+  instructions for following the box (join the access point again, or switch to the
+  home network, and open `http://<name>.local`, pairing again after a new name) are
+  on screen; they stay there after applying. A later step is one more entry in
   `lib/boxsetup.ts` and its own section of the screen.
 - Rig gains "This computer" (health, name, restart, shut down, INDI and PHD2
   restarts, diagnostics) and "Network" (where the box is, known networks, joining
