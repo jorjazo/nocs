@@ -266,13 +266,17 @@ async def test_no_check_while_installing(tools: Tools, paths: UpdatePaths) -> No
     await drive(updates)
     tools.answer("systemctl", "show", "active\n")
     tools.answer("apt", "list", "Listing...\n")
-    await updates.check({})
+    with pytest.raises(HelperError, match="an update is being installed"):
+        await updates.check({})
     await drive(updates)
     status = await updates.status({})
-    assert (status["state"], status["task"]) == ("installing", "install")
-    assert status["error"] == "an update is being installed"
+    assert (status["state"], status["task"], status["error"]) == ("installing", "install", None)
     assert len(cast(list[object], status["upgraded"])) == 3
     assert sum(call == "apt-get update" for call in tools.calls()) == 1
+    # The install ends well: nothing of the refused check is left in its result.
+    tools.answer("systemctl", "show", "inactive\n")
+    status = await updates.status({})
+    assert (status["state"], status["error"], status["upgradable"]) == ("succeeded", None, [])
 
 
 async def test_an_install_that_never_started_is_no_success(

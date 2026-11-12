@@ -87,6 +87,11 @@ class Updates:
         }
 
     async def check(self, args: Message) -> Message:
+        # apt-get update beside the upgrade would fail on apt's lock, or replace the list
+        # and lose what the install upgraded. Refused to the caller only: the install's
+        # own result must not read as this refusal.
+        if await self._installing():
+            raise HelperError("invalid", "an update is being installed")
         return self._ask("check", args)
 
     async def install(self, args: Message) -> Message:
@@ -130,10 +135,9 @@ class Updates:
                 self._pending = None
 
     async def _check(self) -> None:
-        # apt-get update beside the upgrade would fail on apt's lock, or replace the list
-        # and lose what the install upgraded.
-        if await self._unit() in ("active", "activating"):
-            raise HelperError("invalid", "an update is being installed")
+        if await self._installing():  # started since the check was accepted
+            log.info("update check skipped: an update is being installed")
+            return
         self._checking, self._pending = True, None
         self._saved["task"] = None  # what was installed last is old news after a new look
         try:
@@ -163,7 +167,7 @@ class Updates:
         self._save()
 
     async def _install(self) -> None:
-        if await self._unit() in ("active", "activating"):
+        if await self._installing():
             raise HelperError("invalid", "an update is already being installed")
         previous = await _nocs_version()
         await self._start(
@@ -201,6 +205,9 @@ class Updates:
             *argv,
         )
         log.info("update started: %s", " ".join(argv))
+
+    async def _installing(self) -> bool:
+        return await self._unit() in ("active", "activating")
 
     async def _unit(self) -> str:
         state = await _run(
