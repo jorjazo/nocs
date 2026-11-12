@@ -6206,7 +6206,7 @@
           "type": "integer"
         },
         "ap_default_password": {
-          "description": "The access point still has the default password: the first run changes it.",
+          "description": "The access point still has the default password (allowed, but anyone who read the quick start can join it).",
           "type": "boolean"
         },
         "ap_ssid": {
@@ -6266,6 +6266,10 @@
           ],
           "type": "string"
         },
+        "set_up": {
+          "description": "The owner has set the access point's country and password (the first run, which comes before anything else until then); the default password may stay.",
+          "type": "boolean"
+        },
         "ssid": {
           "anyOf": [
             {
@@ -6290,6 +6294,7 @@
         "pin",
         "country",
         "ap_ssid",
+        "set_up",
         "ap_default_password",
         "ap_clients",
         "known",

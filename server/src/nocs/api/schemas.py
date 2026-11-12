@@ -823,8 +823,13 @@ class NetworkState(StateModel):
     )
     country: str = Field(description='Regulatory country for the radio; "00" until set.')
     ap_ssid: str = Field(description="The access point's name, NOCS-xxxx by default.")
+    set_up: bool = Field(
+        description="The owner has set the access point's country and password (the first "
+        "run, which comes before anything else until then); the default password may stay."
+    )
     ap_default_password: bool = Field(
-        description="The access point still has the default password: the first run changes it."
+        description="The access point still has the default password (allowed, but anyone "
+        "who read the quick start can join it)."
     )
     ap_clients: int = Field(description="Devices on the access point now.")
     known: list[str] = Field(description="Networks the box joins by itself.")

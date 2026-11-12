@@ -318,6 +318,7 @@ def _network_state(status: Message) -> Json:
     state: dict[str, Json] = {key: cast(Json, status.get(key)) for key in keys}
     known = status.get("known")
     state |= {
+        "set_up": bool(status.get("set_up")),
         "ap_default_password": bool(status.get("ap_default_password")),
         "ap_clients": int(cast(int, status.get("ap_clients") or 0)),
         "known": [k for k in cast(list[object], known) if isinstance(k, str)]

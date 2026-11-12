@@ -40,7 +40,7 @@ Facts that shape the decision:
 - **Access point:** SSID `NOCS-xxxx` (the last four hex digits of the Pi's serial
   number), WPA2, address `10.42.0.1/24`, 2.4 GHz on a channel valid for the
   country. Its password starts as a **fixed default (`nocsnocs`, easy to type on a
-  phone), printed in the quick start**; the first run makes the owner change it (and the country) before anything else.
+  phone), printed in the quick start**; the first run asks for the password (keeping the default is allowed) and the country before anything else, and nocs-system remembers that it was done.
   The access point's DNS answers `<hostname>.local` and `<hostname>` with
   `10.42.0.1`, so phones that do not speak mDNS still find the box by the same name
   they use at home. There is no captive portal and no fake internet: the quick

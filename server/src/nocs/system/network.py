@@ -49,7 +49,8 @@ JOIN_DELAY = 2.0
 AP_ID = "nocs-ap"
 AP_ADDRESS = "10.42.0.1"
 DEFAULT_PASSWORD = "nocsnocs"
-"""The access point's password until the first run changes it (printed in the quick start)."""
+"""The access point's password until the owner sets one (printed in the quick start); the
+owner may keep it."""
 COUNTRY_ANYWHERE = "00"
 _REGDB = (
     "AD AE AF AI AL AM AN AR AS AT AU AW AZ BA BB BD BE BF BG BH BL BM BN BO BR BS BT BW "
@@ -76,6 +77,8 @@ class Settings:
     ap_ssid: str | None = None
     """``None``: ``NOCS-xxxx`` from the Pi's serial number."""
     ap_password: str = DEFAULT_PASSWORD
+    set_up: bool = False
+    """The owner has set the access point (the first run), whatever its password."""
     last_join: dict[str, object] | None = None
 
 
@@ -235,6 +238,7 @@ class Network:
             "pin": self._settings.pin,
             "country": self._settings.country,
             "ap_ssid": self._ap_ssid(),
+            "set_up": self._settings.set_up,
             "ap_default_password": self._settings.ap_password == DEFAULT_PASSWORD,
             "ap_clients": await self._clients() if device.mode == "ap" else 0,
             "known": sorted(set(known.values())),
@@ -297,6 +301,7 @@ class Network:
             self._settings.ap_password = check_password(args["password"])
         if "country" in args:
             self._settings.country = check_country(args["country"])
+        self._settings.set_up = True
         self._save()
         self._timers.pending_ap = True
         self._timers.wake.set()

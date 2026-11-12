@@ -75,10 +75,10 @@
   });
 
   const offline = $derived(live.synced && live.status !== "open");
-  // On the appliance, the access point's default password goes before anything else
-  // (ADR 0028); the flow stays up after saving until its instructions are read.
+  // On the appliance, setting the access point goes before anything else (ADR 0028);
+  // the flow stays up after saving until its instructions are read.
   const setupBox = $derived(
-    auth.owner && (live.app.network?.ap_default_password === true || boxSetup.done !== null),
+    auth.owner && (live.app.network?.set_up === false || boxSetup.done !== null),
   );
   // Live view uses the whole width: the preview is edge to edge.
   const full = $derived(router.route.screen === "live");

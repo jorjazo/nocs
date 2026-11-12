@@ -299,6 +299,18 @@ async def test_the_access_point_changes_at_once(
         await network.access_point({"password": "short"})
 
 
+async def test_the_first_run_may_keep_the_default_password(
+    nm: FakeNetworkManager, paths: Paths, clock: Clock
+) -> None:
+    network = make(paths, clock)
+    status = await network.status({})
+    assert (status["set_up"], status["ap_default_password"]) == (False, True)
+    await network.access_point({"password": DEFAULT_PASSWORD, "country": "CL"})
+    status = await network.status({})
+    assert (status["set_up"], status["ap_default_password"]) == (True, True)
+    assert (await make(paths, clock).status({}))["set_up"]  # kept for the next start
+
+
 async def test_forget(nm: FakeNetworkManager, paths: Paths, clock: Clock) -> None:
     nm.known("Home", "home-secret")
     nm.known("Office", "office-secret")
@@ -397,7 +409,7 @@ def test_the_api_publishes_and_joins(nm: FakeNetworkManager, paths: Paths, tmp_p
             assert response.status_code == 202, response.text
             network = client.get("/api/state").json()["state"]["network"]
             assert network["ap_ssid"] == "NOCS-C3D4"
-            assert network["ap_default_password"] is True
+            assert (network["set_up"], network["ap_default_password"]) == (False, True)
             response = client.put("/api/system/network/access-point", json={"password": "short"})
             assert response.status_code == 422
             assert "8 to 63" in response.json()["detail"]
@@ -411,7 +423,8 @@ def test_the_api_publishes_and_joins(nm: FakeNetworkManager, paths: Paths, tmp_p
             )
             assert response.status_code == 202, response.text
             network = client.get("/api/state").json()["state"]["network"]
-            assert (network["ap_default_password"], network["country"]) == (False, "CL")
+            assert (network["set_up"], network["ap_default_password"]) == (True, False)
+            assert network["country"] == "CL"
             nm.scan = "Home:64:WPA2\nPlaza:20:\n"
             response = client.post("/api/system/network/scan")
             assert response.status_code == 200, response.text

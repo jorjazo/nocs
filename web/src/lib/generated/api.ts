@@ -1760,7 +1760,7 @@ export interface NetworkState {
    */
   ap_clients: number;
   /**
-   * The access point still has the default password: the first run changes it.
+   * The access point still has the default password (allowed, but anyone who read the quick start can join it).
    */
   ap_default_password: boolean;
   /**
@@ -1789,6 +1789,10 @@ export interface NetworkState {
    * auto: station when a known network is in range, else access point.
    */
   pin: "auto" | "ap" | "station";
+  /**
+   * The owner has set the access point's country and password (the first run, which comes before anything else until then); the default password may stay.
+   */
+  set_up: boolean;
   /**
    * The network joined, as a station.
    */
