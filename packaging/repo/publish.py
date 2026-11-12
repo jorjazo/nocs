@@ -2,7 +2,7 @@
 """Publish packages and images to the NOCS apt repository (ADR 0035).
 
     publish.py debs --suite testing:5 [--suite stable:3] <.deb>...
-    publish.py image --keep 2 <image.img.xz> [its .sha256 and .manifest.txt]
+    publish.py image --keep 2 [--dir images/test] <image.img.xz> [its .sha256 and .manifest.txt]
 
 The repository is a bucket (Cloudflare R2, through the S3 API) or, for tests, a
 local directory (``--local <dir>``). Each suite's ``Packages`` files are its state:
@@ -267,25 +267,30 @@ class Signer:
 
 # -- images --------------------------------------------------------------------------
 
-_IMAGE = re.compile(r"^images/nocs-(.+)-pi5-arm64\.img\.xz$")
+_IMAGE = re.compile(r"^nocs-(.+)-pi5-arm64\.img\.xz$")
 
 
-def publish_image(bucket: Bucket, keep: int, files: list[Path]) -> None:
-    print("Uploading the image")
+def publish_image(bucket: Bucket, keep: int, files: list[Path], folder: str = "images") -> None:
+    """Upload an image to ``folder`` and keep its newest ``keep`` versions there.
+    Releases go to ``images``; test images to a folder of their own, so that they
+    never count among, nor overwrite, a release's (they share its version)."""
+    folder = folder.strip("/")
+    print(f"Uploading the image to {folder}/")
     images = [f for f in files if f.name.endswith(".img.xz")]
     if len(images) != 1:
         sys.exit("give exactly one .img.xz")
     # The image last, so that a listing never shows it without its checksum.
     for path in sorted(files, key=lambda f: f.name.endswith(".img.xz")):
-        bucket.put(path, f"images/{path.name}")
+        bucket.put(path, f"{folder}/{path.name}")
     # Image names spell the version's "~" as "-" (packaging/image/build.sh); NOCS
     # versions have no Debian revision, so every "-" was a "~".
-    versions = [m[1] for key in bucket.list("images/") if (m := _IMAGE.match(key))]
+    names = [key.removeprefix(f"{folder}/") for key in bucket.list(f"{folder}/")]
+    versions = [m[1] for name in names if (m := _IMAGE.match(name))]
     versions.sort(
         key=functools.cmp_to_key(lambda a, b: compare(a.replace("-", "~"), b.replace("-", "~")))
     )
     for version in versions[:-keep]:
-        for key in bucket.list(f"images/nocs-{version}-pi5-arm64."):
+        for key in bucket.list(f"{folder}/nocs-{version}-pi5-arm64."):
             bucket.delete(key)
 
 
@@ -298,6 +303,7 @@ def main() -> None:
     debs.add_argument("files", nargs="+", type=Path)
     image = commands.add_parser("image", help="upload an image with its checksum and manifest")
     image.add_argument("--keep", type=int, default=2)
+    image.add_argument("--dir", default="images", help="the folder in the bucket")
     image.add_argument("files", nargs="+", type=Path)
     args = parser.parse_args()
 
@@ -309,7 +315,7 @@ def main() -> None:
             suites[name] = int(keep or 5)
         publish_debs(bucket, suites, args.files)
     else:
-        publish_image(bucket, args.keep, args.files)
+        publish_image(bucket, args.keep, args.files, args.dir)
 
 
 if __name__ == "__main__":

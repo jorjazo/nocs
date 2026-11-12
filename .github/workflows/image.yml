@@ -68,6 +68,24 @@ jobs:
             packaging/out/*.manifest.txt
           compression-level: 0
           retention-days: 7
+      - name: Publish a test image
+        # Faster to download than the artifact. Its own folder, where only the last stays:
+        # it shares a release's version, and must neither replace nor prune one.
+        if: startsWith(github.ref, 'refs/heads/image-test/') && vars.NOCS_APT_URL != ''
+        env:
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          NOCS_APT_URL: ${{ vars.NOCS_APT_URL }}
+        run: |
+          image=$(ls packaging/out/*.img.xz)
+          python3 packaging/repo/publish.py image --keep 1 --dir images/test \
+            "$image" "$image.sha256" packaging/out/*.manifest.txt
+          link="$NOCS_APT_URL/images/test/$(basename "$image")"
+          echo "Test image: $link"
+          printf '**Raspberry Pi 5 test image** (%s, %s): %s\n' \
+            "$GITHUB_REF_NAME" "${GITHUB_SHA::7}" "$link" >> "$GITHUB_STEP_SUMMARY"
       - name: Publish a release's image
         if: startsWith(github.ref, 'refs/tags/v') && vars.NOCS_APT_URL != ''
         env:

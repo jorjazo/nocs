@@ -54,6 +54,20 @@ done
 images=$(ls "$repo/images")
 [[ $images == $'nocs-0.1.0-pi5-arm64.img.xz\nnocs-0.1.0-pi5-arm64.img.xz.sha256\nnocs-0.1.0-rc1-pi5-arm64.img.xz\nnocs-0.1.0-rc1-pi5-arm64.img.xz.sha256' ]] \
     || fail "images kept: $images"
+# Test images (image-test/* branches) have a folder of their own, where only the last
+# stays; they share a release's version without touching it.
+for build in first second; do
+    image=$work/test/nocs-0.1.0-pi5-arm64.img.xz
+    mkdir -p "$work/test"
+    echo "$build" > "$image"
+    sha256sum "$image" > "$image.sha256"
+    publish image --keep 1 --dir images/test "$image" "$image.sha256"
+done
+[[ $(ls "$repo/images/test") == $'nocs-0.1.0-pi5-arm64.img.xz\nnocs-0.1.0-pi5-arm64.img.xz.sha256' ]] \
+    || fail "test images kept: $(ls "$repo/images/test")"
+[[ $(cat "$repo/images/test/nocs-0.1.0-pi5-arm64.img.xz") == second ]] || fail "the test image was not replaced"
+[[ $(cat "$repo/images/nocs-0.1.0-pi5-arm64.img.xz") == 0.1.0 ]] || fail "a test image overwrote a release's"
+[[ $(ls "$repo/images" | grep -c 'img.xz$') == 2 ]] || fail "a test image changed the releases kept"
 
 docker run --rm -i -v "$repo:/repo:ro" -v "$work/keyring.asc:/usr/share/keyrings/nocs-test.asc:ro" \
     ubuntu:26.04 bash -s <<'CHECK' || fail "apt does not accept the repository"
