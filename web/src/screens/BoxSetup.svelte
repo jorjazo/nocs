@@ -42,6 +42,9 @@
   const nameShown = $derived(name ?? current);
   const host = $derived((rename ? hostName(nameShown) : null) ?? current);
   const join = $derived(joining && ssid.trim() ? ssid.trim() : null);
+  // The box on its access point (this phone, most likely, on it too); otherwise on a
+  // network or a cable, where the access point takes the new password next time.
+  const onAp = $derived(network?.mode === "ap");
 
   let busy = $state(false);
   let error = $state("");
@@ -100,7 +103,7 @@
         join: join ? { ssid: join, password: openNetwork ? null : wifiPassword || null } : null,
         hostname: renamed ? wanted : null,
       });
-      boxSetup.done = { ssid: join, accessPoint: ap, host, renamed };
+      boxSetup.done = { ssid: join, accessPoint: ap, host, renamed, onAp };
       password = wifiPassword = "";
     } catch (e) {
       error = errorText(e, t);
@@ -123,7 +126,9 @@
       <p class="body">
         {done.ssid
           ? t.boxSetup.doneJoin(done.ssid, done.accessPoint, done.host)
-          : t.boxSetup.doneAp(done.accessPoint, done.host)}
+          : done.onAp
+            ? t.boxSetup.doneAp(done.accessPoint, done.host)
+            : t.boxSetup.doneKeep(done.accessPoint, done.host)}
       </p>
       {#if done.renamed}<p class="body">{t.boxSetup.pairAgain}</p>{/if}
     </div>
@@ -134,7 +139,7 @@
     <form class="form" onsubmit={next} novalidate>
       <div class="progress">
         <p class="caption muted">
-          {t.autofocus.stepOf(index + 1, steps.length)} · {t.boxSetup.title}
+          {t.boxSetup.stepOf(index + 1, steps.length)} · {t.boxSetup.title}
         </p>
         <ol class="steps" style:grid-template-columns="repeat({steps.length}, 1fr)">
           {#each steps as s, i (s)}
@@ -217,7 +222,11 @@
           </div>
         </dl>
         <p class="body note">
-          {join ? t.boxSetup.afterJoin(join, ap, host) : t.boxSetup.afterAp(ap, host)}
+          {join
+            ? t.boxSetup.afterJoin(join, ap, host)
+            : onAp
+              ? t.boxSetup.afterAp(ap, host)
+              : t.boxSetup.afterKeep(ap, host)}
           {#if host !== current}{t.boxSetup.pairAgain}{/if}
         </p>
       {/if}

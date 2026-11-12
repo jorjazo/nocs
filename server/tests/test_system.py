@@ -118,7 +118,10 @@ async def test_set_hostname(helper: Config, tools: Path) -> None:
     assert await call("hostname.set", {"name": " Nocs-West "}, socket=helper.socket) == {
         "name": "nocs-west"
     }
-    assert calls(tools) == ["hostnamectl set-hostname nocs-west"]
+    assert calls(tools) == [
+        "hostnamectl set-hostname nocs-west",
+        "systemctl try-restart avahi-daemon.service",
+    ]
     assert helper.context.hosts.read_text() == "127.0.0.1\tlocalhost\n127.0.1.1\tnocs-west\n"
 
 
@@ -289,6 +292,7 @@ def test_api_reboot_and_rename(api: TestClient, tools: Path) -> None:
         "systemctl reboot",
         "systemctl poweroff",
         "hostnamectl set-hostname rig-2",
+        "systemctl try-restart avahi-daemon.service",
     ]
     response = client.put("/api/system/hostname", json={"name": "rig 2"})
     assert response.status_code == 422

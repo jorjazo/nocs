@@ -6,6 +6,7 @@
 import os
 import re
 import stat
+import time
 from pathlib import Path
 
 import pytest
@@ -439,12 +440,18 @@ def test_the_first_run_names_the_box_and_checks_everything_first(
     nm: FakeNetworkManager, paths: Paths, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     renamed: list[tuple[str, ...]] = []
+    host = ["nocs"]
 
     async def run(*argv: str) -> str:
-        renamed.append(argv)
+        if argv[0] == "hostnamectl":
+            renamed.append(argv)
+            host[0] = argv[-1]
         return ""
 
     monkeypatch.setattr(operations_module, "run", run)
+    monkeypatch.setattr(network_module.socket, "gethostname", lambda: host[0])
+    nm.connections[AP_ID] = {"ssid": "NOCS-C3D4", "mode": "ap", "psk": DEFAULT_PASSWORD}
+    nm.active, nm.state, nm.clients = AP_ID, "connected", 1  # this phone, on the access point
     cfg = config(tmp_path, enabled=frozenset({"network", "hostname"}))
     cfg = Config(
         uid=cfg.uid,
@@ -482,10 +489,19 @@ def test_the_first_run_names_the_box_and_checks_everything_first(
             assert response.status_code == 202, response.text
             assert renamed == []
             response = client.post(
-                "/api/system/network/setup",
-                json=setup | {"hostname": " Rig-West ", "join": {"ssid": "Home", "password": None}},
+                "/api/system/network/setup", json=setup | {"hostname": " Rig-West "}
             )
             assert response.status_code == 202, response.text
             assert renamed == [("hostnamectl", "set-hostname", "rig-west")]
             assert "127.0.1.1\trig-west" in cfg.context.hosts.read_text()
-            assert client.get("/api/state").json()["state"]["network"]["set_up"] is True
+            # Renamed first: the access point restarts under the new name, which its
+            # DNS gives phones that do not ask mDNS.
+            for _ in range(100):
+                if paths.dnsmasq.exists() and "rig-west.local" in paths.dnsmasq.read_text():
+                    break
+                time.sleep(0.05)
+            assert paths.dnsmasq.read_text() == (
+                "address=/rig-west.local/10.42.0.1\naddress=/rig-west/10.42.0.1\n"
+            )
+            assert nm.ap_is_up()
+            assert nm.connections[AP_ID]["psk"] == "dark-skies-1"

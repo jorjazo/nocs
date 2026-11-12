@@ -179,6 +179,7 @@ export const es: Messages = {
   },
   boxSetup: {
     title: "Configura este equipo",
+    stepOf: (step: number, total: number) => `Paso ${step} de ${total}`,
     steps: { accessPoint: "Punto de acceso", wifi: "Wi-Fi de casa", name: "Nombre", review: "Revisar y aplicar" },
     body: (ap: string) =>
       `Antes que nada, dale al punto de acceso ${ap} una contraseña propia: mientras no lo hagas, cualquiera cerca puede entrar con la que trae la guía rápida.`,
@@ -208,7 +209,9 @@ export const es: Messages = {
     afterAp: (ap: string, host: string) =>
       `Al aplicar, ${ap} se reinicia con la contraseña nueva y este teléfono se desconecta. Vuelve a conectarte con la contraseña nueva y abre http://${host}.local.`,
     afterJoin: (ssid: string, ap: string, host: string) =>
-      `Al aplicar, el equipo deja ${ap} y se une a ${ssid}: cambia este teléfono a ${ssid} y abre http://${host}.local. Si no puede unirse, ${ap} vuelve en menos de un minuto, con la contraseña nueva.`,
+      `Al aplicar, el equipo se une a ${ssid}: cambia este teléfono a ${ssid} y abre http://${host}.local. Si no puede unirse, ${ap} vuelve en menos de un minuto, con la contraseña nueva.`,
+    afterKeep: (ap: string, host: string) =>
+      `Al aplicar, el equipo sigue en la red en que está, y ${ap} usa la contraseña nueva la próxima vez que se abra. Abre http://${host}.local.`,
     pairAgain: "Con su nombre nuevo, el equipo le pide otra vez tu frase de acceso a este teléfono.",
     back: "Atrás",
     next: "Siguiente",
@@ -218,6 +221,8 @@ export const es: Messages = {
       `${ap} se está reiniciando con la contraseña nueva. Vuelve a conectarte con ella y abre http://${host}.local.`,
     doneJoin: (ssid: string, ap: string, host: string) =>
       `El equipo se está uniendo a ${ssid}. Cambia este teléfono a ${ssid} y abre http://${host}.local. Si no puede unirse, ${ap} vuelve en menos de un minuto, con la contraseña nueva.`,
+    doneKeep: (ap: string, host: string) =>
+      `${ap} usa la contraseña nueva la próxima vez que se abra. Abre http://${host}.local.`,
     continue: "Continuar",
   },
   wifi: {

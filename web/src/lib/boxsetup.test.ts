@@ -16,10 +16,12 @@ test("host names are checked as nocs-system checks them", () => {
   }
 });
 
-test("Wi-Fi passwords are 8 to 63 printable ASCII characters", () => {
+test("Wi-Fi passwords are 8 to 63 ASCII characters, as nocs-system takes them", () => {
   assert.equal(wifiPassword("nocsnocs"), null);
   assert.equal(wifiPassword("dark skies!"), null);
   assert.equal(wifiPassword("1234567"), "short");
   assert.equal(wifiPassword("x".repeat(64)), "long");
   assert.equal(wifiPassword("contraseña"), "ascii");
+  assert.equal(wifiPassword("tab\there!"), "ascii");
+  assert.equal(wifiPassword("del\x7fdel!"), null); // as nocs-system takes it
 });

@@ -301,7 +301,8 @@ async def test_a_new_host_name_restarts_the_share(tmp_path: Path, tools: Path) -
     share = Share(paths(tmp_path), owner=OWNER)
     await set_hostname(Context(hosts=tmp_path / "hosts", share=share), {"name": "rig2"})
     assert calls(tools, "systemctl") == [
-        "systemctl try-restart nocs-share.service nocs-wsdd.service"
+        "systemctl try-restart avahi-daemon.service",
+        "systemctl try-restart nocs-share.service nocs-wsdd.service",
     ]
 
 

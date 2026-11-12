@@ -196,6 +196,7 @@ export const en = {
   },
   boxSetup: {
     title: "Set up this box",
+    stepOf: (step: number, total: number) => `Step ${step} of ${total}`,
     steps: { accessPoint: "Access point", wifi: "Home Wi-Fi", name: "Name", review: "Check and apply" },
     body: (ap: string) =>
       `Before anything else, give the access point ${ap} a password of your own: until you do, anyone nearby can join it with the one printed in the quick start.`,
@@ -225,7 +226,9 @@ export const en = {
     afterAp: (ap: string, host: string) =>
       `When you apply, ${ap} restarts with the new password: this phone drops off it. Join it again with the new password, then open http://${host}.local.`,
     afterJoin: (ssid: string, ap: string, host: string) =>
-      `When you apply, the box leaves ${ap} and joins ${ssid}: switch this phone to ${ssid} and open http://${host}.local. If it cannot join, ${ap} comes back within a minute, with the new password.`,
+      `When you apply, the box joins ${ssid}: switch this phone to ${ssid} and open http://${host}.local. If it cannot join, ${ap} comes back within a minute, with the new password.`,
+    afterKeep: (ap: string, host: string) =>
+      `When you apply, the box stays on the network it is on, and ${ap} takes the new password the next time it opens. Open http://${host}.local.`,
     pairAgain: "Under its new name, the box asks this phone for your passphrase again.",
     back: "Back",
     next: "Next",
@@ -235,6 +238,8 @@ export const en = {
       `${ap} is restarting with the new password. Join it again with it, then open http://${host}.local.`,
     doneJoin: (ssid: string, ap: string, host: string) =>
       `The box is joining ${ssid}. Switch this phone to ${ssid} and open http://${host}.local. If it cannot join, ${ap} comes back within a minute, with the new password.`,
+    doneKeep: (ap: string, host: string) =>
+      `${ap} takes the new password the next time it opens. Open http://${host}.local.`,
     continue: "Continue",
   },
   wifi: {

@@ -4,7 +4,14 @@
 
 import { isCountry } from "./countries";
 
-export type SetupDone = { ssid: string | null; accessPoint: string; host: string; renamed: boolean };
+export type SetupDone = {
+  ssid: string | null;
+  accessPoint: string;
+  host: string;
+  renamed: boolean;
+  // The box was on its access point, which then restarts.
+  onAp: boolean;
+};
 
 class BoxSetup {
   done: SetupDone | null = $state(null);

@@ -22,10 +22,11 @@ export function hostName(name: string): string | null {
   return HOSTNAME.test(wanted) ? wanted : null;
 }
 
-// A Wi-Fi password as nocs-system takes it: 8 to 63 printable ASCII characters.
+// A Wi-Fi password as nocs-system takes it: 8 to 63 ASCII characters, no control
+// characters below the space.
 export function wifiPassword(password: string): "short" | "long" | "ascii" | null {
   if (password.length < 8) return "short";
   if (password.length > 63) return "long";
-  if (!/^[\x20-\x7e]*$/.test(password)) return "ascii";
+  if (!/^[\x20-\x7f]*$/.test(password)) return "ascii";
   return null;
 }
