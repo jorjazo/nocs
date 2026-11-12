@@ -1,6 +1,6 @@
 # Phase 6 plan — Appliance
 
-Status: in progress (6.1–6.8 and 6.11 done; 6.9 done but for a camera unplugged on the rig; 6.10 waits for a test Pi; 6.12 started early with `v0.1.0rc1`, its findings fixed for `rc2`, `rc3` after `rc2`'s first night out, and `rc4` after that night's [field notes](rc2-field-notes.md); ADRs proposed, open points decided) · Last updated: 2026-11-11 · Roadmap: [Phase 6](../v0.1.md#phase-6--appliance)
+Status: in progress (6.1–6.8 and 6.11 done; 6.9 done but for a camera unplugged on the rig; 6.10 waits for a test Pi; 6.12 started early with `v0.1.0rc1`, its findings fixed for `rc2`, `rc3` after `rc2`'s first night out, `rc4` after that night's [field notes](rc2-field-notes.md), and `rc5` after `rc4`'s [field notes](rc4-field-notes.md); ADRs proposed, open points decided) · Last updated: 2026-11-12 · Roadmap: [Phase 6](../v0.1.md#phase-6--appliance)
 
 Goal: anyone flashes an image onto a Raspberry Pi 5 and runs a full night from a
 phone, with no other computer involved. PC users install the same software from
