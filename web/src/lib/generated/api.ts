@@ -2870,19 +2870,45 @@ export interface UpdatesState {
    * The version to go back to, if any.
    */
   previous: string | null;
+  /**
+   * Ubuntu asks for a restart of the box (/run/reboot-required), as after installing a new kernel.
+   */
+  reboot_required: boolean;
   state: "idle" | "checking" | "installing" | "succeeded" | "failed";
   /**
    * What ran last.
    */
   task: ("install" | "rollback") | null;
+  /**
+   * What the last install was to upgrade; empty after a new check.
+   */
+  upgraded: UpgradablePackage[];
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "UpgradablePackage".
  */
 export interface UpgradablePackage {
+  /**
+   * The version installed.
+   */
   from: string;
+  /**
+   * NOCS itself (nocs, nocs-appliance), INDI's packages, PHD2, or the rest of the system (Ubuntu's packages).
+   */
+  kind: "nocs" | "indi" | "phd2" | "system";
   name: string;
+  /**
+   * A new kernel or firmware: the box runs it only after a restart.
+   */
+  reboot: boolean;
+  /**
+   * It comes from a -security suite.
+   */
+  security: boolean;
+  /**
+   * The version an update installs.
+   */
   to: string;
 }
 /**

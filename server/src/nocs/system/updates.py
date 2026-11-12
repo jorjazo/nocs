@@ -8,7 +8,12 @@ unit and its journal, so they survive the restarts they cause.
 
 Before installing, the installed version of ``nocs`` is kept; rolling back installs
 it again from apt's cache with dpkg, with ``nocs-appliance`` of the same version when
-the cache has it.
+the cache has it. What the install was to upgrade is kept too, and once it ends apt is
+asked again what is left (no download: ``apt list`` reads its own lists).
+
+Each package says whether it comes from a ``-security`` suite, and the status whether
+Ubuntu asks for a reboot (``/run/reboot-required``, written when a new kernel is
+installed): the app tells the owner what an install does before it starts.
 """
 
 from __future__ import annotations
@@ -30,7 +35,7 @@ log = logging.getLogger("nocs.system")
 UNIT = "nocs-update"
 CHECK_TIMEOUT = 600.0
 LOG_LINES = 40
-_UPGRADABLE = re.compile(r"^(\S+)/\S+\s+(\S+)\s+\S+\s+\[upgradable from: (\S+)\]")
+_UPGRADABLE = re.compile(r"^(\S+)/(\S+)\s+(\S+)\s+\S+\s+\[upgradable from: (\S+)\]")
 
 type Task = Literal["check", "install", "rollback"]
 
@@ -39,6 +44,7 @@ type Task = Literal["check", "install", "rollback"]
 class UpdatePaths:
     state: Path = Path("/var/lib/nocs-system/updates.json")
     archives: Path = Path("/var/cache/apt/archives")
+    reboot_required: Path = Path("/run/reboot-required")
 
 
 class Updates:
@@ -64,10 +70,14 @@ class Updates:
             state = "succeeded"
         else:
             state = "idle"
+        if state in ("succeeded", "failed") and self._saved.get("relist"):
+            await self._relist()
         return {
             "state": state,
             "task": self._saved.get("task"),
             "upgradable": self._saved.get("upgradable", []),
+            "upgraded": self._saved.get("upgraded", []),
+            "reboot_required": self._paths.reboot_required.exists(),
             "checked": self._saved.get("checked"),
             "installed": await _nocs_version(),
             "previous": self._saved.get("previous"),
@@ -129,18 +139,33 @@ class Updates:
             raise HelperError("failed", "apt did not finish checking within 10 minutes") from e
         finally:
             self._checking = False
-        upgradable = [
-            {"name": m[1], "to": m[2], "from": m[3]}
-            for line in listing.splitlines()
-            if (m := _UPGRADABLE.match(line))
-        ]
-        self._saved |= {"upgradable": upgradable, "checked": time.time()}
+        self._saved |= {
+            "upgradable": upgradable(listing),
+            "checked": time.time(),
+            "upgraded": [],
+            "relist": False,
+        }
+        self._save()
+
+    async def _relist(self) -> None:
+        """What is left to upgrade once an install or a rollback ended."""
+        try:
+            listing = await _run("apt", "list", "--upgradable")
+        except HelperError as e:
+            log.warning("cannot list what is left to upgrade: %s", e)
+            return
+        self._saved |= {"upgradable": upgradable(listing), "relist": False}
         self._save()
 
     async def _install(self) -> None:
         if await self._unit() in ("active", "activating"):
             raise HelperError("invalid", "an update is already being installed")
-        self._saved |= {"task": "install", "previous": await _nocs_version()}
+        self._saved |= {
+            "task": "install",
+            "previous": await _nocs_version(),
+            "upgraded": self._saved.get("upgradable", []),
+            "relist": True,
+        }
         self._save()
         await self._start(
             "apt-get", "-y", "-o", "Dpkg::Options::=--force-confold", "upgrade", "--with-new-pkgs"
@@ -153,7 +178,7 @@ class Updates:
         if not debs:
             raise HelperError("failed", f"NOCS {previous} is no longer in apt's cache")
         appliance = sorted(self._paths.archives.glob(f"nocs-appliance_{version}_all.deb"))
-        self._saved |= {"task": "rollback"}
+        self._saved |= {"task": "rollback", "upgraded": [], "relist": True}
         self._save()
         await self._start("dpkg", "-i", str(debs[0]), *(str(deb) for deb in appliance[:1]))
 
@@ -195,6 +220,21 @@ class Updates:
         new = self._paths.state.with_name(f".{self._paths.state.name}.new")
         new.write_text(json.dumps(self._saved, indent=2) + "\n")
         new.replace(self._paths.state)
+
+
+def upgradable(listing: str) -> list[dict[str, object]]:
+    """The packages ``apt list --upgradable`` lists, each with ``security`` when one of
+    the suites it comes from is a security one (``resolute-updates,resolute-security``)."""
+    return [
+        {
+            "name": m[1],
+            "to": m[3],
+            "from": m[4],
+            "security": any(suite.endswith("-security") for suite in m[2].split(",")),
+        }
+        for line in listing.splitlines()
+        if (m := _UPGRADABLE.match(line))
+    ]
 
 
 async def _nocs_version() -> str | None:

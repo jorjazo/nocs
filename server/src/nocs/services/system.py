@@ -16,6 +16,7 @@ or the sequence.
 from __future__ import annotations
 
 import logging
+import re
 import socket
 from datetime import UTC, datetime
 from pathlib import Path
@@ -355,21 +356,52 @@ def _share_state(status: Message) -> Json:
     }
 
 
-def _updates_state(status: Message) -> Json:
-    """nocs-system's update status as the state shows it."""
-    checked = status.get("checked")
-    upgradable = status.get("upgradable")
-    log_lines = status.get("log")
+_INDI = re.compile(r"^(indi-|libindi-|libindi\d)")
+_REBOOT = re.compile(r"^linux-(image|modules|raspi|firmware)")
+
+
+def package_kind(name: str) -> str:
+    """What a package is to the rig: NOCS itself, INDI (the PPA's ``indi-bin``,
+    ``libindi1``, ``indi-3rdparty-*``…), PHD2, or the rest of the system."""
+    if name in ("nocs", "nocs-appliance"):
+        return "nocs"
+    if _INDI.match(name):
+        return "indi"
+    if name == "phd2":
+        return "phd2"
+    return "system"
+
+
+def _packages(listed: object) -> list[Json]:
     packages: list[Json] = []
-    if isinstance(upgradable, list):
-        for item in cast(list[object], upgradable):
+    if isinstance(listed, list):
+        for item in cast(list[object], listed):
             if isinstance(item, dict):
                 entry = cast(dict[str, object], item)
-                packages.append({k: str(entry.get(k, "")) for k in ("name", "from", "to")})
+                name = str(entry.get("name", ""))
+                packages.append(
+                    {
+                        "name": name,
+                        "from": str(entry.get("from", "")),
+                        "to": str(entry.get("to", "")),
+                        "kind": package_kind(name),
+                        "security": entry.get("security") is True,
+                        "reboot": bool(_REBOOT.match(name)),
+                    }
+                )
+    return packages
+
+
+def _updates_state(status: Message) -> Json:
+    """nocs-system's update status as the state shows it, each package classified."""
+    checked = status.get("checked")
+    log_lines = status.get("log")
     return {
         "state": cast(Json, status.get("state")),
         "task": cast(Json, status.get("task")),
-        "packages": packages,
+        "packages": _packages(status.get("upgradable")),
+        "upgraded": _packages(status.get("upgraded")),
+        "reboot_required": status.get("reboot_required") is True,
         "checked": datetime.fromtimestamp(checked, UTC).isoformat(timespec="seconds")
         if isinstance(checked, int | float)
         else None,

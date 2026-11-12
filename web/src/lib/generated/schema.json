@@ -11532,6 +11532,10 @@
           ],
           "description": "The version to go back to, if any."
         },
+        "reboot_required": {
+          "description": "Ubuntu asks for a restart of the box (/run/reboot-required), as after installing a new kernel.",
+          "type": "boolean"
+        },
         "state": {
           "enum": [
             "idle",
@@ -11556,12 +11560,21 @@
             }
           ],
           "description": "What ran last."
+        },
+        "upgraded": {
+          "description": "What the last install was to upgrade; empty after a new check.",
+          "items": {
+            "$ref": "#/$defs/UpgradablePackage"
+          },
+          "type": "array"
         }
       },
       "required": [
         "state",
         "task",
         "packages",
+        "upgraded",
+        "reboot_required",
         "checked",
         "installed",
         "previous",
@@ -11575,19 +11588,42 @@
       "additionalProperties": false,
       "properties": {
         "from": {
+          "description": "The version installed.",
+          "type": "string"
+        },
+        "kind": {
+          "description": "NOCS itself (nocs, nocs-appliance), INDI's packages, PHD2, or the rest of the system (Ubuntu's packages).",
+          "enum": [
+            "nocs",
+            "indi",
+            "phd2",
+            "system"
+          ],
           "type": "string"
         },
         "name": {
           "type": "string"
         },
+        "reboot": {
+          "description": "A new kernel or firmware: the box runs it only after a restart.",
+          "type": "boolean"
+        },
+        "security": {
+          "description": "It comes from a -security suite.",
+          "type": "boolean"
+        },
         "to": {
+          "description": "The version an update installs.",
           "type": "string"
         }
       },
       "required": [
         "name",
         "from",
-        "to"
+        "to",
+        "kind",
+        "security",
+        "reboot"
       ],
       "title": "UpgradablePackage",
       "type": "object"

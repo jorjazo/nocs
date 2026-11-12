@@ -92,9 +92,22 @@ btrfs and XFS. An ejected drive stays unmounted until you unplug it.
 ## Updates
 
 Updates need internet: join a network with internet (Rig → Network), then Rig → This
-computer → Updates → Check. NOCS installs them only when you say so, never during a
-session, and restarts itself at the end. If the new version misbehaves, **Go back**
-installs the previous one.
+computer → Updates → **Check now**. The list puts NOCS first (a new version or "Up to
+date"), then INDI and PHD2, then the rest of the system as a count with how many are
+security updates; **All N packages** opens every package with its old and new
+version.
+
+NOCS installs them only when you say so, and never while something runs (a
+sequence, an exposure, a slew): install by day. Above the button the app says what
+installing will do:
+
+- a new NOCS restarts NOCS at the end, and the app reconnects within a minute or so;
+- a new INDI or PHD2 is used only after you restart them (Restart INDI, Restart
+  PHD2) or the box;
+- a new kernel needs a restart of the box. When Ubuntu asks for one, a banner says
+  so, with **Restart**.
+
+If the new version of NOCS misbehaves, **Go back** installs the previous one.
 
 ## File sharing
 

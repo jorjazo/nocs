@@ -872,8 +872,16 @@ class NetworkState(StateModel):
 
 class UpgradablePackage(StateModel):
     name: str
-    from_: str = Field(alias="from")
-    to: str
+    from_: str = Field(alias="from", description="The version installed.")
+    to: str = Field(description="The version an update installs.")
+    kind: Literal["nocs", "indi", "phd2", "system"] = Field(
+        description="NOCS itself (nocs, nocs-appliance), INDI's packages, PHD2, or the rest "
+        "of the system (Ubuntu's packages)."
+    )
+    security: bool = Field(description="It comes from a -security suite.")
+    reboot: bool = Field(
+        description="A new kernel or firmware: the box runs it only after a restart."
+    )
 
 
 class UpdatesState(StateModel):
@@ -882,6 +890,13 @@ class UpdatesState(StateModel):
     state: Literal["idle", "checking", "installing", "succeeded", "failed"]
     task: Literal["install", "rollback"] | None = Field(description="What ran last.")
     packages: list[UpgradablePackage] = Field(description="What an update would upgrade.")
+    upgraded: list[UpgradablePackage] = Field(
+        description="What the last install was to upgrade; empty after a new check."
+    )
+    reboot_required: bool = Field(
+        description="Ubuntu asks for a restart of the box (/run/reboot-required), as after "
+        "installing a new kernel."
+    )
     checked: str | None = Field(description="When NOCS last looked, UTC.")
     installed: str | None = Field(description="The version of NOCS installed.")
     previous: str | None = Field(description="The version to go back to, if any.")
