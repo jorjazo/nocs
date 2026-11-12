@@ -1,6 +1,7 @@
 /etc/apt/apt.conf.d/52nocs-unattended-upgrades
 /etc/avahi/services/nocs.service
 /etc/chrony/conf.d/nocs-gps.conf
+/etc/NetworkManager/conf.d/nocs.conf
 /etc/needrestart/conf.d/nocs.conf
 /etc/nocs/system.conf.d/appliance.conf
 /etc/ssh/sshd_config.d/50-nocs.conf

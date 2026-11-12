@@ -34,6 +34,9 @@ from nocs.system.network import (
     split_terse,
     station_id,
 )
+from nocs.system.network import (
+    keyfile as network_keyfile,
+)
 from nocs.system.operations import Context
 from nocs.system.protocol import HelperError
 from nocs.system.server import Config
@@ -191,6 +194,10 @@ async def test_at_boot_known_networks_get_a_minute_then_the_access_point(
     keyfile = paths.connections / f"{AP_ID}.nmconnection"
     assert stat.S_IMODE(keyfile.stat().st_mode) == 0o600
     assert not any(DEFAULT_PASSWORD in " ".join(call) for call in nm.calls)
+    # Power saving off in every connection NOCS writes, whatever the global default.
+    assert "\n[wifi]\nmode=ap\nssid=NOCS-C3D4\npowersave=2\n" in keyfile.read_text()
+    station = network_keyfile("nocs-Home", "Home", "home-secret", ap=False, interface="wlan0")
+    assert "\nssid=Home\npowersave=2\n" in station
 
 
 async def test_a_lost_station_gives_way_to_the_access_point(

@@ -194,6 +194,10 @@ def keyfile(name: str, ssid: str, password: str | None, *, ap: bool, interface: 
         "[wifi]",
         f"mode={'ap' if ap else 'infrastructure'}",
         f"ssid={ssid}",
+        # Power saving makes the Pi miss frames from phones (a reply over the access
+        # point waited a minute for TCP's retransmissions): off whatever the global
+        # default says (Ubuntu's turns it on).
+        "powersave=2",
     ]
     if ap:
         lines.append("band=bg")
