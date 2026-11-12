@@ -106,3 +106,28 @@ position angle of its top east of north as a plate solution gives it (ADR 0018).
   catalog and a 1024 px JPEG of each in the data directory
   (`GET /api/frames/solved`, owner only). The chart draws them under the stars,
   each on the corners where its solution put it.
+- Amended after rc2 (2026-11-12): the survey image says why it is missing and asks
+  for what the services can give in time. Measured from the maintainer's network in
+  Chile (NGC 2070, DSS2 Red, 4:3, two rounds): SkyView took 2.8–3.9 s for 1°,
+  4.5–7.0 s for 2°, 8.8–14.4 s for 4°, 12–13 s for 5° (also at M 31 and M 42),
+  18.6 s for 6°, 28–35 s for 7.7° and 41–53 s for 10.4°, whatever the pixels
+  (200, 400 or 800 across): its time follows the field's area. CDS could not be
+  measured: `alasky` and `alaskybis` (130.79.128.175/179) still drop every
+  connection from that network, while `cds.unistra.fr` (130.79.129.14) answers;
+  hips2fits draws from HiPS tiles at the order the pixels need, so its time should
+  follow the pixels rather than the field. So the image covers at most 5° along the
+  view's longer side (its middle, where the frame is: about 12 s, under half of
+  SkyView's 30 s), at the view's own pixels up to 800. The service that gave the last
+  image is tried first, by every chart and after a reload (kept in the browser);
+  a preference for SkyView lasts 20 h, so the next night asks CDS (colour) first
+  again. A request on its way is not started over by a small pan or zoom, and a
+  failed one is not asked again until the view moves on or the device comes back
+  online. When no service gives an image, the chart says why per service, told
+  apart in the browser: an `<img>` does not give the HTTP status (SkyView allows no
+  CORS), so after a miss a no-cors `fetch` of the host's `/favicon.ico` (5 s)
+  tells "too slow" or "answered with an error" (the host answers) from "not
+  answering" (no answer in time) and "cannot be reached" (fails at once; all of
+  them: "No internet on this device?"); `navigator.onLine` false is "this device is
+  offline". SkyView's Mellinger Red (an all-sky mosaic, ~36″ per pixel) answered
+  4°, 10.4° and 20° in 3–4 s and could cover a wide view whole; not used: its terms
+  of use would need checking first.

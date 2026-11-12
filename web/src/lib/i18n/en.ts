@@ -14,6 +14,7 @@ import type {
   Role,
   SolveFailure,
 } from "../types";
+import type { Miss } from "../sky/survey";
 
 type AutofocusPhase = NonNullable<AutofocusState["phase"]>;
 type AutofocusProblem = NonNullable<AutofocusState["problem"]>;
@@ -931,8 +932,29 @@ export const en = {
     credit: "Stars: Tycho-2, ESA · Objects: OpenNGC",
     surveyCredit: { cds: "Image: DSS2 via CDS hips2fits", skyview: "Image: DSS2 red via NASA SkyView" },
     ownCredit: (count: number) => (count === 1 ? "Image: one of your frames" : `Images: ${count} of your frames`),
-    surveyLoading: "Loading the survey image…",
-    surveyFailed: "No survey image (offline?)",
+    surveyAsking: (service: string) => `Asking ${service} for the survey image…`,
+    surveyOffline: "No survey image: this device is offline",
+    // Why each service gave none, in the order asked (lib/sky/survey.ts).
+    surveyFailed: (misses: { service: string; miss: Miss }[]) => {
+      const all = misses.map((m) => m.service).join(" and ");
+      const [first] = misses;
+      if (first && misses.length > 1 && misses.every((m) => m.miss === first.miss)) {
+        const together: Record<Miss, string> = {
+          unreachable: `${all} cannot be reached. No internet on this device?`,
+          silent: `${all} are not answering`,
+          slow: `${all} are too slow for this view`,
+          error: `${all} answered with errors`,
+        };
+        return `No survey image: ${together[first.miss]}`;
+      }
+      const one: Record<Miss, (service: string) => string> = {
+        unreachable: (service) => `${service} cannot be reached`,
+        silent: (service) => `${service} not answering`,
+        slow: (service) => `${service} too slow for this view`,
+        error: (service) => `${service} answered with an error`,
+      };
+      return `No survey image: ${misses.map((m) => one[m.miss](m.service)).join(" · ")}`;
+    },
     view: (degrees: string) => `View ${degrees}`,
     frame: (width: string, height: string, rotation: string) => `Frame ${width} × ${height}, ${rotation}`,
   },
@@ -1048,7 +1070,7 @@ export const en = {
     solvingOne: "Solving the light with the most stars…",
     solveFailed: "That frame did not solve.",
     survey: "Survey image",
-    surveyHint: "A DSS2 image from CDS under the chart, fetched by this device when it has internet.",
+    surveyHint: "A DSS2 image under the chart from CDS or NASA SkyView, fetched by this device when it has internet.",
     choose: "Make tonight's target",
     update: "Update tonight's target",
     goesToFrame: "Go and Go and centre go where the frame points, not the object's centre.",

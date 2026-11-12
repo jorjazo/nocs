@@ -32,6 +32,17 @@
     viewRadius,
     viewSpan,
   } from "../lib/sky/projection";
+  import {
+    browserLoader,
+    fetchSurvey,
+    type Missed,
+    SERVICE,
+    serves,
+    type Source,
+    surveyMemory,
+    type SurveyRequest,
+    surveyRequest,
+  } from "../lib/sky/survey";
   import type { CameraField, CatalogObject, SkyChart } from "../lib/types";
 
   // The framing chart (ADR 0020): offline stars and deep-sky outlines around a
@@ -62,7 +73,7 @@
     // The last solved frame, drawn dashed where it landed (degrees, J2000).
     solved?: { ra: number; dec: number; width: number; height: number; rotation: number } | null;
     // Draw a survey image under the chart, fetched by this browser from CDS
-    // hips2fits (ADR 0020): only when the user turned it on, and online.
+    // hips2fits or NASA SkyView (ADR 0020): only when the user turned it on.
     survey?: boolean;
     // The user's own solved frames, drawn under the stars where they landed
     // (3.7c): the image as NOCS shows the frame, its top `rotation` east of north.
@@ -128,100 +139,90 @@
 
   // -- Survey image -----------------------------------------------------------------
 
-  // CDS hips2fits first (colour); NASA SkyView when CDS does not answer (it did
-  // not, from Chile, on 2026-11-01). Both give a gnomonic image, north up, east left.
-  type Source = "cds" | "skyview";
-  const SOURCES: Source[] = ["cds", "skyview"];
-  // CDS answers in a second or two when it is up; SkyView makes the image (3 s for 400 px).
-  const SURVEY_TIMEOUT: Record<Source, number> = { cds: 12_000, skyview: 30_000 };
+  // CDS hips2fits (colour) or NASA SkyView (DSS2 red), the one that worked last in
+  // this browser first (lib/sky/survey.ts). Both give a gnomonic image, north up, east left.
   type SurveyImage = { image: HTMLImageElement; ra: number; dec: number; fov: number; source: Source };
-  let surveySource: Source = $state("cds");
   let surveyImage: SurveyImage | null = $state(null);
-  let surveyStatus: "off" | "loading" | "failed" | "ready" = $state("off");
+  let surveyStatus:
+    | { kind: "off" }
+    | { kind: "asking"; source: Source }
+    | { kind: "ready" }
+    | { kind: "failed"; offline: boolean; misses: Missed[] } = $state({ kind: "off" });
   let surveyTimer: ReturnType<typeof setTimeout> | undefined;
+  // The request on its way, so a small pan or zoom meanwhile does not start it over.
+  let surveyAsked: { request: SurveyRequest; controller: AbortController } | null = null;
+  // What failed last, not asked again until the view moves on or the device comes back online.
+  let surveyMissed: SurveyRequest | null = null;
+  let online = $state(0);
 
   $effect(() => {
+    void online;
+    clearTimeout(surveyTimer);
     if (!survey || width === 0 || height === 0) {
-      surveyStatus = "off";
+      untrack(stopSurvey);
+      surveyMissed = null;
+      surveyStatus = { kind: "off" };
       return;
     }
-    const v = view;
+    const wanted = surveyRequest(view, window.devicePixelRatio || 1);
+    const near = (image: { ra: number; dec: number; fov: number }) =>
+      serves(image, wanted, separation(wanted, image));
     const shown = untrack(() => surveyImage);
-    const span = (Math.max(v.width, v.height) / v.scale) / RAD;
-    // What is loaded still serves: about the same place and size.
-    if (shown && separation(v.center, shown) < span * 0.25 && Math.abs(shown.fov / span - 1) < 0.3) return;
-    clearTimeout(surveyTimer);
-    surveyTimer = setTimeout(() => loadSurvey(v), 600);
-  });
-  $effect(() => () => clearTimeout(surveyTimer));
-
-  function surveyUrl(source: Source, v: View, w: number, h: number, fov: number): string {
-    const ra = (v.center.ra * 15).toFixed(5);
-    const dec = v.center.dec.toFixed(5);
-    if (source === "cds") {
-      const params = new URLSearchParams({
-        hips: "CDS/P/DSS2/color",
-        width: String(w),
-        height: String(h),
-        fov: fov.toFixed(4),
-        projection: "TAN",
-        coordsys: "icrs",
-        ra,
-        dec,
-        format: "jpg",
-      });
-      return `https://alasky.cds.unistra.fr/hips-image-services/hips2fits?${params}`;
+    if (shown && near(shown)) {
+      untrack(stopSurvey);
+      surveyStatus = { kind: "ready" };
+      return;
     }
-    const params = new URLSearchParams({
-      Survey: "DSS2 Red",
-      Position: `${ra},${dec}`,
-      Size: `${fov.toFixed(4)},${((fov * h) / w).toFixed(4)}`,
-      Pixels: `${w},${h}`,
-      Projection: "Tan",
-      Coordinates: "J2000",
-      Return: "JPEG",
-    });
-    return `https://skyview.gsfc.nasa.gov/current/cgi/runquery.pl?${params}`;
+    if (surveyAsked && near(surveyAsked.request)) return;
+    if (surveyMissed && near(surveyMissed)) return;
+    surveyTimer = setTimeout(() => void loadSurvey(wanted), 600);
+  });
+  $effect(() => () => {
+    clearTimeout(surveyTimer);
+    stopSurvey();
+  });
+  $effect(() => {
+    const retry = () => {
+      if (surveyStatus.kind !== "failed") return;
+      surveyMissed = null;
+      online += 1;
+    };
+    window.addEventListener("online", retry);
+    return () => window.removeEventListener("online", retry);
+  });
+
+  function stopSurvey(): void {
+    surveyAsked?.controller.abort();
+    surveyAsked = null;
   }
 
-  let surveyRequest = 0;
-  function loadSurvey(v: View): void {
-    // The longer side; a phone's pixels, capped (the services are free, be kind).
-    const long = Math.max(v.width, v.height);
-    const pixels = Math.min(800, Math.round(long * Math.min(2, window.devicePixelRatio || 1)));
-    const w = Math.round((pixels * v.width) / long);
-    const h = Math.round((pixels * v.height) / long);
-    const fov = v.width / v.scale / RAD; // across the image's width
-    const id = ++surveyRequest;
-    surveyStatus = "loading";
-    const attempt = (index: number): void => {
-      const source = SOURCES[index];
-      if (source === undefined) {
-        if (id === surveyRequest) surveyStatus = "failed";
-        return;
-      }
-      const image = new Image();
-      const timer = setTimeout(() => {
-        image.onload = image.onerror = null;
-        image.src = "";
-        attempt(index + 1);
-      }, SURVEY_TIMEOUT[source]);
-      image.onload = () => {
-        clearTimeout(timer);
-        if (id !== surveyRequest) return;
-        surveyImage = { image, ra: v.center.ra, dec: v.center.dec, fov, source };
-        surveySource = source;
-        surveyStatus = "ready";
-      };
-      image.onerror = () => {
-        clearTimeout(timer);
-        attempt(index + 1);
-      };
-      image.src = surveyUrl(source, v, w, h, fov);
-    };
-    // Start where the last image came from.
-    attempt(Math.max(0, SOURCES.indexOf(surveySource)));
+  async function loadSurvey(request: SurveyRequest): Promise<void> {
+    stopSurvey();
+    const asked = { request, controller: new AbortController() };
+    surveyAsked = asked;
+    const result = await fetchSurvey(request, surveyMemory, browserLoader, asked.controller.signal, (source) => {
+      surveyStatus = { kind: "asking", source };
+    });
+    if (result === null || surveyAsked !== asked) return;
+    surveyAsked = null;
+    surveyMissed = "image" in result ? null : request;
+    if ("image" in result) {
+      surveyImage = { image: result.image, ra: request.ra, dec: request.dec, fov: request.fov, source: result.source };
+      surveyStatus = { kind: "ready" };
+    } else {
+      surveyStatus = { kind: "failed", ...result };
+    }
   }
+
+  const surveyText = $derived.by(() => {
+    const s = surveyStatus;
+    if (s.kind === "asking") return t.chart.surveyAsking(SERVICE[s.source]);
+    if (s.kind === "failed") {
+      if (s.offline) return t.chart.surveyOffline;
+      return t.chart.surveyFailed(s.misses.map(({ source, miss }) => ({ service: SERVICE[source], miss })));
+    }
+    return surveyImage ? t.chart.surveyCredit[surveyImage.source] : "";
+  });
 
   // -- Own frames -------------------------------------------------------------------
 
@@ -615,7 +616,7 @@
     <span>{field ? `${frameText} · ` : ""}{t.chart.view(degrees(viewSpan(view)))}</span>
   </div>
   <div class="credit">
-    {t.chart.credit}{#if frames.length}<br />{t.chart.ownCredit(frames.length)}{/if}{#if survey}<br />{surveyStatus === "failed" ? t.chart.surveyFailed : surveyStatus === "loading" ? t.chart.surveyLoading : t.chart.surveyCredit[surveySource]}{/if}
+    {t.chart.credit}{#if frames.length}<br />{t.chart.ownCredit(frames.length)}{/if}{#if survey && surveyText}<br /><span class:error={surveyStatus.kind === "failed"}>{surveyText}</span>{/if}
   </div>
 </div>
 

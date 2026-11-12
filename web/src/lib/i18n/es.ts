@@ -910,8 +910,28 @@ export const es: Messages = {
     credit: "Estrellas: Tycho-2, ESA · Objetos: OpenNGC",
     surveyCredit: { cds: "Imagen: DSS2 vía CDS hips2fits", skyview: "Imagen: DSS2 roja vía NASA SkyView" },
     ownCredit: (count) => (count === 1 ? "Imagen: uno de tus cuadros" : `Imágenes: ${count} de tus cuadros`),
-    surveyLoading: "Cargando la imagen del survey…",
-    surveyFailed: "Sin imagen del survey (¿sin internet?)",
+    surveyAsking: (service) => `Pidiendo la imagen del survey a ${service}…`,
+    surveyOffline: "Sin imagen del survey: este dispositivo no tiene conexión",
+    surveyFailed: (misses) => {
+      const all = misses.map((m) => m.service).join(" y ");
+      const [first] = misses;
+      if (first && misses.length > 1 && misses.every((m) => m.miss === first.miss)) {
+        const together = {
+          unreachable: `no se puede llegar a ${all}. ¿Este dispositivo no tiene internet?`,
+          silent: `${all} no responden`,
+          slow: `${all} tardan demasiado para esta vista`,
+          error: `${all} respondieron con errores`,
+        };
+        return `Sin imagen del survey: ${together[first.miss]}`;
+      }
+      const one = {
+        unreachable: (service: string) => `no se puede llegar a ${service}`,
+        silent: (service: string) => `${service} no responde`,
+        slow: (service: string) => `${service} tarda demasiado para esta vista`,
+        error: (service: string) => `${service} respondió con un error`,
+      };
+      return `Sin imagen del survey: ${misses.map((m) => one[m.miss](m.service)).join(" · ")}`;
+    },
     view: (degrees) => `Vista ${degrees}`,
     frame: (width, height, rotation) => `Encuadre ${width} × ${height}, ${rotation}`,
   },
@@ -1027,7 +1047,7 @@ export const es: Messages = {
     solvingOne: "Resolviendo la light con más estrellas…",
     solveFailed: "Ese cuadro no se resolvió.",
     survey: "Imagen del survey",
-    surveyHint: "Una imagen DSS2 de CDS bajo la carta, que descarga este dispositivo cuando tiene internet.",
+    surveyHint: "Una imagen DSS2 bajo la carta, de CDS o NASA SkyView, que descarga este dispositivo cuando tiene internet.",
     choose: "Elegir para esta noche",
     update: "Actualizar el objetivo",
     goesToFrame: "Ir e Ir y centrar van a donde apunta el cuadro, no al centro del objeto.",
