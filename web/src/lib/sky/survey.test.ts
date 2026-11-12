@@ -100,6 +100,22 @@ test("a fallback that keeps working still gives way to CDS the next night", () =
   assert.deepEqual(new SourceMemory(saved, () => now).order(), ["cds", "skyview"]);
 });
 
+test("while CDS stays down, the fallback is preferred again each night", async () => {
+  let now = 1_000_000;
+  const saved = store();
+  new SourceMemory(saved, () => now).worked("skyview");
+  // The next night: CDS first, still not answering, and SkyView gives the image.
+  now += 24 * 3600 * 1000;
+  const memory = new SourceMemory(saved, () => now);
+  const services = loader({ cds: "timeout", skyview: "load" });
+  await fetchSurvey(request, memory, services, signal);
+  assert.deepEqual(services.asked, ["cds", "skyview"]);
+  // The night's next charts, and a reload, ask SkyView first.
+  now += 3600 * 1000;
+  assert.deepEqual(memory.order(), ["skyview", "cds"]);
+  assert.deepEqual(new SourceMemory(saved, () => now).order(), ["skyview", "cds"]);
+});
+
 test("unreadable or blocked storage falls back to the default order", () => {
   assert.deepEqual(new SourceMemory(store({ "nocs.surveySource": "{bad" })).order(), ["cds", "skyview"]);
   assert.deepEqual(new SourceMemory(store({ "nocs.surveySource": '{"source":"x","at":1}' })).order(), ["cds", "skyview"]);

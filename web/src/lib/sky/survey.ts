@@ -74,21 +74,28 @@ export class SourceMemory {
 
   // The services in the order to try them.
   order(): Source[] {
-    const last = this.#last;
-    const first = last && (last.source === DEFAULT || this.#now() - last.at < FALLBACK_KEPT_MS) ? last.source : DEFAULT;
+    const first = this.#preferred() ?? DEFAULT;
     return [first, ...SOURCES.filter((source) => source !== first)];
   }
 
   // The time is that of the first success in a row, so a preference for the
-  // fallback runs out the next day even when it kept working all night.
+  // fallback runs out the next day even when it kept working all night; a
+  // success after it ran out (CDS still failing) starts a new one.
   worked(source: Source): void {
-    if (this.#last?.source === source) return;
+    if (this.#preferred() === source) return;
     this.#last = { source, at: this.#now() };
     try {
       this.#store?.setItem(KEY, JSON.stringify(this.#last));
     } catch {
       // Not persisted; this page still remembers it.
     }
+  }
+
+  // The remembered service, while its preference holds.
+  #preferred(): Source | null {
+    const last = this.#last;
+    if (!last) return null;
+    return last.source === DEFAULT || this.#now() - last.at < FALLBACK_KEPT_MS ? last.source : null;
   }
 }
 
