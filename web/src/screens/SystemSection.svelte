@@ -286,7 +286,7 @@
                 </span>
                 {#if summary.nocs}
                   <Chip tone="accent">{t.system.newVersion}</Chip>
-                {:else if updates.checked}
+                {:else if updates.checked && updates.installed}
                   <Chip tone="ok">{t.system.upToDate}</Chip>
                 {/if}
               </span>
