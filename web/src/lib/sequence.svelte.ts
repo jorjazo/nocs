@@ -6,7 +6,7 @@ import { listSequences } from "./api";
 import { formatDecimal, formatDuration, formatPlain, formatTemperature, formatTime } from "./format";
 import type { Messages } from "./i18n";
 import type { AutofocusTrigger, DitherTrigger, FlipTrigger, RecenterTrigger } from "./generated/api";
-import { frameName, newTemplate, sequenceId, triggerDue, type CameraSettings } from "./sequence";
+import { focusReason, frameName, newTemplate, sequenceId, triggerDue, type CameraSettings } from "./sequence";
 import type { Container, Node, PlannedTarget, PowerOutput, SequenceEvent, SequenceRun, Template } from "./types";
 
 export { isActive, nextFilter, rowSeconds, sequenceId } from "./sequence";
@@ -178,6 +178,26 @@ function capitalize(text: string): string {
 
 // One line of the session's timeline, from the event's kind and data (the
 // server's messages are English).
+// Why an autofocus was due, in the reader's words (the runner says it in English).
+export function describeFocusReason(reason: string, t: Messages, locale: string): string {
+  const r = t.session.event.focusReason;
+  const why = focusReason(reason);
+  switch (why.why) {
+    case "filter":
+      return r.filter(why.filter);
+    case "temperature":
+      return r.temperature(`${why.change > 0 ? "+" : ""}${formatTemperature(why.change, locale)}`);
+    case "minutes":
+      return r.minutes(why.minutes);
+    case "frames":
+      return r.frames(why.frames);
+    case "hfr":
+      return r.hfr(formatPlain(Math.abs(why.percent), locale));
+    default:
+      return why.text;
+  }
+}
+
 export function describeEvent(event: SequenceEvent, t: Messages, locale: string): string {
   const e = t.session.event;
   const n = t.sequence.node;
@@ -215,7 +235,7 @@ export function describeEvent(event: SequenceEvent, t: Messages, locale: string)
         case "flip":
           return due.waiting === null ? e.flipDue : e.flipWaiting(formatDecimal(due.waiting, locale, 1));
         case "autofocus":
-          return e.focusDue(due.reason);
+          return e.focusDue(describeFocusReason(due.reason, t, locale));
         case "dither":
           return e.ditherDue(due.frames);
         case "recenter":

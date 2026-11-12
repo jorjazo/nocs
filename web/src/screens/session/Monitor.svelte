@@ -15,7 +15,7 @@
   import { guideGraph } from "../../lib/guiding.svelte";
   import { i18n } from "../../lib/i18n";
   import { live } from "../../lib/live.svelte";
-  import { currentRow, runProgress } from "../../lib/sequence";
+  import { currentRow, frameLabel, runProgress } from "../../lib/sequence";
   import { describeEvent, describeStep } from "../../lib/sequence.svelte";
   import type { SequenceEvent, SequenceRun } from "../../lib/types";
   import GuideGraph from "../guiding/GuideGraph.svelte";
@@ -37,6 +37,8 @@
   const outputs = $derived(live.app.power?.outputs ?? []);
 
   const progress = $derived(runProgress(run));
+  // Without filters (no wheel, or none set), the rows are told apart by exposure.
+  const filtered = $derived(progress.rows.some((r) => r.filter));
   const finished = $derived(run.state === "finished");
   type Shown = keyof typeof t.session.states;
   const shown = $derived<Shown>(run.state === "finished" ? (run.outcome ?? "completed") : run.state);
@@ -101,12 +103,10 @@
     return `${String(minutes).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
   }
 
-  // "R 11" and its HFR, from a frame event ("R 120 s 11/15").
-  function frameLabel(event: SequenceEvent): [string, string] {
-    const words = event.message.split(" ");
-    const count = words.at(-1)?.split("/")[0] ?? "";
+  // "R 11" (or "#11" without a filter) and its HFR, from a frame event.
+  function frameTile(event: SequenceEvent): [string, string] {
     const hfr = typeof event.data.hfr === "number" ? formatDecimal(event.data.hfr, locale, 2) : "—";
-    return [`${words[0] ?? ""} ${count}`, hfr];
+    return [frameLabel(event.data), hfr];
   }
 </script>
 
@@ -169,7 +169,7 @@
       {#if recent.length}
         <ol class="strip" aria-label={t.session.latest}>
           {#each recent as event, i (event.time + i)}
-            {@const [name, hfr] = frameLabel(event)}
+            {@const [name, hfr] = frameTile(event)}
             <li class:current={i === recent.length - 1} class="mono"><span>{name}</span><span class="muted">{hfr}</span></li>
           {/each}
         </ol>
@@ -196,7 +196,7 @@
           {#if preview}<img class="thumb phone-only" src={preview.url} alt={t.session.latest} />{/if}
           <div class="now-text">
             {#if exposing && row}
-              <span class="muted small">{t.session.exposing(row.filter ?? "—", Math.min(row.done + 1, row.count), row.count)}</span>
+              <span class="muted small">{t.session.exposing(row.filter, Math.min(row.done + 1, row.count), row.count)}</span>
               <span class="countdown mono">{clock(remaining ?? total)}</span>
               <div class="bar thin"><div style:width="{100 * elapsed}%"></div></div>
               <span class="muted small">{t.session.of(formatSeconds(total, locale))}</span>
@@ -234,11 +234,11 @@
       {/if}
 
       <section aria-labelledby="per-filter">
-        <h3 id="per-filter" class="muted small">{t.session.perFilter}</h3>
+        <h3 id="per-filter" class="muted small">{filtered ? t.session.perFilter : t.session.perExposure}</h3>
         <ul class="rows">
           {#each progress.rows as r, i (i)}
             <li>
-              <span class="badge">{r.filter ?? "—"}</span>
+              <span class="badge">{filtered ? (r.filter ?? "—") : formatSeconds(r.exposure, locale)}</span>
               <span class="mono">{r.done} / {r.count}</span>
               <div class="bar thin"><div style:width="{(100 * Math.min(r.done, r.count)) / r.count}%"></div></div>
             </li>
@@ -296,6 +296,10 @@
       <button type="button" class="choice" onclick={() => void stop(true, true)}>
         <span class="name">{t.session.stopNow}</span>
         <span class="muted small">{t.session.stopNowHint}</span>
+      </button>
+      <button type="button" class="choice" onclick={() => void stop(false, false)}>
+        <span class="name">{t.session.stopAfterBare}</span>
+        <span class="muted small">{t.session.stopAfterBareHint}</span>
       </button>
       <button type="button" class="choice" onclick={() => void stop(true, false)}>
         <span class="name">{t.session.stopBare}</span>

@@ -584,11 +584,22 @@ class Runner:
             self._checkpoint.since_recenter += 1
             if result.hfr is not None:
                 focus.add_hfr(row.filter, result.hfr)
+            done_count = progress.done[index]
+            label = f"{row.exposure:g} s {done_count}/{row.count}"
             self._event(
                 EventKind.FRAME,
-                f"{row.filter or '-'} {row.exposure:g} s {progress.done[index]}/{row.count}",
+                f"{row.filter} {label}" if row.filter else label,
                 here,
-                {"row": index, "stars": result.stars, "hfr": result.hfr, "id": result.frame},
+                {
+                    "row": index,
+                    "filter": row.filter,
+                    "exposure": row.exposure,
+                    "done": done_count,
+                    "count": row.count,
+                    "stars": result.stars,
+                    "hfr": result.hfr,
+                    "id": result.frame,
+                },
             )
             await self._save()
             self._on_change()

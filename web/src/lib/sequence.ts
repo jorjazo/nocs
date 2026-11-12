@@ -126,3 +126,37 @@ export function triggerDue(message: string): TriggerDue {
   if ((kind === "dither" || kind === "recenter") && frames) return { kind, frames: Number(frames[1]) };
   return { kind: "other", message };
 }
+
+// Why the runner says an autofocus is due (its words after "autofocus: "): the
+// filter it changes to, the focuser's temperature change in °C, the minutes or
+// frames since the last run, or how much the stars grew (percent).
+export type FocusReason =
+  | { why: "filter"; filter: string }
+  | { why: "temperature"; change: number }
+  | { why: "minutes"; minutes: number }
+  | { why: "frames"; frames: number }
+  | { why: "hfr"; percent: number }
+  | { why: "other"; text: string };
+
+export function focusReason(reason: string): FocusReason {
+  let m = /^filter (.+)$/.exec(reason);
+  if (m?.[1]) return { why: "filter", filter: m[1] };
+  m = /^temperature ([+-]?[\d.]+) °C$/.exec(reason);
+  if (m) return { why: "temperature", change: Number(m[1]) };
+  m = /^(\d+) min$/.exec(reason);
+  if (m) return { why: "minutes", minutes: Number(m[1]) };
+  m = /^(\d+) frames?$/.exec(reason);
+  if (m) return { why: "frames", frames: Number(m[1]) };
+  m = /^HFR ([+-]?\d+)%$/.exec(reason);
+  if (m) return { why: "hfr", percent: Number(m[1]) };
+  return { why: "other", text: reason };
+}
+
+// A frame event's short label for the strip of recent frames: its filter and its
+// number in the row ("R 11"), or the number alone ("#11") when the row has no filter.
+export function frameLabel(data: Record<string, unknown>): string {
+  const filter = typeof data.filter === "string" && data.filter ? data.filter : null;
+  const done = typeof data.done === "number" ? data.done : null;
+  if (done === null) return filter ?? "";
+  return filter ? `${filter} ${done}` : `#${done}`;
+}
