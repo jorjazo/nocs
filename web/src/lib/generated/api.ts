@@ -351,6 +351,11 @@ export type FrameKind = "light" | "dark" | "flat" | "bias";
  * via the `definition` "SavedFrameTypeName".
  */
 export type SavedFrameTypeName = "light" | "dark" | "bias" | "flat" | "stack";
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "PreparationReason".
+ */
+export type PreparationReason = "not_connected" | "no_site" | "no_solver" | "no_database" | "parked" | "no_phd2";
 
 export interface NOCSAPI {
   [k: string]: unknown;
@@ -590,6 +595,7 @@ export interface AppState {
    * None: no power box is ready.
    */
   power?: PowerState | null;
+  preparation?: PreparationState | null;
   sequence?: SequenceState | null;
   /**
    * None where NOCS does not share the frames (a PC).
@@ -2086,6 +2092,48 @@ export interface PowerOutput {
    * Variable outputs: the voltages it can be set to.
    */
   voltages: number[];
+}
+/**
+ * Whether each step of Tonight's checklist can run (ADR 0041). What a step settles
+ * on its own screen (where the mount points, a target to frame) is not a blocker.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "PreparationState".
+ */
+export interface PreparationState {
+  focus: PreparationStep;
+  frame: PreparationStep;
+  guide: PreparationStep;
+  polar_align: PreparationStep;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "PreparationStep".
+ */
+export interface PreparationStep {
+  /**
+   * The active profile has the devices the step uses.
+   */
+  applies: boolean;
+  /**
+   * What stops the step now, the most basic first; empty: it can run.
+   */
+  blockers: PreparationBlocker[];
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "PreparationBlocker".
+ */
+export interface PreparationBlocker {
+  message: string;
+  /**
+   * not_connected: the profile (role None) or that role's device is not ready; no_site: the box has no active site; no_solver: ASTAP is not installed; no_database: no star database solves the main camera's field; parked: the mount is parked; no_phd2: NOCS cannot reach PHD2.
+   */
+  reason: "not_connected" | "no_site" | "no_solver" | "no_database" | "parked" | "no_phd2";
+  /**
+   * With not_connected: the device that is not ready.
+   */
+  role: Role | null;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema

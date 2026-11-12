@@ -444,6 +444,17 @@
           "default": null,
           "description": "None: no power box is ready."
         },
+        "preparation": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PreparationState"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "sequence": {
           "anyOf": [
             {
@@ -7747,6 +7758,95 @@
         "input"
       ],
       "title": "PowerState",
+      "type": "object"
+    },
+    "PreparationBlocker": {
+      "additionalProperties": false,
+      "properties": {
+        "message": {
+          "type": "string"
+        },
+        "reason": {
+          "$ref": "#/$defs/PreparationReason",
+          "description": "not_connected: the profile (role None) or that role's device is not ready; no_site: the box has no active site; no_solver: ASTAP is not installed; no_database: no star database solves the main camera's field; parked: the mount is parked; no_phd2: NOCS cannot reach PHD2."
+        },
+        "role": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Role"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "With not_connected: the device that is not ready."
+        }
+      },
+      "required": [
+        "reason",
+        "role",
+        "message"
+      ],
+      "title": "PreparationBlocker",
+      "type": "object"
+    },
+    "PreparationReason": {
+      "enum": [
+        "not_connected",
+        "no_site",
+        "no_solver",
+        "no_database",
+        "parked",
+        "no_phd2"
+      ],
+      "type": "string"
+    },
+    "PreparationState": {
+      "additionalProperties": false,
+      "description": "Whether each step of Tonight's checklist can run (ADR 0041). What a step settles\non its own screen (where the mount points, a target to frame) is not a blocker.",
+      "properties": {
+        "focus": {
+          "$ref": "#/$defs/PreparationStep"
+        },
+        "frame": {
+          "$ref": "#/$defs/PreparationStep"
+        },
+        "guide": {
+          "$ref": "#/$defs/PreparationStep"
+        },
+        "polar_align": {
+          "$ref": "#/$defs/PreparationStep"
+        }
+      },
+      "required": [
+        "polar_align",
+        "focus",
+        "frame",
+        "guide"
+      ],
+      "title": "PreparationState",
+      "type": "object"
+    },
+    "PreparationStep": {
+      "additionalProperties": false,
+      "properties": {
+        "applies": {
+          "description": "The active profile has the devices the step uses.",
+          "type": "boolean"
+        },
+        "blockers": {
+          "description": "What stops the step now, the most basic first; empty: it can run.",
+          "items": {
+            "$ref": "#/$defs/PreparationBlocker"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "applies",
+        "blockers"
+      ],
+      "title": "PreparationStep",
       "type": "object"
     },
     "Preview": {

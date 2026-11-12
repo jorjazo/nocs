@@ -843,6 +843,11 @@ export const en = {
     hourAngle: "Hour angle",
     dec: "Dec",
     latitude: "Latitude",
+    siteFrom: (name: string) =>
+      `The site is ${name}. A rough site is enough: the total error does not depend on it, and a degree off turns the split between the two knobs by about a degree.`,
+    noSiteTitle: "Polar alignment needs the site",
+    noSiteBody:
+      "Its latitude and longitude, only roughly: a few kilometres off changes nothing you could measure. Choose a site, or add one, in Rig.",
     last: (time: string, error: string) => `Last run at ${time}: ${error} off the pole.`,
     lastAligned: (time: string, error: string) => `Last run at ${time}: aligned, ${error} off the pole.`,
     where: "Where to start",
@@ -869,10 +874,6 @@ export const en = {
     backHint: "Stopping always leaves the mount where it is.",
     start: "Start polar alignment",
     observer: "Only the paired owner can polar align.",
-    noRig: "Connect a mount and the main camera to polar align.",
-    noSolver: "Polar alignment solves frames: install ASTAP and a star database.",
-    noSite: "The mount does not know the site: choose the site in Rig.",
-    parked: "Unpark the mount first.",
     busy: "The mount or the camera is busy with another job.",
     point: (n: number) => `Point ${n}`,
     here: "where the mount points",
@@ -1043,6 +1044,20 @@ export const en = {
     polarAlign: "Polar align",
     stepDone: "Done",
     stepPending: "To do",
+    stepBlocked: "Blocked",
+  },
+  preparation: {
+    // Why a step of the checklist cannot run yet (the state's `preparation`).
+    blockers: {
+      not_connected: "Connect first.",
+      no_site: "Needs the site; a rough one is enough.",
+      no_solver: "Needs ASTAP, the plate solver, on the box.",
+      no_database: "No star database on the box solves the main camera's field.",
+      parked: "The mount is parked.",
+      no_phd2: "NOCS cannot reach PHD2.",
+    },
+    notReady: (device: string) => `${device} is not ready.`,
+    fixes: { rig: "Open Rig", addSite: "Add a site", chooseSite: "Choose a site", guiding: "Open guiding" },
   },
   plan: {
     tonightsTarget: "Tonight's target",

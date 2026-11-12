@@ -18,6 +18,12 @@ The mount is never synced. A frame that does not solve is taken again (up to
 ``RETRIES`` times for each of the three points; in step 3 it is noted and the next one
 taken); no ASTAP or no star database ends the run at once.
 
+The site is the box's active site, never the mount's own (a driver's default can be
+anywhere; ADR 0041). It need only be rough: the total error does not depend on it,
+while its split into altitude and azimuth turns by about a degree for each degree the
+site is off (``polar.altaz``: the zenith from the latitude, the hour angle from the
+longitude).
+
 State under ``("polar_alignment",)``: ``None`` until the first run, then that run as it
 goes (the most recent one, finished or not)::
 
@@ -100,8 +106,8 @@ class Solves(Protocol):
 class Mounts(Protocol):
     """The mount role (``MountService``)."""
 
-    def site(self) -> Location | None: ...
     def position_jnow(self) -> Coordinates: ...
+    def parked(self) -> bool: ...
     async def slew(
         self,
         context: JobContext,
@@ -241,6 +247,7 @@ class PolarAlignmentService:
         pointing: Solves,
         mount: Mounts,
         clock: Clock,
+        site: Callable[[], Location | None],
         horizon: Callable[[], list[HorizonPoint] | None] = lambda: None,
     ) -> None:
         self._store = store
@@ -248,6 +255,7 @@ class PolarAlignmentService:
         self._pointing = pointing
         self._mount = mount
         self._clock = clock
+        self._site = site
         self._horizon = horizon
         self._run: _Run | None = None
         store.set(ROOT, None)
@@ -268,9 +276,13 @@ class PolarAlignmentService:
     def plan(self, options: PolarOptions) -> tuple[Location, Coordinates, Literal["east", "west"]]:
         """Check a start where the mount points now; returns the site, the start (JNow)
         and the side the RA axis turns to. Raises ``PointingError`` or ``ValueError``."""
-        site = self._mount.site()
+        site = self._site()
         if site is None:
-            raise PointingError("the site is unknown: choose the site")
+            raise PointingError(
+                "polar alignment needs the site, if only roughly: choose or add one"
+            )
+        if self._mount.parked():
+            raise PointingError("the mount is parked: unpark it first")
         start = self._mount.position_jnow()
         if abs(start.dec) > MAX_POLE_DEC:
             raise ValueError(

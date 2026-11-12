@@ -76,9 +76,12 @@ On **Rig**:
 
 1. **New profile**: pick the driver of each device (main camera, guide camera,
    mount, focuser, filter wheel, power box), the serial ports of the mount and the
-   power box, the optics (focal length, aperture, reducer) and the site (latitude,
-   longitude, elevation). A USB GPS can fill the site in later.
-2. **Connect**. Every device should end up ready; a device that fails says why, and
+   power box, and the optics (focal length, aperture, reducer).
+2. **Site**: add the place where the rig stands (latitude, longitude, elevation)
+   and make it the active one. It belongs to the box, not to the profile, and the
+   mount gets it when it connects. Tonight's sky and polar alignment need it, but
+   only roughly: a few kilometres off changes nothing. A USB GPS can fill it in.
+3. **Connect**. Every device should end up ready; a device that fails says why, and
    the others carry on.
 
 The phone gives its time to the box and the mount every time it connects, so the
@@ -86,10 +89,14 @@ clock is right in the field even without network or RTC battery.
 
 ## 5. The night
 
-**Tonight** leads through the night: polar alignment, focus, framing the target and
-the sequence. **Live** takes single frames and loops. **Session** shows what the box
-is doing. The box runs the night by itself: you can lock the phone, or close the
-browser, and come back to it later.
+**Tonight** leads through the night with its checklist: connect, polar alignment,
+focus, framing the target and guiding. The next step, with the big button, is the
+first one not done that can run; a step that cannot run yet says what is missing (the
+site, the plate solver, a device that is not ready, a parked mount) and links to
+where to fix it, and the checklist moves on to the next step that can. **Live** takes
+single frames and loops. **Session** shows what the box is doing. The box runs the
+night by itself: you can lock the phone, or close the browser, and come back to it
+later.
 
 Frames go to `NOCS/<night>/<type>/<target>/<filter>/` on the USB drive (or the card),
 and you can download them from the app. At home, a computer can also open them as a

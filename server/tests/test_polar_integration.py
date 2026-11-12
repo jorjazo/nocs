@@ -98,3 +98,24 @@ def test_polar_alignment_follows_the_knobs(misaligned: TestClient) -> None:
     wait(api, lambda s: s["jobs"][job_id]["state"] != "running", timeout=120)
     assert state(api)["jobs"][job_id]["state"] == "succeeded"
     assert abs(state(api)["mount"]["dec_j2000"] - START[1]) < 0.1  # back at the start
+
+
+@pytest.mark.indi
+def test_without_a_site_polar_alignment_is_blocked_and_refused(api: TestClient) -> None:
+    def reasons(s: dict[str, Any]) -> list[str]:
+        return [b["reason"] for b in s["preparation"]["polar_align"]["blockers"]]
+
+    wait(api, lambda s: reasons(s) == [])
+    assert state(api)["preparation"]["polar_align"]["applies"] is True
+    previous = state(api)["sites"]["active"]
+    assert api.put("/api/sites/active", json={"id": None}).status_code == 204
+    try:
+        wait(api, lambda s: reasons(s) == ["no_site"])
+        # The mount keeps the site it had: polar alignment takes only the box's.
+        assert state(api)["mount"]["site"] is not None
+        response = api.post("/api/align/polar", json={"exposure": EXPOSURE})
+        assert response.status_code == 409
+        assert "if only roughly" in response.json()["detail"]
+    finally:
+        assert api.put("/api/sites/active", json={"id": previous}).status_code == 204
+    wait(api, lambda s: reasons(s) == [])

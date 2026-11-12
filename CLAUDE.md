@@ -38,6 +38,7 @@ server/   Python package `nocs` (nocsd): indi/ (protocol + async client, driver
           align/ (polar alignment: axis from three solves, knobs; ADR 0034),
           sky/ (a night's almanac at the site, targets' visibility),
           sites/ (the saved sites and the box's active one, ADR 0038),
+          preparation/ (what blocks each step of Tonight's checklist, ADR 0041),
           targets/ (bundled OpenNGC catalog and its search, ADR 0019; Tycho-2
           stars for the framing chart, ADR 0020; tonight's target, `plan`),
           system/ (nocs-system, the root helper: stdlib + anyio only, ADR 0027),

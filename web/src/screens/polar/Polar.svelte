@@ -16,6 +16,7 @@
   import { cancelJob, finishPolarAlign, gotoMount, startPolarAlign } from "../../lib/api";
   import { auth } from "../../lib/auth.svelte";
   import { holder } from "../../lib/camera.svelte";
+  import { blockersOf, blockerText, fixRoute } from "../../lib/checklist";
   import { solveExposure } from "../../lib/equipment";
   import { errorText } from "../../lib/errors";
   import { formatDecimal, formatPlain, formatTime } from "../../lib/format";
@@ -37,7 +38,12 @@
   const mount = $derived(live.app.mount ?? null);
   const camera = $derived(live.app.cameras?.main_camera ?? null);
   const running = $derived(run?.state === "running");
-  const site = $derived(mount?.site ?? null);
+  // The box's active site, which the server measures with (ADR 0041), not the
+  // mount's own: a driver's default can be anywhere.
+  const sites = $derived(live.app.sites ?? null);
+  const site = $derived(sites?.active ? (sites.saved[sites.active] ?? null) : null);
+  const blockers = $derived(blockersOf(live.app.preparation, "polar", Object.keys(sites?.saved ?? {}).length));
+  const siteBlocker = $derived(blockers.find((b) => b.reason === "no_site") ?? null);
 
   // The run this screen shows: the one running, or the one it started or
   // watched until the user asks for another.
@@ -85,10 +91,10 @@
   const busyJob = $derived(holder(live.app.jobs, "mount") ?? holder(live.app.jobs, "main_camera"));
   const blocked = $derived.by(() => {
     if (!auth.owner) return t.polar.observer;
-    if (!mount || !camera) return t.polar.noRig;
-    if (!live.app.solver?.available) return t.polar.noSolver;
-    if (!site) return t.polar.noSite;
-    if (mount.parked) return t.polar.parked;
+    // What the server would refuse; the site has its own card.
+    const first = blockers.find((b) => b.reason !== "no_site");
+    if (first) return blockerText(t, first);
+    if (siteBlocker || !site) return t.preparation.blockers.no_site;
     if (busyJob) return t.polar.busy;
     return "";
   });
@@ -221,6 +227,18 @@
         <span class="readout mono">{site ? degrees(site.latitude) : "—"}</span>
       </div>
     </section>
+
+    {#if site}
+      <p class="caption muted">{t.polar.siteFrom(site.name || t.sites.unnamed)}</p>
+    {:else}
+      <section class="card site" aria-labelledby="polar-site">
+        <h2 id="polar-site" class="label">{t.polar.noSiteTitle}</h2>
+        <p class="body">{t.polar.noSiteBody}</p>
+        {#if siteBlocker?.fix && auth.owner}
+          <div><Button onclick={() => siteBlocker?.fix && router.go(fixRoute(siteBlocker.fix))}>{t.preparation.fixes[siteBlocker.fix]}</Button></div>
+        {/if}
+      </section>
+    {/if}
 
     {#if run && !running && run.axis}
       <p class="body muted last">
@@ -527,14 +545,17 @@
   .last {
     margin: 0;
   }
-  .start {
+  .start,
+  .site {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
     gap: var(--space-2);
   }
   .start h2,
-  .start p {
+  .start p,
+  .site h2,
+  .site p {
     margin: 0;
   }
   .settings,

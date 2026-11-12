@@ -278,9 +278,8 @@ class MountService:
         """Where the mount says it points, JNow, as it says it."""
         return self.mount().coordinates
 
-    def site(self) -> Location | None:
-        """Where the rig is: the active site, or else the mount's."""
-        return self._site()
+    def parked(self) -> bool:
+        return self.mount().parked
 
     async def sync(
         self,
