@@ -88,19 +88,25 @@ class Updates:
 
     async def check(self, args: Message) -> Message:
         # apt-get update beside the upgrade would fail on apt's lock, or replace the list
-        # and lose what the install upgraded. Refused to the caller only: the install's
-        # own result must not read as this refusal.
-        if await self._installing():
-            raise HelperError("invalid", "an update is being installed")
+        # and lose what the install upgraded.
+        await self._refuse_while_installing()
         return self._ask("check", args)
 
     async def install(self, args: Message) -> Message:
+        await self._refuse_while_installing()
         return self._ask("install", args)
 
     async def rollback(self, args: Message) -> Message:
         if not self._saved.get("previous"):
             raise HelperError("invalid", "no earlier version of NOCS to go back to")
+        await self._refuse_while_installing()
         return self._ask("rollback", args)
+
+    async def _refuse_while_installing(self) -> None:
+        """Refuse to the caller only: the running install's result must not read as this
+        refusal (the actor's errors become the state's)."""
+        if await self._installing():
+            raise HelperError("invalid", "an update is being installed")
 
     def _ask(self, task: Task, args: Message) -> Message:
         if args:
@@ -167,8 +173,9 @@ class Updates:
         self._save()
 
     async def _install(self) -> None:
-        if await self._installing():
-            raise HelperError("invalid", "an update is already being installed")
+        if await self._installing():  # started since this one was accepted
+            log.info("update install skipped: an update is being installed")
+            return
         previous = await _nocs_version()
         await self._start(
             "apt-get", "-y", "-o", "Dpkg::Options::=--force-confold", "upgrade", "--with-new-pkgs"
@@ -183,6 +190,9 @@ class Updates:
         self._save()
 
     async def _rollback(self) -> None:
+        if await self._installing():  # started since this one was accepted
+            log.info("update rollback skipped: an update is being installed")
+            return
         previous = str(self._saved["previous"])
         version = previous.replace(":", "%3a")
         debs = sorted(self._paths.archives.glob(f"nocs_{version}_*.deb"))

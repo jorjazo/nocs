@@ -291,3 +291,24 @@ async def test_an_install_that_never_started_is_no_success(
     status = await updates.status({})
     assert (status["state"], status["task"], status["upgraded"]) == ("idle", None, [])
     assert status["error"] == "systemd-run: Failed to start"
+
+
+async def test_no_second_install_while_installing(tools: Tools, paths: UpdatePaths) -> None:
+    updates = Updates(paths)
+    await updates.check({})
+    await drive(updates)
+    await updates.install({})
+    await drive(updates)
+    tools.answer("systemctl", "show", "active\n")
+    tools.answer("apt", "list", "Listing...\n")
+    (paths.archives / "nocs_0.1.0_arm64.deb").write_bytes(b"")
+    for again in (updates.install, updates.rollback):
+        with pytest.raises(HelperError, match="an update is being installed"):
+            await again({})
+        await drive(updates)
+    assert sum(call.startswith("systemd-run") for call in tools.calls()) == 1
+    # The install ends well: nothing of the refusals is left in its result.
+    tools.answer("systemctl", "show", "inactive\n")
+    status = await updates.status({})
+    assert (status["state"], status["task"], status["error"]) == ("succeeded", "install", None)
+    assert len(cast(list[object], status["upgraded"])) == 3
