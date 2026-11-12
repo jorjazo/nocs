@@ -2,6 +2,7 @@
 # installed its response types are unknown to pyright.
 # pyright: reportUnknownMemberType=false, reportUnknownVariableType=false, reportUnknownArgumentType=false
 import json
+import logging
 import re
 import stat
 from collections.abc import Iterator
@@ -17,7 +18,8 @@ from starlette.websockets import WebSocketDisconnect
 
 from nocs.api import create_app
 from nocs.api.auth import COOKIE, REVOKED, allowed_host, required_access
-from nocs.auth import AuthStore, ThrottledError, WrongPassphraseError
+from nocs.auth import AuthStore, InvalidHandoffError, ThrottledError, WrongPassphraseError
+from nocs.auth.store import HANDOFF_TTL, MAX_HANDOFFS, MAX_TOKENS
 from nocs.config import Settings
 
 
@@ -359,7 +361,171 @@ def test_configured_hostnames(monkeypatch: pytest.MonkeyPatch) -> None:
         assert client.get("/api/auth").status_code == 421
 
 
+# -- Handoff to a new host name (ADR 0044) ---------------------------------------------
+
+OLD = "http://nocs.local:8000"
+NEW = "http://nocs-lab.local:8000"
+
+
+@pytest.fixture
+def renamed() -> Iterator[TestClient]:
+    """A client paired at the box's old name, which the owner then renames."""
+    with TestClient(create_app(unreachable_indi()), base_url=OLD) as client:
+        pair_owner(client, "Pixel")
+        yield client
+
+
+def redeem(client: TestClient, token: str) -> httpx.Response:
+    return client.post(f"{NEW}/api/auth/handoff/redeem", json={"token": token})
+
+
+def test_handoff_pairs_the_same_device_under_the_new_name(renamed: TestClient) -> None:
+    client = renamed
+    me = client.get("/api/auth").json()["device"]
+    issued = client.post("/api/auth/handoff")
+    assert issued.status_code == 201
+    token = issued.json()["token"]
+    assert issued.json()["expires_in"] == HANDOFF_TTL
+    assert COOKIE not in issued.cookies
+
+    # Cookies belong to a host name: the old one's does not reach the new one.
+    assert client.get(f"{NEW}/api/auth").json()["role"] is None
+    response = redeem(client, token)
+    assert response.status_code == 200, response.text
+    assert (response.json()["id"], response.json()["current"]) == (me["id"], True)
+    cookie = response.headers["set-cookie"]
+    assert "HttpOnly" in cookie
+    assert "SameSite=strict" in cookie
+    assert token not in cookie
+
+    status = client.get(f"{NEW}/api/auth").json()
+    assert (status["role"], status["device"]["id"]) == ("owner", me["id"])
+    assert client.get(f"{NEW}/api/state").status_code == 200
+    # The old name (or the box's address) keeps its own cookie, and there is one device.
+    assert client.get("/api/auth").json()["device"]["id"] == me["id"]
+    assert [d["id"] for d in client.get(f"{NEW}/api/auth/devices").json()] == [me["id"]]
+
+    # Single use.
+    again = redeem(client, token)
+    assert again.status_code == 403
+    assert "expired or was used" in again.json()["detail"]
+
+
+def test_only_the_owner_gets_a_handoff(renamed: TestClient) -> None:
+    client = renamed
+    assert client.put("/api/auth/observer", json={"enabled": True}).status_code == 204
+    anonymous(client)
+    assert client.get("/api/auth").json()["role"] == "observer"
+    assert client.post("/api/auth/handoff").status_code == 401
+    assert required_access("POST", "/api/auth/handoff") == "owner"
+    assert required_access("POST", "/api/auth/handoff/redeem") == "public"
+
+
+def test_redeeming_checks_host_and_origin(renamed: TestClient) -> None:
+    token = renamed.post("/api/auth/handoff").json()["token"]
+    evil = renamed.post(f"{EVIL}/api/auth/handoff/redeem", json={"token": token})
+    assert evil.status_code == 421
+    cross = renamed.post(
+        f"{NEW}/api/auth/handoff/redeem", json={"token": token}, headers={"origin": OLD}
+    )
+    assert cross.status_code == 403
+    assert redeem(renamed, token).status_code == 200  # neither used it up
+
+
+def test_wrong_handoffs_are_throttled(renamed: TestClient) -> None:
+    client = renamed
+    token = client.post("/api/auth/handoff").json()["token"]
+    for _ in range(5):
+        assert redeem(client, "not-a-token").status_code == 403
+    response = redeem(client, token)
+    assert response.status_code == 429
+    assert int(response.headers["retry-after"]) >= 1
+    assert "handoffs" in response.json()["detail"]
+    # Paired devices and pairing with the passphrase are not held up.
+    assert client.get("/api/state").status_code == 200
+    assert pair_other(client, "tablet")
+
+
+def test_revoking_ends_every_cookie_and_handoff_of_the_device(renamed: TestClient) -> None:
+    client = renamed
+    me = client.get("/api/auth").json()["device"]["id"]
+    assert redeem(client, client.post("/api/auth/handoff").json()["token"]).status_code == 200
+    pending = client.post("/api/auth/handoff").json()["token"]
+    assert client.get(f"{NEW}/api/state").status_code == 200
+
+    assert client.delete(f"{NEW}/api/auth/devices/{me}").status_code == 204
+    assert client.get(f"{NEW}/api/state").status_code == 401
+    assert client.get("/api/state").status_code == 401
+    assert redeem(client, pending).status_code == 403
+
+
+def test_handoff_tokens_are_never_kept_shown_or_logged(
+    renamed: TestClient, config_dir: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    client = renamed
+    caplog.set_level(logging.DEBUG)
+    client.put("/api/auth/observer", json={"enabled": True})
+    token = client.post("/api/auth/handoff").json()["token"]
+    assert token not in (config_dir / "auth.json").read_text()
+    assert token not in client.get("/api/state").text
+    response = redeem(client, token)
+    assert response.status_code == 200
+    cookie = response.cookies[COOKIE]
+    assert token not in response.text
+    assert cookie not in response.text
+    saved = (config_dir / "auth.json").read_text()
+    assert token not in saved
+    assert cookie not in saved
+    assert token not in caplog.text
+    assert cookie not in caplog.text
+
+
 # -- Store ------------------------------------------------------------------------------
+
+
+async def test_handoffs_expire_and_are_capped(tmp_path: Path) -> None:
+    now = [0.0]
+    store = AuthStore(tmp_path / "auth.json", clock=lambda: now[0])
+    device, _ = await store.setup(PASSPHRASE, "owner")
+    late = store.issue_handoff(device.id)
+    now[0] += HANDOFF_TTL
+    with pytest.raises(InvalidHandoffError):
+        store.redeem_handoff(late)
+
+    tokens = [store.issue_handoff(device.id) for _ in range(MAX_HANDOFFS + 1)]
+    with pytest.raises(InvalidHandoffError):
+        store.redeem_handoff(tokens[0])  # replaced by the newest
+    for token in tokens[1:]:
+        assert store.redeem_handoff(token)[0].id == device.id
+    with pytest.raises(ValueError, match="no device"):
+        store.issue_handoff("nobody")
+
+
+async def test_a_device_keeps_its_newest_cookies(tmp_path: Path) -> None:
+    store = AuthStore(tmp_path / "auth.json")
+    device, first = await store.setup(PASSPHRASE, "owner")
+    cookies = [store.redeem_handoff(store.issue_handoff(device.id))[1] for _ in range(MAX_TOKENS)]
+    assert store.device_for(first) is None  # the oldest went
+    assert all(store.device_for(cookie) == device for cookie in cookies)
+    assert len(store.devices()) == 1
+    reloaded = AuthStore(tmp_path / "auth.json")
+    assert reloaded.device_for(cookies[-1]) is not None
+    assert reloaded.device_for(first) is None
+
+
+async def test_handoff_throttle_waits_and_resets(tmp_path: Path) -> None:
+    now = [0.0]
+    store = AuthStore(tmp_path / "auth.json", clock=lambda: now[0])
+    device, _ = await store.setup(PASSPHRASE, "owner")
+    for _ in range(5):
+        with pytest.raises(InvalidHandoffError):
+            store.redeem_handoff("wrong")
+    token = store.issue_handoff(device.id)
+    with pytest.raises(ThrottledError):
+        store.redeem_handoff(token)
+    now[0] += 1
+    assert store.redeem_handoff(token)[0].id == device.id
+    await store.pair(PASSPHRASE, "phone")  # passphrases have a count of their own
 
 
 async def test_throttle_doubles_and_resets(tmp_path: Path) -> None:

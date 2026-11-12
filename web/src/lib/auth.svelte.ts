@@ -1,7 +1,8 @@
 // Where this client stands with the server (ADR 0014): setup mode, unpaired,
 // observer or owner. The app shows first run, pairing or the screens from it.
 
-import { ApiError, getAuth, pair, revokeDevice, setUnauthorizedHandler, setUp } from "./api";
+import { ApiError, getAuth, pair, redeemHandoff, revokeDevice, setUnauthorizedHandler, setUp } from "./api";
+import { takeHandoff } from "./handoff";
 import type { AuthStatus } from "./types";
 
 function asApiError(e: unknown): ApiError {
@@ -16,6 +17,8 @@ class Auth {
   revoked = $state(false);
   // An observer asked to pair (or was revoked): show pairing even though it may watch.
   wantsPair = $state(false);
+  // A pairing handed over from the box's old name could not be taken (ADR 0044).
+  handoffFailed = $state(false);
   #refreshing: Promise<void> | null = null;
 
   constructor() {
@@ -24,6 +27,21 @@ class Auth {
 
   get owner(): boolean {
     return this.status?.role === "owner";
+  }
+
+  // The page's first look at the server. A pairing handed over from the box's old
+  // name (ADR 0044) leaves the URL at once, then pairs this browser as that device.
+  async start(): Promise<void> {
+    const { token, hash } = takeHandoff(location.hash);
+    if (token !== null) {
+      history.replaceState(history.state, "", `${location.pathname}${location.search}${hash}`);
+      try {
+        await redeemHandoff(token);
+      } catch {
+        this.handoffFailed = true;
+      }
+    }
+    await this.refresh();
   }
 
   refresh(): Promise<void> {
@@ -38,6 +56,7 @@ class Auth {
       if (this.status.role === "owner") {
         this.revoked = false;
         this.wantsPair = false;
+        this.handoffFailed = false;
       }
     } catch (e) {
       this.error = asApiError(e);

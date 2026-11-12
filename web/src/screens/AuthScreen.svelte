@@ -96,6 +96,8 @@
 
     {#if auth.revoked && !setup}
       <Banner icon="alert" tone="warning">{t.pair.revoked}</Banner>
+    {:else if auth.handoffFailed && !setup}
+      <Banner icon="alert" tone="warning">{t.pair.handoffFailed}</Banner>
     {/if}
 
     <TextField label={t.device.name} hint={t.device.nameHint} bind:value={name} required maxlength={64} />

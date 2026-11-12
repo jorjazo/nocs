@@ -116,6 +116,8 @@ export type {
   OutputRequest,
   PadRequest,
   PadStatusMessage,
+  Handoff,
+  HandoffRedeemRequest,
   PairedDevice,
   PairRequest,
   PassphraseRequest,

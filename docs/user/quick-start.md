@@ -76,8 +76,10 @@ If you gave Imager your home Wi-Fi, join that network instead and open
    5. **Check and apply**: what the box will do. When you apply, it saves the site
       and makes it the active one, restarts its Wi-Fi with the new password (or
       leaves it for your home network), and the phone drops off it: follow it as
-      the screen says, and open `http://<name>.local` again. After a new name the
-      box asks for your passphrase once more.
+      the screen says, and open `http://<name>.local` again. After a new name,
+      **Continue at <name>.local** opens it with this phone still paired, if you
+      get there within two minutes; after that, the box asks for your passphrase
+      once more.
 3. Now plug the USB devices in.
 
 ## 4. Your equipment

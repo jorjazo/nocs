@@ -4372,6 +4372,29 @@ export interface GuidingLoopRequest {
   exposure?: number | null;
 }
 /**
+ * A one-time token that pairs this device under another host name of the box
+ * (ADR 0044): the web app passes it to the new name in the URL's fragment.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "Handoff".
+ */
+export interface Handoff {
+  /**
+   * Seconds it stays valid.
+   */
+  expires_in: number;
+  token: string;
+}
+/**
+ * Redeem a handoff token (``/api/auth/handoff/redeem``, ADR 0044).
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "HandoffRedeemRequest".
+ */
+export interface HandoffRedeemRequest {
+  token: string;
+}
+/**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "Health".
  */

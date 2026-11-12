@@ -11,6 +11,8 @@ export type SetupDone = {
   renamed: boolean;
   // The box was on its access point, which then restarts.
   onAp: boolean;
+  // A one-time token that keeps this phone paired under the new name (ADR 0044).
+  handoff: string | null;
 };
 
 class BoxSetup {

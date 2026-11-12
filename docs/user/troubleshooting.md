@@ -27,8 +27,10 @@ internet. Turn off "switch to mobile data" (Android) or "Wi-Fi assist" (iOS), or
 answer "stay connected" when the phone asks.
 
 **I renamed the box and the app asks me to pair again.** A phone is paired with the
-name it used: after a rename, open `http://<new name>.local` and pair it with your
-passphrase.
+name it used. The phone that renames the box from `http://<old name>.local` waits for
+the new name and opens it still paired, if it gets there within two minutes; other
+phones and computers, or that one later, open `http://<new name>.local` and pair with
+your passphrase.
 
 **I forgot the box's Wi-Fi password.** Reach the box another way (your home Wi-Fi, if
 it knows it, or a network cable) and set a new one on Rig → Network → Access point.

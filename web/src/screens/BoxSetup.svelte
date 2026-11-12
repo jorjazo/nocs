@@ -22,13 +22,15 @@
     type SetupStep,
     type SiteChoice,
   } from "../lib/boxsetup";
-  import { activateSite, addSite, putSite, setUpNetwork } from "../lib/api";
+  import { activateSite, addSite, issueHandoff, putSite, setUpNetwork } from "../lib/api";
   import { isCountry } from "../lib/countries";
   import { errorText } from "../lib/errors";
   import { formatDecimal } from "../lib/format";
+  import { reachedByName } from "../lib/handoff";
   import { i18n } from "../lib/i18n";
   import { live } from "../lib/live.svelte";
   import { boxSetup, guessCountry } from "../lib/setup.svelte";
+  import NameHandoff from "./NameHandoff.svelte";
 
   const t = $derived(i18n.t);
   const network = $derived(live.app.network ?? null);
@@ -54,6 +56,9 @@
   // The box on its access point (this phone, most likely, on it too); otherwise on a
   // network or a cable, where the access point takes the new password next time.
   const onAp = $derived(network?.mode === "ap");
+  // This page reached by the box's current .local name, which a new name ends: this
+  // phone moves to the new one with its pairing (ADR 0044).
+  const moving = $derived(host !== current && reachedByName(location.hostname, current));
 
   // The site: the active one if the box has one already (it may have been set up
   // before), or a new one typed in, or filled from a mount or GPS that happens to be
@@ -176,13 +181,15 @@
       return;
     }
     try {
+      // Before the network changes, which may drop this phone or the old name.
+      const handoff = renamed && moving ? (await issueHandoff()).token : null;
       await setUpNetwork({
         country,
         password,
         join: join ? { ssid: join, password: openNetwork ? null : wifiPassword || null } : null,
         hostname: renamed ? wanted : null,
       });
-      boxSetup.done = { ssid: join, accessPoint: ap, host, renamed, onAp };
+      boxSetup.done = { ssid: join, accessPoint: ap, host, renamed, onAp, handoff };
       password = wifiPassword = "";
     } catch (e) {
       error = errorText(e, t);
@@ -209,10 +216,14 @@
             ? t.boxSetup.doneAp(done.accessPoint, done.host)
             : t.boxSetup.doneKeep(done.accessPoint, done.host)}
       </p>
-      {#if done.renamed}<p class="body">{t.boxSetup.pairAgain}</p>{/if}
+      {#if done.renamed && !done.handoff}<p class="body">{t.boxSetup.pairAgain}</p>{/if}
     </div>
     <div class="actions">
-      <Button variant="primary" wide onclick={() => (boxSetup.done = null)}>{t.boxSetup.continue}</Button>
+      {#if done.handoff}
+        <NameHandoff name={done.host} token={done.handoff} auto={false} wide />
+      {:else}
+        <Button variant="primary" wide onclick={() => (boxSetup.done = null)}>{t.boxSetup.continue}</Button>
+      {/if}
     </div>
   {:else}
     <form class="form" onsubmit={next} novalidate>
@@ -344,7 +355,7 @@
             : onAp
               ? t.boxSetup.afterAp(ap, host)
               : t.boxSetup.afterKeep(ap, host)}
-          {#if host !== current}{t.boxSetup.pairAgain}{/if}
+          {#if host !== current}{moving ? t.boxSetup.keepPairing : t.boxSetup.pairAgain}{/if}
         </p>
       {/if}
 

@@ -568,12 +568,19 @@ Appliance (phase 6):
   last step that shows what will happen. Nothing is sent before that last step,
   which saves the site first, so the phone loses the access point only once the
   instructions for following the box (join the access point again, or switch to the
-  home network, and open `http://<name>.local`, pairing again after a new name) are
-  on screen; they stay there after applying. A later step is one more entry in
-  `lib/boxsetup.ts` and its own section of the screen.
+  home network, and open `http://<name>.local`) are on screen; they stay there after
+  applying. After a new name, from a page at the old `.local` name, the last screen's
+  button is "Continue at <name>.local", which waits for it and opens it with the
+  pairing handed over (ADR 0044); otherwise it says the box asks for the passphrase
+  again. A later step is one more entry in `lib/boxsetup.ts` and its own section of
+  the screen.
 - Rig gains "This computer" (health, name, restart, shut down, INDI and PHD2
   restarts, diagnostics) and "Network" (where the box is, known networks, joining
   one, the access point, the mode); USB drives with Eject sit under Storage.
+  Renaming from a page at the old `.local` name waits for the new name ("Waiting for
+  <name>.local to answer", with the seconds) and opens the same screen there, still
+  paired (ADR 0044); after 60 s it offers a link and "Keep waiting". From an address
+  or another name, it says that other devices pair again.
 - Rig → Access has the owner passphrase for the owner: a Change button opens the
   current passphrase, the new one and the new one again (8 characters at least, as
   the server counts them; wrong, throttled and too short said at their field). On the

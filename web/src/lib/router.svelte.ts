@@ -27,8 +27,9 @@ export type Route =
 
 const DEFAULT: Route = { screen: "tonight" };
 
+// Parameters after the route (#/rig?handoff=…, ADR 0044) are not part of it.
 function parse(hash: string): Route {
-  const [first, second, third] = hash.replace(/^#\/?/, "").split("/");
+  const [first, second, third] = hash.replace(/^#\/?/, "").replace(/\?.*$/, "").split("/");
   if (first === "dev") return { screen: "dev" };
   if (first === "focus") return { screen: "focus" };
   if (first === "guiding") return { screen: "guiding" };

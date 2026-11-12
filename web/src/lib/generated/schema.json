@@ -5263,6 +5263,39 @@
       "title": "GuidingStats",
       "type": "object"
     },
+    "Handoff": {
+      "description": "A one-time token that pairs this device under another host name of the box\n(ADR 0044): the web app passes it to the new name in the URL's fragment.",
+      "properties": {
+        "expires_in": {
+          "description": "Seconds it stays valid.",
+          "type": "number"
+        },
+        "token": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "token",
+        "expires_in"
+      ],
+      "title": "Handoff",
+      "type": "object"
+    },
+    "HandoffRedeemRequest": {
+      "additionalProperties": false,
+      "description": "Redeem a handoff token (``/api/auth/handoff/redeem``, ADR 0044).",
+      "properties": {
+        "token": {
+          "maxLength": 128,
+          "type": "string"
+        }
+      },
+      "required": [
+        "token"
+      ],
+      "title": "HandoffRedeemRequest",
+      "type": "object"
+    },
     "Health": {
       "properties": {
         "indi_connected": {

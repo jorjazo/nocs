@@ -2168,6 +2168,22 @@ class ObserverRequest(BaseModel):
     enabled: bool
 
 
+class HandoffRedeemRequest(BaseModel):
+    """Redeem a handoff token (``/api/auth/handoff/redeem``, ADR 0044)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    token: str = Field(max_length=128)
+
+
+class Handoff(WireModel):
+    """A one-time token that pairs this device under another host name of the box
+    (ADR 0044): the web app passes it to the new name in the URL's fragment."""
+
+    token: str
+    expires_in: float = Field(description="Seconds it stays valid.")
+
+
 class PairedDevice(WireModel):
     id: str
     name: str

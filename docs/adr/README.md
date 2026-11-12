@@ -49,5 +49,6 @@ that supersedes the old one.
 | [0041](0041-preparation-steps-run-when-they-can.md) | Tonight's checklist offers a step only when it can run; the server says what blocks it | Proposed |
 | [0042](0042-site-from-the-mount-and-first-run.md) | A new site from the mount or the GPS, and a site step in the first run | Proposed |
 | [0043](0043-ssh-login-with-the-owner-passphrase.md) | An SSH login on the appliance whose password is the owner passphrase | Proposed |
+| [0044](0044-pairing-handoff-to-a-new-name.md) | A renamed box hands the pairing over to its new name | Proposed |
 
 Template: Context → Decision → Consequences.

@@ -33,7 +33,7 @@
   import Tonight from "./screens/tonight/Tonight.svelte";
 
   const t = $derived(i18n.t);
-  void auth.refresh();
+  void auth.start();
 
   const role = $derived(auth.status?.role ?? null);
   const view = $derived.by(() => {

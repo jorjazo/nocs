@@ -311,7 +311,8 @@ parks the mount. Observatory devices will plug into this later.
 - Several NOCS boxes may share a network (two rigs at home): the host name and
   its mDNS name are configurable (a nocs-system operation), so each box is
   reachable as e.g. `nocs-west.local`. A pairing belongs to the name the client
-  used (ADR 0014).
+  used (ADR 0014); the browser that renames the box from its old `.local` name
+  takes its pairing to the new one (ADR 0044).
 
 ## 12. Deployment
 

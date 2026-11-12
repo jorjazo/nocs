@@ -12,6 +12,7 @@ import tempfile
 import time
 import unicodedata
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -30,6 +31,17 @@ SCRYPT_N = 2**16
 _FREE_FAILURES = 5
 _MAX_DELAY = 60.0
 _LAST_USED_RESOLUTION = timedelta(hours=1)
+
+MAX_TOKENS = 8
+"""Cookies a device keeps at once, one per host name it was handed over to (ADR 0044);
+a new one beyond these replaces the oldest."""
+
+HANDOFF_TTL = 120.0
+"""Seconds a handoff token is valid: enough to rename the box and wait for its new
+name to answer (ADR 0044)."""
+
+MAX_HANDOFFS = 4
+"""Handoff tokens outstanding at once; a new one beyond these replaces the oldest."""
 
 
 class AuthError(Exception):
@@ -52,9 +64,14 @@ class WrongPassphraseError(AuthError):
 
 
 class ThrottledError(AuthError):
-    def __init__(self, retry_after: float) -> None:
-        super().__init__(f"too many wrong passphrases: retry in {retry_after:.0f} s")
+    def __init__(self, retry_after: float, what: str = "passphrases") -> None:
+        super().__init__(f"too many wrong {what}: retry in {retry_after:.0f} s")
         self.retry_after = retry_after
+
+
+class InvalidHandoffError(AuthError):
+    def __init__(self) -> None:
+        super().__init__("this handoff is not valid: it expired or was used already")
 
 
 class ScryptHash(BaseModel):
@@ -88,7 +105,8 @@ class ScryptHash(BaseModel):
 class Device(BaseModel):
     id: str
     name: str
-    token_sha256: str
+    tokens_sha256: list[str] = Field(min_length=1)
+    """One cookie per host name the device was handed over to (ADR 0044), oldest first."""
     created: datetime
     last_used: datetime
 
@@ -99,8 +117,42 @@ class _AuthFile(BaseModel):
     devices: list[Device] = Field(default_factory=list[Device])
 
 
+class _Throttle:
+    """Free failures, then a doubling wait before the next attempt."""
+
+    def __init__(self, clock: Callable[[], float], what: str) -> None:
+        self._clock = clock
+        self._what = what
+        self._failures = 0
+        self._locked_until = 0.0
+
+    def check(self) -> None:
+        wait = self._locked_until - self._clock()
+        if wait > 0:
+            raise ThrottledError(wait, self._what)
+
+    def succeeded(self) -> None:
+        self._failures = 0
+
+    def failed(self) -> int:
+        """Count a failure; returns how many in a row."""
+        self._failures += 1
+        if self._failures >= _FREE_FAILURES:
+            delay = min(_MAX_DELAY, 2.0 ** (self._failures - _FREE_FAILURES))
+            self._locked_until = self._clock() + delay
+        return self._failures
+
+
+@dataclass(frozen=True)
+class _Handoff:
+    device_id: str
+    expires: float
+
+
 class AuthStore:
-    """The single owner's credentials. Not thread-safe: use it from the event loop."""
+    """The single owner's credentials. Not thread-safe: use it from the event loop.
+
+    Handoff tokens (ADR 0044) live only here, in memory, as hashes."""
 
     def __init__(self, path: Path, clock: Callable[[], float] = time.monotonic) -> None:
         self._path = path
@@ -108,11 +160,12 @@ class AuthStore:
         self._data = _AuthFile()
         if path.exists():
             self._data = _AuthFile.model_validate_json(path.read_text())
-        self._by_token = {d.token_sha256: d for d in self._data.devices}
+        self._by_token = {t: d for d in self._data.devices for t in d.tokens_sha256}
         # One hash at a time: each takes 64 MiB and a fifth of a second on the Pi.
         self._lock = anyio.Lock()
-        self._failures = 0
-        self._locked_until = 0.0
+        self._passphrases = _Throttle(clock, "passphrases")
+        self._handoff_failures = _Throttle(clock, "handoffs")
+        self._handoffs: dict[str, _Handoff] = {}  # by the token's SHA-256, oldest first
 
     @property
     def setup_required(self) -> bool:
@@ -164,34 +217,77 @@ class AuthStore:
         log.info("owner passphrase changed")
 
     def revoke(self, device_id: str) -> bool:
-        device = next((d for d in self._data.devices if d.id == device_id), None)
+        """Unpair a device: every cookie it has, and its pending handoffs."""
+        device = self._device(device_id)
         if device is None:
             return False
         self._data.devices.remove(device)
-        del self._by_token[device.token_sha256]
+        for token in device.tokens_sha256:
+            del self._by_token[token]
+        self._handoffs = {k: h for k, h in self._handoffs.items() if h.device_id != device_id}
         self._save()
         log.info("device %s (%s) revoked", device.id, device.name)
         return True
+
+    # -- Handoff to another host name (ADR 0044) ----------------------------------
+
+    def issue_handoff(self, device_id: str) -> str:
+        """A one-time token that pairs the browser redeeming it as ``device_id`` under
+        the host name it uses then (cookies belong to a host name). Kept only as a hash,
+        for :data:`HANDOFF_TTL` seconds."""
+        if self._device(device_id) is None:
+            raise ValueError(f"no device {device_id}")
+        self._expire_handoffs()
+        while len(self._handoffs) >= MAX_HANDOFFS:
+            del self._handoffs[next(iter(self._handoffs))]
+        token = secrets.token_urlsafe(32)
+        self._handoffs[_sha256(token)] = _Handoff(device_id, self._clock() + HANDOFF_TTL)
+        log.info("handoff issued to device %s", device_id)
+        return token
+
+    def redeem_handoff(self, token: str) -> tuple[Device, str]:
+        """The device a handoff token was issued to, with a new cookie token for it; the
+        handoff is used up. Wrong tokens are throttled like wrong passphrases."""
+        self._handoff_failures.check()
+        self._expire_handoffs()
+        handoff = self._handoffs.pop(_sha256(token), None)
+        device = self._device(handoff.device_id) if handoff is not None else None
+        if device is None:
+            failures = self._handoff_failures.failed()
+            log.warning("invalid handoff (%d in a row)", failures)
+            raise InvalidHandoffError
+        self._handoff_failures.succeeded()
+        cookie = secrets.token_urlsafe(32)
+        device.tokens_sha256.append(_sha256(cookie))
+        self._by_token[device.tokens_sha256[-1]] = device
+        while len(device.tokens_sha256) > MAX_TOKENS:
+            del self._by_token[device.tokens_sha256.pop(0)]
+        device.last_used = _now()
+        self._save()
+        log.info("device %s (%s) handed over to another host name", device.id, device.name)
+        return device, cookie
+
+    def _expire_handoffs(self) -> None:
+        now = self._clock()
+        self._handoffs = {k: h for k, h in self._handoffs.items() if h.expires > now}
+
+    def _device(self, device_id: str) -> Device | None:
+        return next((d for d in self._data.devices if d.id == device_id), None)
 
     async def _verify(self, passphrase: str) -> None:
         async with self._lock:
             stored = self._data.passphrase
             if stored is None:
                 raise SetupRequiredError
-            wait = self._locked_until - self._clock()
-            if wait > 0:
-                raise ThrottledError(wait)
+            self._passphrases.check()
             normalized = unicodedata.normalize("NFC", passphrase)
             if len(normalized) <= MAX_PASSPHRASE and await anyio.to_thread.run_sync(
                 stored.matches, normalized
             ):
-                self._failures = 0
+                self._passphrases.succeeded()
                 return
-            self._failures += 1
-            if self._failures >= _FREE_FAILURES:
-                delay = min(_MAX_DELAY, 2.0 ** (self._failures - _FREE_FAILURES))
-                self._locked_until = self._clock() + delay
-            log.warning("wrong passphrase (%d in a row)", self._failures)
+            failures = self._passphrases.failed()
+            log.warning("wrong passphrase (%d in a row)", failures)
             raise WrongPassphraseError
 
     def _pair(self, name: str) -> tuple[Device, str]:
@@ -200,12 +296,12 @@ class AuthStore:
         device = Device(
             id=secrets.token_hex(6),
             name=name,
-            token_sha256=_sha256(token),
+            tokens_sha256=[_sha256(token)],
             created=now,
             last_used=now,
         )
         self._data.devices.append(device)
-        self._by_token[device.token_sha256] = device
+        self._by_token[device.tokens_sha256[0]] = device
         self._save()
         log.info("device %s (%s) paired", device.id, device.name)
         return device, token

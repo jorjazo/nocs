@@ -21,6 +21,8 @@ from starlette.websockets import WebSocketClose
 from nocs.api.schemas import (
     AuthStatus,
     ClientRole,
+    Handoff,
+    HandoffRedeemRequest,
     ObserverRequest,
     PairedDevice,
     PairRequest,
@@ -30,11 +32,12 @@ from nocs.auth import (
     AlreadySetUpError,
     AuthStore,
     Device,
+    InvalidHandoffError,
     SetupRequiredError,
     ThrottledError,
     WrongPassphraseError,
 )
-from nocs.auth.store import check_passphrase
+from nocs.auth.store import HANDOFF_TTL, check_passphrase
 
 COOKIE = "nocs_device"
 COOKIE_MAX_AGE = timedelta(days=400)
@@ -51,6 +54,7 @@ _PUBLIC = {
     ("GET", "/api/auth"),
     ("POST", "/api/auth/setup"),
     ("POST", "/api/auth/pair"),
+    ("POST", "/api/auth/handoff/redeem"),
 }
 _OBSERVER = {("GET", "/api/state"), ("WEBSOCKET", "/api/ws"), ("GET", "/api/guiding/steps")}
 _OBSERVER_PREFIXES = {("GET", "/api/previews/"), ("GET", "/api/sky/"), ("GET", "/api/targets/")}
@@ -254,6 +258,26 @@ def auth_router(
         _set_cookie(request, response, token)
         return _paired(device, Identity(role="owner", device=device))
 
+    @router.post("/handoff", status_code=status.HTTP_201_CREATED)
+    async def handoff(request: Request) -> Handoff:  # pyright: ignore[reportUnusedFunction]
+        """A one-time token for this device under another host name of the box (ADR 0044):
+        the web app gets one before renaming the box, since its old name stops answering."""
+        who = identity(request)
+        if who.device is None:  # the middleware lets only the owner's devices in
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "this device is not paired")
+        return Handoff(token=auth.issue_handoff(who.device.id), expires_in=HANDOFF_TTL)
+
+    @router.post("/handoff/redeem")
+    async def redeem_handoff(  # pyright: ignore[reportUnusedFunction]
+        body: HandoffRedeemRequest, request: Request, response: Response
+    ) -> PairedDevice:
+        """Pair this browser, under the host name it uses, as the device that got the
+        token: public, single use, throttled like wrong passphrases."""
+        with _auth_errors():
+            device, token = auth.redeem_handoff(body.token)
+        _set_cookie(request, response, token)
+        return _paired(device, Identity(role="owner", device=device))
+
     @router.get("/devices")
     async def devices(request: Request) -> list[PairedDevice]:  # pyright: ignore[reportUnusedFunction]
         who = identity(request)
@@ -318,7 +342,7 @@ def _auth_errors() -> Generator[None]:
         raise HTTPException(
             status.HTTP_429_TOO_MANY_REQUESTS, str(e), headers={"Retry-After": retry}
         ) from e
-    except WrongPassphraseError as e:
+    except (WrongPassphraseError, InvalidHandoffError) as e:
         raise HTTPException(status.HTTP_403_FORBIDDEN, str(e)) from e
     except (AlreadySetUpError, SetupRequiredError) as e:
         raise HTTPException(status.HTTP_409_CONFLICT, str(e)) from e

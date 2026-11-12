@@ -35,6 +35,8 @@ import type {
   GpsSiteRequest,
   GuideRequest,
   GuideSteps,
+  Handoff,
+  HandoffRedeemRequest,
   HorizontalGoto,
   MountMoveRequest,
   HostnameRequest,
@@ -161,6 +163,16 @@ export function setUp(body: PairRequest): Promise<PairedDevice> {
 
 export function pair(body: PairRequest): Promise<PairedDevice> {
   return request("POST", "/api/auth/pair", body);
+}
+
+// A one-time token that pairs this device under another name of the box (ADR 0044).
+export function issueHandoff(): Promise<Handoff> {
+  return request("POST", "/api/auth/handoff");
+}
+
+// Refused with 403 when the token expired or was used, 429 while wrong ones are throttled.
+export function redeemHandoff(token: string): Promise<PairedDevice> {
+  return request("POST", "/api/auth/handoff/redeem", { token } satisfies HandoffRedeemRequest);
 }
 
 export function listDevices(): Promise<PairedDevice[]> {

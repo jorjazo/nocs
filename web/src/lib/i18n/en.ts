@@ -81,6 +81,18 @@ export const en = {
     submit: "Pair this device",
     watch: "Watch without pairing",
     revoked: "This device was unpaired. Pair it again to keep using it.",
+    handoffFailed:
+      "This device's pairing could not move to this name: it took too long, or the link was used already. Pair it again with the passphrase.",
+  },
+  // The box renamed from a page at its old name (ADR 0044).
+  handoff: {
+    waiting: (host: string, seconds: number) =>
+      `Waiting for ${host}.local to answer (${seconds} s): this device then opens it, still paired.`,
+    timeout: (host: string) =>
+      `${host}.local does not answer yet: the box may still be restarting its network, or this device be on another one. Open it within two minutes to stay paired; after that, it asks for the passphrase again.`,
+    open: (host: string) => `Open ${host}.local`,
+    retry: "Keep waiting",
+    go: (host: string) => `Continue at ${host}.local`,
   },
   nights: {
     stackImage: "Open the picture",
@@ -259,6 +271,7 @@ export const en = {
     afterKeep: (ap: string, host: string) =>
       `When you apply, the box stays on the network it is on, and ${ap} takes the new password the next time it opens. Open http://${host}.local.`,
     pairAgain: "Under its new name, the box asks this phone for your passphrase again.",
+    keepPairing: "This phone stays paired under the new name if you open it within two minutes; after that, it asks for your passphrase again.",
     back: "Back",
     next: "Next",
     submit: "Apply",
@@ -366,10 +379,12 @@ export const en = {
     name: "Name on the network",
     rename: "Rename",
     nameInvalid: "Use 1 to 63 letters, digits and hyphens, without a hyphen at either end.",
-    renameHint: "Letters, digits and hyphens. Phones and computers reach it as <name>.local, and must pair again under the new name.",
+    renameHint:
+      "Letters, digits and hyphens. Phones and computers reach it as <name>.local: this device stays paired, others that used the old name pair again.",
     save: "Save",
     cancel: "Cancel",
-    renamed: (name: string) => `Renamed. Open ${name}.local and pair this device again.`,
+    renamed: (name: string) =>
+      `Renamed: the box is now ${name}.local. Devices that used the old name pair again under the new one.`,
     ssh: "SSH",
     loginLocked: (user: string) => `The SSH user ${user} has no password yet: give it the owner passphrase to log in.`,
     loginFailed: (user: string) =>

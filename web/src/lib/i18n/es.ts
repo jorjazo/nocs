@@ -62,6 +62,17 @@ export const es: Messages = {
     submit: "Emparejar este dispositivo",
     watch: "Mirar sin emparejar",
     revoked: "Este dispositivo fue desvinculado. Vuelve a emparejarlo para seguir usándolo.",
+    handoffFailed:
+      "El emparejamiento de este dispositivo no pudo pasar a este nombre: tardó demasiado, o el enlace ya se había usado. Vuelve a emparejarlo con la frase de acceso.",
+  },
+  handoff: {
+    waiting: (host: string, seconds: number) =>
+      `Esperando que ${host}.local responda (${seconds} s): luego este dispositivo lo abre, todavía emparejado.`,
+    timeout: (host: string) =>
+      `${host}.local todavía no responde: puede que el equipo siga reiniciando su red, o que este dispositivo esté en otra. Ábrelo antes de dos minutos para seguir emparejado; después, te pide otra vez la frase de acceso.`,
+    open: (host: string) => `Abrir ${host}.local`,
+    retry: "Seguir esperando",
+    go: (host: string) => `Continuar en ${host}.local`,
   },
   nights: {
     stackImage: "Abrir la imagen",
@@ -242,6 +253,8 @@ export const es: Messages = {
     afterKeep: (ap: string, host: string) =>
       `Al aplicar, el equipo sigue en la red en que está, y ${ap} usa la contraseña nueva la próxima vez que se abra. Abre http://${host}.local.`,
     pairAgain: "Con su nombre nuevo, el equipo le pide otra vez tu frase de acceso a este teléfono.",
+    keepPairing:
+      "Este teléfono sigue emparejado con el nombre nuevo si lo abres antes de dos minutos; después, te pide otra vez la frase de acceso.",
     back: "Atrás",
     next: "Siguiente",
     submit: "Aplicar",
@@ -349,10 +362,12 @@ export const es: Messages = {
     name: "Nombre en la red",
     rename: "Cambiar nombre",
     nameInvalid: "Usa de 1 a 63 letras, números y guiones, sin guion al principio ni al final.",
-    renameHint: "Letras, números y guiones. Teléfonos y computadores lo encuentran como <nombre>.local, y deben emparejarse de nuevo con el nombre nuevo.",
+    renameHint:
+      "Letras, números y guiones. Teléfonos y computadores lo encuentran como <nombre>.local: este dispositivo sigue emparejado, los demás que usaban el nombre anterior deben emparejarse de nuevo.",
     save: "Guardar",
     cancel: "Cancelar",
-    renamed: (name: string) => `Nombre cambiado. Abre ${name}.local y vuelve a emparejar este dispositivo.`,
+    renamed: (name: string) =>
+      `Nombre cambiado: el equipo ahora es ${name}.local. Los dispositivos que usaban el nombre anterior deben emparejarse de nuevo con el nuevo.`,
     ssh: "SSH",
     loginLocked: (user: string) =>
       `El usuario SSH ${user} todavía no tiene contraseña: dale la frase de acceso del propietario para poder entrar.`,

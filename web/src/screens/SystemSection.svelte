@@ -9,6 +9,7 @@
   import {
     ApiError,
     DIAGNOSTICS_URL,
+    issueHandoff,
     powerOff,
     reboot,
     restartService,
@@ -26,11 +27,13 @@
     formatTemperature,
     formatTime,
   } from "../lib/format";
+  import { reachedByName } from "../lib/handoff";
   import { i18n } from "../lib/i18n";
   import { live } from "../lib/live.svelte";
   import { loginWarning } from "../lib/passphrase";
   import { showPassphraseForm } from "../lib/passphraseform.svelte";
   import { installedCount, isToday, summarize } from "../lib/updates";
+  import NameHandoff from "./NameHandoff.svelte";
 
   const t = $derived(i18n.t);
   const locale = $derived(i18n.locale);
@@ -77,6 +80,9 @@
   let name = $state("");
   let nameError = $state("");
   let renamed = $state<string | null>(null);
+  // Renamed from a page reached by the old <name>.local, which stops answering: this
+  // device moves to the new name with its pairing (ADR 0044).
+  let handoff = $state<{ name: string; token: string } | null>(null);
 
   // -- Actions --------------------------------------------------------------------
 
@@ -115,9 +121,18 @@
       nameError = t.system.nameInvalid;
       return;
     }
-    if (await act("rename", () => setHostname(wanted))) {
+    const old = system?.hostname ?? "";
+    const moving = wanted !== old && reachedByName(location.hostname, old);
+    let token = null as string | null;
+    const ok = await act("rename", async () => {
+      // First: once renamed, the old name may stop answering before a second request.
+      if (moving) token = (await issueHandoff()).token;
+      await setHostname(wanted);
+    });
+    if (ok) {
       renaming = false;
-      renamed = wanted;
+      if (token !== null) handoff = { name: wanted, token };
+      else renamed = wanted;
     }
   }
 
@@ -221,7 +236,11 @@
           {/if}
         </div>
       {/if}
-      {#if renamed}<p class="muted">{t.system.renamed(renamed)}</p>{/if}
+      {#if handoff}
+        <NameHandoff name={handoff.name} token={handoff.token} />
+      {:else if renamed}
+        <p class="muted">{t.system.renamed(renamed)}</p>
+      {/if}
     </div>
 
     {#if login}
