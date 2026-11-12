@@ -8,6 +8,7 @@
   import Banner from "../components/Banner.svelte";
   import Button from "../components/Button.svelte";
   import ConfirmButton from "../components/ConfirmButton.svelte";
+  import DriverField from "../components/DriverField.svelte";
   import Icon from "../components/Icon.svelte";
   import NumberField from "../components/NumberField.svelte";
   import Toggle from "../components/Toggle.svelte";
@@ -15,7 +16,7 @@
   import TextField from "../components/TextField.svelte";
   import { deleteProfile, getProfile, listDriverDevices, listDrivers, listSerialPorts, putProfile } from "../lib/api";
   import { auth } from "../lib/auth.svelte";
-  import { choiceFor, driverChoices, matches, type DriverChoice } from "../lib/drivers";
+  import { choiceFor, driverChoices, type DriverChoice } from "../lib/drivers";
   import { ROLE_ICONS, ROLES, SOLVE_EXPOSURE } from "../lib/equipment";
   import { errorText } from "../lib/errors";
   import { i18n } from "../lib/i18n";
@@ -41,7 +42,7 @@
   };
 
   // The model is the catalog's, kept so that the editor shows the one chosen.
-  type DeviceDraft = { driver: string; model: string | null; device: string; port: string; filter: string };
+  type DeviceDraft = { driver: string; model: string | null; device: string; port: string };
   type OpticsDraft = { focal_length: number | null; aperture: number | null; reducer: number | null };
 
   function opticsDraft(optics: Optics | null | undefined): OpticsDraft {
@@ -96,7 +97,6 @@
               model: config.model ?? null,
               device: config.device ?? "",
               port: config.port ?? "",
-              filter: "",
             },
           ]),
         );
@@ -112,22 +112,10 @@
   // -- Drivers -----------------------------------------------------------------------
 
   const choices = $derived(driverChoices(drivers));
+  // The role just added: its driver field takes the focus.
+  let added = $state<Role | null>(null);
 
-  // The role's groups first, then the rest; only what the filter matches, and
-  // always the current choice (also a driver installed by hand).
-  function groupsFor(role: Role, draft: DeviceDraft): { label: string; choices: DriverChoice[] }[] {
-    const current = choiceFor(choices, draft.driver, draft.model);
-    const shown = choices.filter((c) => c.key === current?.key || matches(c, draft.filter));
-    const wanted = ROLE_GROUPS[role];
-    const groups = wanted.map((group) => ({ label: group, choices: shown.filter((c) => c.group === group) }));
-    const others = shown.filter((c) => !wanted.includes(c.group));
-    if (current && !choices.some((c) => c.key === current.key)) others.unshift(current);
-    return [...groups, { label: t.editor.otherDrivers, choices: others }].filter((g) => g.choices.length > 0);
-  }
-
-  function choose(draft: DeviceDraft, key: string): void {
-    const choice = choices.find((c) => c.key === key);
-    if (!choice) return;
+  function choose(draft: DeviceDraft, choice: DriverChoice): void {
     if (choice.driver !== draft.driver) draft.device = "";
     [draft.driver, draft.model] = [choice.driver, choice.model];
   }
@@ -302,7 +290,12 @@
               {#if draft}
                 <Button variant="text" onclick={() => delete devices[role]}>{t.editor.remove}</Button>
               {:else}
-                <Button variant="text" onclick={() => (devices[role] = { driver: "", model: null, device: "", port: "", filter: "" })}>
+                <Button
+                  variant="text"
+                  onclick={() => {
+                    devices[role] = { driver: "", model: null, device: "", port: "" };
+                    added = role;
+                  }}>
                   <Icon name="plus" size={20} />{t.editor.add(t.roles[role])}
                 </Button>
               {/if}
@@ -312,24 +305,14 @@
               {@const listing = listingFor(role, draft)}
               {@const listed = listing?.names ? deviceChoices(listing.names, draft.device) : null}
               <div class="role-fields">
-                <TextField label={t.editor.filterDrivers} bind:value={draft.filter} placeholder={t.editor.filterPlaceholder} />
-                <label class="select">
-                  <span class="label muted">{t.editor.driver}</span>
-                  <select
-                    bind:value={
-                      () => choiceFor(choices, draft.driver, draft.model)?.key ?? "",
-                      (key) => choose(draft, key)
-                    }>
-                    <option value="" disabled>{t.editor.chooseDriver}</option>
-                    {#each groupsFor(role, draft) as group (group.label)}
-                      <optgroup label={group.label}>
-                        {#each group.choices as choice (choice.key)}
-                          <option value={choice.key}>{choice.text}</option>
-                        {/each}
-                      </optgroup>
-                    {/each}
-                  </select>
-                </label>
+                <DriverField
+                  label={t.editor.driver}
+                  context={t.roles[role]}
+                  {choices}
+                  groups={ROLE_GROUPS[role]}
+                  current={choiceFor(choices, draft.driver, draft.model)}
+                  onchoose={(choice) => choose(draft, choice)}
+                  autofocus={added === role} />
                 {#if listed}
                   <label class="select">
                     <span class="label muted">{t.editor.deviceName}</span>

@@ -209,6 +209,17 @@ Focuser, filter wheel and profile editor (stage 2.8):
   catalog groups first), device name with the devices that driver runs now as
   suggestions, serial port from `/dev/serial/by-id/`; then both trains' optics.
   Changes to a connected profile apply when it is next connected.
+- A role's driver is one field (an ARIA combobox, `DriverField`) that shows the
+  model chosen, with the driver's executable under it. Tapping it selects its text
+  and lists the drivers right under it, in the page's flow (never clipped; on a
+  phone the field scrolls to the top, above the keyboard), the current one marked
+  and in sight; typing filters by model, maker or executable (models and makers
+  that match first), and the first match is active, so Enter takes it. Arrows and
+  Page Up/Down move, a tap or a click chooses, Escape or leaving the field keeps
+  the choice it had; × empties the field to search again. Each option shows the
+  model, then the maker and the executable. INDI's catalog entries that give a real
+  model a simulator's driver (the iOptron SkyGuider Pro, a tracker) are left out:
+  they would be a simulated mount under a real name.
 - The site belongs to the box, not to a profile (ADR 0038). Rig lists the saved
   sites under the trains, each with its position, the active one marked and the
   others with "Use"; the owner opens one to edit it (`#/rig/site/<id>`: name,

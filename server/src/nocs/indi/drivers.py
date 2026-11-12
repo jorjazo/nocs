@@ -68,6 +68,13 @@ class DriverInfo:
     """Catalog group, e.g. ``CCDs`` or ``Telescopes``."""
 
 
+def _stand_in(executable: str, label: str) -> bool:
+    """A real model INDI lists under a simulator's driver: the iOptron SkyGuider Pro,
+    a tracker with nothing to control, runs the Telescope Simulator in Ekos. In NOCS
+    it would be a simulated mount under a real name, slewing nowhere."""
+    return executable.startswith("indi_simulator_") and "simulator" not in label.lower()
+
+
 def load_catalog(directory: Path) -> list[DriverInfo]:
     """Read every INDI driver catalog file (``drivers.xml`` and third-party ones)."""
     entries: set[DriverInfo] = set()
@@ -86,11 +93,14 @@ def load_catalog(directory: Path) -> list[DriverInfo]:
                 executable = (driver.text or "").strip() if driver is not None else ""
                 if driver is None or not DRIVER_NAME.fullmatch(executable):
                     continue
+                label = device.get("label", executable)
+                if _stand_in(executable, label):
+                    continue
                 entries.add(
                     DriverInfo(
                         driver=executable,
                         name=driver.get("name", executable),
-                        label=device.get("label", executable),
+                        label=label,
                         manufacturer=device.get("manufacturer", ""),
                         group=group.get("group", ""),
                     )
