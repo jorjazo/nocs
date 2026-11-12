@@ -7,6 +7,7 @@ import os
 import re
 import stat
 import time
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -458,7 +459,7 @@ def test_the_first_run_names_the_box_and_checks_everything_first(
         gid=cfg.gid,
         enabled=cfg.enabled,
         socket=cfg.socket,
-        context=Context(hosts=cfg.context.hosts, network=Network(paths)),
+        context=replace(cfg.context, network=Network(paths)),
     )
     with serving(cfg):
         settings = Settings(

@@ -299,11 +299,13 @@ async def test_a_new_host_name_restarts_the_share(tmp_path: Path, tools: Path) -
     (tools.parent / "bin/hostnamectl").write_text("#!/bin/sh\n")
     (tools.parent / "bin/hostnamectl").chmod(0o755)
     share = Share(paths(tmp_path), owner=OWNER)
-    await set_hostname(Context(hosts=tmp_path / "hosts", share=share), {"name": "rig2"})
+    context = Context(hosts=tmp_path / "hosts", cloud_init=tmp_path / "no-cloud-init", share=share)
+    await set_hostname(context, {"name": "rig2"})
     assert calls(tools, "systemctl") == [
         "systemctl try-restart avahi-daemon.service",
         "systemctl try-restart nocs-share.service nocs-wsdd.service",
     ]
+    assert not (tmp_path / "no-cloud-init").exists()  # nothing to tell without cloud-init
 
 
 def test_the_api_switches_the_share_and_publishes_it(tmp_path: Path, tools: Path) -> None:

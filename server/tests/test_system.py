@@ -53,6 +53,8 @@ def calls(log: Path) -> list[str]:
 def config(tmp_path: Path, enabled: frozenset[str] = ALL, uid: int | None = None) -> Config:
     hosts = tmp_path / "hosts"
     hosts.write_text("127.0.0.1\tlocalhost\n127.0.1.1\tnocs\n")
+    cloud_init = tmp_path / "cloud.cfg.d"
+    cloud_init.mkdir(exist_ok=True)
     # Unix socket paths are short (108 bytes): pytest's directories can be longer.
     socket = Path(f"/tmp/nocs-system-test-{os.getpid()}-{id(tmp_path)}.sock")
     return Config(
@@ -60,7 +62,7 @@ def config(tmp_path: Path, enabled: frozenset[str] = ALL, uid: int | None = None
         gid=os.getgid(),
         enabled=enabled,
         socket=socket,
-        context=Context(hosts=hosts),
+        context=Context(hosts=hosts, cloud_init=cloud_init),
     )
 
 
@@ -123,6 +125,10 @@ async def test_set_hostname(helper: Config, tools: Path) -> None:
         "systemctl try-restart avahi-daemon.service",
     ]
     assert helper.context.hosts.read_text() == "127.0.0.1\tlocalhost\n127.0.1.1\tnocs-west\n"
+    # cloud-init would otherwise set its user-data's name again at the next boot.
+    drop_in = helper.context.cloud_init / "99-nocs-hostname.cfg"
+    assert "preserve_hostname: true\n" in drop_in.read_text()
+    assert sorted(p.name for p in helper.context.cloud_init.iterdir()) == [drop_in.name]
 
 
 @pytest.mark.parametrize("name", ["", "-nocs", "nocs-", "no cs", "nocs.local", "a" * 64, "ñocs"])

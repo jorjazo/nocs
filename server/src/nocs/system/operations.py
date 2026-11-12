@@ -36,6 +36,8 @@ class Context:
     """Files operations change, and the user they act for; replaced in tests."""
 
     hosts: Path = Path("/etc/hosts")
+    cloud_init: Path = Path("/etc/cloud/cloud.cfg.d")
+    """cloud-init's configuration, where it is installed (the Pi's image)."""
     media: Path = Path("/media/nocs")
     """Where drives are mounted, one directory per filesystem UUID."""
     sys_class_block: Path = Path("/sys/class/block")
@@ -88,6 +90,10 @@ async def set_hostname(context: Context, args: Message) -> Message:
     name = validate_hostname(name)
     await run("hostnamectl", "set-hostname", name)
     await anyio.to_thread.run_sync(update_hosts, context.hosts, name)
+    try:
+        await anyio.to_thread.run_sync(preserve_hostname, context.cloud_init)
+    except OSError as e:
+        raise HelperError("failed", f"cloud-init would set the old name again: {e}") from e
     # avahi-daemon keeps announcing the name it started with: <name>.local would not
     # resolve until a reboot.
     try:
@@ -116,6 +122,30 @@ def update_hosts(path: Path, name: str) -> None:
         updated.insert(loopback + 1, entry)
     new = path.with_name(f".{path.name}.nocs-system")
     new.write_text("\n".join(updated) + "\n")
+    os.chmod(new, 0o644)
+    new.replace(path)
+
+
+CLOUD_INIT_DROP_IN = "99-nocs-hostname.cfg"
+
+
+def preserve_hostname(cloud_cfg_d: Path) -> None:
+    """Keep cloud-init from setting its user-data's host name again at boot.
+
+    It does so on every boot, not only the first: it compares the name and the domain
+    it last set with those it would set now, and without a domain in its meta-data it
+    takes the domain from the running host name, so a new name looks like a change to
+    undo (``cc_set_hostname``). The name chosen at first boot (``nocs``, or Raspberry Pi
+    Imager's) still applies, since this is written only when the box is renamed.
+    """
+    if not cloud_cfg_d.is_dir():
+        return  # no cloud-init here
+    path = cloud_cfg_d / CLOUD_INIT_DROP_IN
+    new = path.with_name(f".{path.name}.nocs-system")
+    new.write_text(
+        "# Written by nocs-system when the box was renamed: the name is the owner's now.\n"
+        "preserve_hostname: true\n"
+    )
     os.chmod(new, 0o644)
     new.replace(path)
 
