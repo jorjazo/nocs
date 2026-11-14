@@ -20,3 +20,24 @@ export function roundStep(steps: number): number {
   const magnitude = 10 ** Math.max(0, Math.floor(Math.log10(steps)) - 1);
   return Math.round(steps / magnitude) * magnitude;
 }
+
+// The focuser's calibration (ADR 0044) counts for the profile it was measured with:
+// the same focuser on another scope or camera is asked to calibrate again.
+export function calibratedFor(
+  calibration: { profile: string | null } | null | undefined,
+  profile: string | null | undefined,
+): boolean {
+  return !!calibration && !!profile && calibration.profile === profile;
+}
+
+// How far apart a calibration's measurements of one reversal are, in steps.
+export function spread(values: readonly number[]): number {
+  return values.length < 2 ? 0 : Math.max(...values) - Math.min(...values);
+}
+
+// Measurements that disagree by more than a few of the smallest significant steps
+// (and by more than a tenth of the backlash): the backlash is not steady.
+export function unsteady(values: readonly number[], minStep: number): boolean {
+  const largest = Math.max(0, ...values);
+  return spread(values) > Math.max(3 * minStep, 0.1 * largest);
+}

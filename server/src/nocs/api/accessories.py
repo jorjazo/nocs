@@ -11,6 +11,7 @@ from nocs.api.schemas import (
     AutofocusRequest,
     FilterNamesRequest,
     FilterSelectRequest,
+    FocusCalibrationRequest,
     FocuserBacklashRequest,
     FocuserMoveRequest,
     JobStarted,
@@ -18,7 +19,7 @@ from nocs.api.schemas import (
 from nocs.devices import DeviceError
 from nocs.filters.service import FilterWheelNotReadyError, FilterWheelService
 from nocs.focus.autofocus import AutofocusService
-from nocs.focus.focusers import FocuserConfig
+from nocs.focus.calibration import FocuserCalibrationService
 from nocs.focus.service import FocuserNotReadyError, FocuserService
 from nocs.focus.sweep import Direction
 from nocs.imaging import CameraNotReadyError
@@ -29,6 +30,7 @@ def accessories_router(
     focuser: Callable[[], FocuserService],
     filter_wheel: Callable[[], FilterWheelService],
     autofocus: Callable[[], AutofocusService],
+    calibration: Callable[[], FocuserCalibrationService],
 ) -> APIRouter:
     router = APIRouter(prefix="/api")
 
@@ -61,9 +63,21 @@ def accessories_router(
     @router.put("/focuser/backlash", status_code=status.HTTP_204_NO_CONTENT)
     async def backlash(request: FocuserBacklashRequest) -> Response:  # pyright: ignore[reportUnusedFunction]
         with _errors():
-            focuser().set_backlash(
-                FocuserConfig(direction=request.direction, overshoot=request.overshoot)
-            )
+            focuser().set_backlash(request.direction, request.overshoot)
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    @router.post("/focuser/calibrate", status_code=status.HTTP_202_ACCEPTED)
+    async def calibrate(request: FocusCalibrationRequest) -> JobStarted:  # pyright: ignore[reportUnusedFunction]
+        """Measure the focuser's backlash and scale (ADR 0044)."""
+        with _errors():
+            options = calibration().options(step=request.step, exposure=request.exposure)
+            return JobStarted(job=calibration().start(options))
+
+    @router.delete("/focuser/driver-backlash", status_code=status.HTTP_204_NO_CONTENT)
+    async def driver_backlash_off() -> Response:  # pyright: ignore[reportUnusedFunction]
+        """Turn off the driver's own backlash compensation: NOCS takes it up."""
+        with _errors():
+            await focuser().disable_driver_backlash()
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     @router.post("/filter-wheel/select", status_code=status.HTTP_202_ACCEPTED)

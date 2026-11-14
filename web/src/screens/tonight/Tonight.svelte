@@ -29,6 +29,7 @@
   import { i18n } from "../../lib/i18n";
   import { live } from "../../lib/live.svelte";
   import { href, router, type Route } from "../../lib/router.svelte";
+  import { calibratedFor } from "../../lib/focus";
   import { nearest, phase } from "../../lib/sky/night";
   import { separation } from "../../lib/sky/projection";
   import { siteKey, tonight } from "../../lib/tonight.svelte";
@@ -143,17 +144,22 @@
       const run = live.app.autofocus ?? null;
       const tonightRun = run?.finished && Date.parse(run.finished) > nightStart ? run : null;
       const focused = tonightRun?.state === "succeeded";
+      // Calibrating focuses too (ADR 0044): offered instead until the focuser has a
+      // calibration for this profile.
+      const calibrated = calibratedFor(live.app.focuser?.calibration, profile);
       list.push({
         key: "focus",
         title: t.tonight.steps.focus,
         detail: focused
           ? t.tonight.focused(formatTime(tonightRun.finished ?? "", locale), tonightRun.hfr === null ? "—" : formatDecimal(tonightRun.hfr, locale, 2))
-          : tonightRun
-            ? t.tonight.focusFailed
-            : t.tonight.notFocused,
+          : !calibrated && live.app.focuser
+            ? t.tonight.notCalibrated
+            : tonightRun
+              ? t.tonight.focusFailed
+              : t.tonight.notFocused,
         done: focused,
-        action: t.tonight.focus,
-        route: { screen: "focus" },
+        action: calibrated || !live.app.focuser ? t.tonight.focus : t.tonight.calibrate,
+        route: calibrated || !live.app.focuser ? { screen: "focus" } : { screen: "focus-calibration" },
         blockers: blockersOf(preparation, "focus", savedSites),
       });
     }

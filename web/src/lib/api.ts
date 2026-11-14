@@ -31,6 +31,7 @@ import type {
   SavedFrameTypeName,
   StackSaved,
   FocuserBacklashRequest,
+  FocusCalibrationRequest,
   FocuserMoveRequest,
   GpsSiteRequest,
   GuideRequest,
@@ -339,6 +340,18 @@ export function abortFocuser(): Promise<void> {
 
 export function setFocuserBacklash(body: FocuserBacklashRequest): Promise<void> {
   return request("PUT", "/api/focuser/backlash", body);
+}
+
+// Measures the focuser's backlash each way and its scale (ADR 0044); what the
+// request leaves out comes from the imaging train's sweep.
+export async function startFocusCalibration(body: FocusCalibrationRequest): Promise<string> {
+  const started = await request<JobStarted>("POST", "/api/focuser/calibrate", body);
+  return started.job;
+}
+
+// Turns off the driver's own backlash compensation: NOCS takes backlash up itself.
+export function disableDriverBacklash(): Promise<void> {
+  return request("DELETE", "/api/focuser/driver-backlash");
 }
 
 // -- Autofocus (ADR 0021) ---------------------------------------------------------

@@ -13,7 +13,7 @@ from nocs.devices import DeviceInterface, FilterWheel, Focuser
 from nocs.equipment import EquipmentService, Role
 from nocs.filters.service import FilterWheelService
 from nocs.filters.wheels import WheelConfig, WheelStore, check_names, wheel_key
-from nocs.focus.focusers import FocuserConfig, FocuserStore
+from nocs.focus.focusers import FocuserCalibration, FocuserConfig, FocuserStore
 from nocs.focus.service import FocuserService
 from nocs.indi import IndiClient, Property, PropertyState, PropertyType
 from nocs.indi.properties import NumberElement, SwitchElement, TextElement
@@ -85,6 +85,9 @@ class Driver:
                 loop.call_soon(update, device, name, PropertyState.OK, {"ABORT": "Off"})
             case "FILTER_NAME":
                 loop.call_soon(update, device, name, PropertyState.OK, text)
+            case "FOCUS_BACKLASH_TOGGLE":
+                switches = {k: "On" if v else "Off" for k, v in values.items()}
+                loop.call_soon(update, device, name, PropertyState.OK, switches)
             case _:
                 pass
 
@@ -174,6 +177,26 @@ async def test_focuser_moves_by_steps(client: FakeClient, driver: Driver) -> Non
     assert client.sent[-1] == (FOCUSER, "ABS_FOCUS_POSITION", {"FOCUS_ABSOLUTE_POSITION": 6000})
 
 
+async def test_focuser_driver_backlash_is_read_and_turned_off(
+    client: FakeClient, driver: Driver
+) -> None:
+    focuser = Focuser(client, FOCUSER)
+    assert focuser.driver_backlash is None  # the driver has no such property
+    toggle = Property(FOCUSER, "FOCUS_BACKLASH_TOGGLE", PropertyType.SWITCH)
+    toggle.elements["INDI_ENABLED"] = SwitchElement("INDI_ENABLED", "Enabled", True)
+    toggle.elements["INDI_DISABLED"] = SwitchElement("INDI_DISABLED", "Disabled", False)
+    client.define(toggle)
+    client.define(number_property(FOCUSER, "FOCUS_BACKLASH_STEPS", FOCUS_BACKLASH_VALUE=120))
+    assert focuser.driver_backlash == 120
+    await focuser.disable_driver_backlash()
+    assert client.sent[-1] == (
+        FOCUSER,
+        "FOCUS_BACKLASH_TOGGLE",
+        {"INDI_ENABLED": False, "INDI_DISABLED": True},
+    )
+    assert focuser.driver_backlash is None
+
+
 def test_wheel_reads(client: FakeClient) -> None:
     wheel = FilterWheel(client, WHEEL)
     assert (wheel.slots, wheel.slot, wheel.filter) == (5, 1, "Red")
@@ -238,13 +261,29 @@ async def test_backlash_is_kept_per_physical_focuser(
     settings = FocuserStore(tmp_path)
     service, _, store = focuser_service(client, settings)
     assert service.backlash() == FocuserConfig()
-    service.set_backlash(FocuserConfig(direction="inward", overshoot=250))
+    service.set_backlash("inward", 250)
     assert store.get(("focuser", "backlash")) == {"direction": "inward", "overshoot": 250}
     assert settings.get(KEY) == FocuserConfig(direction="inward", overshoot=250)
     # A new service (nocsd restarted) reads it back.
     again, _, store = focuser_service(client, FocuserStore(tmp_path))
     assert again.backlash().overshoot == 250
     assert store.get(("focuser", "backlash", "direction")) == "inward"
+    # A calibration sets the overshoot; changing the backlash keeps the calibration.
+    calibration = FocuserCalibration(
+        measured="2026-11-14T03:00:00.000+00:00",
+        profile="william",
+        inward=[1010, 990],
+        outward=[1000, 1020],
+        overshoot=1400,
+        noise=4.2,
+        min_step=13,
+    )
+    again.set_calibration(calibration)
+    assert store.get(("focuser", "backlash", "overshoot")) == 1400
+    assert store.get(("focuser", "calibration", "outward")) == [1000, 1020]
+    again.set_backlash("outward", 2000)
+    assert settings.get(KEY).calibration == calibration
+    assert settings.get(KEY).overshoot == 2000
 
 
 async def test_focuser_state_and_moves(client: FakeClient, driver: Driver) -> None:
@@ -259,6 +298,8 @@ async def test_focuser_state_and_moves(client: FakeClient, driver: Driver) -> No
         "can_abort": True,
         "key": KEY,
         "backlash": {"direction": "outward", "overshoot": None},
+        "driver_backlash": None,
+        "calibration": None,
     }
     job = service.move_to(7000)
     await jobs.wait(job)

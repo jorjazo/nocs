@@ -327,6 +327,28 @@ Autofocus (stage 5.5):
 - Live view reports only its own exposures and loops as failed; a failed
   autofocus is reported on its own screen.
 
+Focuser calibration (ADR 0044):
+
+- A full-screen flow at `#/focus/calibrate`, like autofocus: start, measuring,
+  result. The focuser's sheet (Rig and Live view) opens it with the calibration's
+  state under the autofocus button ("Overshoot 1400, calibrated …", or not
+  calibrated for this profile); so do autofocus's Advanced settings and a failed
+  autofocus (*backlash*, *missed*). Tonight's focus step offers "Calibrate" instead
+  of "Focus" while the focuser has no calibration for the active profile:
+  calibrating focuses too.
+- Start says what it measures and what it needs (stars, near focus, a few minutes,
+  the mount does not move), the last calibration (backlash each way, overshoot,
+  focus zone), and autofocus's step. A driver that compensates backlash itself
+  is mentioned: the calibration turns that off without asking, and the result says
+  so.
+- While it runs: autofocus's V-curve while it focuses, then each reversal's lost
+  steps and each round trip as they come, the phase and a progress bar, Cancel.
+- The result: the backlash inward and outward (every measurement), the overshoot
+  that autofocus now uses on this focuser, the smallest significant step, a step
+  in microns and the focus zone in steps; a warning when the measurements of one
+  way disagree (check the coupling) or the drawtube slipped; and autofocus's
+  suggested step with "Use it for autofocus". A failure names its cause.
+
 Plate solve (stage 3.2):
 
 - Live view puts "Plate solve" under the mount (main camera only): Solve, and

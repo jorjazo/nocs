@@ -49,5 +49,6 @@ that supersedes the old one.
 | [0041](0041-preparation-steps-run-when-they-can.md) | Tonight's checklist offers a step only when it can run; the server says what blocks it | Proposed |
 | [0042](0042-site-from-the-mount-and-first-run.md) | A new site from the mount or the GPS, and a site step in the first run | Proposed |
 | [0043](0043-autofocus-last-frame-against-the-curve.md) | Autofocus checks its last frame against the curve, and approaches again | Proposed |
+| [0044](0044-focuser-calibration.md) | Focuser calibration: backlash each way, an overshoot that returns, and the scale | Proposed |
 
 Template: Context → Decision → Consequences.

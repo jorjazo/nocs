@@ -98,6 +98,7 @@ from nocs.equipment.profiles import FocusSweep
 from nocs.filters.service import FilterWheelService
 from nocs.filters.wheels import WheelStore
 from nocs.focus.autofocus import AutofocusService
+from nocs.focus.calibration import FocuserCalibrationService, Scale
 from nocs.focus.focusers import FocuserStore
 from nocs.focus.service import FocuserNotReadyError, FocuserService
 from nocs.guiding import GuidingService, Settle
@@ -236,6 +237,10 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
         assert services.autofocus is not None
         return services.autofocus
 
+    def focus_calibration() -> FocuserCalibrationService:
+        assert services.focus_calibration is not None
+        return services.focus_calibration
+
     def system() -> SystemService:
         assert services.system is not None
         return services.system
@@ -322,6 +327,18 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
         profile = ProfileStore(settings.config_dir).get(active) if active else None
         return profile.imaging.autofocus if profile and profile.imaging else None
 
+    def imaging_scale() -> Scale | None:
+        """The imaging train's focal ratio (as saved) and the main camera's pixel size."""
+        active = equipment().active
+        profile = ProfileStore(settings.config_dir).get(active) if active else None
+        optics = profile.imaging if profile else None
+        pixel = store.get(("cameras", Role.MAIN_CAMERA.value, "sensor", "pixel_size"))
+        if optics is None or optics.aperture is None or not isinstance(pixel, int | float):
+            return None
+        if pixel <= 0:
+            return None
+        return Scale(optics.focal_length * optics.reducer / optics.aperture, float(pixel))
+
     def solve_exposure() -> float | None:
         """The active profile's, as saved (its summary in the state): no reconnection."""
         active = equipment().active
@@ -388,6 +405,15 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
             sweep=imaging_sweep,
             profile=lambda: equipment().active,
             record=record_focus_run,
+        )
+        services.focus_calibration = FocuserCalibrationService(
+            store,
+            services.jobs,
+            services.focuser,
+            services.capture,
+            services.autofocus,
+            scale=imaging_scale,
+            profile=lambda: equipment().active,
         )
         services.environment = EnvironmentLog(store, services.storage, services.clock.now)
         services.environment.start()
@@ -543,7 +569,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
     app.include_router(solver_router(pointing, centering, guiding))
     app.include_router(saved_frames_router(saved_frames))
     app.include_router(align_router(polar))
-    app.include_router(accessories_router(focuser, filter_wheel, autofocus))
+    app.include_router(accessories_router(focuser, filter_wheel, autofocus, focus_calibration))
     app.include_router(sequences_router(sequences))
     app.include_router(sessions_router(storage, lambda: clock().now()))
     app.include_router(calibration_router(lambda: calibration_library, flats))
@@ -938,6 +964,7 @@ class _Services:
     preparation: PreparationService | None = None
     plan: PlanService | None = None
     autofocus: AutofocusService | None = None
+    focus_calibration: FocuserCalibrationService | None = None
     guiding: GuidingService | None = None
     environment: EnvironmentLog | None = None
     system: SystemService | None = None

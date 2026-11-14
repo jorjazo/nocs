@@ -325,6 +325,18 @@
           "default": null,
           "description": "None: never run (ADR 0036)."
         },
+        "focus_calibration": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FocusCalibrationState"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "None: never run (ADR 0044)."
+        },
         "focuser": {
           "anyOf": [
             {
@@ -3974,6 +3986,362 @@
       "title": "FlipTrigger",
       "type": "object"
     },
+    "FocusCalibrationBest": {
+      "additionalProperties": false,
+      "properties": {
+        "hfr": {
+          "description": "The fitted curve's best HFR (a), px.",
+          "type": "number"
+        },
+        "position": {
+          "description": "Autofocus's best focus.",
+          "type": "integer"
+        },
+        "width": {
+          "description": "The curve's width (b), steps.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "position",
+        "hfr",
+        "width"
+      ],
+      "title": "FocusCalibrationBest",
+      "type": "object"
+    },
+    "FocusCalibrationRequest": {
+      "additionalProperties": false,
+      "description": "What is left out comes from the imaging train's sweep (ADR 0044).",
+      "properties": {
+        "exposure": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "maximum": 600,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Seconds."
+        },
+        "step": {
+          "anyOf": [
+            {
+              "maximum": 100000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Autofocus's step."
+        }
+      },
+      "title": "FocusCalibrationRequest",
+      "type": "object"
+    },
+    "FocusCalibrationReversal": {
+      "additionalProperties": false,
+      "properties": {
+        "lost": {
+          "description": "Steps the optics did not follow.",
+          "type": "integer"
+        },
+        "slip": {
+          "description": "Then they followed the motor only in part.",
+          "type": "boolean"
+        },
+        "towards": {
+          "description": "Which way the focuser reversed to.",
+          "enum": [
+            "outward",
+            "inward"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "towards",
+        "lost",
+        "slip"
+      ],
+      "title": "FocusCalibrationReversal",
+      "type": "object"
+    },
+    "FocusCalibrationState": {
+      "additionalProperties": false,
+      "description": "The running focuser calibration, or the most recent one (ADR 0044).",
+      "properties": {
+        "best": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FocusCalibrationBest"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "direction": {
+          "description": "The approach direction.",
+          "enum": [
+            "outward",
+            "inward"
+          ],
+          "type": "string"
+        },
+        "driver_backlash": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Steps the driver compensated itself until the calibration turned that off."
+        },
+        "finished": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "focus_zone": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The critical focus zone, steps."
+        },
+        "hfr": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "At the best focus, at the end."
+        },
+        "job": {
+          "type": "string"
+        },
+        "microns_per_step": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "min_step": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The smallest significant move, steps."
+        },
+        "noise": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Noise of a frame's position on the arm, steps (standard deviation)."
+        },
+        "overshoot": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Being tried in the round trips, or the result."
+        },
+        "phase": {
+          "anyOf": [
+            {
+              "enum": [
+                "focusing",
+                "ruler",
+                "reversing",
+                "round_trips",
+                "returning",
+                "restoring"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "While running."
+        },
+        "problem": {
+          "anyOf": [
+            {
+              "enum": [
+                "driver_backlash",
+                "autofocus",
+                "too_few_stars",
+                "not_an_arm",
+                "no_movement",
+                "travel",
+                "not_repeatable"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "reversals": {
+          "items": {
+            "$ref": "#/$defs/FocusCalibrationReversal"
+          },
+          "type": "array"
+        },
+        "ruler": {
+          "description": "Frames on the arm past the best focus.",
+          "items": {
+            "$ref": "#/$defs/AutofocusPoint"
+          },
+          "type": "array"
+        },
+        "slip": {
+          "type": "boolean"
+        },
+        "start_position": {
+          "type": "integer"
+        },
+        "started": {
+          "type": "string"
+        },
+        "state": {
+          "enum": [
+            "running",
+            "succeeded",
+            "failed",
+            "cancelled"
+          ],
+          "type": "string"
+        },
+        "suggested_step": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Autofocus's suggestion for the sweep."
+        },
+        "trips": {
+          "items": {
+            "$ref": "#/$defs/FocusCalibrationTrip"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "job",
+        "state",
+        "phase",
+        "started",
+        "finished",
+        "start_position",
+        "direction",
+        "best",
+        "ruler",
+        "reversals",
+        "overshoot",
+        "trips",
+        "noise",
+        "min_step",
+        "microns_per_step",
+        "focus_zone",
+        "suggested_step",
+        "slip",
+        "hfr",
+        "driver_backlash",
+        "problem",
+        "detail"
+      ],
+      "title": "FocusCalibrationState",
+      "type": "object"
+    },
+    "FocusCalibrationTrip": {
+      "additionalProperties": false,
+      "properties": {
+        "measured": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Where the frame put the optics; None: no stars."
+        },
+        "ok": {
+          "type": "boolean"
+        },
+        "overshoot": {
+          "type": "integer"
+        },
+        "target": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "target",
+        "measured",
+        "ok",
+        "overshoot"
+      ],
+      "title": "FocusCalibrationTrip",
+      "type": "object"
+    },
     "FocusPlan": {
       "additionalProperties": false,
       "description": "When a template's sequence focuses: at the start, and on these reasons.",
@@ -4122,6 +4490,93 @@
       "title": "FocuserBacklashRequest",
       "type": "object"
     },
+    "FocuserCalibrationRecord": {
+      "additionalProperties": false,
+      "description": "The last calibration that succeeded (ADR 0044).",
+      "properties": {
+        "focus_zone": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The critical focus zone, steps; None without the optics."
+        },
+        "inward": {
+          "description": "Motion lost reversing to move inward, steps.",
+          "items": {
+            "type": "integer"
+          },
+          "type": "array"
+        },
+        "measured": {
+          "description": "When it finished, UTC ISO 8601.",
+          "type": "string"
+        },
+        "microns_per_step": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "None without the optics."
+        },
+        "min_step": {
+          "description": "The smallest significant move, steps.",
+          "type": "integer"
+        },
+        "noise": {
+          "description": "Noise of a frame's position on the arm, steps (standard deviation).",
+          "type": "number"
+        },
+        "outward": {
+          "description": "Motion lost reversing to move outward, steps.",
+          "items": {
+            "type": "integer"
+          },
+          "type": "array"
+        },
+        "overshoot": {
+          "description": "The overshoot that passed the round trips.",
+          "type": "integer"
+        },
+        "profile": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The equipment profile it was measured with."
+        },
+        "slip": {
+          "description": "The optics followed the motor only in part.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "measured",
+        "profile",
+        "inward",
+        "outward",
+        "overshoot",
+        "noise",
+        "min_step",
+        "microns_per_step",
+        "focus_zone",
+        "slip"
+      ],
+      "title": "FocuserCalibrationRecord",
+      "type": "object"
+    },
     "FocuserMoveRequest": {
       "additionalProperties": false,
       "description": "Exactly one of ``position`` and ``steps``.",
@@ -4161,11 +4616,32 @@
         "backlash": {
           "$ref": "#/$defs/FocuserBacklash"
         },
+        "calibration": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FocuserCalibrationRecord"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "can_abort": {
           "type": "boolean"
         },
         "device": {
           "type": "string"
+        },
+        "driver_backlash": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Steps the driver compensates itself on a reversal; None: off (ADR 0044)."
         },
         "key": {
           "description": "The physical focuser: serial:<number> or device:<name>.",
@@ -4221,7 +4697,9 @@
         "target",
         "temperature",
         "can_abort",
-        "backlash"
+        "backlash",
+        "driver_backlash",
+        "calibration"
       ],
       "title": "FocuserState",
       "type": "object"

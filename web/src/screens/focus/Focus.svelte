@@ -353,6 +353,9 @@
           max={100000}
           hint={t.autofocus.overshootHint}
           placeholder={sweepStep !== null ? formatPlain(sweepStep, locale) : ""} />
+        <Button variant="text" onclick={() => router.go({ screen: "focus-calibration" })}>
+          {t.focusCalibration.open}
+        </Button>
         {#if canRemember}
           <Toggle
             label={t.autofocus.remember}
@@ -456,6 +459,11 @@
             {/if}
           {:else if shown.detail}
             <p class="body">{shown.detail}</p>
+          {/if}
+          {#if shown.problem === "backlash" || shown.problem === "missed"}
+            <Button variant="text" onclick={() => router.go({ screen: "focus-calibration" })}>
+              {t.focusCalibration.open}
+            </Button>
           {/if}
           <p class="caption muted">{t.autofocus.back(formatPlain(shown.start_position, locale))}</p>
         {/if}
