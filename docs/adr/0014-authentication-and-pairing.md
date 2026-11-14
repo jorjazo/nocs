@@ -1,6 +1,6 @@
 # 0014. Authentication and device pairing
 
-Date: 2026-10-30 · Status: Accepted · Amended: 2026-10-30 (host names, see below) · Host name check removed by [ADR 0045](0045-no-host-name-check.md)
+Date: 2026-10-30 · Status: Accepted · Amended: 2026-10-30 (host names, see below) · Host name check removed by [ADR 0046](0046-no-host-name-check.md)
 
 ## Context
 
@@ -105,14 +105,14 @@ Constraints:
   else under `/api` requires the owner**, so an endpoint added later is protected
   even if its author forgets about authentication. A test walks all registered
   routes and checks that each one outside the table refuses anonymous requests.
-  Refusals are `421` (unknown host name, removed by ADR 0045), `401` (no valid
+  Refusals are `421` (unknown host name, removed by ADR 0046), `401` (no valid
   device) or `403` (bad origin); a refused WebSocket handshake is closed before it is accepted.
 - The middleware stores the request's role and device in the ASGI scope, where
   endpoints that need them (`/api/auth`, revoking the current device) read them.
 - A WebSocket keeps the role it had at the handshake. When its device is revoked,
   or observer access is switched off, the server closes it with code 4401; the
   client then asks `GET /api/auth` and shows pairing.
-- **Host name check (DNS rebinding)**, *added 2026-10-30, removed by ADR 0045*: every HTTP request
+- **Host name check (DNS rebinding)**, *added 2026-10-30, removed by ADR 0046*: every HTTP request
   and WebSocket handshake, public ones and the web app's static files included,
   must name the server by an IP address (v4 or v6, with or without a port),
   `localhost`, an mDNS name ending in `.local`, or a name listed in
@@ -150,7 +150,7 @@ Constraints:
   renamed (or if mDNS renames it to `nocs-2.local` after a name clash). Each name
   needs its own pairing. Several NOCS boxes on one network each keep their own
   cookie as long as their names differ, which they need anyway (design §11).
-- *Removed by ADR 0045, which accepts DNS rebinding's risks:* DNS rebinding is
+- *Removed by ADR 0046, which accepts DNS rebinding's risks:* DNS rebinding is
   closed by the host name check, without HTTPS (this replaces
   the original consequence, which left it open for observers until phase 6 and
   missed that a rebound page could claim a box in setup mode). The cost: a box

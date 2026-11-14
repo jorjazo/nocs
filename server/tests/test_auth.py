@@ -303,7 +303,7 @@ def test_cross_origin_setup_is_refused(client: TestClient) -> None:
     "base_url", ["http://nocs-lab.tail1234.ts.net", "http://192.168.4.1:8000", "http://nocs.lan"]
 )
 def test_any_host_name_reaches_the_box(base_url: str) -> None:
-    """No host name check: pairing, not the name, guards the box (ADR 0045)."""
+    """No host name check: pairing, not the name, guards the box (ADR 0046)."""
     with TestClient(create_app(unreachable_indi()), base_url=base_url) as client:
         assert client.get("/api/state").status_code == 401
         pair_owner(client)

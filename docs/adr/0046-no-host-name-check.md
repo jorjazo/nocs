@@ -1,4 +1,4 @@
-# 0045. No host name check: any name reaches the box, pairing guards it
+# 0046. No host name check: any name reaches the box, pairing guards it
 
 Date: 2026-11-14 · Status: Proposed · Amends: [ADR 0014](0014-authentication-and-pairing.md) (removes its host name check)
 
