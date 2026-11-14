@@ -105,8 +105,8 @@ Constraints:
   else under `/api` requires the owner**, so an endpoint added later is protected
   even if its author forgets about authentication. A test walks all registered
   routes and checks that each one outside the table refuses anonymous requests.
-  Refusals are `421` (unknown host name), `401` (no valid device) or `403` (bad
-  origin); a refused WebSocket handshake is closed before it is accepted.
+  Refusals are `421` (unknown host name, removed by ADR 0045), `401` (no valid
+  device) or `403` (bad origin); a refused WebSocket handshake is closed before it is accepted.
 - The middleware stores the request's role and device in the ASGI scope, where
   endpoints that need them (`/api/auth`, revoking the current device) read them.
 - A WebSocket keeps the role it had at the handshake. When its device is revoked,
@@ -150,7 +150,8 @@ Constraints:
   renamed (or if mDNS renames it to `nocs-2.local` after a name clash). Each name
   needs its own pairing. Several NOCS boxes on one network each keep their own
   cookie as long as their names differ, which they need anyway (design §11).
-- DNS rebinding is closed by the host name check, without HTTPS (this replaces
+- *Removed by ADR 0045, which accepts DNS rebinding's risks:* DNS rebinding is
+  closed by the host name check, without HTTPS (this replaces
   the original consequence, which left it open for observers until phase 6 and
   missed that a rebound page could claim a box in setup mode). The cost: a box
   reached by any other name (a router's DNS name, a reverse proxy) needs that
