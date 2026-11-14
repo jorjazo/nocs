@@ -48,9 +48,10 @@ sudo apt install ./packaging/out/nocs_<version>_amd64.deb indi-3rdparty-drivers 
 ```
 
 ASTAP and its star databases are installed as [ADR 0018](../docs/adr/0018-plate-solving-with-astap.md)
-says, in `/opt/astap`. Versions between releases are `<version>~git<commits>.g<commit>`,
-which sort before `<version>`: bump `server/pyproject.toml` right after tagging a
-release.
+says, in `/opt/astap`. Builds between releases are `<version>~git<commits>.g<commit>`
+while `<version>` is not tagged yet, sorting before it, and `<version>.git<commits>.g<commit>`
+once it is, sorting after it ([ADR 0045](../docs/adr/0045-builds-after-a-release.md)):
+a box on `testing` always gets `main`'s newest build.
 
 ## Releases
 
