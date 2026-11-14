@@ -426,6 +426,14 @@
             <p class="body mono">{t.autofocus.hfrChange(number(shown.start_hfr, 2), number(shown.hfr, 2))}</p>
           {/if}
           {#if shown.fit}<p class="caption muted mono">{t.autofocus.fit(number(shown.fit.r_squared, 3))}</p>{/if}
+          {#if shown.suggested_overshoot}
+            <p class="body">{t.autofocus.missedOvershoot(formatPlain(shown.suggested_overshoot, locale))}</p>
+            {#if auth.owner}
+              <Button variant="text" {busy} onclick={() => useOvershoot(shown.suggested_overshoot ?? null)}
+                >{t.autofocus.useOvershoot}</Button
+              >
+            {/if}
+          {/if}
           {#if suggested !== null}
             <p class="body">{t.autofocus.suggest(formatPlain(suggested, locale))}</p>
             {#if canRemember && auth.owner}

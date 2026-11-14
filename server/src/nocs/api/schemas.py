@@ -713,7 +713,16 @@ class AutofocusState(StateModel):
     hfr: float | None = Field(description="Of the last frame, at ``position``.")
     stars: int | None
     problem: (
-        Literal["no_stars", "too_few_stars", "not_turning", "flat", "bad_fit", "worse", "backlash"]
+        Literal[
+            "no_stars",
+            "too_few_stars",
+            "not_turning",
+            "flat",
+            "bad_fit",
+            "worse",
+            "backlash",
+            "missed",
+        ]
         | None
     )
     detail: str | None = Field(description="Why it failed.")
@@ -721,7 +730,11 @@ class AutofocusState(StateModel):
         description="A step that would put the sweep's ends at 2.5 times the best HFR."
     )
     suggested_overshoot: int | None = Field(
-        default=None, description="For backlash: an overshoot that would take it up."
+        default=None,
+        description=(
+            "For backlash: an overshoot that would take it up. In a run that succeeded:"
+            " the overshoot that reached the best focus after the saved one missed it."
+        ),
     )
 
 
