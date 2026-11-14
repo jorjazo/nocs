@@ -444,6 +444,25 @@ class FocuserBacklash(StateModel):
     )
 
 
+class FocuserCalibrationRecord(StateModel):
+    """The last calibration that succeeded (ADR 0044)."""
+
+    measured: str = Field(description="When it finished, UTC ISO 8601.")
+    profile: str | None = Field(description="The equipment profile it was measured with.")
+    inward: list[int] = Field(description="Motion lost reversing to move inward, steps.")
+    outward: list[int] = Field(description="Motion lost reversing to move outward, steps.")
+    overshoot: int = Field(description="The overshoot that passed the round trips.")
+    noise: float = Field(
+        description="Noise of a frame's position on the arm, steps (standard deviation)."
+    )
+    min_step: int = Field(description="The smallest significant move, steps.")
+    microns_per_step: float | None = Field(description="None without the optics.")
+    focus_zone: int | None = Field(
+        description="The critical focus zone, steps; None without the optics."
+    )
+    slip: bool = Field(description="The optics followed the motor only in part.")
+
+
 class FocuserState(StateModel):
     device: str
     key: str = Field(description="The physical focuser: serial:<number> or device:<name>.")
@@ -454,6 +473,10 @@ class FocuserState(StateModel):
     temperature: float | None = Field(description="Its probe, °C; None if it has none.")
     can_abort: bool
     backlash: FocuserBacklash
+    driver_backlash: int | None = Field(
+        description="Steps the driver compensates itself on a reversal; None: off (ADR 0044)."
+    )
+    calibration: FocuserCalibrationRecord | None
 
 
 class FilterWheelState(StateModel):
@@ -736,6 +759,66 @@ class AutofocusState(StateModel):
             " the overshoot that reached the best focus after the saved one missed it."
         ),
     )
+
+
+class FocusCalibrationBest(StateModel):
+    position: int = Field(description="Autofocus's best focus.")
+    hfr: float = Field(description="The fitted curve's best HFR (a), px.")
+    width: float = Field(description="The curve's width (b), steps.")
+
+
+class FocusCalibrationReversal(StateModel):
+    towards: Literal["outward", "inward"] = Field(description="Which way the focuser reversed to.")
+    lost: int = Field(description="Steps the optics did not follow.")
+    slip: bool = Field(description="Then they followed the motor only in part.")
+
+
+class FocusCalibrationTrip(StateModel):
+    target: int
+    measured: int | None = Field(description="Where the frame put the optics; None: no stars.")
+    ok: bool
+    overshoot: int
+
+
+class FocusCalibrationState(StateModel):
+    """The running focuser calibration, or the most recent one (ADR 0044)."""
+
+    job: str
+    state: Literal["running", "succeeded", "failed", "cancelled"]
+    phase: (
+        Literal["focusing", "ruler", "reversing", "round_trips", "returning", "restoring"] | None
+    ) = Field(description="While running.")
+    started: str
+    finished: str | None
+    start_position: int
+    direction: Literal["outward", "inward"] = Field(description="The approach direction.")
+    best: FocusCalibrationBest | None
+    ruler: list[AutofocusPoint] = Field(description="Frames on the arm past the best focus.")
+    reversals: list[FocusCalibrationReversal]
+    overshoot: int | None = Field(description="Being tried in the round trips, or the result.")
+    trips: list[FocusCalibrationTrip]
+    noise: float | None = Field(
+        description="Noise of a frame's position on the arm, steps (standard deviation)."
+    )
+    min_step: int | None = Field(description="The smallest significant move, steps.")
+    microns_per_step: float | None
+    focus_zone: int | None = Field(description="The critical focus zone, steps.")
+    suggested_step: int | None = Field(description="Autofocus's suggestion for the sweep.")
+    slip: bool
+    hfr: float | None = Field(description="At the best focus, at the end.")
+    problem: (
+        Literal[
+            "driver_backlash",
+            "autofocus",
+            "too_few_stars",
+            "not_an_arm",
+            "no_movement",
+            "travel",
+            "not_repeatable",
+        ]
+        | None
+    )
+    detail: str | None
 
 
 class Phd2Server(StateModel):
@@ -1199,6 +1282,9 @@ class AppState(StateModel):
     )
     solver: SolverState | None = None
     autofocus: AutofocusState | None = Field(default=None, description="None: never run.")
+    focus_calibration: FocusCalibrationState | None = Field(
+        default=None, description="None: never run (ADR 0044)."
+    )
     flats: FlatsState | None = Field(default=None, description="None: never run (ADR 0036).")
     centering: CenteringState | None = Field(default=None, description="None: never run.")
     polar_alignment: PolarAlignmentState | None = Field(
@@ -1649,6 +1735,15 @@ class FocuserBacklashRequest(BaseModel):
     overshoot: int | None = Field(
         default=None, ge=0, le=100000, description="None: one sweep step."
     )
+
+
+class FocusCalibrationRequest(BaseModel):
+    """What is left out comes from the imaging train's sweep (ADR 0044)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    step: int | None = Field(default=None, ge=1, le=100000, description="Autofocus's step.")
+    exposure: float | None = Field(default=None, gt=0, le=600, description="Seconds.")
 
 
 class AutofocusRun(WireModel):

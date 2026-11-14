@@ -13,7 +13,9 @@
     if (screen === "dev" || screen === "profile" || screen === "site") return "rig";
     if (screen === "target" || screen === "sequence") return "plan";
     if (screen === "report" || screen === "flats") return "session";
-    if (screen === "focus" || screen === "guiding" || screen === "polar") return "tonight";
+    if (screen === "focus" || screen === "focus-calibration" || screen === "guiding" || screen === "polar") {
+      return "tonight";
+    }
     return screen;
   });
 

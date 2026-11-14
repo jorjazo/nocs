@@ -566,6 +566,10 @@ export interface AppState {
    */
   flats?: FlatsState | null;
   /**
+   * None: never run (ADR 0044).
+   */
+  focus_calibration?: FocusCalibrationState | null;
+  /**
    * None: no focuser is ready.
    */
   focuser?: FocuserState | null;
@@ -1206,13 +1210,125 @@ export interface FlatFilterState {
   state: "pending" | "running" | "done" | "ended" | "failed" | "cancelled";
 }
 /**
+ * The running focuser calibration, or the most recent one (ADR 0044).
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "FocusCalibrationState".
+ */
+export interface FocusCalibrationState {
+  best: FocusCalibrationBest | null;
+  detail: string | null;
+  /**
+   * The approach direction.
+   */
+  direction: "outward" | "inward";
+  finished: string | null;
+  /**
+   * The critical focus zone, steps.
+   */
+  focus_zone: number | null;
+  /**
+   * At the best focus, at the end.
+   */
+  hfr: number | null;
+  job: string;
+  microns_per_step: number | null;
+  /**
+   * The smallest significant move, steps.
+   */
+  min_step: number | null;
+  /**
+   * Noise of a frame's position on the arm, steps (standard deviation).
+   */
+  noise: number | null;
+  /**
+   * Being tried in the round trips, or the result.
+   */
+  overshoot: number | null;
+  /**
+   * While running.
+   */
+  phase: ("focusing" | "ruler" | "reversing" | "round_trips" | "returning" | "restoring") | null;
+  problem:
+    | ("driver_backlash" | "autofocus" | "too_few_stars" | "not_an_arm" | "no_movement" | "travel" | "not_repeatable")
+    | null;
+  reversals: FocusCalibrationReversal[];
+  /**
+   * Frames on the arm past the best focus.
+   */
+  ruler: AutofocusPoint[];
+  slip: boolean;
+  start_position: number;
+  started: string;
+  state: "running" | "succeeded" | "failed" | "cancelled";
+  /**
+   * Autofocus's suggestion for the sweep.
+   */
+  suggested_step: number | null;
+  trips: FocusCalibrationTrip[];
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "FocusCalibrationBest".
+ */
+export interface FocusCalibrationBest {
+  /**
+   * The fitted curve's best HFR (a), px.
+   */
+  hfr: number;
+  /**
+   * Autofocus's best focus.
+   */
+  position: number;
+  /**
+   * The curve's width (b), steps.
+   */
+  width: number;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "FocusCalibrationReversal".
+ */
+export interface FocusCalibrationReversal {
+  /**
+   * Steps the optics did not follow.
+   */
+  lost: number;
+  /**
+   * Then they followed the motor only in part.
+   */
+  slip: boolean;
+  /**
+   * Which way the focuser reversed to.
+   */
+  towards: "outward" | "inward";
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "FocusCalibrationTrip".
+ */
+export interface FocusCalibrationTrip {
+  /**
+   * Where the frame put the optics; None: no stars.
+   */
+  measured: number | null;
+  ok: boolean;
+  overshoot: number;
+  target: number;
+}
+/**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "FocuserState".
  */
 export interface FocuserState {
   backlash: FocuserBacklash;
+  calibration: FocuserCalibrationRecord | null;
   can_abort: boolean;
   device: string;
+  /**
+   * Steps the driver compensates itself on a reversal; None: off (ADR 0044).
+   */
+  driver_backlash: number | null;
   /**
    * The physical focuser: serial:<number> or device:<name>.
    */
@@ -1250,6 +1366,54 @@ export interface FocuserBacklash {
    * Steps past a target when moving the other way; None: one sweep step.
    */
   overshoot: number | null;
+}
+/**
+ * The last calibration that succeeded (ADR 0044).
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "FocuserCalibrationRecord".
+ */
+export interface FocuserCalibrationRecord {
+  /**
+   * The critical focus zone, steps; None without the optics.
+   */
+  focus_zone: number | null;
+  /**
+   * Motion lost reversing to move inward, steps.
+   */
+  inward: number[];
+  /**
+   * When it finished, UTC ISO 8601.
+   */
+  measured: string;
+  /**
+   * None without the optics.
+   */
+  microns_per_step: number | null;
+  /**
+   * The smallest significant move, steps.
+   */
+  min_step: number;
+  /**
+   * Noise of a frame's position on the arm, steps (standard deviation).
+   */
+  noise: number;
+  /**
+   * Motion lost reversing to move outward, steps.
+   */
+  outward: number[];
+  /**
+   * The overshoot that passed the round trips.
+   */
+  overshoot: number;
+  /**
+   * The equipment profile it was measured with.
+   */
+  profile: string | null;
+  /**
+   * The optics followed the motor only in part.
+   */
+  slip: boolean;
 }
 /**
  * A USB GPS through gpsd (ADR 0029); positions to 4 decimals, at most every 10 s.
@@ -4189,6 +4353,22 @@ export interface TwilightWindow {
    * UTC, ISO 8601: the Sun 1° below the horizon at dusk.
    */
   start: string;
+}
+/**
+ * What is left out comes from the imaging train's sweep (ADR 0044).
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "FocusCalibrationRequest".
+ */
+export interface FocusCalibrationRequest {
+  /**
+   * Seconds.
+   */
+  exposure?: number | null;
+  /**
+   * Autofocus's step.
+   */
+  step?: number | null;
 }
 /**
  * When a template's sequence focuses: at the start, and on these reasons.

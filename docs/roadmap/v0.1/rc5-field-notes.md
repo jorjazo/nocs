@@ -43,10 +43,13 @@ for runs 1–3.
 
 ## Next
 
-- A focuser calibration (proposed to the maintainer on 2026-11-13): on an arm of the
-  V, measure the backlash each way and its spread, the overshoot that reaches a
-  position again (round trips), steps per µm and the critical focus zone in steps;
-  from the Focus screen, the focuser's sheet in Rig, a *backlash* failure, and
-  Tonight's checklist while the train is not calibrated.
-- Next clear night: overshoot 2000 on this focuser; check the last frame's HFR after
-  each autofocus.
+- **A focuser calibration** ([ADR 0044](../../adr/0044-focuser-calibration.md)): on an
+  arm of the V, the backlash each way and its spread, the overshoot that comes back
+  to a position (round trips), µm per step and the critical focus zone in steps;
+  from the Focus screen, the focuser's sheet in Rig, a *backlash* or *missed*
+  failure, and Tonight's focus step while the focuser has no calibration for the
+  profile. Checked on the simulators (no backlash) and against a test focuser with a
+  dead band.
+- Next clear night: calibrate the GT81's focuser (from Tonight); compare the backlash
+  each way with 1000–1450, note the spread and whether it warns of slip; then
+  autofocus three times and check that each last frame is near the curve's best.
