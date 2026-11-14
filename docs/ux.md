@@ -170,9 +170,11 @@ Rig (2026-11-14):
   chip on Updates. Plain system updates come every few days and do not light it, nor
   does a failed join of a network: nocs-system keeps the last one until the next, so
   Network says it in words and nothing more.
-- Observers see what is informative (devices, the site, the box's status, storage,
-  where the network is); Access and Updates are for the owner, and the app's banner
-  offers to pair.
+- Observers see what is informative (devices, the box's status, storage, whether the
+  box is on its access point or a Wi-Fi network); not where the box is or which
+  networks it knows (ADR 0047): no Site group, a GPS fix without its position, and no
+  network names. Access and Updates are for the owner, and the app's banner offers to
+  pair.
 - From 1200 px the groups sit in two columns: the rig and its site on the left, the
   box and settings on the right.
 

@@ -112,8 +112,9 @@ minutes: mark a new integration test `slow` when CI's durations show it past tha
   against it) and regenerate the TS types.
 - **Every `/api` endpoint needs the paired owner** unless it is listed as public
   or for observers in `api/auth.py` (ADR 0014); never put secrets in the state,
-  which observers see. API tests pair their client with `pair_owner(client)`
-  (`tests/owner.py`).
+  which observers see. A new state field that tells where the box is or a network
+  name needs a rule in `api/observers.py` (ADR 0047). API tests pair their client
+  with `pair_owner(client)` (`tests/owner.py`).
 - **Device code goes through `nocs.devices` facades**, not raw INDI properties.
   Commands complete on the driver's `Ok` and fail on `Alert`.
 - **Concurrency in the API uses anyio** (task groups, `move_on_after`), the ASGI

@@ -140,7 +140,15 @@
           "type": "string"
         },
         "site": {
-          "$ref": "#/$defs/Site"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Site"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "None for observers, who do not see where (ADR 0047)."
         },
         "start": {
           "description": "Local noon.",

@@ -367,5 +367,7 @@ def test_sky_needs_a_site(config_dir: Path) -> None:
 def test_observers_may_read_the_sky(client: TestClient) -> None:
     client.put("/api/auth/observer", json={"enabled": True})
     client.cookies.clear()
-    assert client.get("/api/sky/tonight", params={"date": "2026-11-15"}).status_code == 200
+    tonight = client.get("/api/sky/tonight", params={"date": "2026-11-15"})
+    assert tonight.status_code == 200
+    assert tonight.json()["site"] is None  # observers do not see where (ADR 0047)
     assert client.get("/api/profiles").status_code == 401

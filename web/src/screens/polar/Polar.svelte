@@ -161,7 +161,10 @@
       .filter((a): a is AxisError => a !== null),
   );
   const knobs = $derived(shown?.axis ? advice(shown.axis, shown.options.tolerance) : null);
-  const eastRight = $derived((site?.latitude ?? 0) >= 0);
+  // Observers do not get the site (ADR 0047): the hemisphere is where the run started
+  // (near the pole), else where the mount points.
+  const north = $derived(site ? site.latitude >= 0 : (run?.start.dec ?? live.app.mount?.dec ?? 0) >= 0);
+  const eastRight = $derived(north);
   const moved = $derived.by(() => {
     const k = latest?.knobs;
     if (!k) return null;
@@ -230,7 +233,7 @@
 
     {#if site}
       <p class="caption muted">{t.polar.siteFrom(site.name || t.sites.unnamed)}</p>
-    {:else}
+    {:else if auth.owner}
       <section class="card site" aria-labelledby="polar-site">
         <h2 id="polar-site" class="label">{t.polar.noSiteTitle}</h2>
         <p class="body">{t.polar.noSiteBody}</p>
@@ -366,7 +369,7 @@
       <p class="caption muted">{t.polar.stopHint}</p>
     </div>
   {:else if running && shown.axis}
-    <PolarTarget axis={shown.axis} {trail} tolerance={shown.options.tolerance} latitude={site?.latitude ?? -1} />
+    <PolarTarget axis={shown.axis} {trail} tolerance={shown.options.tolerance} latitude={site?.latitude ?? (north ? 1 : -1)} />
 
     <section class="error-line" aria-live="polite">
       <span class="total mono">{formatAngle(shown.axis.total, locale)}</span>

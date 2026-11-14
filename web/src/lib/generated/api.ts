@@ -425,7 +425,10 @@ export interface Almanac {
    * YYYY-MM-DD, the date at the start of the night.
    */
   night: string;
-  site: Site;
+  /**
+   * None for observers, who do not see where (ADR 0047).
+   */
+  site: Site | null;
   /**
    * Local noon.
    */

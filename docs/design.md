@@ -292,7 +292,8 @@ parks the mount. Observatory devices will plug into this later.
 - Clients **pair** once with the passphrase and receive a long-lived device
   token (an `HttpOnly` cookie); tokens can be listed and revoked.
 - Optional **observer** role, off by default: read-only access without pairing
-  (state and previews), for showing the session to others.
+  (state and previews), for showing the session to others. Observers' state has
+  no site coordinates or Wi-Fi names (ADR 0047).
 - Commands and WebSockets are refused from other origins (CSRF).
 - Until HTTPS (phase 6) the web app runs without geolocation, offline
   installation and wake lock, which browsers keep for secure contexts. Details
