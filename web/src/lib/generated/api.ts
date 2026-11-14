@@ -653,7 +653,7 @@ export interface AutofocusState {
    * Best focus, once the run checked it.
    */
   position: number | null;
-  problem: ("no_stars" | "too_few_stars" | "not_turning" | "flat" | "bad_fit" | "worse" | "backlash") | null;
+  problem: ("no_stars" | "too_few_stars" | "not_turning" | "flat" | "bad_fit" | "worse" | "backlash" | "missed") | null;
   stars: number | null;
   start_hfr: number | null;
   start_position: number;
@@ -662,7 +662,7 @@ export interface AutofocusState {
   state: "running" | "succeeded" | "failed" | "cancelled";
   step: number;
   /**
-   * For backlash: an overshoot that would take it up.
+   * For backlash: an overshoot that would take it up. In a run that succeeded: the overshoot that reached the best focus after the saved one missed it.
    */
   suggested_overshoot?: number | null;
   /**
@@ -3071,7 +3071,7 @@ export interface AutofocusState1 {
    * Best focus, once the run checked it.
    */
   position: number | null;
-  problem: ("no_stars" | "too_few_stars" | "not_turning" | "flat" | "bad_fit" | "worse" | "backlash") | null;
+  problem: ("no_stars" | "too_few_stars" | "not_turning" | "flat" | "bad_fit" | "worse" | "backlash" | "missed") | null;
   stars: number | null;
   start_hfr: number | null;
   start_position: number;
@@ -3080,7 +3080,7 @@ export interface AutofocusState1 {
   state: "running" | "succeeded" | "failed" | "cancelled";
   step: number;
   /**
-   * For backlash: an overshoot that would take it up.
+   * For backlash: an overshoot that would take it up. In a run that succeeded: the overshoot that reached the best focus after the saved one missed it.
    */
   suggested_overshoot?: number | null;
   /**

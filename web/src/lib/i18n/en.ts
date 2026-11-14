@@ -858,8 +858,12 @@ export const en = {
       worse: "The last frame was worse than the first: conditions may have changed. Try again.",
       backlash:
         "The first points of the sweep had the same stars although the focuser moved: its backlash was not taken up. Use a larger overshoot (Advanced).",
+      missed:
+        "The stars at the best focus were far larger than the curve's best, even after approaching it again with twice the overshoot: the focuser's backlash may be larger still, or the sky changed. Try again with a larger overshoot (Advanced).",
     } satisfies Record<AutofocusProblem, string>,
     suggestOvershoot: (steps: string) => `An overshoot of ${steps} steps should take the backlash up.`,
+    missedOvershoot: (steps: string) =>
+      `The first move to the best focus fell short of the focuser's backlash; approaching it again past ${steps} steps got there.`,
     useOvershoot: "Use it for this focuser",
     again: "Run again",
     done: "Done",

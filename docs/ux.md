@@ -321,7 +321,9 @@ Autofocus (stage 5.5):
   after and R², and when the fit suggests a step more than 15 % different, offers
   to keep it for next time. A failure names its cause and the next step for each
   quality check (no stars, too few stars, a curve that never turns, a bad fit, a
-  worse last frame) and where the focuser went back to.
+  worse last frame, a best focus missed twice) and where the focuser went back to.
+  A run that reached its best focus only at a second approach, with twice the
+  overshoot, says so and offers to keep that overshoot for the focuser (ADR 0043).
 - Live view reports only its own exposures and loops as failed; a failed
   autofocus is reported on its own screen.
 

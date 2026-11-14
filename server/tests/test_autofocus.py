@@ -78,6 +78,25 @@ class FakeFocuser:
         pass
 
 
+class SlackFocuser(FakeFocuser):
+    """A dead band: after the focuser reverses, its gears cross ``slack`` steps before
+    the optics move. Pushing outward, the optics are at the position; pulling inward,
+    ``slack`` steps outward of it."""
+
+    def __init__(self, position: int, slack: int) -> None:
+        super().__init__(position)
+        self.slack = slack
+        self.tube = position
+
+    @property
+    def optical(self) -> int:
+        return self.tube
+
+    async def move_to(self, position: int) -> None:
+        await FakeFocuser.move_to(self, position)
+        self.tube = min(max(self.tube, position), position + self.slack)
+
+
 class EafLikeFocuser(FakeFocuser):
     """Like the ZWO EAF: a move goes on to its target when the command is cancelled,
     and a new move is refused until it gets there."""
@@ -272,21 +291,66 @@ async def test_too_few_stars_in_the_sweep() -> None:
     assert rig.focuser.position == 10150
 
 
-async def test_a_worse_last_frame_restores_the_start() -> None:
-    rig = Rig(start=10150)
+def seeing_worsens(by: float, after: int) -> Callable[[int], float]:
+    """The curve, with every frame after the first ``after`` ``by`` times larger."""
     frames = 0
 
-    def seeing_worsens(position: int) -> float:
+    def curve(position: int) -> float:
         nonlocal frames
         frames += 1
-        return CURVE(position) * (3 if frames > 10 else 1)
+        return CURVE(position) * (by if frames > after else 1)
 
-    rig.camera.curve = seeing_worsens
+    return curve
+
+
+async def test_a_worse_last_frame_restores_the_start() -> None:
+    rig = Rig(start=10150)
+    rig.camera.curve = seeing_worsens(1.4, after=10)  # the first frame and the sweep's 9
     job, state = await rig.focus()
     assert job["state"] == "failed"
     assert state["problem"] == "worse"
-    assert state["detail"].startswith("HFR 6.00 at 10000")
+    assert state["detail"].startswith("HFR 2.80 at 10000")
     assert rig.focuser.position == 10150
+
+
+async def test_a_missed_focus_is_approached_again_with_twice_the_overshoot() -> None:
+    # As on the GT81 (2026-11-12): the move to the best focus falls short of the backlash
+    # and leaves the optics 150 steps out. In a dead band the sweep starts with the same
+    # shortfall: two points, too few to fail as backlash.
+    rig = Rig(start=10150, focuser=SlackFocuser(10150, slack=550))
+    rig.camera.curve = Hyperbola(a=2.0, b=100, c=10000)
+    job, state = await rig.focus(step=100, overshoot=400)
+    assert job["state"] == "succeeded", job
+    best = state["position"]
+    assert rig.focuser.moves[-4:] == [best - 400, best, best - 800, best]
+    assert rig.focuser.optical == best  # the gears push the optics there at last
+    assert best == pytest.approx(10000, abs=80)  # the sweep's two short points skew the fit
+    assert state["hfr"] < 1.5 * state["fit"]["a"]
+    assert state["suggested_overshoot"] == 800
+    assert rig.runs[-1].hfr == state["hfr"]
+
+
+async def test_a_focus_missed_twice_fails_and_goes_back() -> None:
+    rig = Rig(start=10150)
+    rig.camera.curve = seeing_worsens(3, after=10)
+    job, state = await rig.focus()
+    assert job["state"] == "failed"
+    assert state["problem"] == "missed"
+    assert state["detail"] == (
+        "HFR 6.00 at 10000 against 2.00 at the curve's best, also after approaching it"
+        " again past 400 steps"
+    )
+    assert state["suggested_overshoot"] is None
+    assert rig.focuser.position == 10150
+
+
+async def test_a_failed_run_goes_back_past_its_backlash() -> None:
+    rig = Rig(start=10150, focuser=SlackFocuser(10150, slack=780))
+    rig.camera.stars = lambda p: 40 if abs(p - 10150) < 300 else 2
+    _, state = await rig.focus(overshoot=400)
+    assert state["problem"] == "too_few_stars"
+    assert rig.focuser.position == 10150
+    assert rig.focuser.optical == 10150  # twice the overshoot: the gears pushed it there
 
 
 async def test_cancelling_goes_back_to_the_start() -> None:

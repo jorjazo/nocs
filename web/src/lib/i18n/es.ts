@@ -836,8 +836,12 @@ export const es: Messages = {
       worse: "La última imagen salió peor que la primera: las condiciones pueden haber cambiado. Vuelve a intentarlo.",
       backlash:
         "Los primeros puntos del barrido tuvieron las mismas estrellas aunque el enfocador se movió: no se absorbió su holgura. Usa un sobrepaso mayor (Avanzado).",
+      missed:
+        "Las estrellas en el mejor foco salieron mucho más grandes que el mínimo de la curva, incluso después de volver a llegar con el doble de sobrepaso: la holgura del enfocador puede ser aún mayor, o el cielo cambió. Vuelve a intentarlo con un sobrepaso mayor (Avanzado).",
     },
     suggestOvershoot: (steps) => `Un sobrepaso de ${steps} pasos debería absorber la holgura.`,
+    missedOvershoot: (steps) =>
+      `El primer movimiento al mejor foco no alcanzó a absorber la holgura del enfocador; volviendo a llegar con ${steps} pasos de sobrepaso se llegó.`,
     useOvershoot: "Usarlo para este enfocador",
     again: "Repetir",
     done: "Listo",

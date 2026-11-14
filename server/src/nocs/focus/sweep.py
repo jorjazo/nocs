@@ -41,6 +41,10 @@ class Problem(StrEnum):
     """The points do not follow a V closely enough."""
     WORSE = "worse"
     """The frame at the fitted focus is worse than where the run started."""
+    MISSED = "missed"
+    """The frame at the fitted focus is far worse than the curve's best, even after
+    approaching it again with twice the overshoot: the focuser did not get there
+    (backlash larger than that), or the sky changed."""
     BACKLASH = "backlash"
     """The first points of the sweep show the same HFR although the focuser moved: the
     overshoot does not take up the focuser's backlash."""
@@ -140,6 +144,18 @@ def approach(
     """
     if overshoot <= 0 or target == current or (target - current) * direction > 0:
         return [target]
+    beyond = target - direction * overshoot
+    beyond = max(beyond, 0)
+    if maximum is not None:
+        beyond = min(beyond, maximum)
+    return [target] if beyond == target else [beyond, target]
+
+
+def approach_again(
+    target: int, direction: Direction, overshoot: int, maximum: int | None
+) -> list[int]:
+    """The moves that reach ``target`` again from where the focuser is, at ``target``:
+    ``overshoot`` steps back against ``direction``, then forward to it."""
     beyond = target - direction * overshoot
     beyond = max(beyond, 0)
     if maximum is not None:
