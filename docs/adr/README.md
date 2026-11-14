@@ -50,5 +50,6 @@ that supersedes the old one.
 | [0042](0042-site-from-the-mount-and-first-run.md) | A new site from the mount or the GPS, and a site step in the first run | Proposed |
 | [0043](0043-autofocus-last-frame-against-the-curve.md) | Autofocus checks its last frame against the curve, and approaches again | Proposed |
 | [0044](0044-focuser-calibration.md) | Focuser calibration: backlash each way, an overshoot that returns, and the scale | Proposed |
+| [0045](0045-builds-after-a-release.md) | Builds after a release sort after it, so `testing` always moves on | Proposed |
 
 Template: Context → Decision → Consequences.

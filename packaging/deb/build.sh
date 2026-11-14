@@ -13,18 +13,22 @@ out=${OUT:-$repo/packaging/out}
 mkdir -p "$out"
 
 # The pyproject version (0.1.0, 0.1.0rc1) is the tag's after its v; its package is
-# 0.1.0 or 0.1.0~rc1, which sorts before 0.1.0.
-# Between releases: <package version>~git<commits>.g<commit>, which sorts before
-# the release itself. A tagged release is just its package version.
+# 0.1.0 or 0.1.0~rc1, which sorts before 0.1.0. A tagged release is just that.
+# Other builds add git<commits>.g<commit> (ADR 0045): after "~" while the version is
+# not tagged yet (0.1.0~rc6~git231.g…, before 0.1.0~rc6), after "." once its tag is
+# behind them (0.1.0~rc5.git219.g…, after 0.1.0~rc5), so that testing always moves on.
 if [[ -z ${VERSION:-} ]]; then
     pep440=$(sed -n 's/^version = "\(.*\)"/\1/p' "$repo/server/pyproject.toml" | head -1)
     [[ $pep440 =~ ^([0-9]+\.[0-9]+\.[0-9]+)(rc([0-9]+))?$ ]] \
         || { echo "error: version $pep440 is neither X.Y.Z nor X.Y.ZrcN" >&2; exit 1; }
     base=${BASH_REMATCH[1]}${BASH_REMATCH[3]:+~rc${BASH_REMATCH[3]}}
+    build="git$(git -C "$repo" rev-list --count HEAD).g$(git -C "$repo" rev-parse --short=7 HEAD)"
     if git -C "$repo" describe --exact-match --tags --match "v$pep440" >/dev/null 2>&1; then
         VERSION=$base
+    elif git -C "$repo" merge-base --is-ancestor "refs/tags/v$pep440" HEAD 2>/dev/null; then
+        VERSION="$base.$build"
     else
-        VERSION="$base~git$(git -C "$repo" rev-list --count HEAD).g$(git -C "$repo" rev-parse --short=7 HEAD)"
+        VERSION="$base~$build"
     fi
 fi
 

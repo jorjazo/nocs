@@ -38,11 +38,18 @@ done
 publish debs --suite stable:3 --suite testing:2 "$(package nocs 0.1.0 amd64)" \
     "$(package nocs 0.1.0 arm64)" "$(package nocs-appliance 0.1.0 all)"
 
+# After its release, main's builds sort after it (ADR 0045): testing moves on to them.
+for version in 0.1.0.git4.gd 0.1.0.git5.ge; do
+    publish debs --suite testing:2 "$(package nocs "$version" amd64)" "$(package nocs "$version" arm64)" \
+        "$(package nocs-appliance "$version" all)"
+done
+
 pool=$(cd "$repo" && find pool -name '*.deb' | sort)
 echo "$pool"
-[[ $(grep -c . <<<"$pool") == 6 ]] || fail "the pool should hold two versions of three packages"
-grep -q 'nocs_0.1.0~git3.gc_amd64.deb' <<<"$pool" || fail "testing lost its newest build"
-! grep -q 'git1\|git2' <<<"$pool" || fail "old testing builds were not pruned"
+[[ $(grep -c . <<<"$pool") == 9 ]] || fail "the pool should hold three versions of three packages"
+grep -q 'nocs_0.1.0.git5.ge_amd64.deb' <<<"$pool" || fail "testing lost its newest build"
+grep -q 'nocs_0.1.0_amd64.deb' <<<"$pool" || fail "stable lost its release"
+! grep -q 'git[1-3]\.' <<<"$pool" || fail "old testing builds were not pruned"
 
 # Images: the newest two stay, an rc sorts before its release.
 for version in 0.1.0-rc1 0.1.0 0.0.9; do
@@ -65,7 +72,8 @@ for suite in stable testing; do
     ! grep -q '^[WE]:' /tmp/update || { cat /tmp/update; exit 1; }
     apt-cache madison nocs nocs-appliance
 done
+# testing (the last source written) installs main's newest build, not the release.
 apt-get install -y nocs nocs-appliance >/dev/null 2>&1
-[[ $(cat /usr/share/nocs/version) == 0.1.0 ]]
+[[ $(dpkg-query -W -f '${Version}' nocs) == 0.1.0.git5.ge ]]
 CHECK
 echo PASS
