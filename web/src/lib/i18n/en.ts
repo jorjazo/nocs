@@ -885,7 +885,9 @@ export const en = {
     otherProfile: (profile: string) => `Calibrated with another profile (${profile}): calibrate again for this one.`,
     never: "Not calibrated yet.",
     driver: (steps: string) =>
-      `The focuser's driver compensates ${steps} steps of backlash itself. NOCS takes backlash up on its own: turn the driver's off first.`,
+      `The focuser's driver compensates ${steps} steps of backlash itself: the calibration turns that off, as NOCS takes backlash up on its own.`,
+    driverTurnedOff: (steps: string) =>
+      `The driver's own compensation (${steps} steps) is now off: NOCS takes backlash up on its own.`,
     turnOff: "Turn it off",
     step: "Autofocus step",
     stepHint: "Autofocus runs first with this step; the profile's when it has one.",
@@ -923,7 +925,7 @@ export const en = {
     suggest: (step: string) => `Autofocus's step could be ${step}.`,
     useStep: "Use it for autofocus",
     problem: {
-      driver_backlash: "The focuser's driver compensates backlash itself: turn that off, then calibrate.",
+      driver_backlash: "The focuser's driver compensates backlash itself, and turning that off failed: turn it off, then calibrate.",
       autofocus: "Autofocus failed first, so there was no focus to measure from:",
       too_few_stars:
         "Frames out of focus had too few stars: clouds, or stars faint enough to fade out of focus. Try a longer exposure.",

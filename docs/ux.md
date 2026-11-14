@@ -339,7 +339,8 @@ Focuser calibration (ADR 0044):
 - Start says what it measures and what it needs (stars, near focus, a few minutes,
   the mount does not move), the last calibration (backlash each way, overshoot,
   focus zone), and autofocus's step. A driver that compensates backlash itself
-  shows a warning with "Turn it off", and the start waits for it.
+  is mentioned: the calibration turns that off without asking, and the result says
+  so.
 - While it runs: autofocus's V-curve while it focuses, then each reversal's lost
   steps and each round trip as they come, the phase and a progress bar, Cancel.
 - The result: the backlash inward and outward (every measurement), the overshoot

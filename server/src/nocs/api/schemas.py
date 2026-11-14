@@ -806,6 +806,9 @@ class FocusCalibrationState(StateModel):
     suggested_step: int | None = Field(description="Autofocus's suggestion for the sweep.")
     slip: bool
     hfr: float | None = Field(description="At the best focus, at the end.")
+    driver_backlash: int | None = Field(
+        description="Steps the driver compensated itself until the calibration turned that off."
+    )
     problem: (
         Literal[
             "driver_backlash",

@@ -50,9 +50,11 @@ way?) and the smallest step that still means something to focus. Facts:
   wheel) and never moves the mount. From the Focus screen, the focuser's sheet
   (Rig), a failed autofocus (*backlash*, *missed*), and Tonight's checklist while the
   focuser has no calibration for the active profile.
-- **Refuse driver compensation.** With `FOCUS_BACKLASH_TOGGLE` on, the job fails
-  before moving and the screen offers to turn it off (`PUT /api/focuser/driver-backlash`);
-  NOCS alone takes up backlash.
+- **Turn driver compensation off.** With `FOCUS_BACKLASH_TOGGLE` on, the job turns it
+  off before moving, without asking (a warning in the log, and the result says how
+  many steps the driver compensated), and goes on; it fails only when the driver
+  refuses. NOCS alone takes up backlash. `DELETE /api/focuser/driver-backlash` turns
+  it off outside a calibration.
 - **Steps of the job:**
   1. *Autofocus* with the train's sweep and a large overshoot (the larger of 2000
      and three times the saved one): its curve gives the best focus `c`, its HFR

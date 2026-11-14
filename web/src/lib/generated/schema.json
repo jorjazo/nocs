@@ -4106,6 +4106,17 @@
           ],
           "type": "string"
         },
+        "driver_backlash": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Steps the driver compensated itself until the calibration turned that off."
+        },
         "finished": {
           "anyOf": [
             {
@@ -4291,6 +4302,7 @@
         "suggested_step",
         "slip",
         "hfr",
+        "driver_backlash",
         "problem",
         "detail"
       ],

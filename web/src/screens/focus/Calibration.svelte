@@ -75,7 +75,6 @@
     if (!auth.owner) return t.focusCalibration.observer;
     if (!focuser || !camera) return t.autofocus.noRig;
     if (busyJob) return t.autofocus.busy;
-    if (focuser.driver_backlash !== null) return t.focusCalibration.driver(formatPlain(focuser.driver_backlash, locale));
     if (step === null) return t.focusCalibration.needStep;
     return "";
   });
@@ -200,11 +199,8 @@
       {/if}
     </section>
 
-    {#if focuser?.driver_backlash != null && auth.owner}
-      <Banner icon="alert" tone="warning">
-        {t.focusCalibration.driver(formatPlain(focuser.driver_backlash, locale))}
-      </Banner>
-      <Button {busy} onclick={turnOff}>{t.focusCalibration.turnOff}</Button>
+    {#if focuser?.driver_backlash != null}
+      <p class="body muted">{t.focusCalibration.driver(formatPlain(focuser.driver_backlash, locale))}</p>
     {/if}
 
     {#key form}
@@ -294,6 +290,9 @@
           </section>
           {#if shown.overshoot !== null}
             <p class="body">{t.focusCalibration.overshootApplied(formatPlain(shown.overshoot, locale))}</p>
+          {/if}
+          {#if shown.driver_backlash !== null}
+            <p class="body muted">{t.focusCalibration.driverTurnedOff(formatPlain(shown.driver_backlash, locale))}</p>
           {/if}
           {#if isUnsteady}<Banner icon="alert" tone="warning">{t.focusCalibration.unsteady}</Banner>{/if}
           {#if shown.slip}<Banner icon="alert" tone="warning">{t.focusCalibration.slip}</Banner>{/if}

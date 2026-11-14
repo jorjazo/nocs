@@ -1222,6 +1222,10 @@ export interface FocusCalibrationState {
    * The approach direction.
    */
   direction: "outward" | "inward";
+  /**
+   * Steps the driver compensated itself until the calibration turned that off.
+   */
+  driver_backlash: number | null;
   finished: string | null;
   /**
    * The critical focus zone, steps.

@@ -862,7 +862,9 @@ export const es: Messages = {
     otherProfile: (profile) => `Calibrado con otro perfil (${profile}): vuelve a calibrar para este.`,
     never: "Todavía sin calibrar.",
     driver: (steps) =>
-      `El driver del enfocador compensa por su cuenta ${steps} pasos de holgura. NOCS absorbe la holgura por sí mismo: apaga primero la del driver.`,
+      `El driver del enfocador compensa por su cuenta ${steps} pasos de holgura: la calibración la apaga, porque NOCS absorbe la holgura por sí mismo.`,
+    driverTurnedOff: (steps) =>
+      `La compensación propia del driver (${steps} pasos) quedó apagada: NOCS absorbe la holgura por sí mismo.`,
     turnOff: "Apagarla",
     step: "Paso de autofocus",
     stepHint: "Primero corre un autofocus con este paso; el del perfil si tiene uno.",
@@ -900,7 +902,7 @@ export const es: Messages = {
     suggest: (step) => `El paso del autofocus podría ser ${step}.`,
     useStep: "Usarlo para el autofocus",
     problem: {
-      driver_backlash: "El driver del enfocador compensa la holgura por su cuenta: apágala y luego calibra.",
+      driver_backlash: "El driver del enfocador compensa la holgura por su cuenta y no se pudo apagar: apágala y luego calibra.",
       autofocus: "Primero falló el autofocus, así que no hubo un foco desde donde medir:",
       too_few_stars:
         "Las imágenes fuera de foco tuvieron muy pocas estrellas: nubes, o estrellas tan débiles que se pierden fuera de foco. Prueba una exposición más larga.",

@@ -58,6 +58,9 @@ class FakeFocuser:
         self._position = position
         self.moves.append(position)
 
+    async def disable_driver_backlash(self) -> None:
+        self.driver_backlash = None
+
     async def abort(self) -> None:
         pass
 

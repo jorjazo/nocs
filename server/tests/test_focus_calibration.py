@@ -135,13 +135,17 @@ async def test_a_failed_autofocus_fails_the_calibration() -> None:
     assert rig.focuser.position == 10150
 
 
-async def test_driver_compensation_is_refused() -> None:
+async def test_driver_compensation_is_turned_off_and_the_calibration_goes_on(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     focuser = FakeFocuser(10150)
     focuser.driver_backlash = 120
     rig = Rig(focuser)
-    with pytest.raises(ValueError, match="compensates 120 steps"):
-        rig.service.start(rig.service.options(step=STEP))
-    assert focuser.moves == []
+    job, state = await rig.calibrate()
+    assert job["state"] == "succeeded", job
+    assert focuser.driver_backlash is None
+    assert state["driver_backlash"] == 120
+    assert "compensated 120 steps" in caplog.text
 
 
 def test_the_autofocus_overshoot_is_large() -> None:

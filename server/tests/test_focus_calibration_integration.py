@@ -3,7 +3,7 @@
 """Focuser calibration through the API, against the simulators at 1000 mm (ADR 0044).
 
 The focuser simulator has no backlash: this checks the plain path, the driver's own
-compensation refused and turned off, and what is kept.
+compensation turned off, and what is kept.
 """
 
 import json
@@ -119,14 +119,14 @@ def api(tmp_path_factory: pytest.TempPathFactory) -> Iterator[TestClient]:
             move(client, start)
 
 
-def test_driver_compensation_is_refused_and_turned_off(api: TestClient) -> None:
+def test_driver_compensation_can_be_turned_off(api: TestClient) -> None:
     set_property(api, FOCUSER, "FOCUS_BACKLASH_TOGGLE", {"INDI_ENABLED": True})
     wait(api, lambda s: s["focuser"]["driver_backlash"] is not None, timeout=10)
-    response = api.post("/api/focuser/calibrate", json={})
-    assert response.status_code == 422, response.text
-    assert "compensates" in response.json()["detail"]
     assert api.delete("/api/focuser/driver-backlash").status_code == 204
     wait(api, lambda s: s["focuser"]["driver_backlash"] is None, timeout=10)
+    # On again: the calibration below turns it off itself.
+    set_property(api, FOCUSER, "FOCUS_BACKLASH_TOGGLE", {"INDI_ENABLED": True})
+    wait(api, lambda s: s["focuser"]["driver_backlash"] is not None, timeout=10)
 
 
 def test_calibration_on_the_simulators(api: TestClient) -> None:
@@ -154,7 +154,9 @@ def test_calibration_on_the_simulators(api: TestClient) -> None:
     assert all(t["ok"] for t in result["trips"])
     assert result["microns_per_step"] is not None
     assert result["focus_zone"] is not None
+    assert result["driver_backlash"] is not None  # on from the test before, then off
     focuser = current["focuser"]
+    assert focuser["driver_backlash"] is None
     assert focuser["position"] == result["best"]["position"]
     assert focuser["calibration"]["profile"] == "focus"
     assert focuser["calibration"]["overshoot"] == result["overshoot"]

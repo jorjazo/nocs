@@ -2,7 +2,7 @@
 
 A calibration runs in a job of its own that locks what autofocus locks, and:
 
-1. refuses a driver that compensates backlash itself;
+1. turns off the driver's own backlash compensation, if on (a warning in the log);
 2. focuses (autofocus, with a large overshoot): the curve's best focus ``c``,
    best HFR ``a`` and width ``b``;
 3. makes a ruler of frames on the arm past the best focus, on the approach side,
@@ -24,7 +24,7 @@ as it goes::
 
     {job, state, phase, started, finished, start_position, direction, best, ruler,
      reversals, overshoot, trips, noise, min_step, microns_per_step, focus_zone,
-     suggested_step, slip, hfr, problem, detail}
+     suggested_step, slip, hfr, driver_backlash, problem, detail}
 """
 
 from __future__ import annotations
@@ -95,7 +95,7 @@ RESET = 2000
 
 class Problem(StrEnum):
     DRIVER_BACKLASH = "driver_backlash"
-    """The driver compensates backlash itself."""
+    """The driver compensates backlash itself, and turning that off failed."""
     AUTOFOCUS = "autofocus"
     """Autofocus failed (its own problem in ``detail``)."""
     TOO_FEW_STARS = "too_few_stars"
@@ -143,6 +143,7 @@ class Focusers(Protocol):
 class CalibratedFocuser(FocuserDevice, Protocol):
     @property
     def driver_backlash(self) -> int | None: ...
+    async def disable_driver_backlash(self) -> None: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -191,6 +192,8 @@ class _Run:
     zone: int | None = None
     hfr: float | None = None
     """At the best focus, at the end."""
+    driver_backlash: int | None = None
+    """What the driver compensated before the calibration turned that off."""
     problem: Problem | None = None
     detail: str | None = None
     finished: str | None = None
@@ -235,6 +238,7 @@ class _Run:
             "suggested_step": self.suggested_step,
             "slip": any(r.slip for r in self.reversals),
             "hfr": self.hfr,
+            "driver_backlash": self.driver_backlash,
             "problem": self.problem.value if self.problem else None,
             "detail": self.detail,
         }
@@ -273,11 +277,9 @@ class FocuserCalibrationService:
     def start(self, options: AutofocusOptions) -> str:
         """Calibrate in a job of its own; returns the job id."""
         options.check()
-        focuser = self._focuser.focuser()  # fail now, not in the job, without a focuser
+        self._focuser.focuser()  # fail now, not in the job, without a focuser
         self._capture.camera(Role.MAIN_CAMERA)
         self._jobs.check_free(RESOURCES)
-        if (steps := focuser.driver_backlash) is not None:
-            raise ValueError(_driver_detail(steps))
 
         async def job(context: JobContext) -> Json:
             return await self.run(context, options)
@@ -312,7 +314,22 @@ class FocuserCalibrationService:
     async def _calibrate(self, context: JobContext, focuser: CalibratedFocuser, run: _Run) -> None:
         options = run.options
         if (steps := focuser.driver_backlash) is not None:
-            raise CalibrationError(Problem.DRIVER_BACKLASH, _driver_detail(steps))
+            # NOCS alone takes backlash up (ADR 0044): turn the driver's off and go on.
+            log.warning(
+                "focuser calibration: the driver compensated %d steps of backlash itself;"
+                " turning that off",
+                steps,
+            )
+            try:
+                await focuser.disable_driver_backlash()
+            except DeviceError as e:
+                raise CalibrationError(
+                    Problem.DRIVER_BACKLASH,
+                    f"the focuser's driver compensates {steps} steps of backlash itself,"
+                    f" and turning that off failed: {e}",
+                ) from e
+            run.driver_backlash = steps
+            self._publish()
         side = options.direction
         maximum = focuser.max_position
         criteria = options.criteria
@@ -584,13 +601,6 @@ class _Part(JobContext):
 def _jump(lost: int, width: float) -> int:
     """A first move for the next reversal the same way: within the slack found."""
     return max(0, round(lost - CHUNK * width))
-
-
-def _driver_detail(steps: int) -> str:
-    return (
-        f"the focuser's driver compensates {steps} steps of backlash itself: turn that off"
-        " so that NOCS alone takes it up"
-    )
 
 
 def _name(direction: Direction) -> str:
