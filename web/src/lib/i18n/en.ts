@@ -946,6 +946,8 @@ export const en = {
       travel: "The calibration needs more of the focuser's travel: focus nearer the middle of it.",
       not_repeatable:
         "Coming back to the same position kept missing it, even with larger overshoots: the backlash is not steady. Check the coupling and the focuser's tension, then calibrate again.",
+      missed:
+        "Back at the best focus, the stars were far larger than the curve's best: the backlash changed, or the sky did. Calibrate again.",
     } satisfies Record<NonNullable<FocusCalibrationState["problem"]>, string>,
     again: "Calibrate again",
     done: "Done",

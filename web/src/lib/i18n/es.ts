@@ -923,6 +923,8 @@ export const es: Messages = {
       travel: "La calibración necesita más recorrido del enfocador: enfoca más cerca del centro de su recorrido.",
       not_repeatable:
         "Al volver a la misma posición falló una y otra vez, incluso con sobrepasos mayores: la holgura no es estable. Revisa el acople y la tensión del enfocador, y vuelve a calibrar.",
+      missed:
+        "De vuelta en el mejor foco, las estrellas eran mucho más grandes que el mejor de la curva: cambió la holgura, o el cielo. Vuelve a calibrar.",
     },
     again: "Calibrar otra vez",
     done: "Listo",

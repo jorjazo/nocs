@@ -60,7 +60,7 @@ from nocs.focus.backlash import (
 )
 from nocs.focus.focusers import FocuserCalibration, FocuserConfig
 from nocs.focus.service import FocuserNotReadyError
-from nocs.focus.sweep import Direction, approach
+from nocs.focus.sweep import Direction, approach, approach_again
 from nocs.jobs import JobContext, JobManager
 from nocs.state import Json, Path, StateStore
 
@@ -89,6 +89,10 @@ TRIPS = (3.0, 2.0, 4.0)
 ATTEMPTS = 3
 ROUNDS = 2
 """Reversals each way."""
+JUMP = 0.5
+"""A later reversal's first move, as a fraction of the least motion lost so far: the
+backlash varies (1000 to 1450 on the GT81), and a jump past it would carry the optics
+across focus, where one arm's ruler misreads them."""
 RESET = 2000
 """The least overshoot for autofocus and for going back: larger than any backlash seen."""
 
@@ -108,6 +112,8 @@ class Problem(StrEnum):
     """The calibration would leave the focuser's travel."""
     NOT_REPEATABLE = "not_repeatable"
     """The round trips kept missing their targets, even with larger overshoots."""
+    MISSED = "missed"
+    """The last frame, back at the best focus, was far from the curve's best HFR."""
 
 
 class Phase(StrEnum):
@@ -364,6 +370,13 @@ class FocuserCalibrationService:
                 )
             await focuser.move_to(position)
 
+        async def approach_within(target: int, overshoot: int) -> None:
+            """Approach ``target`` as autofocus does, with all of ``overshoot``: the
+            moves are not clamped to the travel, or the overshoot tried would be less."""
+            if (target - focuser.position) * side < 0:
+                await go(target - side * overshoot)  # past the travel: TRAVEL
+            await go(target)
+
         async def frame(label: str) -> tuple[float | None, int]:
             shot = await self._capture.take(
                 context, Role.MAIN_CAMERA, options.exposure, FrameType.LIGHT, label
@@ -440,11 +453,20 @@ class FocuserCalibrationService:
                 moved = (now - ref) * towards
                 if moved <= threshold:
                     continue
+                if moved > cumulative + threshold:
+                    # More motion than commanded: the optics crossed focus, or left the
+                    # ruler's range, and the ruler misreads them.
+                    raise CalibrationError(
+                        Problem.NOT_AN_ARM,
+                        f"the optics seemed to move {moved:.0f} steps {_name(towards)}"
+                        f" for {cumulative} commanded: seeing or clouds may have changed",
+                    )
                 # The ruler's noise can measure more motion than was commanded; lost
                 # motion is never negative.
                 lost = max(0, round(cumulative - moved))
-                # One more chunk: the optics should follow the motor now.
-                confirm = int(min(width, abs(limit - now)))
+                # One more chunk, never past the limit: the optics should follow the
+                # motor now.
+                confirm = int(min(width, (limit - now) * towards))
                 slip = False
                 if confirm > threshold:
                     await go(focuser.position + towards * confirm)
@@ -473,15 +495,13 @@ class FocuserCalibrationService:
         run.phase = Phase.REVERSING
         back = Direction(-side)
         now = float(arm(FAR))
-        jumps = {back: 0, side: 0}
         for i in range(ROUNDS):
             report(0.5 + 0.25 * i / ROUNDS, f"reversing {_name(back)}")
-            now = await reverse(back, now, arm(NEAR), jumps[back])
-            jumps[back] = _jump(run.reversals[-1].lost, width)
+            jump = _jump(run.reversals, back, width)
+            now = await reverse(back, now, arm(NEAR), jump)
             now = await bring(arm(1.5), now, back)
             report(0.5 + 0.25 * (i + 0.5) / ROUNDS, f"reversing {_name(side)}")
-            now = await reverse(side, now, arm(BEYOND), jumps[side])
-            jumps[side] = _jump(run.reversals[-1].lost, width)
+            now = await reverse(side, now, arm(BEYOND), _jump(run.reversals, side, width))
             now = await bring(arm(FAR), now, side)
 
         # 4. Round trips with the overshoot.
@@ -495,8 +515,7 @@ class FocuserCalibrationService:
                 target = arm(widths)
                 report(0.75 + 0.15 * attempt / ATTEMPTS, f"round trip to {target}")
                 await go(arm(FAR))
-                for position in approach(focuser.position, target, side, overshoot, maximum):
-                    await go(position)
+                await approach_within(target, overshoot)
                 hfr, stars = await frame(f"round trip {target}: ")
                 measured = (
                     ruler.position(hfr) if hfr is not None and stars >= criteria.min_stars else None
@@ -521,10 +540,15 @@ class FocuserCalibrationService:
         # 5. Back to focus; the scale; keep it.
         run.phase = Phase.RETURNING
         report(0.92, f"back to {best}")
-        for position in approach(focuser.position, best, side, overshoot, maximum):
-            await go(position)
+        await approach_within(best, overshoot)
         hfr, _ = await frame("best focus: ")
         run.hfr = hfr
+        if hfr is None or hfr > a * options.off_focus:
+            raise CalibrationError(
+                Problem.MISSED,
+                f"back at the best focus {best} with an overshoot of {overshoot}, HFR"
+                f" {'unknown' if hfr is None else f'{hfr:.2f}'} against the curve's {a:.2f}",
+            )
         if (scale := self._scale()) is not None:
             run.microns = microns_per_step(a, b, scale.focal_ratio, scale.pixel_size)
             run.zone = focus_zone(scale.focal_ratio, run.microns)
@@ -554,20 +578,21 @@ class FocuserCalibrationService:
         run.phase = Phase.RESTORING
         self._publish()
         target = run.best[0]
-        overshoot = 2 * (run.overshoot or 0) or run.options.overshoot or RESET
+        overshoot = max(2 * (run.overshoot or 0), run.options.overshoot or RESET)
         with anyio.CancelScope(shield=True):
             try:
                 if focuser.can_abort:
                     await focuser.abort()
                 await settle(focuser)
                 context.progress(None, f"back to {target}")
-                for position in approach(
-                    focuser.position,
-                    target,
-                    run.options.direction,
-                    overshoot,
-                    focuser.max_position,
-                ):
+                # Already at the target, the optics may not be: approach it again.
+                direction, maximum = run.options.direction, focuser.max_position
+                moves = (
+                    approach_again(target, direction, overshoot, maximum)
+                    if focuser.position == target
+                    else approach(focuser.position, target, direction, overshoot, maximum)
+                )
+                for position in moves:
                     try:
                         await focuser.move_to(position)
                     except DeviceError as e:
@@ -598,9 +623,13 @@ class _Part(JobContext):
         self._context.progress(scaled, message)
 
 
-def _jump(lost: int, width: float) -> int:
-    """A first move for the next reversal the same way: within the slack found."""
-    return max(0, round(lost - CHUNK * width))
+def _jump(reversals: list[Reversal], towards: Direction, width: float) -> int:
+    """A first move for a reversal ``towards``, once one was measured that way: well
+    within the least motion lost either way (``JUMP``), less a chunk."""
+    if not any(r.towards is towards for r in reversals):
+        return 0
+    least = min(r.lost for r in reversals)
+    return max(0, round(JUMP * least - CHUNK * width))
 
 
 def _name(direction: Direction) -> str:

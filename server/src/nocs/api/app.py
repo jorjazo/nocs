@@ -328,7 +328,8 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
         return profile.imaging.autofocus if profile and profile.imaging else None
 
     def imaging_scale() -> Scale | None:
-        """The imaging train's focal ratio (as saved) and the main camera's pixel size."""
+        """The imaging train's focal ratio (as saved) and the main camera's pixel size,
+        binned: frames' HFR is in binned pixels."""
         active = equipment().active
         profile = ProfileStore(settings.config_dir).get(active) if active else None
         optics = profile.imaging if profile else None
@@ -337,7 +338,11 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
             return None
         if pixel <= 0:
             return None
-        return Scale(optics.focal_length * optics.reducer / optics.aperture, float(pixel))
+        binning = store.get(("cameras", Role.MAIN_CAMERA.value, "binning"))
+        factor = binning[0] if isinstance(binning, list) and isinstance(binning[0], int) else 1
+        return Scale(
+            optics.focal_length * optics.reducer / optics.aperture, float(pixel) * max(1, factor)
+        )
 
     def solve_exposure() -> float | None:
         """The active profile's, as saved (its summary in the state): no reconnection."""

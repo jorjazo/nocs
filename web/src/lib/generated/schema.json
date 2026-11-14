@@ -4224,7 +4224,8 @@
                 "not_an_arm",
                 "no_movement",
                 "travel",
-                "not_repeatable"
+                "not_repeatable",
+                "missed"
               ],
               "type": "string"
             },

@@ -122,7 +122,10 @@ class FocuserService:
         )
 
     async def disable_driver_backlash(self) -> None:
-        """Turn off the driver's own backlash compensation: NOCS takes it up (ADR 0044)."""
+        """Turn off the driver's own backlash compensation: NOCS takes it up (ADR 0044).
+
+        Not while a job holds the focuser: its backlash would change under it."""
+        self._jobs.check_free([RESOURCE])
         await self.focuser().disable_driver_backlash()
 
     def _save(self, key: str, config: FocuserConfig) -> None:

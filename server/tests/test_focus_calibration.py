@@ -11,6 +11,7 @@ from nocs.api.schemas import FocusCalibrationState, FocuserCalibrationRecord
 from nocs.focus.autofocus import AutofocusService
 from nocs.focus.backlash import Ruler, focus_zone, microns_per_step, overshoot_for, round_up
 from nocs.focus.calibration import FocuserCalibrationService, Scale
+from nocs.focus.curve import Hyperbola
 from nocs.jobs import JobManager
 from nocs.state import StateStore
 
@@ -52,8 +53,8 @@ class Rig:
             profile=lambda: "william",
         )
 
-    async def calibrate(self) -> tuple[dict[str, Any], dict[str, Any]]:
-        job_id = self.service.start(self.service.options(step=STEP))
+    async def calibrate(self, step: int = STEP) -> tuple[dict[str, Any], dict[str, Any]]:
+        job_id = self.service.start(self.service.options(step=step))
         await self.jobs.wait(job_id)
         job = self.store.get(("jobs", job_id))
         state = self.store.get(("focus_calibration",))
@@ -122,6 +123,56 @@ async def test_a_backlash_that_grows_is_not_repeatable() -> None:
     # Going back with twice the last overshoot takes the 1500 steps up.
     assert rig.focuser.position == state["best"]["position"]
     assert rig.focuser.optical == rig.focuser.position
+
+
+@pytest.mark.parametrize(("first", "later"), [(1450, 1000), (1000, 1450)])
+async def test_a_backlash_that_varies_is_measured_each_time(first: int, later: int) -> None:
+    # The GT81's night: 1000 to 1450 steps, on a narrow V (b = 40). A later reversal's
+    # first jump must not carry the optics across focus when the backlash shrinks.
+    rig = Rig(FakeFocuser(0))
+
+    def slack() -> int:
+        state = rig.store.get(("focus_calibration",))
+        reversals = state.get("reversals") if isinstance(state, dict) else None
+        return first if not isinstance(reversals, list) or len(reversals) < 2 else later
+
+    rig.focuser = rig.camera.focuser = rig.focusers.device = VaryingSlack(10030, slack)
+    rig.camera.curve = Hyperbola(a=1.5, b=40, c=10000)
+    job, state = await rig.calibrate(step=25)
+    assert job["state"] == "succeeded", state["detail"]
+    lost = [r["lost"] for r in state["reversals"]]
+    assert lost == pytest.approx([first, first, later, later], abs=30)
+    assert not any(r["slip"] for r in state["reversals"])
+    assert state["overshoot"] == overshoot_for(lost, 25)
+
+
+async def test_a_last_frame_off_the_curve_fails() -> None:
+    # Measured at 300 steps, 1500 once back at the best focus: the frame there misses.
+    rig = Rig(FakeFocuser(0))
+    rig.focuser = rig.camera.focuser = rig.focusers.device = VaryingSlack(
+        10150, lambda: 1500 if rig.phase() in ("returning", "restoring") else 300
+    )
+    job, state = await rig.calibrate()
+    assert job["state"] == "failed"
+    assert state["problem"] == "missed", state["detail"]
+    assert rig.focusers.config.calibration is None
+    # Going back with the large overshoot takes the 1500 steps up.
+    assert rig.focuser.optical == rig.focuser.position == state["best"]["position"]
+
+
+async def test_an_overshoot_past_the_travel_fails() -> None:
+    # Focus 1400 steps from the travel's start, an overshoot of ~1560 inward past it:
+    # never cut short (the overshoot tried would be less than the one saved).
+    rig = Rig(FakeFocuser(0))
+    rig.focuser = rig.camera.focuser = rig.focusers.device = VaryingSlack(
+        1550, lambda: 100 if rig.phase() in (None, "focusing") else 1200
+    )
+    rig.camera.curve = Hyperbola(a=2.0, b=300, c=1400)
+    job, state = await rig.calibrate()
+    assert job["state"] == "failed"
+    assert state["problem"] == "travel", state["detail"]
+    assert state["trips"] or state["overshoot"] > 1400  # past the measurements
+    assert rig.focusers.config.calibration is None
 
 
 async def test_a_failed_autofocus_fails_the_calibration() -> None:

@@ -818,6 +818,7 @@ class FocusCalibrationState(StateModel):
             "no_movement",
             "travel",
             "not_repeatable",
+            "missed",
         ]
         | None
     )

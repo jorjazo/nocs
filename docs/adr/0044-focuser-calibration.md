@@ -66,17 +66,22 @@ way?) and the smallest step that still means something to focus. Facts:
      most 2.5 `b` (so the optics cannot reach focus and the other arm) until a frame
      shows the optics moved by more than max(4 σ, 0.25 `b`); the motion lost is the
      commanded total minus the motion measured. One more chunk checks that the optics
-     now follow the motor (less than 60 % of it: *slip*, a warning). Then the same
-     towards the far end. After the first reversal each way, the next one starts with
-     a jump of the backlash found less 2.5 `b`. More than 6000 steps without motion
-     (beyond one chunk) fails (*no movement*); leaving the focuser's travel fails (*travel*).
+     now follow the motor (less than 60 % of it: *slip*, a warning), never past the
+     arm's end. Then the same towards the far end. After the first reversal each way,
+     the next one starts with a jump of half the least motion lost so far less 2.5 `b`:
+     the backlash varies, and a jump past it would carry the optics across focus, where
+     the ruler misreads them. A frame that shows more motion than was commanded fails
+     (*not an arm*). More than 6000 steps without motion (beyond one chunk) fails
+     (*no movement*); leaving the focuser's travel fails (*travel*).
   4. *Round trips*: the overshoot is 1.3 times the largest motion lost, rounded up
      (at least one sweep step). Three times: from the arm's far end, approach a
-     position on the arm as autofocus does and check that the frame there puts the
+     position on the arm as autofocus does (with all of the overshoot: one that would
+     leave the travel fails, *travel*, rather than being cut short) and check that the frame there puts the
      optics within max(4 σ, 0.3 `b`) of it. A miss raises the overshoot by half and
      starts the trips again, at most three times; then the calibration fails (*not
      repeatable*).
-  5. *Back to focus*: approach the best focus with that overshoot.
+  5. *Back to focus*: approach the best focus with that overshoot; a last frame more
+     than 1.5 times the curve's best HFR fails (*missed*), as autofocus's does (ADR 0043).
 - **Results**: the motion lost each way (inward, outward: every measurement), the
   overshoot that passed the round trips, the noise, µm per step and the critical
   focus zone in steps (when the profile has the aperture and the camera its pixel
@@ -86,7 +91,10 @@ way?) and the smallest step that still means something to focus. Facts:
   (with the profile it was measured with and when), and **its overshoot becomes the
   focuser's**. The sweep step is offered, as autofocus offers it, for the imaging train.
 - A failed or cancelled calibration goes back to the best focus when autofocus found
-  one, otherwise to where it started, with the large overshoot.
+  one, otherwise to where it started, with the large overshoot (or twice the round
+  trips' overshoot, if larger).
+- **The scale uses binned pixels**: frames' HFR is in the camera's binned pixels.
+- `DELETE /api/focuser/driver-backlash` is refused while a job holds the focuser.
 - **Per physical focuser**, as ADR 0021 keeps the overshoot; the record names the
   profile, and Tonight's checklist asks for a calibration when it was another one.
 

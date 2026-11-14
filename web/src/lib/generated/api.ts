@@ -1254,7 +1254,16 @@ export interface FocusCalibrationState {
    */
   phase: ("focusing" | "ruler" | "reversing" | "round_trips" | "returning" | "restoring") | null;
   problem:
-    | ("driver_backlash" | "autofocus" | "too_few_stars" | "not_an_arm" | "no_movement" | "travel" | "not_repeatable")
+    | (
+        | "driver_backlash"
+        | "autofocus"
+        | "too_few_stars"
+        | "not_an_arm"
+        | "no_movement"
+        | "travel"
+        | "not_repeatable"
+        | "missed"
+      )
     | null;
   reversals: FocusCalibrationReversal[];
   /**

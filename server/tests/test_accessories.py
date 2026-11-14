@@ -322,6 +322,8 @@ async def test_focuser_move_locks_and_abort_stops_it(client: FakeClient, driver:
     assert store.get(("focuser", "target")) == 9000
     with pytest.raises(ResourceBusyError):
         service.move_by(10)
+    with pytest.raises(ResourceBusyError):  # its backlash would change under the job
+        await service.disable_driver_backlash()
     await service.abort()
     await jobs.wait(job)
     assert store.get(("jobs", job, "state")) == "cancelled"
