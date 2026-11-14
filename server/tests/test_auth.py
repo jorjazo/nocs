@@ -277,17 +277,29 @@ def test_observers_do_not_see_where_the_box_is() -> None:
             ]
             # Resuming replays the same patches, redacted the same way.
             with client.websocket_connect("/api/ws") as again:
-                hello = {"type": "hello", "epoch": store.epoch, "since": snapshot["version"]}
+                hello = {"type": "hello", "epoch": snapshot["epoch"], "since": snapshot["version"]}
                 again.send_text(json.dumps(hello))
                 assert [again.receive_json()["ops"] for _ in range(3)] == [
                     p["ops"] for p in patches
                 ]
 
+        # A browser that pairs while it watches never resumes on the redacted state.
         with client.websocket_connect("/api/ws", headers=as_device(token)) as ws:
-            ws.send_text(json.dumps({"type": "hello"}))
-            owner = ws.receive_json()["state"]
+            hello = {"type": "hello", "epoch": snapshot["epoch"], "since": snapshot["version"]}
+            ws.send_text(json.dumps(hello))
+            message = ws.receive_json()
+            assert message["type"] == "snapshot"
+            assert message["epoch"] == store.epoch != snapshot["epoch"]
+            owner = message["state"]
             assert owner["network"]["ssid"] == "Home"
             assert owner["sites"]["saved"]["lab"]["latitude"] == SITE["latitude"]
+        # Nor does an observer resume on the owner's.
+        with client.websocket_connect("/api/ws") as ws:
+            hello = {"type": "hello", "epoch": store.epoch, "since": store.version}
+            ws.send_text(json.dumps(hello))
+            message = ws.receive_json()
+            assert message["type"] == "snapshot"
+            assert "sites" not in message["state"]
 
 
 def test_every_other_endpoint_needs_the_owner(client: TestClient) -> None:

@@ -147,8 +147,11 @@
 {/snippet}
 
 {#snippet site()}
-  {#snippet body()}<SiteSection />{/snippet}
-  {@render group("site", t.rig.groups.site, body)}
+  <!-- Observers do not get the sites (ADR 0047). -->
+  {#if live.app.sites}
+    {#snippet body()}<SiteSection />{/snippet}
+    {@render group("site", t.rig.groups.site, body)}
+  {/if}
 {/snippet}
 
 {#snippet box()}

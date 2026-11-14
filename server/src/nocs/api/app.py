@@ -946,8 +946,9 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
                 pass
             except WebSocketDisconnect:
                 return
-            since = hello.since if hello.epoch == store.epoch else None
-            await _stream_state(websocket, store, since, revoked, owner=who.role == "owner")
+            owner = who.role == "owner"
+            since = hello.since if hello.epoch == _epoch(store, owner=owner) else None
+            await _stream_state(websocket, store, since, revoked, owner=owner)
 
     if settings.web_dir is not None and settings.web_dir.is_dir():
         app.mount("/", StaticFiles(directory=settings.web_dir, html=True), name="web")
@@ -1105,6 +1106,12 @@ def _frame_record(frame: Located) -> FrameRecord:
     )
 
 
+def _epoch(store: StateStore, *, owner: bool) -> str:
+    """The epoch a client resumes from: observers' patches build on a redacted snapshot
+    (ADR 0047), so a client that changed role never resumes on what it held before."""
+    return store.epoch if owner else f"{store.epoch}-observer"
+
+
 async def _stream_state(
     websocket: WebSocket,
     store: StateStore,
@@ -1124,7 +1131,7 @@ async def _stream_state(
     def snapshot() -> SnapshotMessage:
         state = store.snapshot()
         return SnapshotMessage(
-            epoch=store.epoch,
+            epoch=_epoch(store, owner=owner),
             version=store.version,
             state=state if owner else observer_state(state),
         )

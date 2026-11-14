@@ -60,15 +60,24 @@ def _messages(value: Json) -> Json:
     ]
 
 
+def _message(value: Json) -> Json:
+    """A property's own message, which drivers may send with any update."""
+    return None if isinstance(value, str) and _LOCATION_WORDS.search(value) else value
+
+
 @dataclass(frozen=True, slots=True)
 class Rule:
     """A node to hide: its path ("*" matches any key) and what observers get instead.
 
-    Changes inside the node are dropped, so an action's result must not depend on what
-    is inside it, except for a node that is always set whole (the INDI messages)."""
+    ``fixed``: the action does not look at the node, so a change inside it becomes the
+    replacement at the node (which also creates its parents, as the change does for the
+    owner). Otherwise changes inside the node are dropped: the node must be set whole
+    (the INDI messages), or be removed from a parent that exists before anything is set
+    inside it (an INDI property is defined before it is updated)."""
 
     pattern: Path
     action: Action
+    fixed: bool = True
 
 
 RULES: tuple[Rule, ...] = (
@@ -83,7 +92,8 @@ RULES: tuple[Rule, ...] = (
     Rule(("network", "joining"), _none),
     Rule(("network", "last_join"), _none),
     Rule(("indi", "devices", "*", "properties", "GEOGRAPHIC_COORD"), _remove),
-    Rule(("indi", "messages"), _messages),
+    Rule(("indi", "devices", "*", "properties", "*", "message"), _message, fixed=False),
+    Rule(("indi", "messages"), _messages, fixed=False),
 )
 
 
@@ -121,7 +131,11 @@ def _observer_op(op: Op, rule: Rule) -> Op | None:
     if not _matches(pattern[:common], path[:common]):
         return op  # elsewhere in the tree
     if len(path) > len(pattern):
-        return None  # inside the hidden node: observers keep what they were given
+        # Inside the hidden node: observers keep what they were given.
+        replacement = rule.action(None) if rule.fixed else REMOVED
+        if isinstance(replacement, _Removed):
+            return None
+        return Op("set", path[: len(pattern)], replacement)
     if len(path) == len(pattern):
         if op.op == "delete":
             return None if rule.action is _remove else op

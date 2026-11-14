@@ -30,6 +30,8 @@
     if (!network) return "";
     if (network.mode === "ap") return t.network.ap(network.ap_ssid);
     if (network.mode === "station" && network.ssid) return t.network.station(network.ssid);
+    // Observers do not get network names (ADR 0047).
+    if (network.mode === "station" && !auth.owner) return t.network.stationHidden;
     return t.network.none;
   });
 

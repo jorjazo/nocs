@@ -47,7 +47,7 @@
 
   // The state channel is open whenever this client may watch.
   $effect(() => {
-    if (role) live.start();
+    if (role) live.start(role);
     else live.stop();
   });
   // Revoked (4401): ask where we stand and show pairing; never retry blindly.

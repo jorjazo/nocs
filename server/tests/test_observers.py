@@ -136,6 +136,29 @@ def test_redacted_state_is_still_valid() -> None:
         [Op("set", ("indi",), {"devices": {}, "messages": []})],
         [Op("delete", ("mount",))],
         [Op("delete", ("indi", "devices", "AM5"))],
+        # inside a hidden node that is not there yet, or not a node (the owner's store
+        # creates the parents)
+        [Op("delete", ("mount",)), Op("set", ("mount", "site", "latitude"), 1.0)],
+        [Op("set", ("mount",), "x"), Op("set", ("mount", "site", "latitude"), 1.0)],
+        [Op("set", ("network", "last_join", "ok"), False)],
+        # a property's own message
+        [
+            Op(
+                "set",
+                ("indi", "devices", "AM5", "properties", "EQUATORIAL_EOD_COORD"),
+                {"state": "Ok", "message": "Site changed to Latitude -30.03"},
+            )
+        ],
+        [Op("set", ("indi", "devices", "AM5", "properties", "X", "message"), "Lat -30")],
+        [Op("set", ("indi", "devices", "AM5", "properties", "X", "message"), "Slewing")],
+        # several rules at once
+        [
+            Op(
+                "set",
+                ("network",),
+                {"ssid": "A", "known": ["A"], "joining": "B", "last_join": {"ssid": "A"}},
+            )
+        ],
         # elsewhere
         [Op("set", ("mount", "ra"), 2.0), Op("set", ("gps", "fix"), "none")],
     ],
@@ -160,6 +183,19 @@ def test_patches_keep_observers_in_step(ops: list[Op]) -> None:
     for op in seen.ops:
         observer.set(op.path, op.value) if op.op == "set" else observer.delete(op.path)
     assert observer.snapshot() == observer_state(owner.snapshot())
+
+
+def test_messages_about_the_location_are_dropped() -> None:
+    texts = ["Slew complete", "GPS fix acquired", "Exposure took too long", "Updated site"]
+    state: dict[str, Json] = {
+        "indi": {"messages": [{"device": None, "timestamp": None, "text": t} for t in texts]}
+    }
+    indi = observer_state(state)["indi"]
+    assert isinstance(indi, dict)
+    assert indi["messages"] == [
+        {"device": None, "timestamp": None, "text": t}
+        for t in ("Slew complete", "Exposure took too long")
+    ]
 
 
 def test_a_patch_of_hidden_changes_only_keeps_its_version() -> None:

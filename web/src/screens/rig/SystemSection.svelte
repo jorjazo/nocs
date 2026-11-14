@@ -44,7 +44,11 @@
       items.push({ label: t.system.disk, value: t.system.free(formatBytes(health.disk_free, locale)) });
     }
     if (timeSource) items.push({ label: t.system.time, value: t.system.timeSource[timeSource] });
-    if (gps) items.push({ label: t.system.gps, value: gpsPosition ?? t.system.gpsNoFix });
+    // Observers get the fix without the position (ADR 0047).
+    if (gps) {
+      const value = gpsPosition ?? (gps.fix === "none" ? t.system.gpsNoFix : t.system.gpsFix(gps.fix.toUpperCase()));
+      items.push({ label: t.system.gps, value });
+    }
     if (health.under_voltage !== null) {
       const low = health.under_voltage;
       items.push({ label: t.system.supply, value: low ? t.system.supplyLow : t.system.supplyOk, low });

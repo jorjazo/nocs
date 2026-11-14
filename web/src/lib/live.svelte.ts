@@ -50,14 +50,20 @@ class Live {
   #timer: ReturnType<typeof setTimeout> | null = null;
   #attempt = 0;
   #running = false;
+  #role: string | null = null;
 
   // The state tree, typed as the server documents it.
   get app(): AppState {
     return this.state as AppState;
   }
 
-  start(): void {
-    if (this.#running) return;
+  // `role` is the client's (owner or observer): observers get less of the state
+  // (ADR 0047), so another role starts again from a snapshot instead of resuming.
+  start(role: string | null = null): void {
+    if (this.#running && role === this.#role) return;
+    if (this.#running) this.stop();
+    if (role !== this.#role) this.#epoch = null;
+    this.#role = role;
     this.#running = true;
     this.#connect();
   }

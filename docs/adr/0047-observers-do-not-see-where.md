@@ -28,12 +28,17 @@ networks the box knows:
   - `mount.site`, the GPS's `latitude`, `longitude`, `elevation` and `site`,
     `network.ssid`, `joining` and `last_join` are `null`, and `network.known` empty,
     so the state still matches its schema;
-  - `GEOGRAPHIC_COORD` is left out of every INDI device, and INDI messages that
-    speak of a latitude, longitude, location, site, elevation or GPS are dropped.
-- A patch keeps its version for observers: changes inside a hidden node are dropped
-  (a patch may arrive empty), changes of a hidden node become its replacement, and
-  changes above one are redacted like a snapshot. Applying them to an observer's
-  snapshot gives what a new snapshot would.
+  - `GEOGRAPHIC_COORD` is left out of every INDI device; INDI messages that speak
+    of a latitude, longitude, location, site, elevation or GPS are dropped, and a
+    property's own message that does is `null`.
+- A patch keeps its version for observers: a change of a hidden node, or inside one,
+  becomes its replacement (or is dropped where the node is left out, so a patch may
+  arrive empty), and a change above one is redacted like a snapshot. Applying them to
+  an observer's snapshot gives what a new snapshot would.
+- A client's role is fixed when its WebSocket connects. Observers get their own epoch
+  (the store's with `-observer`), so a client that pairs, or loses its pairing, gets a
+  new snapshot instead of resuming on the other role's state; the web app also
+  reconnects when its role changes.
 - The almanac's `site` is `null` for observers.
 - What follows from what is left stays: the mount's altitude and azimuth with its
   coordinates and the time, and tonight's sky (twilights, targets' altitudes), give
@@ -47,7 +52,16 @@ networks the box knows:
   still compute the site from the mount and the sky: observer access stays off by
   default, and the owner should turn it on only while it is in use.
 - The box's own access point name (`network.ap_ssid`) stays: it is on the air anyway.
-- Observers' screens show no site (Polar's, the mount sheet's) and cannot tell when
-  the site changes; Tonight's almanac is asked again every few minutes anyway.
+  So do the radio's regulatory country (`network.country`) and the box's host name,
+  which tell a country, or what the owner chose to call the box.
+- Observers' screens show no site: Rig has no Site group, its GPS row shows the fix
+  without the position and Network says "On a Wi-Fi network"; Polar and the mount
+  sheet show no latitude, and Polar takes the hemisphere from where the mount points.
+  Observers cannot tell when the site changes; Tonight's almanac is asked again every
+  few minutes anyway.
+- This amends the observers' paragraph of ADR 0046, which lists what a rebound page
+  could read.
+- The INDI mirror may hold other things drivers report that observers should not see
+  (a weather service's key, for one); they are left for another decision.
 - A new state field with a location or a network name needs a rule; the rule list is
   the one place that says what observers do not see.
