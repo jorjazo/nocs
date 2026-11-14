@@ -7,8 +7,9 @@ from datetime import UTC, date, datetime
 from typing import Annotated, overload
 
 import anyio.to_thread
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, Request, status
 
+from nocs.api.auth import identity
 from nocs.api.schemas import (
     Almanac,
     MoonNight,
@@ -53,13 +54,14 @@ def sky_router(
 
     @router.get("/tonight")
     async def almanac(  # pyright: ignore[reportUnusedFunction]
+        request: Request,
         date: Annotated[date | None, Query(description="The night's first date.")] = None,
     ) -> Almanac:
         where, n = await night_at(_checked(date))
         moon = n.sky.moon
         return Almanac(
             night=n.date.isoformat(),
-            site=where,
+            site=where if identity(request).role == "owner" else None,
             start=_iso(n.span.start),
             end=_iso(n.span.end),
             sunset=_iso(n.sunset),

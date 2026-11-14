@@ -19,6 +19,7 @@ from fastapi import (
     FastAPI,
     HTTPException,
     Query,
+    Request,
     Response,
     WebSocket,
     WebSocketDisconnect,
@@ -35,6 +36,7 @@ from nocs.api.auth import REVOKED, AuthMiddleware, Sockets, auth_router, identit
 from nocs.api.calibration import calibration_router
 from nocs.api.guiding import guiding_router
 from nocs.api.mount import mount_router
+from nocs.api.observers import observer_patch, observer_state
 from nocs.api.plan import plan_router
 from nocs.api.power import power_router
 from nocs.api.schemas import (
@@ -136,7 +138,7 @@ from nocs.sites import SiteService, SiteStore
 from nocs.sky import Target as SkyTarget
 from nocs.solving import Astap, SolverService
 from nocs.stacking.service import LiveStackService
-from nocs.state import Resync, StateStore
+from nocs.state import Patch, Resync, StateStore
 from nocs.storage import (
     FocusRun,
     FrameFilter,
@@ -609,8 +611,12 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
         return Health(version=__version__, indi_connected=bridge.client is not None)
 
     @app.get("/api/state")
-    async def state() -> StateSnapshot:  # pyright: ignore[reportUnusedFunction]
-        return StateSnapshot(version=store.version, state=store.snapshot())
+    async def state(request: Request) -> StateSnapshot:  # pyright: ignore[reportUnusedFunction]
+        owner = identity(request).role == "owner"
+        snapshot = store.snapshot()
+        return StateSnapshot(
+            version=store.version, state=snapshot if owner else observer_state(snapshot)
+        )
 
     @app.post("/api/indi/devices/{device}/properties/{name}", status_code=status.HTTP_202_ACCEPTED)
     async def set_property(  # pyright: ignore[reportUnusedFunction]
@@ -929,7 +935,8 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
 
     @app.websocket("/api/ws")
     async def ws(websocket: WebSocket) -> None:  # pyright: ignore[reportUnusedFunction]
-        with sockets.track(identity(websocket)) as revoked:
+        who = identity(websocket)
+        with sockets.track(who) as revoked:
             await websocket.accept()
             hello = Hello()
             try:
@@ -940,7 +947,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
             except WebSocketDisconnect:
                 return
             since = hello.since if hello.epoch == store.epoch else None
-            await _stream_state(websocket, store, since, revoked)
+            await _stream_state(websocket, store, since, revoked, owner=who.role == "owner")
 
     if settings.web_dir is not None and settings.web_dir.is_dir():
         app.mount("/", StaticFiles(directory=settings.web_dir, html=True), name="web")
@@ -1099,31 +1106,49 @@ def _frame_record(frame: Located) -> FrameRecord:
 
 
 async def _stream_state(
-    websocket: WebSocket, store: StateStore, since: int | None, revoked: anyio.Event
+    websocket: WebSocket,
+    store: StateStore,
+    since: int | None,
+    revoked: anyio.Event,
+    *,
+    owner: bool,
 ) -> None:
-    """Send the client what it is missing, then every change as it happens, until revoked."""
+    """Send the client what it is missing, then every change as it happens, until revoked.
+
+    Observers get the state without the owner's location and networks (ADR 0047)."""
     subscription = store.subscribe()
 
     async def send(message: ServerMessage) -> None:
         await websocket.send_text(message.model_dump_json())
 
+    def snapshot() -> SnapshotMessage:
+        state = store.snapshot()
+        return SnapshotMessage(
+            epoch=store.epoch,
+            version=store.version,
+            state=state if owner else observer_state(state),
+        )
+
+    def patch(item: Patch) -> PatchMessage:
+        return PatchMessage.from_patch(item if owner else observer_patch(item))
+
     async def sender() -> None:
         missed = store.patches_since(since) if since is not None else None
         if missed is None:
             last = store.version
-            await send(SnapshotMessage(epoch=store.epoch, version=last, state=store.snapshot()))
+            await send(snapshot())
         else:
             last = since if since is not None else 0
-            for patch in missed:
-                await send(PatchMessage.from_patch(patch))
-                last = patch.version
+            for item in missed:
+                await send(patch(item))
+                last = item.version
         while True:
             item = await subscription.get()
             if isinstance(item, Resync):
                 last = store.version
-                await send(SnapshotMessage(epoch=store.epoch, version=last, state=store.snapshot()))
+                await send(snapshot())
             elif item.version > last:
-                await send(PatchMessage.from_patch(item))
+                await send(patch(item))
                 last = item.version
 
     # Structured with an anyio task group, the concurrency model of the ASGI server

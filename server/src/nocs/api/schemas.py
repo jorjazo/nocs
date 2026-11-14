@@ -2373,7 +2373,7 @@ class Almanac(WireModel):
     """``GET /api/sky/tonight``: the night at the active site."""
 
     night: str = Field(description="YYYY-MM-DD, the date at the start of the night.")
-    site: Site
+    site: Site | None = Field(description="None for observers, who do not see where (ADR 0047).")
     start: str = Field(description="Local noon.")
     end: str = Field(description="The next local noon.")
     sunset: str | None = Field(description="None when the Sun does not set this night.")

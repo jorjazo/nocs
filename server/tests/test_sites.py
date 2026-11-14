@@ -156,9 +156,9 @@ def test_sites_api_refusals(client: TestClient) -> None:
     assert client.post("/api/sites", json=bad).status_code == 422
 
 
-def test_observers_see_the_sites_but_cannot_change_them(client: TestClient) -> None:
+def test_observers_neither_see_nor_change_the_sites(client: TestClient) -> None:
     client.post("/api/sites", json=DIAGUITAS.model_dump())
     client.put("/api/auth/observer", json={"enabled": True})
     client.cookies.clear()
     assert client.post("/api/sites", json=VICUNA.model_dump()).status_code == 401
-    assert len(sites_state(client).saved) == 1
+    assert "sites" not in client.get("/api/state").json()["state"]  # ADR 0047

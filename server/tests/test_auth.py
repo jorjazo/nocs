@@ -19,6 +19,7 @@ from nocs.api import create_app
 from nocs.api.auth import COOKIE, REVOKED, required_access
 from nocs.auth import AuthStore, ThrottledError, WrongPassphraseError
 from nocs.config import Settings
+from nocs.state import Json, StateStore
 
 
 def unreachable_indi() -> Settings:
@@ -237,6 +238,56 @@ def test_observer_watches_but_cannot_command(client: TestClient) -> None:
             ws.receive_json()
         assert closed.value.code == REVOKED
     assert client.get("/api/state").status_code == 401
+
+
+SITE: dict[str, Json] = {"latitude": -30.03, "longitude": -70.67, "elevation": 700.0}
+
+
+def test_observers_do_not_see_where_the_box_is() -> None:
+    """Any page the owner opens can rebind to the box and watch as an observer (ADR 0046):
+    the state observers get has no location and no Wi-Fi names (ADR 0047)."""
+    store = StateStore()
+    with TestClient(create_app(unreachable_indi(), store)) as client:
+        token = pair_owner(client)
+        client.put("/api/auth/observer", json={"enabled": True})
+        assert client.portal is not None
+        client.portal.call(lambda: store.set(("mount",), {"device": "AM5", "site": SITE}))
+        assert client.get("/api/state").json()["state"]["mount"]["site"] == SITE
+
+        anonymous(client)
+        state = client.get("/api/state").json()["state"]
+        assert state["mount"] == {"device": "AM5", "site": None}
+        with client.websocket_connect("/api/ws") as ws:
+            ws.send_text(json.dumps({"type": "hello"}))
+            snapshot = ws.receive_json()
+            assert snapshot["state"]["mount"]["site"] is None
+
+            def changes() -> None:
+                store.set(("network", "ssid"), "Home")
+                store.set(("sites",), {"active": None, "saved": {"lab": {"name": "Lab", **SITE}}})
+                store.set(("mount", "ra"), 1.5)
+
+            client.portal.call(changes)
+            patches = [ws.receive_json() for _ in range(3)]
+            assert [p["version"] for p in patches] == [snapshot["version"] + n for n in (1, 2, 3)]
+            assert [p["ops"] for p in patches] == [
+                [{"op": "set", "path": ["network", "ssid"], "value": None}],
+                [],
+                [{"op": "set", "path": ["mount", "ra"], "value": 1.5}],
+            ]
+            # Resuming replays the same patches, redacted the same way.
+            with client.websocket_connect("/api/ws") as again:
+                hello = {"type": "hello", "epoch": store.epoch, "since": snapshot["version"]}
+                again.send_text(json.dumps(hello))
+                assert [again.receive_json()["ops"] for _ in range(3)] == [
+                    p["ops"] for p in patches
+                ]
+
+        with client.websocket_connect("/api/ws", headers=as_device(token)) as ws:
+            ws.send_text(json.dumps({"type": "hello"}))
+            owner = ws.receive_json()["state"]
+            assert owner["network"]["ssid"] == "Home"
+            assert owner["sites"]["saved"]["lab"]["latitude"] == SITE["latitude"]
 
 
 def test_every_other_endpoint_needs_the_owner(client: TestClient) -> None:
