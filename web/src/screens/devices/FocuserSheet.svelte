@@ -12,7 +12,8 @@
   import { auth } from "../../lib/auth.svelte";
   import { capture, FOCUS_STEPS, holder } from "../../lib/camera.svelte";
   import { errorText } from "../../lib/errors";
-  import { formatPlain, formatTemperature } from "../../lib/format";
+  import { calibratedFor } from "../../lib/focus";
+  import { formatDateTime, formatPlain, formatTemperature } from "../../lib/format";
   import { i18n } from "../../lib/i18n";
   import { live } from "../../lib/live.svelte";
   import { router } from "../../lib/router.svelte";
@@ -98,6 +99,18 @@
     </div>
 
     <Button wide onclick={() => router.go({ screen: "focus" })}>{t.autofocus.open}</Button>
+    <div class="calibration">
+      <span class="label muted">{t.focuser.calibration}</span>
+      <span class="body">
+        {focuser.calibration && calibratedFor(focuser.calibration, live.app.equipment?.active)
+          ? t.focuser.calibrated(
+              formatPlain(focuser.calibration.overshoot, locale),
+              formatDateTime(focuser.calibration.measured, locale),
+            )
+          : t.focuser.notCalibrated}
+      </span>
+      <Button wide onclick={() => router.go({ screen: "focus-calibration" })}>{t.focusCalibration.open}</Button>
+    </div>
 
     {#if locked && auth.owner}<p class="caption muted">{t.focuser.locked}</p>{/if}
     <SequenceHold resources={["focuser"]} />
@@ -106,6 +119,11 @@
 </Sheet>
 
 <style>
+  .calibration {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
   .readouts {
     display: grid;
     grid-template-columns: 1fr 1fr;

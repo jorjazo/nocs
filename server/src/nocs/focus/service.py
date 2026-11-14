@@ -2,23 +2,27 @@
 
 State under ``("focuser",)`` while the role is ready, ``None`` otherwise::
 
-    {device, key, position, max_position, moving, target, temperature, can_abort, backlash}
+    {device, key, position, max_position, moving, target, temperature, can_abort, backlash,
+     driver_backlash, calibration}
 
 A move (to a position, or by a number of steps) runs as a job that locks the
 focuser; cancelling it, or ``abort``, stops the motor where it is. ``backlash``
-is how autofocus takes up this physical focuser's backlash (``nocs.focus.focusers``).
+is how autofocus takes up this physical focuser's backlash (``nocs.focus.focusers``),
+``calibration`` the last calibration that succeeded (ADR 0044), and
+``driver_backlash`` the steps the driver compensates itself (``None``: off).
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
+from typing import Literal
 
 from nocs.devices import DeviceError, Focuser
 from nocs.devices.base import SERIAL_PROPERTIES
 from nocs.equipment import EquipmentService, Role
 from nocs.equipment.service import IndiConnection
-from nocs.focus.focusers import FocuserConfig, FocuserStore
+from nocs.focus.focusers import FocuserCalibration, FocuserConfig, FocuserStore
 from nocs.indi import IndiClient, IndiEvent, PropertyDefined, PropertyUpdated
 from nocs.jobs import JobContext, JobManager
 from nocs.state import Json, Path, StateStore
@@ -34,6 +38,8 @@ _WATCHED = frozenset(
         "REL_FOCUS_POSITION",
         "FOCUS_MAX",
         "FOCUS_TEMPERATURE",
+        "FOCUS_BACKLASH_TOGGLE",
+        "FOCUS_BACKLASH_STEPS",
         *SERIAL_PROPERTIES,
     }
 )
@@ -97,10 +103,31 @@ class FocuserService:
         """How autofocus takes up this focuser's backlash."""
         return self._config(self.focuser().key)
 
-    def set_backlash(self, config: FocuserConfig) -> None:
+    def set_backlash(self, direction: Literal["outward", "inward"], overshoot: int | None) -> None:
+        """How autofocus takes up this focuser's backlash; its calibration stays."""
+        key = self.focuser().key
+        self._save(
+            key,
+            self._config(key).model_copy(update={"direction": direction, "overshoot": overshoot}),
+        )
+
+    def set_calibration(self, calibration: FocuserCalibration) -> None:
+        """Keep a calibration that succeeded; its overshoot becomes the focuser's."""
+        key = self.focuser().key
+        self._save(
+            key,
+            self._config(key).model_copy(
+                update={"calibration": calibration, "overshoot": calibration.overshoot}
+            ),
+        )
+
+    async def disable_driver_backlash(self) -> None:
+        """Turn off the driver's own backlash compensation: NOCS takes it up (ADR 0044)."""
+        await self.focuser().disable_driver_backlash()
+
+    def _save(self, key: str, config: FocuserConfig) -> None:
         if self._settings is None:
             raise RuntimeError("focuser settings are not kept")
-        key = self.focuser().key
         self._settings.put(key, config)
         self._configs[key] = config
         self._publish()
@@ -214,6 +241,10 @@ class FocuserService:
             "temperature": focuser.temperature,
             "can_abort": focuser.can_abort,
             "backlash": {"direction": config.direction, "overshoot": config.overshoot},
+            "driver_backlash": focuser.driver_backlash,
+            "calibration": (
+                config.calibration.model_dump(mode="json") if config.calibration else None
+            ),
         }
 
 

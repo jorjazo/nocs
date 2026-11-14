@@ -535,7 +535,7 @@ class AutofocusService:
             try:
                 if focuser.can_abort:
                     await focuser.abort()
-                await _settle(focuser)
+                await settle(focuser)
                 context.progress(None, f"back to {run.start_position}")
                 for position in approach(
                     focuser.position,
@@ -548,7 +548,7 @@ class AutofocusService:
                         await focuser.move_to(position)
                     except DeviceError as e:
                         log.warning("autofocus: moving back to %d refused, again: %s", position, e)
-                        await _settle(focuser)
+                        await settle(focuser)
                         await focuser.move_to(position)
             except (DeviceError, ConnectionError, TimeoutError, FocuserNotReadyError) as e:
                 log.error("autofocus: could not move the focuser back: %s", e)
@@ -584,7 +584,7 @@ class AutofocusService:
             self._store.set(ROOT, self._run.summary())
 
 
-async def _settle(focuser: FocuserDevice) -> None:
+async def settle(focuser: FocuserDevice) -> None:
     """Wait until the focuser is not moving and its position holds still (or give up)."""
     with anyio.move_on_after(SETTLE_TIMEOUT):
         last = focuser.position

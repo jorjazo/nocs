@@ -18,6 +18,7 @@
   import BoxSetup from "./screens/BoxSetup.svelte";
   import Dev from "./screens/dev/Dev.svelte";
   import Focus from "./screens/focus/Focus.svelte";
+  import FocusCalibration from "./screens/focus/Calibration.svelte";
   import Guiding from "./screens/guiding/Guiding.svelte";
   import Polar from "./screens/polar/Polar.svelte";
   import Flats from "./screens/flats/Flats.svelte";
@@ -102,6 +103,8 @@
 {:else if router.route.screen === "focus"}
   <!-- Guided flows take the whole screen, without the tabs (docs/ux.md §1). -->
   <Focus {offline} />
+{:else if router.route.screen === "focus-calibration"}
+  <FocusCalibration {offline} />
 {:else if router.route.screen === "guiding"}
   <Guiding {offline} />
 {:else if router.route.screen === "polar"}

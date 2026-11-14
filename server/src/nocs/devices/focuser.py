@@ -51,6 +51,30 @@ class Focuser(Device):
     def can_abort(self) -> bool:
         return self.has("FOCUS_ABORT_MOTION")
 
+    @property
+    def driver_backlash(self) -> int | None:
+        """Steps the driver adds itself when the focuser reverses; ``None`` when it does not.
+
+        INDI's ``FOCUS_BACKLASH_TOGGLE`` and ``FOCUS_BACKLASH_STEPS`` (the ZWO EAF and the
+        focuser simulator have them). NOCS takes up backlash itself (ADR 0021, 0044).
+        """
+        if not self.has("FOCUS_BACKLASH_TOGGLE"):
+            return None
+        if not self.prop("FOCUS_BACKLASH_TOGGLE").switch("INDI_ENABLED"):
+            return None
+        if not self.has("FOCUS_BACKLASH_STEPS"):
+            return 0
+        return round(self.prop("FOCUS_BACKLASH_STEPS").number("FOCUS_BACKLASH_VALUE"))
+
+    async def disable_driver_backlash(self) -> None:
+        """Turn the driver's own backlash compensation off."""
+        if self.has("FOCUS_BACKLASH_TOGGLE"):
+            await self.command(
+                "FOCUS_BACKLASH_TOGGLE",
+                {"INDI_ENABLED": False, "INDI_DISABLED": True},
+                done=lambda p: p.switch("INDI_DISABLED"),
+            )
+
     def check_position(self, position: int) -> None:
         limit = self.max_position
         if position < 0 or (limit is not None and position > limit):
