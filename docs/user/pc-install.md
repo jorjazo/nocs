@@ -45,8 +45,7 @@ finds them. Without them, NOCS says so when a frame has to be solved.
 ## Settings
 
 - `/etc/nocs/nocsd.env`: nocsd's settings (`NOCS_*`, listed in
-  `server/src/nocs/config.py`): the port, and host names other than IP addresses
-  and `*.local` (`NOCS_HOSTNAMES`). Then `sudo systemctl restart nocsd`.
+  `server/src/nocs/config.py`), such as the port. Then `sudo systemctl restart nocsd`.
 - `/etc/nocs/system.conf`: what nocs-system may do for nocsd. On a PC, only
   restarting indiserver and PHD2.
 - `/var/lib/nocs`: profiles, the passphrase, the frame catalog, and frames saved

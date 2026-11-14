@@ -1,6 +1,6 @@
 # 0014. Authentication and device pairing
 
-Date: 2026-10-30 · Status: Accepted · Amended: 2026-10-30 (host names, see below)
+Date: 2026-10-30 · Status: Accepted · Amended: 2026-10-30 (host names, see below) · Host name check removed by [ADR 0045](0045-no-host-name-check.md)
 
 ## Context
 
@@ -112,7 +112,7 @@ Constraints:
 - A WebSocket keeps the role it had at the handshake. When its device is revoked,
   or observer access is switched off, the server closes it with code 4401; the
   client then asks `GET /api/auth` and shows pairing.
-- **Host name check (DNS rebinding)**, *added 2026-10-30*: every HTTP request
+- **Host name check (DNS rebinding)**, *added 2026-10-30, removed by ADR 0045*: every HTTP request
   and WebSocket handshake, public ones and the web app's static files included,
   must name the server by an IP address (v4 or v6, with or without a port),
   `localhost`, an mDNS name ending in `.local`, or a name listed in

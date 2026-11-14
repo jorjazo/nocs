@@ -51,5 +51,6 @@ that supersedes the old one.
 | [0043](0043-autofocus-last-frame-against-the-curve.md) | Autofocus checks its last frame against the curve, and approaches again | Proposed |
 | [0044](0044-focuser-calibration.md) | Focuser calibration: backlash each way, an overshoot that returns, and the scale | Proposed |
 | [0045](0045-builds-after-a-release.md) | Builds after a release sort after it, so `testing` always moves on | Proposed |
+| [0045](0045-no-host-name-check.md) | No host name check: any name reaches the box, pairing guards it | Proposed |
 
 Template: Context → Decision → Consequences.
