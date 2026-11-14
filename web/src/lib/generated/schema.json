@@ -1022,7 +1022,8 @@
                 "flat",
                 "bad_fit",
                 "worse",
-                "backlash"
+                "backlash",
+                "missed"
               ],
               "type": "string"
             },
@@ -1089,7 +1090,7 @@
             }
           ],
           "default": null,
-          "description": "For backlash: an overshoot that would take it up."
+          "description": "For backlash: an overshoot that would take it up. In a run that succeeded: the overshoot that reached the best focus after the saved one missed it."
         },
         "suggested_step": {
           "anyOf": [

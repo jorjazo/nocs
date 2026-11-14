@@ -10,9 +10,13 @@ of its own for the API, which also locks the filter wheel. A run:
    worker while the next one is taken;
 3. adds points on a side where the curve has not turned yet, up to a budget;
 4. fits the curve and moves to its best focus;
-5. checks a last frame there against the first one.
+5. checks a last frame there against the curve's best HFR: far worse, and it
+   approaches the best focus again with twice the overshoot and checks once
+   more (the focuser missed it: backlash larger than the overshoot);
+6. checks that last frame against the first one.
 
-A failed or cancelled run takes the focuser back to where it started.
+A failed or cancelled run takes the focuser back to where it started, with twice
+the overshoot.
 
 State under ``("autofocus",)``: ``None`` until the first run, then that run as
 it goes (the most recent one, finished or not)::
@@ -52,6 +56,7 @@ from nocs.focus.sweep import (
     Point,
     Problem,
     approach,
+    approach_again,
     assess,
     extension,
     suggest_step,
@@ -161,6 +166,8 @@ class AutofocusOptions:
     criteria: Criteria = DEFAULT_CRITERIA
     worse: float = 0.10
     """How much larger than the first frame's the last frame's HFR may be."""
+    off_focus: float = 1.5
+    """How many times the fitted curve's best HFR the last frame's may be."""
 
     def check(self) -> None:
         if self.step < 1:
@@ -423,11 +430,36 @@ class AutofocusService:
         run.phase = Phase.CHECKING
         report("checking the focus")
         run.final = final = await frames("last frame: ")
+        at_best = run.fit.curve.a * options.off_focus
+        if _off(final, at_best, criteria):
+            # The sweep's own points followed the curve, so the focuser did not land
+            # where the sweep's moves put it: the overshoot fell short of its backlash.
+            again = 2 * max(overshoot, options.step)
+            log.info(
+                "autofocus: %s at %d against %.2f expected; approaching it again past %d",
+                _hfr_text(final),
+                best,
+                run.fit.curve.a,
+                again,
+            )
+            run.phase = Phase.MOVING
+            report(f"moving to {best} again")
+            for position in approach_again(best, options.direction, again, maximum):
+                await focuser.move_to(position)
+            run.phase = Phase.CHECKING
+            report("checking the focus again")
+            run.final = final = await frames("last frame, again: ")
+            if _off(final, at_best, criteria):
+                raise AutofocusError(
+                    Problem.MISSED,
+                    f"{_hfr_text(final)} at {best} against {run.fit.curve.a:.2f} at the"
+                    f" curve's best, also after approaching it again past {again} steps",
+                )
+            run.suggested_overshoot = again
         limit = start.hfr * (1 + options.worse)
-        if final.hfr is None or final.stars < criteria.min_stars or final.hfr > limit:
-            got = "no stars" if final.hfr is None else f"HFR {final.hfr:.2f}"
+        if _off(final, limit, criteria):
             raise AutofocusError(
-                Problem.WORSE, f"{got} at {best}, against {start.hfr:.2f} at the start"
+                Problem.WORSE, f"{_hfr_text(final)} at {best}, against {start.hfr:.2f} at the start"
             )
         context.progress(1.0, f"focused at {best}")
 
@@ -496,7 +528,9 @@ class AutofocusService:
         run.phase = Phase.RESTORING
         self._publish()
         options = run.options
-        overshoot = options.overshoot if options.overshoot is not None else options.step
+        # Twice the overshoot: a run that failed may have failed because the overshoot
+        # did not take up the backlash, and going back with it would miss the start too.
+        overshoot = 2 * (options.overshoot if options.overshoot is not None else options.step)
         with anyio.CancelScope(shield=True):
             try:
                 if focuser.can_abort:
@@ -570,6 +604,15 @@ def _combine(position: int, measures: Sequence[Measure], criteria: Criteria) -> 
         return Measure(position, None, stars)
     hfrs = [m.hfr for m in good if m.hfr is not None]
     return Measure(position, round(statistics.median(hfrs), 3), stars)
+
+
+def _off(measure: Measure, limit: float, criteria: Criteria) -> bool:
+    """Too few stars, or an HFR above ``limit``."""
+    return measure.hfr is None or measure.stars < criteria.min_stars or measure.hfr > limit
+
+
+def _hfr_text(measure: Measure) -> str:
+    return "no stars" if measure.hfr is None else f"HFR {measure.hfr:.2f}"
 
 
 def _first[T](*values: T | None) -> T:
