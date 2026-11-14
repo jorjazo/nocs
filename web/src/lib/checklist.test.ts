@@ -76,7 +76,7 @@ test("each blocker says where it is fixed", () => {
   assert.equal(fixFor({ reason: "no_solver", role: null }, 0), null);
   assert.equal(fixFor({ reason: "no_database", role: null }, 0), null);
   assert.deepEqual(fixRoute("addSite"), { screen: "site", id: null });
-  assert.deepEqual(fixRoute("chooseSite"), { screen: "rig" });
+  assert.deepEqual(fixRoute("chooseSite"), { screen: "rig", section: "site" });
   assert.deepEqual(fixRoute("guiding"), { screen: "guiding" });
 });
 

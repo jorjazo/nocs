@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { pageWidth } from "./layout.ts";
 
-test("the Session tab gets the wide page", () => {
+test("the Session and Rig tabs get the wide page", () => {
   assert.equal(pageWidth({ screen: "session" }), "wide");
+  assert.equal(pageWidth({ screen: "rig" }), "wide");
+  assert.equal(pageWidth({ screen: "rig", section: "site" }), "wide");
 });
 
 test("Live view is edge to edge", () => {
@@ -14,7 +16,6 @@ test("every other screen keeps one readable column", () => {
   for (const route of [
     { screen: "tonight" },
     { screen: "plan" },
-    { screen: "rig" },
     { screen: "sequence" },
     { screen: "report", id: 3 },
     { screen: "target", id: "M42" },

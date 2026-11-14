@@ -1,6 +1,6 @@
 # NOCS — UX and Design System
 
-Status: draft (Phase 1) · Last updated: 2026-10-27
+Status: draft (Phase 1) · Last updated: 2026-11-14
 
 This document captures the information architecture, the key screens and the
 design tokens of the NOCS web client. Mockups live on a design canvas (private
@@ -17,7 +17,7 @@ Navigation follows the night, not the device tree.
 | **Live** | Manual imaging: preview, exposure settings, loop, save | Live view |
 | **Plan** | Choose a target and build what to do with it | Target (search + framing) · Sequence |
 | **Session** | Watch and control what the server is running | Session monitor |
-| **Rig** | Equipment profile, optical trains, the site, devices | Rig · device details |
+| **Rig** | Equipment profile, optical trains, devices, the site, the box, settings | Rig · device details |
 
 - Phone: bottom tab bar. Tablet / desktop: left navigation rail.
 - Guided flows (first run, polar alignment, autofocus) open full screen with a
@@ -37,7 +37,7 @@ Navigation follows the night, not the device tree.
 |---|---|
 | First run | Create owner passphrase, pair this device, take time and location from the phone. Shows the hotspot name. |
 | Tonight | Astronomical night window, environment from the power box sensor, setup checklist. |
-| Rig | Imaging and guiding trains with derived FOV and pixel scale; the saved sites and the active one; device list with status. |
+| Rig | The profile and its connection on top; below, collapsible sections in groups: imaging and guiding trains with derived FOV and pixel scale, devices with status; the saved sites and the active one; the box; settings (§7, "Rig"). |
 | Polar alignment | Target view with the axis error, per-axis readouts with plain-language direction ("Raise", "Turn west"). |
 | Autofocus | Live V-curve with fit, best position / HFR / stars / temperature, cancel restores the previous position. |
 | Framing | Target search, sky view with camera frame and rotation, altitude tonight, "Go and center". |
@@ -109,13 +109,13 @@ custom properties, so the breakpoints are written out where they are used):
 | 420 px | Cards get their full side padding (small phones below) |
 | 768 px | The navigation rail replaces the bottom tab bar; screen headers fit one line |
 | 1000 px | Tablet: screens with a visual lay out in two columns (Session) |
-| 1200 px | PC: "wide" pages grow from `--page-width` (760 px) to `--page-width-wide` (2400 px) |
+| 1200 px | PC: "wide" pages grow from `--page-width` (760 px) to `--page-width-wide` (2400 px); Rig in two columns |
 | 1600 px | Large screens: wide pages may use a third column (Session) |
 
 Each screen's page is one of three widths (`web/src/lib/layout.ts`): **narrow**,
 one readable column of at most 760 px (forms, lists, settings; most screens);
 **wide**, the same below 1200 px and up to 2400 px from there, for screens laid
-out in columns (Session); **full**, edge to edge without the page's margins (Live
+out in columns (Session, Rig); **full**, edge to edge without the page's margins (Live
 view). A screen becomes wide only with a layout of its own for that width:
 widening a single column only makes its lines longer.
 
@@ -143,6 +143,38 @@ Icons: 24 px, 1.8 px stroke, round caps and joins, drawn in-house.
 - First run asks for this device's name instead of a rig name, and leaves the
   phone's time and location to the mount stage (no API yet; geolocation needs a
   secure context, ADR 0014). The hotspot name waits for nocs-system.
+
+Rig (2026-11-14):
+
+- On top, always in view: the profile picker (in the header), the connection with
+  its chip, Connect / Disconnect and Edit / New profile. Everything else is in
+  sections, in four groups, each group a card under a small title:
+  **Optics and devices** (Optical trains; Devices, with the INDI and PHD2 services and
+  their restarts; without a profile, only the services), **Site** (Saved sites),
+  **The box** (Status; Storage, with USB drives and file
+  sharing; Network; Updates) and **Settings** (Access; This screen, the language; the
+  INDI properties as a row that leads to their screen). The theme is not repeated
+  there: its button is in every screen's header.
+- Each section opens and closes on its own from its header (a button with a chevron
+  and `aria-expanded`); this browser keeps which are open (`prefs`), like the theme.
+  On a first visit only Devices is open. Closed, a header says how the section stands
+  in a line ("5/6 online", "Internal · 15 GB free of 17 GB", the active site), and a
+  problem shows as a chip ("Problem", "Check") whether the section is open or not:
+  nothing opens by itself. Closing hides rather than removes, so what is typed or
+  running inside survives.
+- `#/rig/<section>` opens that section and scrolls to it: Tonight's "choose a site"
+  leads to `#/rig/site`, and the site editor goes back there.
+- The Rig tab carries a dot when something on Rig needs a look (red for a problem,
+  amber for a warning: no active site among them) or, for the owner, when updates are
+  worth installing: a new NOCS, security fixes or a restart still due, each with its
+  chip on Updates. Plain system updates come every few days and do not light it, nor
+  does a failed join of a network: nocs-system keeps the last one until the next, so
+  Network says it in words and nothing more.
+- Observers see what is informative (devices, the site, the box's status, storage,
+  where the network is); Access and Updates are for the owner, and the app's banner
+  offers to pair.
+- From 1200 px the groups sit in two columns: the rig and its site on the left, the
+  box and settings on the right.
 
 Live view (stage 2.7):
 
@@ -397,7 +429,7 @@ Tonight and Plan (stage 3.6):
   black, a line at now, the Moon's time up under it) with sunset, the dark
   window and sunrise under it; the dark window's length (or how dark it gets when
   it never gets fully dark) and the Moon's phase, light and rise and set. Without
-  an active site it says so and leads to Rig.
+  an active site it says so and leads to Rig's Site section (`#/rig/site`).
 - Tonight's target, when one is chosen, shows its altitude now and how long it
   is above 30° in the dark, and opens its page. The get-ready checklist lists
   Connect, Focus (with a focuser), Frame the target and Guide (with a guide
@@ -595,10 +627,11 @@ Appliance (phase 6):
   home network, and open `http://<name>.local`, pairing again after a new name) are
   on screen; they stay there after applying. A later step is one more entry in
   `lib/boxsetup.ts` and its own section of the screen.
-- Rig gains "This computer" (health, name, restart, shut down, INDI and PHD2
-  restarts, diagnostics) and "Network" (where the box is, known networks, joining
-  one, the access point, the mode); USB drives with Eject sit under Storage.
-- Updates, in "This computer" where nocs-system installs them (ADR 0025), are for a
+- Rig gains "Status" (health, name, restart, shut down, diagnostics) and "Network"
+  (where the box is, known networks, the mode; joining one and the access point open
+  as sheets), in the box's group; INDI and PHD2 restarts sit under Devices, with their
+  services' rows, and USB drives with Eject under Storage.
+- Updates, a section of the box's group where nocs-system installs them (ADR 0025), are for a
   decision, not a dump of apt (rc2's field notes): NOCS first (installed version,
   the new one with a "New version" chip, or "Up to date"), then INDI and PHD2 as one
   line each (the version of `indi-bin`/`phd2` shortened to what people know, and how
@@ -612,7 +645,7 @@ Appliance (phase 6):
   so when something does; a refusal offers "Install anyway"). After it: how many
   were installed, what is left (apt is asked again), and when Ubuntu asks for a
   restart, a banner with Restart. ASTAP is not an apt package and is not shown.
-- Rig's "File sharing" (ADR 0039), below Network, where nocs-system runs the share: a
+- Rig's "File sharing" (ADR 0039), under Storage, where nocs-system runs the share: a
   switch ("Share frames with computers", saying it is read-only and open to anyone on
   the network); while on, a chip with the computers connected, how to open it from
   Windows (`\\<name>.local\Internal`), a Mac and Linux (`smb://<name>.local`) as

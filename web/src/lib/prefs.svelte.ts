@@ -1,6 +1,8 @@
-// Per-device preferences: theme, language, and whether the framing chart may
-// fetch survey images from the internet. They are about this screen, not the
+// Per-device preferences: theme, language, whether the framing chart may
+// fetch survey images from the internet, and which of Rig's sections are open. They are about this screen, not the
 // rig, so they live in the browser rather than on the server.
+
+import { isOpen, parseOpen, type OpenSections, type RigSection } from "./rigsections";
 
 export type Theme = "dusk" | "night";
 export type Locale = "en" | "es";
@@ -17,6 +19,14 @@ function read<T extends string>(key: string, allowed: readonly T[]): T | null {
     return allowed.find((item) => item === value) ?? null;
   } catch {
     return null; // storage blocked (private mode): fall back to defaults
+  }
+}
+
+function readRaw(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
   }
 }
 
@@ -44,6 +54,7 @@ class Prefs {
   survey: boolean = $state(read("nocs.survey", ["on"] as const) === "on");
   // The user's own solved frames under the chart: on unless turned off (they come from nocsd).
   ownFrames: boolean = $state(read("nocs.ownFrames", ["off"] as const) !== "off");
+  #sections: OpenSections = $state(parseOpen(readRaw("nocs.rigSections")));
 
   constructor() {
     this.#apply();
@@ -73,6 +84,15 @@ class Prefs {
   setOwnFrames(on: boolean): void {
     this.ownFrames = on;
     write("nocs.ownFrames", on ? "on" : "off");
+  }
+
+  sectionOpen(section: RigSection): boolean {
+    return isOpen(this.#sections, section);
+  }
+
+  setSectionOpen(section: RigSection, open: boolean): void {
+    this.#sections = { ...this.#sections, [section]: open };
+    write("nocs.rigSections", JSON.stringify(this.#sections));
   }
 
   #apply(): void {

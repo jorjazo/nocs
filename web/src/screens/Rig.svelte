@@ -1,61 +1,38 @@
 <script lang="ts">
-  // Rig: the active profile, its trains and devices, connect / disconnect,
-  // where frames are saved, who has access, and this screen's preferences.
+  // Rig: the active profile and its connection on top, always in view; below it the
+  // sections in four groups (optics and devices, the site, the box, settings), each
+  // opened and closed on its own (docs/ux.md §7, "Rig"). Two columns on a PC.
+  import { tick, untrack, type Snippet } from "svelte";
   import Banner from "../components/Banner.svelte";
   import Button from "../components/Button.svelte";
   import Chip from "../components/Chip.svelte";
-  import ConfirmButton from "../components/ConfirmButton.svelte";
-  import DeviceRow from "../components/DeviceRow.svelte";
   import EmptyState from "../components/EmptyState.svelte";
   import Icon from "../components/Icon.svelte";
   import ScreenHeader from "../components/ScreenHeader.svelte";
+  import Section from "../components/Section.svelte";
   import SegmentedControl from "../components/SegmentedControl.svelte";
-  import Toggle from "../components/Toggle.svelte";
-  import {
-    connectProfile,
-    disconnectEquipment,
-    getProfile,
-    powerCycle,
-    restartDriver,
-    listDevices,
-    revokeDevice,
-    setObserver,
-  } from "../lib/api";
+  import { connectProfile, disconnectEquipment, getProfile } from "../lib/api";
   import { auth } from "../lib/auth.svelte";
-  import { slotLabel } from "../lib/camera.svelte";
-  import { connectionTone, ROLE_ICONS, ROLES, roles, roleTone } from "../lib/equipment";
+  import { connectionTone, ROLES, roles } from "../lib/equipment";
   import { errorText } from "../lib/errors";
-  import {
-    formatBytes,
-    formatDateTime,
-    formatDecimal,
-    formatPlain,
-    formatTemperature,
-    formatTime,
-  } from "../lib/format";
   import { i18n, LANGUAGE_NAMES } from "../lib/i18n";
   import { live } from "../lib/live.svelte";
-  import { formatDec, formatRa, mountActivity } from "../lib/mount.svelte";
-  import { LOCALES, prefs, THEMES } from "../lib/prefs.svelte";
+  import { LOCALES, prefs } from "../lib/prefs.svelte";
   import { href, router } from "../lib/router.svelte";
-  import FilterWheelSheet from "./devices/FilterWheelSheet.svelte";
-  import FocuserSheet from "./devices/FocuserSheet.svelte";
-  import MountSheet from "./devices/MountSheet.svelte";
-  import PowerSheet from "./devices/PowerSheet.svelte";
-  import NetworkSection from "./NetworkSection.svelte";
-  import ShareSection from "./ShareSection.svelte";
-  import SiteSection from "./SiteSection.svelte";
-  import StorageDrives from "./StorageDrives.svelte";
-  import SystemSection from "./SystemSection.svelte";
-  import type { CameraState, DeviceStatusName, Optics, PairedDevice, Profile, Role, RoleState } from "../lib/types";
+  import AccessSection from "./rig/AccessSection.svelte";
+  import DevicesSection from "./rig/DevicesSection.svelte";
+  import NetworkSection from "./rig/NetworkSection.svelte";
+  import SiteSection from "./rig/SiteSection.svelte";
+  import StorageSection from "./rig/StorageSection.svelte";
+  import SystemSection from "./rig/SystemSection.svelte";
+  import TrainsSection from "./rig/TrainsSection.svelte";
+  import UpdatesSection from "./rig/UpdatesSection.svelte";
+  import type { RigSection } from "../lib/rigsections";
+  import type { Profile, Role, RoleState } from "../lib/types";
 
   const t = $derived(i18n.t);
-  const locale = $derived(i18n.locale);
 
   const equipment = $derived(live.app.equipment);
-  const cameras = $derived(live.app.cameras);
-  const server = $derived(live.app.indi?.server ?? null);
-  const storage = $derived(live.app.storage);
 
   // -- Profile and connection ---------------------------------------------------
 
@@ -67,46 +44,6 @@
     picked !== null && equipment?.profiles[picked] ? picked : (equipment?.active ?? profiles[0]?.[0] ?? null),
   );
   const connection = $derived(equipment?.connection ?? "disconnected");
-  // Until a profile is connected the state lists no roles: show the selected
-  // profile's devices instead, all offline.
-  const roleList = $derived.by((): [Role, RoleState][] => {
-    const current = equipment ? roles(equipment) : [];
-    if (current.length > 0 || !profile) return current;
-    return ROLES.flatMap((role): [Role, RoleState][] => {
-      const config = profile?.devices?.[role];
-      if (!config) return [];
-      const device = config.device ?? null;
-      return [[role, { driver: config.driver, device, status: "disconnected", error: null, unresponsive_since: null }]];
-    });
-  });
-  const devicesByRole = $derived(Object.fromEntries(roleList) as Partial<Record<Role, RoleState>>);
-  const anyError = $derived(roleList.some(([, device]) => device.status === "error"));
-
-  let busy = $state<"connect" | "disconnect" | `restart:${Role}` | `cycle:${Role}` | null>(null);
-  let actionError = $state("");
-
-  // Devices of a connected profile that dropped out or stopped answering: the owner can
-  // restart their driver, or cut the power of the output that feeds them (never the
-  // mount's, ADR 0030).
-  const FAILING: readonly DeviceStatusName[] = ["error", "disconnected", "unresponsive"];
-  const failing = $derived(
-    connection === "connected" && auth.owner ? roleList.filter(([, device]) => FAILING.includes(device.status)) : [],
-  );
-  function fed(role: Role): boolean {
-    return role !== "mount" && (power?.outputs.some((output) => output.feeds.includes(role)) ?? false);
-  }
-
-  async function run(kind: NonNullable<typeof busy>, action: () => Promise<void>): Promise<void> {
-    busy = kind;
-    actionError = "";
-    try {
-      await action();
-    } catch (e) {
-      actionError = errorText(e, t);
-    } finally {
-      busy = null;
-    }
-  }
 
   // The optics are in the profile, which only the owner may read.
   let profile = $state<Profile | null>(null);
@@ -126,139 +63,61 @@
     };
   });
 
-  // -- Trains -------------------------------------------------------------------
-
-  function deviceName(device: RoleState | undefined): string | null {
-    return device ? (device.device ?? device.driver) : null;
-  }
-
-  function train(optics: Optics | null | undefined, camera: CameraState | undefined, parts: (string | null)[]) {
-    if (!optics) return null;
-    const focal = optics.focal_length * (optics.reducer ?? 1);
-    const ratio = optics.aperture ? focal / optics.aperture : null;
-    const lens = `${formatDecimal(focal, locale, 0)} mm${ratio ? ` f/${formatDecimal(ratio, locale, 1)}` : ""}`;
-    const sensor = camera?.sensor;
-    const known = sensor && sensor.width > 0 && sensor.pixel_size > 0;
-    const scale = known ? `${formatDecimal((206.265 * sensor.pixel_size) / focal, locale, 2)}″/px` : null;
-    const fov = known
-      ? [sensor.width, sensor.height]
-          .map((px) => formatDecimal((((px * sensor.pixel_size) / 1000 / focal) * 180) / Math.PI, locale, 1) + "°")
-          .join(" × ")
-      : null;
-    return { chain: [lens, ...parts.filter((part) => part !== null)], scale, fov };
-  }
-
-  const imaging = $derived(
-    train(profile?.imaging, cameras?.main_camera, [
-      deviceName(devicesByRole.filter_wheel),
-      deviceName(devicesByRole.focuser),
-      deviceName(devicesByRole.main_camera),
-    ]),
-  );
-  const guiding = $derived(
-    train(
-      profile?.guiding_through_imaging ? profile.imaging : profile?.guiding,
-      cameras?.guide_camera,
-      [deviceName(devicesByRole.guide_camera)],
-    ),
-  );
-
-  const power = $derived(live.app.power ?? null);
-  const weather = $derived(live.app.weather ?? null);
-  const focuser = $derived(live.app.focuser ?? null);
-  const wheel = $derived(live.app.filter_wheel ?? null);
-  const mount = $derived(live.app.mount ?? null);
-  let sheet = $state<"power" | "focuser" | "filter_wheel" | "mount" | null>(null);
-
-  function subtitle(role: Role): string {
-    const parts = [t.roles[role]];
-    const camera = role === "main_camera" || role === "guide_camera" ? cameras?.[role] : undefined;
-    if (camera?.temperature != null) parts.push(`${formatDecimal(camera.temperature, locale, 1)}\u00a0°C`);
-    if (role === "power" && power?.input) {
-      const { voltage, current } = power.input;
-      if (voltage !== null) parts.push(`${formatDecimal(voltage, locale, 1)}\u00a0V`);
-      if (current !== null) parts.push(`${formatDecimal(current, locale, 2)}\u00a0A`);
-    }
-    if (role === "weather" && weather) {
-      if (weather.temperature !== null) parts.push(`${formatDecimal(weather.temperature, locale, 1)}\u00a0°C`);
-      if (weather.humidity !== null) parts.push(`${formatDecimal(weather.humidity, locale, 0)}\u00a0%`);
-    }
-    if (role === "focuser" && focuser) {
-      parts.push(t.rig.position(formatPlain(focuser.position, locale)));
-      if (focuser.temperature !== null) parts.push(formatTemperature(focuser.temperature, locale));
-    }
-    if (role === "mount" && mount) {
-      parts.push(`${formatRa(mount.ra_j2000)} ${formatDec(mount.dec_j2000)}`, mountActivity(mount, t).text);
-    }
-    if (role === "filter_wheel" && wheel) {
-      if (wheel.label) parts.push(wheel.label);
-      if (wheel.slot) parts.push(slotLabel(wheel, wheel.slot, t));
-      if (!wheel.confirmed && wheel.key) parts.push(t.rig.wheelNew);
-    }
-    return parts.join(" · ");
-  }
-
-  function moving(role: Role): boolean {
-    return (
-      (role === "focuser" && !!focuser?.moving) ||
-      (role === "filter_wheel" && !!wheel?.moving) ||
-      (role === "mount" && !!mount && mountActivity(mount, t).moving)
-    );
-  }
-
-  function opener(role: Role): (() => void) | undefined {
-    if (role === "focuser" && focuser) return () => (sheet = "focuser");
-    if (role === "filter_wheel" && wheel) return () => (sheet = "filter_wheel");
-    if (role === "power" && power) return () => (sheet = "power");
-    if (role === "mount" && mount) return () => (sheet = "mount");
-    return undefined;
-  }
-
-  // -- Storage ------------------------------------------------------------------
-
-  const destination = $derived(storage?.destinations.find((d) => d.id === storage.destination) ?? null);
-  const destinationDetails = $derived.by(() => {
-    if (!destination || !storage) return "";
-    const parts = [
-      destination.sd ? t.rig.storageSd : destination.internal ? t.rig.storageInternal : null,
-      destination.system && !destination.internal ? t.rig.storageSystem : null,
-      destination.fs,
-      storage.choice === "auto" ? t.rig.storageAuto : null,
-      destination.writable ? null : t.rig.storageReadOnly,
-    ];
-    return parts.filter((part) => part !== null).join(" · ");
+  // Until a profile is connected the state lists no roles: show the selected
+  // profile's devices instead, all offline.
+  const roleList = $derived.by((): [Role, RoleState][] => {
+    const current = equipment ? roles(equipment) : [];
+    if (current.length > 0 || !profile) return current;
+    return ROLES.flatMap((role): [Role, RoleState][] => {
+      const config = profile?.devices?.[role];
+      if (!config) return [];
+      const device = config.device ?? null;
+      return [[role, { driver: config.driver, device, status: "disconnected", error: null, unresponsive_since: null }]];
+    });
   });
-  const used = $derived(destination && destination.total > 0 ? 1 - destination.free / destination.total : 0);
+  const devicesByRole = $derived(Object.fromEntries(roleList) as Partial<Record<Role, RoleState>>);
+  const anyError = $derived(roleList.some(([, device]) => device.status === "error"));
 
-  // -- Access -------------------------------------------------------------------
+  let busy = $state<"connect" | "disconnect" | null>(null);
+  let actionError = $state("");
 
-  let devices = $state<PairedDevice[] | null>(null);
-  let accessError = $state("");
-  let accessBusy = $state<string | null>(null);
-
-  async function loadDevices(): Promise<void> {
-    try {
-      devices = await listDevices();
-    } catch (e) {
-      accessError = errorText(e, t);
-    }
-  }
-  $effect(() => {
-    if (auth.owner) void loadDevices();
-  });
-  const others = $derived((devices ?? []).filter((device) => !device.current));
-
-  async function access(key: string, action: () => Promise<void>): Promise<void> {
-    accessBusy = key;
-    accessError = "";
+  async function run(kind: NonNullable<typeof busy>, action: () => Promise<void>): Promise<void> {
+    busy = kind;
+    actionError = "";
     try {
       await action();
     } catch (e) {
-      accessError = errorText(e, t);
+      actionError = errorText(e, t);
     } finally {
-      accessBusy = null;
+      busy = null;
     }
   }
+
+  // The box's group shows only where there is something of the box to show.
+  const hasBox = $derived(
+    !!live.app.system || !!live.app.storage || !!live.app.network || (auth.owner && !!live.app.updates),
+  );
+
+  // #/rig/<section> opens that section and scrolls to it, once the state is in.
+  // The profile arrives later and grows the page above it (the trains, the devices),
+  // so for a moment each such change scrolls to it again; Safari keeps no anchor.
+  let anchor: { section: RigSection; until: number } | null = null;
+  function scrollTo(section: RigSection): void {
+    void tick().then(() => document.getElementById(`rig-${section}`)?.scrollIntoView({ block: "start" }));
+  }
+  $effect(() => {
+    const route = router.route;
+    if (route.screen !== "rig" || !route.section || !live.synced) return;
+    const section = route.section;
+    untrack(() => prefs.setSectionOpen(section, true));
+    anchor = { section, until: Date.now() + 2000 };
+    scrollTo(section);
+  });
+  $effect(() => {
+    void profile;
+    void roleList.length;
+    if (anchor && Date.now() < anchor.until) scrollTo(anchor.section);
+  });
 </script>
 
 <ScreenHeader title={t.rig.title}>
@@ -280,6 +139,54 @@
   {/snippet}
 </ScreenHeader>
 
+{#snippet group(id: string, title: string, body: Snippet)}
+  <section class="group" aria-labelledby="group-{id}">
+    <h2 class="group-title label" id="group-{id}">{title}</h2>
+    <div class="card group-card">{@render body()}</div>
+  </section>
+{/snippet}
+
+{#snippet site()}
+  {#snippet body()}<SiteSection />{/snippet}
+  {@render group("site", t.rig.groups.site, body)}
+{/snippet}
+
+{#snippet box()}
+  {#if hasBox}
+    {#snippet body()}
+      <SystemSection />
+      <StorageSection />
+      <NetworkSection />
+      <UpdatesSection />
+    {/snippet}
+    {@render group("box", t.rig.groups.box, body)}
+  {/if}
+{/snippet}
+
+{#snippet settings()}
+  {#snippet body()}
+    <AccessSection />
+    <Section id="screen" title={t.prefs.title} summary={LANGUAGE_NAMES[prefs.locale]}>
+      <div class="pref">
+        <span class="label muted">{t.language.label}</span>
+        <SegmentedControl
+          label={t.language.label}
+          options={LOCALES.map((value) => ({ value, label: LANGUAGE_NAMES[value] }))}
+          value={prefs.locale}
+          onchange={(value) => prefs.setLocale(value)} />
+      </div>
+    </Section>
+    <a class="advanced" href={href({ screen: "dev" })}>
+      <span class="text">
+        <span class="heading">{t.rig.advanced}</span>
+        <span class="summary">{t.rig.advancedHint}</span>
+      </span>
+      <Icon name="chevronRight" />
+    </a>
+  {/snippet}
+  {@render group("settings", t.rig.groups.settings, body)}
+{/snippet}
+
 {#if !live.synced}
   <p class="loading muted" role="status">{t.boot.loading}</p>
 {:else if equipment && profiles.length === 0}
@@ -290,286 +197,115 @@
       {/if}
     {/snippet}
   </EmptyState>
-  <div class="sections"><SiteSection /></div>
+  <div class="layout">
+    <div class="column">
+      {#snippet servicesBody()}
+        <DevicesSection roles={[]} {connection} profileId={null} />
+      {/snippet}
+      {@render group("equipment", t.rig.groups.equipment, servicesBody)}
+      {@render site()}
+    </div>
+    <div class="column">
+      {@render box()}
+      {@render settings()}
+    </div>
+  </div>
 {:else if equipment}
-  <div class="sections">
-    <section class="card equipment" aria-labelledby="equipment-title">
-      <div class="line">
-        <h2 class="heading" id="equipment-title">{t.rig.equipment}</h2>
-        <Chip tone={equipment.error ? "error" : connectionTone(connection)}>{t.connection[connection]}</Chip>
-      </div>
-      {#if equipment.error || actionError}
-        <p class="error">{actionError || equipment.error}</p>
-      {/if}
-      {#if auth.owner && profileId !== null}
-        {@const id = profileId}
-        <div class="buttons">
-          {#if connection === "disconnected"}
-            <Button variant="primary" wide busy={busy === "connect"} onclick={() => run("connect", () => connectProfile(id))}>
-              {t.rig.connect}
-            </Button>
-          {:else}
-            {#if anyError}
-              <Button variant="primary" busy={busy === "connect"} onclick={() => run("connect", () => connectProfile(id))}>
-                {t.rig.retry}
+  <div class="layout">
+    <div class="column">
+      <section class="card connection" aria-labelledby="connection-title">
+        <div class="line">
+          <h2 class="heading" id="connection-title">{t.rig.equipment}</h2>
+          <Chip tone={equipment.error ? "error" : connectionTone(connection)}>{t.connection[connection]}</Chip>
+        </div>
+        {#if equipment.error || actionError}
+          <p class="error">{actionError || equipment.error}</p>
+        {/if}
+        {#if auth.owner && profileId !== null}
+          {@const id = profileId}
+          <div class="buttons">
+            {#if connection === "disconnected"}
+              <Button variant="primary" wide busy={busy === "connect"} onclick={() => run("connect", () => connectProfile(id))}>
+                {t.rig.connect}
+              </Button>
+            {:else}
+              {#if anyError}
+                <Button variant="primary" busy={busy === "connect"} onclick={() => run("connect", () => connectProfile(id))}>
+                  {t.rig.retry}
+                </Button>
+              {/if}
+              <Button
+                busy={busy === "disconnect"}
+                disabled={connection === "disconnecting"}
+                onclick={() => run("disconnect", disconnectEquipment)}>
+                {t.rig.disconnect}
               </Button>
             {/if}
-            <Button
-              busy={busy === "disconnect"}
-              disabled={connection === "disconnecting"}
-              onclick={() => run("disconnect", disconnectEquipment)}>
-              {t.rig.disconnect}
-            </Button>
-          {/if}
-        </div>
-        <div class="links">
-          <a href={href({ screen: "profile", id })}>{t.rig.editProfile}</a>
-          <a href={href({ screen: "profile", id: null })}>{t.rig.newProfile}</a>
-        </div>
-      {/if}
-    </section>
-
-    {#if imaging || guiding}
-      <section class="card trains">
-        {#each [{ label: t.rig.imagingTrain, value: imaging }, { label: t.rig.guidingTrain, value: guiding }] as item (item.label)}
-          {#if item.value}
-            <div class="train">
-              <div class="line">
-                <h2 class="label muted">{item.label}</h2>
-                <span class="mono muted">{[item.value.fov, item.value.scale].filter(Boolean).join(" · ")}</span>
-              </div>
-              <p class="chain">
-                {#each item.value.chain as part, i (i)}
-                  {#if i > 0}<span class="arrow" aria-hidden="true">→</span>{/if}
-                  <span class:muted={i === 0}>{part}</span>
-                {/each}
-              </p>
-            </div>
-          {/if}
-        {/each}
-      </section>
-    {/if}
-
-    <SiteSection />
-
-    <section aria-labelledby="devices-title">
-      <div class="line section-title">
-        <h2 class="heading" id="devices-title">{t.rig.devices}</h2>
-        {#if auth.owner && profileId !== null}
-          <a href={href({ screen: "profile", id: profileId })}>{t.rig.addDevice}</a>
-        {/if}
-      </div>
-      {#if roleList.length === 0}
-        <p class="muted">{t.rig.noDevices}</p>
-      {:else}
-        <ul class="rows">
-          {#each roleList as [role, device] (role)}
-            <DeviceRow
-              icon={ROLE_ICONS[role]}
-              title={device.device ?? t.roles[role]}
-              subtitle={device.device ? subtitle(role) : device.driver}
-              error={device.error}
-              onclick={opener(role)}>
-              {#snippet trailing()}
-                {#if moving(role)}
-                  <Chip tone="accent">{t.rig.moving}</Chip>
-                {:else}
-                  <Chip tone={roleTone(device.status, connection)}>{t.deviceStatus[device.status]}</Chip>
-                {/if}
-              {/snippet}
-            </DeviceRow>
-          {/each}
-          {#each failing as [role, device] (role)}
-            <li class="recover">
-              <span>
-                {device.unresponsive_since
-                  ? t.rig.notAnsweringSince(device.device ?? t.roles[role], formatTime(device.unresponsive_since, locale))
-                  : t.rig.recover(device.device ?? t.roles[role])}
-              </span>
-              <Button busy={busy === `restart:${role}`} onclick={() => run(`restart:${role}`, () => restartDriver(role))}>
-                {t.rig.restartDriver}
-              </Button>
-              {#if fed(role)}
-                <ConfirmButton
-                  label={t.rig.powerCycle}
-                  confirmLabel={t.rig.confirmPowerCycle}
-                  busy={busy === `cycle:${role}`}
-                  onconfirm={() => run(`cycle:${role}`, () => powerCycle(role))} />
-              {/if}
-            </li>
-          {/each}
-          {#if server}
-            <DeviceRow icon="server" title={t.rig.indiServer} subtitle="{server.host}:{server.port}" error={server.error}>
-              {#snippet trailing()}
-                {#if server.connected && !server.responsive}
-                  <Chip tone="warning">{t.rig.indiNotAnswering}</Chip>
-                {:else}
-                  <Chip tone={server.connected ? "ok" : "error"}>
-                    {server.connected ? t.rig.indiConnected : t.rig.indiOffline}
-                  </Chip>
-                {/if}
-              {/snippet}
-            </DeviceRow>
-          {/if}
-        </ul>
-      {/if}
-    </section>
-
-    {#if storage}
-      <section aria-labelledby="storage-title">
-        <h2 class="heading section-title" id="storage-title">{t.rig.storage}</h2>
-        <ul class="rows">
-          {#if destination}
-            <DeviceRow icon="storage" title={destination.label} subtitle={destinationDetails} error={storage.error}>
-              {#snippet trailing()}
-                <span class="mono free">{formatBytes(destination.free, locale)}</span>
-              {/snippet}
-            </DeviceRow>
-          {:else}
-            <DeviceRow icon="storage" title={t.rig.storageNone} error={storage.error}>
-              {#snippet trailing()}<Chip tone="error">{t.deviceStatus.error}</Chip>{/snippet}
-            </DeviceRow>
-          {/if}
-        </ul>
-        {#if destination}
-          <div class="meter-row">
-            <div
-              class="meter"
-              role="meter"
-              aria-label={t.rig.storage}
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={Math.round(used * 100)}>
-              <span style:width="{Math.round(used * 100)}%"></span>
-            </div>
-            <span class="caption muted">
-              {t.rig.storageFree(formatBytes(destination.free, locale), formatBytes(destination.total, locale))}
-            </span>
+          </div>
+          <div class="links">
+            <a href={href({ screen: "profile", id })}>{t.rig.editProfile}</a>
+            <a href={href({ screen: "profile", id: null })}>{t.rig.newProfile}</a>
           </div>
         {/if}
-        <StorageDrives />
       </section>
-    {/if}
 
-    <SystemSection />
+      {#snippet equipmentBody()}
+        <TrainsSection {profile} devices={devicesByRole} />
+        <DevicesSection roles={roleList} {connection} {profileId} />
+      {/snippet}
+      {@render group("equipment", t.rig.groups.equipment, equipmentBody)}
 
-    <NetworkSection />
-
-    <ShareSection />
-
-    <section aria-labelledby="access-title">
-      <h2 class="heading section-title" id="access-title">{t.access.title}</h2>
-      {#if auth.owner && auth.status?.device}
-        {@const me = auth.status.device}
-        <ul class="rows">
-          <DeviceRow icon="device" title={me.name} subtitle="{t.access.thisDevice} · {t.access.pairedSince(formatDateTime(me.created, locale))}">
-            {#snippet trailing()}
-              <ConfirmButton
-                label={t.access.unpair}
-                confirmLabel={t.access.confirmUnpair}
-                busy={accessBusy === "me"}
-                onconfirm={() => access("me", () => auth.unpair())} />
-            {/snippet}
-          </DeviceRow>
-        </ul>
-        <div class="toggle-row">
-          <Toggle
-            label={t.access.observers}
-            hint={t.access.observersHint}
-            checked={auth.status.observer}
-            disabled={accessBusy === "observer"}
-            onchange={(enabled) =>
-              access("observer", async () => {
-                await setObserver(enabled);
-                await auth.refresh();
-              })} />
-        </div>
-        <h3 class="label muted subsection">{t.access.devices}</h3>
-        {#if devices && others.length === 0}
-          <p class="muted">{t.access.noDevices}</p>
-        {:else}
-          <ul class="rows">
-            {#each others as device (device.id)}
-              <DeviceRow icon="device" title={device.name} subtitle={t.access.lastUsed(formatDateTime(device.last_used, locale))}>
-                {#snippet trailing()}
-                  <ConfirmButton
-                    label={t.access.revoke}
-                    confirmLabel={t.access.confirmRevoke}
-                    busy={accessBusy === device.id}
-                    onconfirm={() =>
-                      access(device.id, async () => {
-                        await revokeDevice(device.id);
-                        await loadDevices();
-                      })} />
-                {/snippet}
-              </DeviceRow>
-            {/each}
-          </ul>
-        {/if}
-        {#if accessError}<p class="error">{accessError}</p>{/if}
-      {:else}
-        <div class="observer">
-          <p class="muted">{t.access.observerNote}</p>
-          <Button onclick={() => (auth.wantsPair = true)}>{t.link.pair}</Button>
-        </div>
-      {/if}
-    </section>
-
-    <section aria-labelledby="prefs-title">
-      <h2 class="heading section-title" id="prefs-title">{t.prefs.title}</h2>
-      <div class="prefs">
-        <div class="pref">
-          <span class="label muted">{t.language.label}</span>
-          <SegmentedControl
-            label={t.language.label}
-            options={LOCALES.map((value) => ({ value, label: LANGUAGE_NAMES[value] }))}
-            value={prefs.locale}
-            onchange={(value) => prefs.setLocale(value)} />
-        </div>
-        <div class="pref">
-          <span class="label muted">{t.theme.label}</span>
-          <SegmentedControl
-            label={t.theme.label}
-            options={THEMES.map((value) => ({ value, label: t.theme[value] }))}
-            value={prefs.theme}
-            onchange={(value) => prefs.setTheme(value)} />
-        </div>
-      </div>
-    </section>
-
-    <a class="advanced" href={href({ screen: "dev" })}>
-      <span class="text">
-        <span>{t.rig.advanced}</span>
-        <span class="caption muted">{t.rig.advancedHint}</span>
-      </span>
-      <Icon name="chevronRight" />
-    </a>
+      {@render site()}
+    </div>
+    <div class="column">
+      {@render box()}
+      {@render settings()}
+    </div>
   </div>
 {:else}
   <Banner icon="alert" tone="warning">{t.boot.loading}</Banner>
-{/if}
-
-{#if sheet === "power"}
-  <PowerSheet onclose={() => (sheet = null)} />
-{:else if sheet === "focuser"}
-  <FocuserSheet onclose={() => (sheet = null)} />
-{:else if sheet === "mount"}
-  <MountSheet onclose={() => (sheet = null)} />
-{:else if sheet === "filter_wheel"}
-  <FilterWheelSheet onclose={() => (sheet = null)} />
 {/if}
 
 <style>
   .loading {
     padding: var(--space-8) 0;
   }
-  .sections {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-8);
+  .layout {
+    display: grid;
+    gap: var(--space-6);
     padding-bottom: var(--space-8);
   }
-  .card {
+  .column {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+    min-width: 0;
+  }
+  /* A PC: the rig on the left, the box and settings on the right. */
+  @media (min-width: 1200px) {
+    .layout {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      align-items: start;
+      max-width: 1600px;
+    }
+  }
+  .group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+  .group-title {
+    margin: 0;
+    padding: 0 var(--space-1);
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .group-card {
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+  .connection {
     display: flex;
     flex-direction: column;
     gap: var(--space-3);
@@ -587,16 +323,6 @@
     flex-wrap: wrap;
     margin-top: var(--space-1);
   }
-  .recover {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-2);
-    padding: var(--space-2) 0;
-  }
-  .recover span {
-    flex: 1 1 12rem;
-  }
   .error {
     color: var(--error);
     overflow-wrap: anywhere;
@@ -606,88 +332,13 @@
     flex-wrap: wrap;
     gap: var(--space-2) var(--space-6);
   }
-  .links a,
-  .line a {
+  .links a {
     display: inline-flex;
     align-items: center;
     min-height: var(--touch);
     color: var(--accent);
     font-weight: 600;
     text-decoration: none;
-  }
-  .trains {
-    gap: 0;
-  }
-  .train {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    padding: var(--space-3) 0;
-  }
-  .train + .train {
-    border-top: 1px solid var(--line);
-  }
-  .chain {
-    display: flex;
-    flex-wrap: wrap;
-    column-gap: var(--space-2);
-    font-size: 17px;
-    line-height: 26px;
-    overflow-wrap: anywhere;
-  }
-  .arrow {
-    color: var(--muted);
-  }
-  .section-title {
-    margin-bottom: var(--space-2);
-  }
-  .subsection {
-    margin: var(--space-4) 0 0;
-  }
-  .rows {
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  .free {
-    color: var(--text);
-  }
-  .meter-row {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    padding-top: var(--space-3);
-  }
-  .meter {
-    height: 8px;
-    border-radius: var(--radius-full);
-    background: var(--raised);
-    overflow: hidden;
-  }
-  .meter span {
-    display: block;
-    height: 100%;
-    background: var(--accent);
-    border-radius: inherit;
-  }
-  .toggle-row {
-    padding: var(--space-2) 0;
-    border-bottom: 1px solid var(--line);
-  }
-  .observer {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--space-3);
-  }
-  .prefs {
-    display: grid;
-    gap: var(--space-4);
-  }
-  @media (min-width: 768px) {
-    .prefs {
-      grid-template-columns: 1fr 1fr;
-    }
   }
   .pref {
     display: flex;
@@ -721,15 +372,15 @@
     right: 14px;
     pointer-events: none;
   }
+  /* Looks like a section's header, but leads to another screen. */
   .advanced {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: var(--space-4);
+    gap: var(--space-3);
     min-height: 64px;
-    padding: var(--space-3) var(--space-4);
-    border-radius: var(--radius-card);
-    border: 1px solid var(--line);
+    padding: var(--space-3) 0;
+    border-top: 1px solid var(--line);
     color: var(--text);
     text-decoration: none;
   }
@@ -737,5 +388,14 @@
     display: flex;
     flex-direction: column;
     gap: 2px;
+  }
+  .advanced .summary {
+    color: var(--muted);
+    font-size: 15px;
+    line-height: 20px;
+  }
+  .advanced :global(.icon) {
+    flex: none;
+    color: var(--muted);
   }
 </style>

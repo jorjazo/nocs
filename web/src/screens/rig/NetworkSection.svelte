@@ -1,22 +1,26 @@
 <script lang="ts">
   // Rig's network, where nocs-system runs it (the appliance, ADR 0028): what the box
-  // is on, the networks it joins by itself, joining one, its access point and mode.
-  import Banner from "../components/Banner.svelte";
-  import Button from "../components/Button.svelte";
-  import Chip from "../components/Chip.svelte";
-  import ConfirmButton from "../components/ConfirmButton.svelte";
-  import DeviceRow from "../components/DeviceRow.svelte";
-  import CountrySelect from "../components/CountrySelect.svelte";
-  import SegmentedControl from "../components/SegmentedControl.svelte";
-  import TextField from "../components/TextField.svelte";
-  import WifiPicker from "../components/WifiPicker.svelte";
-  import { forgetNetwork, joinNetwork, setAccessPoint, setNetworkMode } from "../lib/api";
-  import { auth } from "../lib/auth.svelte";
-  import { isCountry } from "../lib/countries";
-  import { errorText } from "../lib/errors";
-  import { i18n } from "../lib/i18n";
-  import { live } from "../lib/live.svelte";
-  import type { AccessPointRequest, NetworkState } from "../lib/types";
+  // is on, the networks it joins by itself and its mode; joining one and the access
+  // point open as sheets. Observers see only where the box is.
+  import Banner from "../../components/Banner.svelte";
+  import Button from "../../components/Button.svelte";
+  import Chip from "../../components/Chip.svelte";
+  import ConfirmButton from "../../components/ConfirmButton.svelte";
+  import DeviceRow from "../../components/DeviceRow.svelte";
+  import CountrySelect from "../../components/CountrySelect.svelte";
+  import Section from "../../components/Section.svelte";
+  import SegmentedControl from "../../components/SegmentedControl.svelte";
+  import Sheet from "../../components/Sheet.svelte";
+  import TextField from "../../components/TextField.svelte";
+  import WifiPicker from "../../components/WifiPicker.svelte";
+  import { forgetNetwork, joinNetwork, setAccessPoint, setNetworkMode } from "../../lib/api";
+  import { auth } from "../../lib/auth.svelte";
+  import { isCountry } from "../../lib/countries";
+  import { errorText } from "../../lib/errors";
+  import { i18n } from "../../lib/i18n";
+  import { live } from "../../lib/live.svelte";
+  import { networkAttention } from "../../lib/rigsections";
+  import type { AccessPointRequest, NetworkState } from "../../lib/types";
 
   const t = $derived(i18n.t);
   const network = $derived(live.app.network ?? null);
@@ -28,6 +32,21 @@
     if (network.mode === "station" && network.ssid) return t.network.station(network.ssid);
     return t.network.none;
   });
+
+  const attention = $derived(networkAttention(network, auth.owner));
+  let sheet = $state<"join" | "ap" | null>(null);
+
+  function openSheet(which: "join" | "ap"): void {
+    error = "";
+    note = "";
+    sheet = which;
+  }
+
+  // An error in a sheet belongs to it: closed, it does not reappear in the section.
+  function closeSheet(): void {
+    error = "";
+    sheet = null;
+  }
 
   let busy = $state<string | null>(null);
   let error = $state("");
@@ -60,6 +79,7 @@
     const name = ssid.trim();
     if (await act("join", () => joinNetwork(name, openNetwork ? null : password || null), t.network.joinStarted(name))) {
       password = "";
+      sheet = null;
     }
   }
 
@@ -68,10 +88,13 @@
   let apName = $state("");
   let apPassword = $state("");
   let country = $state("");
+  // Fill the form from the box, once it is known: a field cleared by hand stays empty.
+  let filled = false;
   $effect(() => {
-    // Fill the form from the box, once it is known.
-    if (network && !apName) apName = network.ap_ssid;
-    if (network && !country && network.country !== "00") country = network.country;
+    if (!network || filled) return;
+    filled = true;
+    apName = network.ap_ssid;
+    if (network.country !== "00") country = network.country;
   });
 
   async function saveAccessPoint(event: SubmitEvent): Promise<void> {
@@ -81,8 +104,14 @@
     if (apName.trim() && apName.trim() !== network.ap_ssid) body.ssid = apName.trim();
     if (apPassword) body.password = apPassword;
     if (isCountry(country) && country !== network.country) body.country = country;
-    if (Object.keys(body).length === 0) return;
-    if (await act("ap", () => setAccessPoint(body), t.network.saved)) apPassword = "";
+    if (Object.keys(body).length === 0) {
+      sheet = null;
+      return;
+    }
+    if (await act("ap", () => setAccessPoint(body), t.network.saved)) {
+      apPassword = "";
+      sheet = null;
+    }
   }
 
   const modes = $derived(
@@ -92,14 +121,15 @@
 </script>
 
 {#if network}
-  <section class="network" aria-labelledby="network-title">
-    <div class="line">
-      <h2 class="heading" id="network-title">{t.network.title}</h2>
-      {#if network.ethernet}<Chip tone="ok">{t.network.ethernet}</Chip>{/if}
-    </div>
+  <Section
+    id="network"
+    title={t.network.title}
+    summary={where}
+    status={attention ? { tone: "warning", text: t.rig.attention[attention] } : null}>
     <p class="where">
       <span>{where}</span>
       {#if network.mode === "ap"}<span class="muted">· {t.network.apClients(network.ap_clients)}</span>{/if}
+      {#if network.ethernet}<Chip tone="ok">{t.network.ethernet}</Chip>{/if}
     </p>
     {#if network.ap_default_password && auth.owner}
       <Banner icon="alert" tone="warning">{t.network.defaultPassword}</Banner>
@@ -111,7 +141,7 @@
     {/if}
 
     {#if auth.owner}
-      <h3 class="label muted subsection">{t.network.known}</h3>
+      <h4 class="label muted subsection">{t.network.known}</h4>
       {#if network.known.length === 0}
         <p class="muted">{t.network.noKnown}</p>
       {:else}
@@ -130,7 +160,27 @@
         </ul>
       {/if}
 
-      <h3 class="label muted subsection">{t.network.join}</h3>
+      <div class="buttons">
+        <Button onclick={() => openSheet("join")}>{t.network.joinOpen}</Button>
+        <Button onclick={() => openSheet("ap")}>{t.network.apOpen}</Button>
+      </div>
+
+      <div class="mode">
+        <span class="label muted">{t.network.mode}</span>
+        <SegmentedControl
+          label={t.network.mode}
+          options={modes}
+          value={pin}
+          disabled={busy === "mode"}
+          onchange={(value) => act("mode", () => setNetworkMode(value))} />
+      </div>
+      {#if error && sheet === null}<p class="error">{error}</p>{/if}
+      {#if note}<p class="muted" role="status">{note}</p>{/if}
+    {/if}
+  </Section>
+
+  {#if sheet === "join"}
+    <Sheet title={t.network.join} onclose={closeSheet}>
       <form class="form" onsubmit={join}>
         <WifiPicker label={t.network.ssid} bind:value={ssid} bind:open={openNetwork} />
         {#if !openNetwork}
@@ -143,10 +193,12 @@
             maxlength={63} />
         {/if}
         {#if ssid.trim()}<p class="caption muted">{t.network.joinHint(ssid.trim(), hostname)}</p>{/if}
+        {#if error}<p class="error">{error}</p>{/if}
         <div><Button variant="primary" type="submit" busy={busy === "join"} disabled={!ssid.trim()}>{t.network.joinButton}</Button></div>
       </form>
-
-      <h3 class="label muted subsection">{t.network.accessPoint}</h3>
+    </Sheet>
+  {:else if sheet === "ap"}
+    <Sheet title={t.network.accessPoint} onclose={closeSheet}>
       <form class="form" onsubmit={saveAccessPoint}>
         <TextField label={t.network.apName} bind:value={apName} maxlength={32} />
         <TextField
@@ -158,44 +210,28 @@
           minlength={8}
           maxlength={63} />
         <CountrySelect label={t.network.country} hint={t.network.countryHint} bind:value={country} />
-        <div><Button type="submit" busy={busy === "ap"}>{t.network.save}</Button></div>
+        {#if error}<p class="error">{error}</p>{/if}
+        <div><Button variant="primary" type="submit" busy={busy === "ap"}>{t.network.save}</Button></div>
       </form>
-
-      <div class="mode">
-        <span class="label muted">{t.network.mode}</span>
-        <SegmentedControl
-          label={t.network.mode}
-          options={modes}
-          value={pin}
-          disabled={busy === "mode"}
-          onchange={(value) => act("mode", () => setNetworkMode(value))} />
-      </div>
-      {#if error}<p class="error">{error}</p>{/if}
-      {#if note}<p class="muted" role="status">{note}</p>{/if}
-    {/if}
-  </section>
+    </Sheet>
+  {/if}
 {/if}
 
 <style>
-  .network {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-  }
-  .line {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-3);
-  }
   .where {
     display: flex;
     flex-wrap: wrap;
+    align-items: center;
     gap: var(--space-2);
     font-size: 17px;
   }
+  .buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+  }
   .subsection {
-    margin: var(--space-3) 0 0;
+    margin: var(--space-2) 0 0;
   }
   .rows {
     margin: 0;

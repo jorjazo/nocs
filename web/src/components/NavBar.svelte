@@ -1,7 +1,9 @@
 <script lang="ts">
   // Bottom tab bar on phones, left navigation rail from 768 px (docs/ux.md §1).
+  import { auth } from "../lib/auth.svelte";
   import { i18n } from "../lib/i18n";
   import { live } from "../lib/live.svelte";
+  import { rigAttention } from "../lib/rigsections";
   import { href, router, TABS, type Tab } from "../lib/router.svelte";
   import Icon from "./Icon.svelte";
   import ThemeButton from "./ThemeButton.svelte";
@@ -23,6 +25,9 @@
   // on the Session tab, which says how it stands to screen readers too.
   const run = $derived(live.app.sequence?.run ?? null);
   const session = $derived(run && run.state !== "finished" ? run.state : null);
+  // Something on Rig needs a look, or the owner has updates worth installing: a dot
+  // on the Rig tab, since the section that says so may be closed.
+  const rig = $derived(live.synced ? rigAttention(live.app, auth.owner) : null);
 </script>
 
 <nav class="nav" aria-label={i18n.t.tabs.label}>
@@ -36,9 +41,13 @@
             {#if tab === "session" && session}
               <span class="badge" class:paused={session === "paused" || session === "pausing"}></span>
             {/if}
+            {#if tab === "rig" && rig}
+              <span class="badge {rig}"></span>
+            {/if}
           </span>
           <span class="name">{i18n.t.tabs[tab]}</span>
           {#if tab === "session" && session}<span class="visually-hidden">{i18n.t.session.states[session]}</span>{/if}
+          {#if tab === "rig" && rig}<span class="visually-hidden">{i18n.t.rig.tabAttention[rig]}</span>{/if}
         </a>
       </li>
     {/each}
@@ -93,8 +102,12 @@
     background: var(--accent);
     box-shadow: 0 0 0 2px var(--surface);
   }
-  .badge.paused {
+  .badge.paused,
+  .badge.warning {
     background: var(--warning);
+  }
+  .badge.problem {
+    background: var(--error);
   }
   .name {
     font-size: 13px;
