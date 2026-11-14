@@ -250,7 +250,7 @@
     {:else if tonight.missingSite}
       <p class="muted">{t.tonight.noSite}</p>
       {#if auth.owner}
-        <div><Button onclick={() => router.go({ screen: "rig" })}>{t.tonight.openRig}</Button></div>
+        <div><Button onclick={() => router.go({ screen: "rig", section: "site" })}>{t.tonight.openRig}</Button></div>
       {/if}
     {:else if tonight.error}
       <p class="muted">{errorText(tonight.error, t)}</p>

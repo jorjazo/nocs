@@ -46,7 +46,7 @@ server/   Python package `nocs` (nocsd): indi/ (protocol + async client, driver
           REST + WebSocket, schemas, schema export)
 web/      Svelte 5 + TypeScript PWA: styles/ (tokens), lib/ (api, live state,
           auth, router, i18n/ with en.ts as the source, prefs), components/,
-          screens/ (dev/ is the old INDI property browser at #/dev)
+          screens/ (rig/ holds Rig's sections; dev/ is the old INDI property browser at #/dev)
 dev/      compose.yaml (INDI simulators + GSC catalog + driver FIFO in dev/.run,
           headless PHD2), astap/ (solver install), profiles/ (simulator rig),
           catalog/ (builds the bundled target catalog),

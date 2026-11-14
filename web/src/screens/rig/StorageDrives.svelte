@@ -1,16 +1,16 @@
 <script lang="ts">
   // Rig's USB drives: the mounted ones with Eject where nocs-system can eject
   // them, and the ones plugged in but not mounted, with the reason (ADR 0027).
-  import Button from "../components/Button.svelte";
-  import Chip from "../components/Chip.svelte";
-  import ConfirmButton from "../components/ConfirmButton.svelte";
-  import DeviceRow from "../components/DeviceRow.svelte";
-  import { ApiError, ejectDrive } from "../lib/api";
-  import { auth } from "../lib/auth.svelte";
-  import { errorText } from "../lib/errors";
-  import { formatBytes } from "../lib/format";
-  import { i18n } from "../lib/i18n";
-  import { live } from "../lib/live.svelte";
+  import Button from "../../components/Button.svelte";
+  import Chip from "../../components/Chip.svelte";
+  import ConfirmButton from "../../components/ConfirmButton.svelte";
+  import DeviceRow from "../../components/DeviceRow.svelte";
+  import { ApiError, ejectDrive } from "../../lib/api";
+  import { auth } from "../../lib/auth.svelte";
+  import { errorText } from "../../lib/errors";
+  import { formatBytes } from "../../lib/format";
+  import { i18n } from "../../lib/i18n";
+  import { live } from "../../lib/live.svelte";
 
   const t = $derived(i18n.t);
   const locale = $derived(i18n.locale);
@@ -47,7 +47,7 @@
 </script>
 
 {#if drives.length > 0 || unmounted.length > 0}
-  <h3 class="label muted subsection">{t.drives.title}</h3>
+  <h4 class="label muted subsection">{t.drives.title}</h4>
   <ul class="rows">
     {#each drives as drive (drive.id)}
       <DeviceRow icon="storage" title={drive.label} subtitle="{drive.fs} · {formatBytes(drive.free, locale)}">

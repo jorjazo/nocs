@@ -1,9 +1,12 @@
 // Hash router (#/rig): nocsd serves the built files as they are, without a
 // fallback to index.html, so reloading any screen must not need the server.
 
+import { isRigSection, type RigSection } from "./rigsections";
+
 export type Tab = "tonight" | "live" | "plan" | "session" | "rig";
 export const TABS: readonly Tab[] = ["tonight", "live", "plan", "session", "rig"];
 
+// Rig opens one of its sections, scrolled to it, at #/rig/<section> (#/rig/site).
 // The profile editor hangs off Rig: #/rig/profile/<id>, or #/rig/profile/new, and
 // so does a site's: #/rig/site/<id>, or #/rig/site/new; a
 // target's page off Plan: #/plan/<catalog id>, and the sequence builder:
@@ -14,7 +17,8 @@ export const TABS: readonly Tab[] = ["tonight", "live", "plan", "session", "rig"
 // (#/flats, or #/flats/<night> for that night's lights) are full-screen flows
 // over whichever tab opened them.
 export type Route =
-  | { screen: Tab }
+  | { screen: Exclude<Tab, "rig"> }
+  | { screen: "rig"; section?: RigSection }
   | { screen: "dev" }
   | { screen: "focus" }
   | { screen: "focus-calibration" }
@@ -46,6 +50,7 @@ function parse(hash: string): Route {
   if (first === "rig" && second === "site" && third) {
     return { screen: "site", id: third === "new" ? null : decodeURIComponent(third) };
   }
+  if (first === "rig" && second && !third && isRigSection(second)) return { screen: "rig", section: second };
   const tab = TABS.find((name) => name === first);
   return tab ? { screen: tab } : DEFAULT;
 }
@@ -57,6 +62,7 @@ export function href(route: Route): string {
   if (route.screen === "sequence") return "#/plan/sequence";
   if (route.screen === "focus-calibration") return "#/focus/calibrate";
   if (route.screen === "report") return `#/session/${route.id}`;
+  if (route.screen === "rig" && route.section) return `#/rig/${route.section}`;
   if (route.screen === "flats") return route.night === null ? "#/flats" : `#/flats/${route.night}`;
   return `#/${route.screen}`;
 }

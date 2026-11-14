@@ -109,7 +109,7 @@ later.
 
 Frames go to `NOCS/<night>/<type>/<target>/<filter>/` on the USB drive (or the card),
 and you can download them from the app. At home, a computer can also open them as a
-network folder: switch on **File sharing** on Rig, then open `\\nocs.local\Internal`
+network folder: switch on **File sharing** on Rig → Storage, then open `\\nocs.local\Internal`
 in Windows' File Explorer or `smb://nocs.local` on a Mac (Finder → Go → Connect to
 Server) or on Linux. It is read-only and needs no password, so anyone on that network
 can read the frames while it is on; Windows 11 asks for a login: user `nocs`, password
@@ -118,7 +118,7 @@ can read the frames while it is on; Windows 11 asks for a login: user `nocs`, pa
 ## 6. At the end
 
 - **Eject** the USB drive on Rig, under Storage, before unplugging it.
-- **Shut down** on Rig, under This computer, and wait half a minute before you cut
+- **Shut down** on Rig, under The box → Status, and wait half a minute before you cut
   the power. Cutting it while the box writes can damage the card or the drive.
 
 When something does not work, see [troubleshooting](troubleshooting.md).

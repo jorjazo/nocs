@@ -1,7 +1,7 @@
 # Troubleshooting
 
-When a problem is not listed here, download the **diagnostics** (Rig → This
-computer → Download diagnostics) and attach the zip to a report. It holds the
+When a problem is not listed here, download the **diagnostics** (Rig → The
+box → Status → Download diagnostics) and attach the zip to a report. It holds the
 versions, the state and the last day of logs. It includes your site and your
 equipment, so check it before posting it publicly.
 
@@ -20,7 +20,7 @@ ones, or put the devices that do not need USB 3 on the USB 2 ports.
 - On another network, some phones do not resolve `.local` names. Find the box's
   address in your router, or plug in a network cable and try again.
 - With two boxes on one network, the second one may answer as `nocs-2.local`. Give
-  each its own name (Rig → This computer → Rename).
+  each its own name (Rig → The box → Status → Rename).
 
 **The phone keeps leaving the box's Wi-Fi.** The phone prefers networks with
 internet. Turn off "switch to mobile data" (Android) or "Wi-Fi assist" (iOS), or
@@ -67,7 +67,7 @@ power, and that the profile names the right driver and, for mounts and power box
 the right serial port (`/dev/serial/by-id/…`).
 
 **INDI "Not answering".** NOCS restarts indiserver by itself after about a minute;
-you can also restart it on Rig → This computer → Restart INDI. Every device
+you can also restart it on Rig → Devices → Restart INDI. Every device
 reconnects; an exposure in progress is lost.
 
 **A device stops answering** (Error or Offline while the rig is connected). Rig
@@ -91,8 +91,8 @@ btrfs and XFS. An ejected drive stays unmounted until you unplug it.
 
 ## Updates
 
-Updates need internet: join a network with internet (Rig → Network), then Rig → This
-computer → Updates → **Check now**. The list puts NOCS first (a new version or "Up to
+Updates need internet: join a network with internet (Rig → Network → Join a network…),
+then Rig → Updates → **Check now**. The list puts NOCS first (a new version or "Up to
 date"), then INDI and PHD2, then the rest of the system as a count with how many are
 security updates; **All N packages** opens every package with its old and new
 version.

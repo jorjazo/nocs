@@ -86,6 +86,7 @@
   }
   .subtitle {
     color: var(--muted);
+    overflow-wrap: anywhere;
   }
   .error {
     color: var(--error);

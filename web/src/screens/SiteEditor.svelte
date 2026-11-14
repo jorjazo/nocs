@@ -64,7 +64,7 @@
       } else {
         await putSite(id, edited);
       }
-      router.go({ screen: "rig" });
+      router.go({ screen: "rig", section: "site" });
     } catch (e) {
       error = errorText(e, t);
     } finally {
@@ -78,7 +78,7 @@
     error = "";
     try {
       await deleteSite(id);
-      router.go({ screen: "rig" });
+      router.go({ screen: "rig", section: "site" });
     } catch (e) {
       error = errorText(e, t);
     } finally {
@@ -87,7 +87,7 @@
   }
 </script>
 
-<a class="back" href={href({ screen: "rig" })}><Icon name="chevronLeft" />{t.sites.back}</a>
+<a class="back" href={href({ screen: "rig", section: "site" })}><Icon name="chevronLeft" />{t.sites.back}</a>
 <ScreenHeader title={id === null ? t.sites.newTitle : t.sites.editTitle} />
 
 {#if missing}

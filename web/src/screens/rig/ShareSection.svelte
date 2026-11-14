@@ -1,16 +1,16 @@
 <script lang="ts">
-  // Rig's file sharing, where nocs-system runs it (the appliance, ADR 0039): the
+  // Rig → Storage → File sharing, where nocs-system runs it (the appliance, ADR 0039): the
   // read-only SMB share of the frames, its switch, how to open it from a computer,
   // the folders shared and the computers connected.
-  import Banner from "../components/Banner.svelte";
-  import Chip from "../components/Chip.svelte";
-  import DeviceRow from "../components/DeviceRow.svelte";
-  import Toggle from "../components/Toggle.svelte";
-  import { setShare } from "../lib/api";
-  import { auth } from "../lib/auth.svelte";
-  import { errorText } from "../lib/errors";
-  import { i18n } from "../lib/i18n";
-  import { live } from "../lib/live.svelte";
+  import Banner from "../../components/Banner.svelte";
+  import Chip from "../../components/Chip.svelte";
+  import DeviceRow from "../../components/DeviceRow.svelte";
+  import Toggle from "../../components/Toggle.svelte";
+  import { setShare } from "../../lib/api";
+  import { auth } from "../../lib/auth.svelte";
+  import { errorText } from "../../lib/errors";
+  import { i18n } from "../../lib/i18n";
+  import { live } from "../../lib/live.svelte";
 
   const t = $derived(i18n.t);
   const share = $derived(live.app.share ?? null);
@@ -34,9 +34,9 @@
 </script>
 
 {#if share}
-  <section class="share" aria-labelledby="share-title">
+  <div class="share">
     <div class="line">
-      <h2 class="heading" id="share-title">{t.share.title}</h2>
+      <h4 class="label muted">{t.share.title}</h4>
       {#if share.on && share.running}<Chip tone="ok">{t.share.clients(share.clients)}</Chip>{/if}
     </div>
     {#if auth.owner}
@@ -52,7 +52,7 @@
     {#if share.on && !share.running}
       <Banner icon="alert" tone="warning">{t.share.notRunning}</Banner>
     {:else if share.on}
-      <h3 class="label muted subsection">{t.share.open}</h3>
+      <h5 class="label muted subsection">{t.share.open}</h5>
       <dl class="how">
         <dt>{t.share.windows}</dt>
         <dd><code>\\{hostname}.local\{first}</code></dd>
@@ -63,7 +63,7 @@
       </dl>
       <p class="caption muted">{t.share.login}</p>
 
-      <h3 class="label muted subsection">{t.share.folders}</h3>
+      <h5 class="label muted subsection">{t.share.folders}</h5>
       <ul class="rows">
         {#each share.shares as folder (folder.volume)}
           <DeviceRow
@@ -74,7 +74,7 @@
       </ul>
       <p class="caption muted">{t.share.slow}</p>
     {/if}
-  </section>
+  </div>
 {/if}
 
 <style>
@@ -82,6 +82,11 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-3);
+    margin-top: var(--space-4);
+  }
+  h4,
+  h5 {
+    margin: 0;
   }
   .line {
     display: flex;

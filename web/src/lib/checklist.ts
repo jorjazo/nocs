@@ -71,8 +71,9 @@ export function fixRoute(fix: Fix): Route {
     case "guiding":
       return { screen: "guiding" };
     case "rig":
-    case "chooseSite":
       return { screen: "rig" };
+    case "chooseSite":
+      return { screen: "rig", section: "site" };
   }
 }
 
