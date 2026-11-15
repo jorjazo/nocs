@@ -69,6 +69,13 @@ def mount_router(
             )
         return JobStarted(job=job)
 
+    @router.post("/mount/sun-warning", status_code=status.HTTP_204_NO_CONTENT)
+    async def sun_warning() -> Response:  # pyright: ignore[reportUnusedFunction]
+        """The owner read the Sun's warning: go to near the Sun is allowed until the
+        site's date changes (ADR 0049)."""
+        mount().acknowledge_sun()
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
     @router.post("/mount/abort", status_code=status.HTTP_202_ACCEPTED)
     async def abort() -> None:  # pyright: ignore[reportUnusedFunction]
         with _mount_errors():

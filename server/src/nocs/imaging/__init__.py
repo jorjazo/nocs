@@ -10,6 +10,7 @@ from nocs.imaging.capture import (
     Shot,
     image_connector,
 )
+from nocs.imaging.disc import Disc
 from nocs.imaging.pipeline import StarMetrics
 
 __all__ = [
@@ -18,6 +19,7 @@ __all__ = [
     "CameraNotReadyError",
     "CameraSettings",
     "CaptureService",
+    "Disc",
     "KeptFrame",
     "Shot",
     "StarMetrics",

@@ -71,6 +71,18 @@ def test_center_needs_a_camera_and_a_target(client: TestClient) -> None:
     assert client.post("/api/solver/center", json=bad).status_code == 422
 
 
+def test_the_finder_needs_a_camera_and_a_body(client: TestClient) -> None:
+    response = client.post("/api/finder", json={"body": "moon"})
+    assert response.status_code == 503, response.text
+    assert client.post("/api/finder", json={"body": "mars"}).status_code == 422
+    assert client.post("/api/finder", json={"body": "sun", "radius": 45}).status_code == 422
+    assert client.post("/api/finder", json={"body": "sun", "exposure": 0}).status_code == 422
+
+
+def test_the_sun_warning_is_acknowledged(client: TestClient) -> None:
+    assert client.post("/api/mount/sun-warning").status_code == 204
+
+
 def test_set_property_validates_body(client: TestClient) -> None:
     response = client.post("/api/indi/devices/CCD/properties/CONNECTION", json={"values": {}})
     assert response.status_code == 422

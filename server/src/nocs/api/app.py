@@ -34,6 +34,7 @@ from nocs.align.service import PolarAlignmentService
 from nocs.api.accessories import accessories_router
 from nocs.api.auth import REVOKED, AuthMiddleware, Sockets, auth_router, identity
 from nocs.api.calibration import calibration_router
+from nocs.api.finder import finder_router
 from nocs.api.guiding import guiding_router
 from nocs.api.mount import mount_router
 from nocs.api.observers import observer_patch, observer_state
@@ -101,6 +102,7 @@ from nocs.equipment import (
 from nocs.equipment.profiles import FocusSweep
 from nocs.filters.service import FilterWheelService
 from nocs.filters.wheels import WheelStore
+from nocs.finder import FinderService
 from nocs.focus.autofocus import AutofocusService
 from nocs.focus.calibration import FocuserCalibrationService, Scale
 from nocs.focus.focusers import FocuserStore
@@ -264,6 +266,10 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
     def polar() -> PolarAlignmentService:
         assert services.polar is not None
         return services.polar
+
+    def finder() -> FinderService:
+        assert services.finder is not None
+        return services.finder
 
     def plan() -> PlanService:
         assert services.plan is not None
@@ -467,6 +473,9 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
         services.centering = CenteringService(
             store, services.jobs, services.pointing, services.mount
         )
+        services.finder = FinderService(
+            store, services.jobs, services.capture, services.mount, services.clock
+        )
         services.polar = PolarAlignmentService(
             store,
             services.jobs,
@@ -583,6 +592,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
     app.include_router(solver_router(pointing, centering, guiding))
     app.include_router(saved_frames_router(saved_frames))
     app.include_router(align_router(polar))
+    app.include_router(finder_router(finder, guiding))
     app.include_router(accessories_router(focuser, filter_wheel, autofocus, focus_calibration))
     app.include_router(sequences_router(sequences))
     app.include_router(sessions_router(storage, lambda: clock().now()))
@@ -1003,6 +1013,7 @@ class _Services:
     saved_frames: SavedFrames | None = None
     centering: CenteringService | None = None
     polar: PolarAlignmentService | None = None
+    finder: FinderService | None = None
     preparation: PreparationService | None = None
     plan: PlanService | None = None
     autofocus: AutofocusService | None = None

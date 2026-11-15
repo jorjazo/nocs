@@ -49,6 +49,7 @@ from nocs.devices.camera import Region
 from nocs.equipment import EquipmentService, Role
 from nocs.equipment.service import IndiConnection
 from nocs.guiding import GuidingError, GuidingNotReadyError, Settle
+from nocs.imaging.disc import Disc
 from nocs.imaging.pipeline import FrameAnalysis, StarMetrics
 from nocs.imaging.worker import ImageWorker
 from nocs.indi import BlobMode, IndiClient, IndiEvent, PropertyDefined, PropertyUpdated
@@ -618,6 +619,16 @@ class CaptureService:
         return await self._finish(
             context, role, shot, save=True, target=None, label=label, guiding=None
         )
+
+    async def disc(self, shot: Shot, radius: float) -> Disc:
+        """Where the Sun's or the Moon's disc is in a frame from ``take``, expected
+        ``radius`` (a fraction of the frame's width) across; the file stays (ADR 0049)."""
+        return await self._worker.disc(str(shot.path), shot.bayer, radius)
+
+    async def show(self, role: Role, shot: Shot) -> None:
+        """Make a frame from ``take`` the role's preview, which keeps its file until a
+        newer frame replaces it; never raises."""
+        await self._preview(role, shot, discard=True)
 
     async def level(self, shot: Shot) -> float:
         """A frame's level in ADU (its strongest Bayer channel's median); the file stays."""

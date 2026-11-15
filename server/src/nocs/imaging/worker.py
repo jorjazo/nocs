@@ -33,7 +33,8 @@ from concurrent.futures.process import BrokenProcessPool
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from nocs.imaging import pipeline
+from nocs.imaging import disc, pipeline
+from nocs.imaging.disc import Disc
 from nocs.imaging.pipeline import FrameAnalysis, StarMetrics
 
 # The module, not its names: nocs.stacking.stack imports nocs.imaging.pipeline, whose
@@ -130,6 +131,10 @@ class ImageWorker:
         except BrokenProcessPool:
             self._died()
             raise
+
+    async def disc(self, fits_path: str, bayer: str | None, radius: float) -> Disc:
+        """Where the Sun's or the Moon's disc is in a frame (``disc.find_disc``)."""
+        return await self._run(functools.partial(disc.find_disc, fits_path, bayer, radius))
 
     async def stack_add(
         self,

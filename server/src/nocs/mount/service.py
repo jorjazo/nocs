@@ -4,7 +4,8 @@ State under ``("mount",)`` while the mount role is ready, ``None`` otherwise::
 
     {device, ra, dec, ra_j2000, dec_j2000, alt, az, slewing, tracking, track_mode,
      track_modes, parked, parking, can_park, can_home, homing, pier_side, moving,
-     moved_by, slew_rate, slew_rates, slew_rate_labels, time, site, site_check, limits}
+     moved_by, slew_rate, slew_rates, slew_rate_labels, time, site, site_check, limits,
+     sun_acknowledged}
 
 Go to, park and home run as jobs that lock the mount; cancelling one aborts the
 motion. Manual motion goes through slew pads (``nocs.mount.pad``).
@@ -14,6 +15,10 @@ soon as a client has reported its clock): the lab's ZWO AM7 refuses every go to
 after power-on until it gets them, and the site its driver shows is only the
 driver's saved configuration (ADR 0015). Go to waits for both. The site is the box's
 active one (ADR 0038), sent again whenever it changes.
+
+A go to within ``SUN_AVOIDANCE`` of the Sun while it is up waits for the owner to
+acknowledge the Sun's warning, which lasts until the site's local date changes
+(ADR 0049).
 """
 
 from __future__ import annotations
@@ -22,7 +27,7 @@ import asyncio
 import logging
 import math
 from collections.abc import Coroutine
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from typing import Any, Literal, Protocol
 
 import anyio
@@ -41,6 +46,7 @@ from nocs.mount.coords import (
 )
 from nocs.mount.pad import Pad
 from nocs.sites import Site, SiteService
+from nocs.sky.bodies import Body, position, separation
 from nocs.state import Json, Path, StateStore
 
 log = logging.getLogger(__name__)
@@ -64,6 +70,10 @@ poll, about a second later."""
 SYNC_KEPT = 1.0
 """Arcminutes the position may stray from a sync before NOCS says it was not kept;
 the simulators reported 0.05-0.2'."""
+SUN_AVOIDANCE = 20.0
+"""Degrees from the Sun within which a go to needs the Sun's warning acknowledged."""
+SUN_UP = -1.0
+"""The Sun's (geometric) altitude above which it shines on the rig, degrees."""
 
 type Frame = Literal["j2000", "jnow"]
 
@@ -102,6 +112,10 @@ class SyncNotKeptError(PointingError):
     """The mount took a sync and then went back to where it thought it pointed."""
 
 
+class SunWarningError(PointingError):
+    """A go to near the Sun before the owner acknowledged the Sun's warning today."""
+
+
 class _Positioned(Protocol):
     @property
     def name(self) -> str: ...
@@ -125,6 +139,22 @@ async def check_sync_kept(
             f"{mount.name} did not keep the sync: it went back {where} from it "
             "(some mounts ignore syncs near their home position; try away from the pole)"
         )
+
+
+def near_sun(target: Coordinates, site: Location, when: datetime) -> float | None:
+    """Degrees from JNow ``target`` to the Sun when the Sun is up and closer than
+    ``SUN_AVOIDANCE``; ``None`` otherwise."""
+    sun = position(Body.SUN, site, when)
+    if sun.alt <= SUN_UP:
+        return None
+    away = separation(target, sun.jnow)
+    return away if away < SUN_AVOIDANCE else None
+
+
+def local_date(longitude: float, when: datetime) -> date:
+    """The local mean solar date at ``longitude`` (degrees east): the Sun's warning lasts
+    until it changes."""
+    return (when + timedelta(hours=longitude / 15)).date()
 
 
 def _arcmin(a: Coordinates, b: Coordinates) -> float:
@@ -162,6 +192,8 @@ class MountService:
         self._tasks: set[asyncio.Task[object]] = set()
         self._changes: set[anyio.Event] = set()
         """Set when a property the state shows changes (``settle``)."""
+        self._sun_acknowledged: date | None = None
+        """The site's local date on which the Sun's warning was acknowledged."""
 
         store.set(ROOT, None)
         self._unwatch_bridge = bridge.watch(self._on_client)
@@ -253,6 +285,8 @@ class MountService:
         self._require_site_and_time()
         site = self._site()
         assert site is not None  # the mount got one
+        aim = horizontal_to_jnow(alt, az, site, self._clock.now())
+        self._check_sun(aim.ra, aim.dec)
 
         async def run(context: JobContext) -> Json:
             target = horizontal_to_jnow(alt, az, site, self._clock.now())
@@ -269,6 +303,17 @@ class MountService:
 
         return self._jobs.start("goto", [RESOURCE], run)
 
+    @property
+    def sun_acknowledged(self) -> bool:
+        """Whether the owner acknowledged the Sun's warning today (the site's date)."""
+        return self._sun_acknowledged is not None and self._sun_acknowledged == self._today()
+
+    def acknowledge_sun(self) -> None:
+        """The owner read the Sun's warning: go to near the Sun until the date changes."""
+        self._sun_acknowledged = self._today()
+        log.warning("the Sun's warning was acknowledged for %s", self._sun_acknowledged)
+        self._publish()
+
     def position(self) -> Coordinates:
         """Where the mount says it points, J2000 (converted from JNow now)."""
         position = self.mount().coordinates
@@ -280,6 +325,14 @@ class MountService:
 
     def parked(self) -> bool:
         return self.mount().parked
+
+    def track_modes(self) -> list[str]:
+        """Tracking rates the mount offers (``sidereal``, ``lunar``, ``solar``…)."""
+        return self.mount().track_modes
+
+    def site(self) -> Location | None:
+        """Where the rig is: the active site, or else the mount's."""
+        return self._site()
 
     async def sync(
         self,
@@ -480,6 +533,7 @@ class MountService:
         self._require_site_and_time()
         jnow = j2000_to_jnow(ra, dec, self._clock.now()) if frame == "j2000" else None
         self._check_horizon(jnow.ra if jnow else ra, jnow.dec if jnow else dec, force)
+        self._check_sun(jnow.ra if jnow else ra, jnow.dec if jnow else dec)
         return mount
 
     async def _goto(
@@ -526,6 +580,21 @@ class MountService:
             raise PointingError(
                 f"the target is {-altitude:.1f}° below the horizon; force the go to to slew anyway"
             )
+
+    def _check_sun(self, ra: float, dec: float) -> None:
+        site = self._site()
+        if site is None or not self._clock.known or self.sun_acknowledged:
+            return
+        away = near_sun(Coordinates(ra, dec), site, self._clock.now())
+        if away is not None:
+            raise SunWarningError(
+                f"the target is {away:.0f}° from the Sun, near the Sun: read and acknowledge "
+                "the Sun's warning first"
+            )
+
+    def _today(self) -> date:
+        site = self._site()
+        return local_date(site.longitude if site is not None else 0.0, self._clock.now())
 
     def _site(self) -> Location | None:
         """Where the rig is: the active site, or else the mount's."""
@@ -691,6 +760,7 @@ class MountService:
             "site_check": self._site_check(mount_site),
             "site_sent": self._site_sent,
             "time_sent": self._time_sent,
+            "sun_acknowledged": self.sun_acknowledged,
             "limits": {
                 "altitude": (
                     {"enabled": altitude.enabled, "lower": altitude.lower, "upper": altitude.upper}

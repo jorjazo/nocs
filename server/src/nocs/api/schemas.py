@@ -384,6 +384,10 @@ class MountState(StateModel):
         description="NOCS sent the time since the mount became ready; go to waits for both."
     )
     limits: MountLimits
+    sun_acknowledged: bool = Field(
+        description="The owner acknowledged the Sun's warning today (the site's date): go to"
+        " near the Sun is allowed (ADR 0049)."
+    )
 
 
 class ClockState(StateModel):
@@ -706,6 +710,68 @@ class CenteringState(StateModel):
     max_attempts: int
     attempts: list[CenteringAttempt]
     error: str | None = Field(description="Why it failed.")
+    started: str
+    finished: str | None
+
+
+type FinderBody = Literal["sun", "moon"]
+
+
+class FinderOptionsState(StateModel):
+    radius: float = Field(description="Degrees searched around the body (or the mount).")
+    exposure: float = Field(description="Seconds the search starts with.")
+    binning: int | None = Field(description="None: the camera's largest up to 4.")
+    tolerance: float = Field(description="Arcminutes.")
+    here: bool = Field(description="The search was centred where the mount pointed.")
+    sync: bool
+    track: bool
+
+
+class FinderDisc(StateModel):
+    """The latest frame's disc, pixels of that frame."""
+
+    found: bool
+    x: float | None = Field(description="The disc's centre; it may lie outside the frame.")
+    y: float | None
+    radius: float | None
+    width: int
+    height: int
+    background: float = Field(description="The frame's median level, of the full scale.")
+
+
+class FinderOffset(StateModel):
+    """Arcminutes on the sky from the body's position."""
+
+    east: float
+    north: float
+
+
+class FinderState(StateModel):
+    """The running Sun or Moon finder, or the most recent one (ADR 0049)."""
+
+    job: str
+    body: FinderBody
+    state: Literal["running", "succeeded", "failed", "cancelled"]
+    phase: Literal["tracking", "searching", "calibrating", "centring", "syncing"] | None = Field(
+        description="While running."
+    )
+    options: FinderOptionsState
+    exposure: float = Field(description="Seconds of the frames now.")
+    binning: int | None = Field(description="Of the frames; None until the run starts them.")
+    searched: int = Field(description="Points of the search looked at.")
+    positions: int = Field(description="Points of the search in all.")
+    frames: int
+    disc: FinderDisc | None
+    offset: FinderOffset | None = Field(
+        description="Where the mount aims from the body; once centred: how far off the mount"
+        " pointed, before the sync."
+    )
+    error: float | None = Field(description="Arcminutes from the disc's centre to the frame's.")
+    attempts: int = Field(description="Moves made to centre it.")
+    track_mode: str | None = Field(description="The rate set; None: the mount's own.")
+    synced: bool
+    warning: str | None
+    failure: str | None = Field(description="Why it failed.")
     started: str
     finished: str | None
 
@@ -1306,6 +1372,7 @@ class AppState(StateModel):
     polar_alignment: PolarAlignmentState | None = Field(
         default=None, description="None: never run."
     )
+    finder: FinderState | None = Field(default=None, description="None: never run.")
     preparation: PreparationState | None = None
     plan: PlanState | None = None
     stack: StackState | None = None
@@ -1842,6 +1909,30 @@ class CenterRequest(BaseModel):
         default=False,
         description="Stop guiding first and guide again once centred, in the same job: PHD2 "
         "selects a new star, calibrating again only if the mount changed sides of the pier.",
+    )
+
+
+class FinderRequest(BaseModel):
+    """Find the Sun or the Moon and centre it in the main camera (ADR 0049). The Sun, and
+    anything within 20° of it while it is up, needs the Sun's warning acknowledged today;
+    finding the Sun stops PHD2."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    body: FinderBody
+    radius: float = Field(default=5.0, ge=0, le=30, description="Degrees to search.")
+    exposure: float = Field(default=0.1, ge=0.0001, le=10, description="Seconds.")
+    binning: int | None = Field(
+        default=None, ge=1, description="None: the camera's largest up to 4."
+    )
+    tolerance: float = Field(default=2.0, gt=0, le=60, description="Arcminutes.")
+    here: bool = Field(
+        default=False, description="Search around where the mount points, not the body."
+    )
+    sync: bool = Field(default=True, description="Sync the mount to the body once centred.")
+    track: bool = Field(default=True, description="Track at the body's rate.")
+    stop_guiding: bool = Field(
+        default=False, description="Stop guiding first; refused while guiding otherwise (ADR 0023)."
     )
 
 
