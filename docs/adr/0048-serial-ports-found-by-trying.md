@@ -39,17 +39,23 @@ Facts:
 - **Some ports are not for drivers**: the GPS's, which gpsd holds (its `DEVICES`
   report names it), and the ports the profile's other devices use.
 - **INDI's telescope and focuser simulators define a serial port** (`/dev/ttyUSB0`)
-  that they never open: they connect on any port.
+  that they never open: they connect on any port. So does a mount connected over the
+  network (`CONNECTION_MODE` TCP), whose `DEVICE_PORT` keeps its default.
+- **INDI's serial connection** defines `DEVICE_PORT`, `DEVICE_BAUD_RATE` and
+  `DEVICE_AUTO_SEARCH`, in that order; a driver may use a `DEVICE_PORT` of its own
+  for something else (a camera's shutter release cable).
 
 ## Decision
 
-- **A serial device without a port is looked for.** When NOCS connects a device
-  whose driver defines `DEVICE_PORT` and the profile names no port, or names a
+- **A serial device without a port is looked for.** When NOCS connects the device of
+  a mount, focuser, filter wheel, power box or weather role (never a camera) that
+  uses INDI's serial connection now (`DEVICE_PORT` and `DEVICE_BAUD_RATE`, not over
+  the network) and the profile names no port, or names a
   `/dev/serial/by-id/` port that is no longer plugged in (the device came back on
   another adapter), NOCS tries the serial ports one by one: it sets the port, turns
   the driver's own search off and connects. The first port it connects on is saved
-  in the profile, for every role the device plays (a power box's weather too), and
-  used from then on. A port in the profile that is plugged in is always used as it
+  in the profile on disk (edits saved meanwhile are kept), for every role the device
+  plays (a power box's weather too), and used from then on. A port in the profile that is plugged in is always used as it
   is: a device that does not answer there may be switched off, and looking for it
   elsewhere would open the other devices' ports.
 - **The driver's own search is always off** when NOCS sets a port: with it on, a
@@ -59,7 +65,7 @@ Facts:
   match another device of the profile better than this one come last. The port the
   driver saved, when it is no USB adapter's (a Pi's own UART), is tried last.
 - **Ports that are never tried**: those the profile's other devices name, those of
-  connected devices, gpsd's (from its `DEVICES` and `DEVICE` reports) and any whose
+  devices connected through a serial port, gpsd's (from its `DEVICES` and `DEVICE` reports) and any whose
   stable name says GPS or GNSS.
 - **A refused connection is tried once more** on the same port, at once, whether the
   port was found or is the profile's: the second try reads no leftovers.

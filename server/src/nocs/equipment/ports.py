@@ -63,9 +63,10 @@ def words(*names: str | None) -> frozenset[str]:
 
 
 def affinity(port: SerialPort, device_words: Collection[str]) -> int:
-    """How many of a device's words appear in the port's stable name."""
-    name = Path(port.path).name.lower()
-    return sum(1 for word in device_words if word in name)
+    """How many of a device's words begin a word of the port's stable name (``ppba``:
+    ``PPBADV``)."""
+    tokens = re.findall(r"[a-z0-9]+", Path(port.path).name.lower())
+    return sum(1 for word in device_words if any(token.startswith(word) for token in tokens))
 
 
 def looks_like_gps(port: SerialPort) -> bool:

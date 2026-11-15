@@ -180,9 +180,19 @@
   let detected = $state<Partial<Record<Role, { port: string } | { error: string }>>>({});
   const progress = $derived(live.app.equipment?.detecting ?? null);
 
-  // Roles played by the same device: a power box's weather, say.
+  // Roles played by the same device: a power box's weather, say. A role without a
+  // device name takes its driver's device, as the server does.
   function sameDevice(a: DeviceDraft, b: DeviceDraft): boolean {
-    return a.driver === b.driver && a.device.trim() === b.device.trim();
+    const [x, y] = [a.device.trim(), b.device.trim()];
+    return a.driver === b.driver && (!x || !y || x === y);
+  }
+
+  // The search's progress, when it is this role's device's (a connect may be
+  // searching for another one first).
+  function progressFor(role: Role, draft: DeviceDraft): typeof progress {
+    if (!progress) return null;
+    const names = draft.device.trim() ? [draft.device.trim()] : (listingFor(role, draft)?.names ?? []);
+    return names.includes(progress.device) ? progress : null;
   }
 
   async function detect(role: Role): Promise<void> {
@@ -195,6 +205,8 @@
       (other): other is DeviceDraft => !!other && !sameDevice(other, draft),
     );
     try {
+      // Plugged in since the editor opened, perhaps.
+      ports = await listSerialPorts().catch(() => ports);
       const port = await detectPort({
         driver: draft.driver,
         role,
@@ -206,7 +218,6 @@
         if (config && sameDevice(config, draft)) config.port = port;
       }
       detected[role] = { port };
-      ports = await listSerialPorts().catch(() => ports);
     } catch (e) {
       detected[role] = { error: errorText(e, t) };
     } finally {
@@ -415,7 +426,7 @@
                     {#if SERIAL_ROLES.has(role) && draft.driver}
                       <Button
                         busy={detecting === role}
-                        disabled={detecting !== null || ports.length === 0}
+                        disabled={detecting !== null}
                         onclick={() => void detect(role)}>
                         {t.editor.detect}
                       </Button>
@@ -423,7 +434,8 @@
                   </div>
                   <span class="caption muted" id="{role}-port-hint" role="status">
                     {#if detecting === role}
-                      {progress ? t.editor.detecting(progress.attempt, progress.attempts, portName(progress.port)) : t.editor.detectStarting}
+                      {@const mine = progressFor(role, draft)}
+                      {mine ? t.editor.detecting(mine.attempt, mine.attempts, portName(mine.port)) : t.editor.detectStarting}
                     {:else if result && "port" in result}
                       {t.editor.detected(portName(result.port))}
                     {:else if SERIAL_ROLES.has(role) && draft.driver && ports.length === 0}

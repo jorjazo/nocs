@@ -54,6 +54,10 @@ class SerialDevice:
     serial: bool = True
     saved_port: str = "/dev/ttyUSB0"
     """The port its driver starts with: both real drivers' factory default."""
+    network: bool = False
+    """Connected over the network: it defines a serial port all the same (the AM5's)."""
+    baud: bool = True
+    """Whether it defines DEVICE_BAUD_RATE: INDI's serial connection does."""
     refusals: int = 0
     """Times it refuses on its own port first: the PPBA, still answering the AM5's
     handshake when its own driver asks."""
@@ -75,12 +79,20 @@ class Server:
         client = self.client
         client.define(driver_info(device.name, device.interfaces, driver))
         client.define(switch_property(device.name, "CONNECTION", CONNECT=False, DISCONNECT=True))
-        if device.serial:
+        if device.serial or device.network:
             client.define(text_property(device.name, "DEVICE_PORT", PORT=device.saved_port))
+            if device.baud:
+                rates = switch_property(device.name, "DEVICE_BAUD_RATE", **{"9600": True})
+                client.define(rates)
             search = switch_property(
                 device.name, "DEVICE_AUTO_SEARCH", INDI_ENABLED=True, INDI_DISABLED=False
             )
             client.define(search)
+        if device.network:
+            mode = switch_property(
+                device.name, "CONNECTION_MODE", CONNECTION_SERIAL=False, CONNECTION_TCP=True
+            )
+            client.define(mode)
 
     def stop(self, driver: str) -> None:
         device = self.devices[driver]
@@ -115,13 +127,13 @@ class Server:
             loop.call_soon(client.update, device, "CONNECTION", PropertyState.IDLE, off)
             return
         chosen = ""
-        if target.serial:
+        if target.serial and not target.network:
             port = client.get_property(device, "DEVICE_PORT")
             chosen = port.text("PORT") if port is not None else ""
             self.connects.append((device, chosen))
         plugged = target.port
         own = plugged is not None and chosen in (plugged.path, plugged.device)
-        right = own or not target.serial
+        right = own or not target.serial or target.network
         if right and target.refusals > 0:
             target.refusals -= 1
             right = False
@@ -460,6 +472,48 @@ async def test_simulators_keep_their_port(make_rig: Factory) -> None:
     assert saved_ports(rig) == {Role.MOUNT: None}
 
 
+async def test_edits_saved_during_a_search_are_kept(make_rig: Factory) -> None:
+    hidden = SerialPort(f"{BY_ID}/usb-1a86_USB_Serial-if00-port1", "/dev/ttyUSB2")
+    rig = make_rig(mount(port=hidden), profile=mount_only(), ports=[PEGASUS, hidden])
+    rig.service.connect("lab")
+    subscription = rig.store.subscribe()
+    try:
+        async with asyncio.timeout(5):
+            while rig.store.get(("equipment", "detecting")) is None:
+                await subscription.get()
+    finally:
+        subscription.close()
+    rig.service.save_profile("lab", Profile(name="Renamed", devices=mount_only().devices))
+    await connect(rig)
+    saved = rig.profiles.get("lab")
+    assert saved is not None
+    assert (saved.name, saved.devices[Role.MOUNT].port) == ("Renamed", hidden.path)
+
+
+async def test_a_mount_over_the_network_takes_no_port(make_rig: Factory) -> None:
+    """The AM5 over Wi-Fi keeps its factory /dev/ttyUSB0 in DEVICE_PORT: the PPBA's."""
+    network = mount(port=None)
+    network.network = True
+    rig = make_rig(network, profile=mount_only())
+    roles = await connect(rig)
+    assert roles["mount"]["status"] == "ready"
+    assert tried(rig, "ZWO AM5") == []
+    assert await rig.service.detect_port(POWER_DRIVER, Role.POWER) == PEGASUS.path
+
+
+async def test_a_port_that_is_no_serial_connection(make_rig: Factory) -> None:
+    """A driver may use DEVICE_PORT for something else, without INDI's serial
+    connection (no baud rate): it is not looked for."""
+    other = power(port=SerialPort("/dev/ttyUSB0", "/dev/ttyUSB0"))  # its driver's own
+    other.baud = False
+    rig = make_rig(other)
+    roles = await connect(rig)
+    assert roles["power"]["status"] == "ready"
+    assert tried(rig, "Pegasus PPBA") == [other.saved_port]
+    with pytest.raises(DeviceError, match="does not use a serial port"):
+        await rig.service.detect_port(MOUNT_DRIVER, Role.MAIN_CAMERA)
+
+
 # -- from the profile editor ---------------------------------------------------------
 
 
@@ -525,3 +579,15 @@ async def test_progress_is_in_the_state(make_rig: Factory) -> None:
         {"device": "Pegasus PPBA", "port": ZWO.path, "attempt": 2, "attempts": 3},
         {"device": "Pegasus PPBA", "port": CH340.path, "attempt": 3, "attempts": 3},
     ]
+
+
+async def test_listing_and_detecting_at_once_share_the_driver(make_rig: Factory) -> None:
+    """The editor lists a driver's devices while Detect runs: the driver is started
+    once, and stopped only after both."""
+    rig = make_rig(power(port=CH340))
+    listed, port = await asyncio.gather(
+        rig.service.list_devices(POWER_DRIVER, Role.POWER),
+        rig.service.detect_port(POWER_DRIVER, Role.POWER),
+    )
+    assert (listed, port) == (["Pegasus PPBA"], CH340.path)
+    assert rig.fifo.commands == [("start", POWER_DRIVER), ("stop", POWER_DRIVER)]

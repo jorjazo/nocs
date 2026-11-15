@@ -61,6 +61,11 @@ def test_the_ports_gpsd_holds(tmp_path: Path) -> None:
     # One it lets go of comes without "activated".
     service.on_message(b'{"class":"DEVICE","path":"/dev/ttyACM1"}\n')
     assert service.devices == {"/dev/ttyUSB3"}
+    # Listed before gpsd opens it: still its.
+    service.on_message(
+        b'{"class":"DEVICES","devices":[{"class":"DEVICE","path":"/dev/ttyACM2"}]}\n'
+    )
+    assert service.devices == {"/dev/ttyACM2"}
     service.on_message(b'{"class":"DEVICES","devices":[]}\n')
     assert service.devices == frozenset()
 

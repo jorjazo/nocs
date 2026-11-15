@@ -102,10 +102,14 @@ class GpsService:
             case "DEVICES":
                 listed = report.get("devices")
                 entries = cast(list[object], listed) if isinstance(listed, list) else []
-                self._devices.clear()
-                for entry in entries:
-                    if isinstance(entry, dict):
-                        self._on_device(cast(dict[str, object], entry))
+                # Every device gpsd knows, opened yet or not.
+                self._devices = {
+                    path
+                    for entry in entries
+                    if isinstance(entry, dict)
+                    and isinstance(path := cast(dict[str, object], entry).get("path"), str)
+                    and path
+                }
                 return
             case "DEVICE":
                 self._on_device(report)

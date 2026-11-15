@@ -40,8 +40,12 @@ def simulated(device: Device) -> bool:
 
 
 def uses_serial(device: Device) -> bool:
-    """Whether the device connects through a serial port now (not over the network)."""
-    if not device.has("DEVICE_PORT") or simulated(device):
+    """Whether the device connects through INDI's serial connection now (not over the
+    network): it defines the port and its baud rate. A driver can use ``DEVICE_PORT``
+    for something else (a camera's shutter release cable)."""
+    if not device.has("DEVICE_PORT") or not device.has("DEVICE_BAUD_RATE"):
+        return False
+    if simulated(device):
         return False
     if device.has("CONNECTION_MODE"):
         mode = device.prop("CONNECTION_MODE")
