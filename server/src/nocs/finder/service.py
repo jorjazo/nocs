@@ -365,7 +365,7 @@ class FinderService:
             with anyio.CancelScope(shield=True):
                 try:
                     await self._mount.restore_rate(job=context.id)
-                except (DeviceError, ConnectionError, RuntimeError) as e:
+                except Exception as e:  # the run's own failure, or cancellation, goes on
                     log.error("finder: could not put the tracking rate back: %s", e)
             raise
         finally:

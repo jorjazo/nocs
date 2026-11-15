@@ -642,10 +642,16 @@ class MountService:
         return local_date(site.longitude if site is not None else 0.0, when)
 
     async def _restore_rate(self, mount: Mount) -> None:
+        """Put back the rate a body's replaced; a failure is only logged, so a go to (a
+        meridian flip, say) does not fail for it."""
         rate, self._body_rate = self._body_rate, None
-        if rate is not None and rate != mount.track_mode:
-            log.info("%s: tracking at the %s rate again", mount.name, rate)
+        if rate is None or rate == mount.track_mode:
+            return
+        log.info("%s: tracking at the %s rate again", mount.name, rate)
+        try:
             await mount.set_track_mode(rate)
+        except (DeviceError, ConnectionError, ValueError) as e:
+            log.error("%s: could not track at the %s rate again: %s", mount.name, rate, e)
 
     def _site(self) -> Location | None:
         """Where the rig is: the active site, or else the mount's."""
@@ -674,6 +680,7 @@ class MountService:
             return
         self._device = name
         self._published = None
+        self._body_rate = None  # another mount, or the same one connected again
         self._site_sent = False
         self._time_sent = False
         if name is None:

@@ -28,7 +28,7 @@ from nocs.imaging import Disc, Shot
 from nocs.imaging.disc import locate
 from nocs.jobs import JobContext, JobManager
 from nocs.mount.coords import j2000_to_jnow
-from nocs.mount.service import Frame, SunWarningError, local_date, near_sun
+from nocs.mount.service import Frame, MountNotReadyError, SunWarningError, local_date, near_sun
 from nocs.sky.bodies import position, separation
 from nocs.state import StateStore
 
@@ -597,3 +597,18 @@ async def test_finding_the_sun_stops_phd2() -> None:
     with pytest.raises(HTTPException) as refused:
         await stop_phd2(cast(GuidingService, _Guiding(object(), Phd2Error("stop_capture", 1, "x"))))
     assert refused.value.status_code == 502
+
+
+async def test_a_rate_that_cannot_be_put_back_keeps_the_run_s_failure(tmp_path: Path) -> None:
+    rig = Rig(tmp_path)
+    rig.mount.error = (8.0, 8.0)
+
+    async def gone(*, job: str) -> None:
+        raise MountNotReadyError("the mount is not connected")
+
+    rig.mount.restore_rate = gone
+    await rig.find(radius=0.5)
+    state = rig.state()
+    assert state["state"] == "failed"
+    assert "not within 0.5°" in state["failure"]
+    assert rig.capture.device.binnings == [4, 1]
