@@ -1,5 +1,6 @@
 """Equipment profiles, device roles and the service that connects them."""
 
+from nocs.equipment.detect import PortNotFoundError
 from nocs.equipment.ports import SerialPort, serial_ports
 from nocs.equipment.profiles import (
     DeviceConfig,
@@ -27,6 +28,7 @@ __all__ = [
     "EquipmentService",
     "Optics",
     "OutputConfig",
+    "PortNotFoundError",
     "Profile",
     "ProfileError",
     "ProfileStore",

@@ -7,9 +7,13 @@ State layout under ``("equipment",)``::
     connection: disconnected | connecting | connected | disconnecting
     error:      why the profile cannot be connected right now, or None
     devices:    {<role>: {driver, device, status, error, unresponsive_since}}
+    detecting:  {device, port, attempt, attempts} while a serial port is being looked
+                for (ADR 0048), else None
 
 Connecting starts the drivers that are not running yet, waits for each device,
-sets its serial port, connects it and waits until its facade is ready. Roles
+sets its serial port, connects it and waits until its facade is ready. A serial
+device without a port in the profile, or whose port is no longer plugged in, gets
+one found by trying the ports one by one, and the profile keeps it (ADR 0048). Roles
 connect independently: one failing device leaves the others usable, and
 connecting the same profile again retries the ones that failed. A ready device that
 stops answering a command (``nocs.devices.on_unresponsive``) makes its roles
@@ -20,8 +24,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from collections import defaultdict
-from collections.abc import Callable, Coroutine
+from collections.abc import Callable, Collection, Coroutine
 from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any, Protocol
@@ -41,6 +46,17 @@ from nocs.devices import (
     on_unresponsive,
 )
 from nocs.devices.base import device_interfaces, event_device
+from nocs.equipment.detect import connect as connect_serial
+from nocs.equipment.detect import find_port, set_port, uses_serial
+from nocs.equipment.ports import (
+    BY_ID,
+    SerialPort,
+    ranked,
+    real_path,
+    serial_ports,
+    stable_name,
+    words,
+)
 from nocs.equipment.profiles import DeviceConfig, Profile, ProfileStore, Role
 from nocs.indi import IndiClient, IndiEvent, PropertyDeleted, PropertyUpdated, TextElement
 from nocs.indi.drivers import DriverControlError, DriverFifo
@@ -150,7 +166,11 @@ class EquipmentService:
         fifo: DriverFifo | None,
         *,
         driver_timeout: float = DRIVER_START_TIMEOUT,
+        ports: Callable[[], list[SerialPort]] = serial_ports,
+        reserved_ports: Callable[[], Collection[str]] = tuple,
     ) -> None:
+        """``ports`` lists the serial ports to look for devices on; ``reserved_ports``
+        says which ones something else holds (gpsd's GPS)."""
         self._store = store
         self._profiles = profiles
         self._fifo = fifo
@@ -172,12 +192,18 @@ class EquipmentService:
         """Devices whose driver is being restarted: their going away is expected."""
         self._listing: set[str] = set()
         """Drivers started only to list their devices, stopped after unless a connect needs them."""
+        self._ports = ports
+        self._reserved_ports = reserved_ports
+        self._detecting = asyncio.Lock()
+        """One port search at a time: two would open each other's ports."""
+        self._saving = asyncio.Lock()
 
         with store.transaction():
             self._publish_profiles()
             store.set((*ROOT, "active"), self._profile_id)
             self._publish_connection(Connection.DISCONNECTED)
             self._publish_roles(DeviceStatus.DISCONNECTED)
+            store.set((*ROOT, "detecting"), None)
         self._unwatch = bridge.watch(self._on_client)
         if bridge.client is not None:
             self._on_client(bridge.client)
@@ -335,6 +361,51 @@ class EquipmentService:
                 except DriverControlError as e:
                     log.warning("cannot stop driver %s: %s", driver, e)
 
+    async def detect_port(
+        self, driver: str, role: Role, device: str | None = None, exclude: Collection[str] = ()
+    ) -> str:
+        """The serial port ``driver``'s device for ``role`` answers on, for the profile
+        editor (ADR 0048): its by-id name when it has one.
+
+        A connected device says which port it uses; any other is tried on each port
+        but those in ``exclude`` (the profile's other devices'), and left disconnected
+        after. A driver that does not run is started for the question and stopped after,
+        as for ``list_devices``. Raises ``DeviceError`` (``PortNotFoundError`` when no
+        port works).
+        """
+        client = self._client
+        if client is None:
+            raise ConnectionError("not connected to indiserver")
+        config = DeviceConfig(driver=driver, device=device)
+        started = not driver_devices(client, driver) and driver not in self._listing
+        if started:
+            if self._fifo is None:
+                raise DriverControlError(
+                    f"driver {driver} is not running and indiserver has no FIFO"
+                )
+            self._fifo.start(driver)
+            self._listing.add(driver)
+        try:
+            name = await self._resolve(client, role, config)
+            facade = Device(client, name)
+            async with self._locks[name]:
+                await self._wait_defined(client, name)
+                if not uses_serial(facade):
+                    raise DeviceError(f"{name} does not use a serial port")
+                if facade.connected:
+                    return stable_name(facade.prop("DEVICE_PORT").text("PORT"), self._ports())
+                port = await self._find_port(client, name, config, exclude=exclude)
+                await facade.disconnect()
+                return port
+        finally:
+            if started:
+                self._listing.discard(driver)
+                if driver not in self._started and self._fifo is not None:
+                    try:
+                        self._fifo.stop(driver)
+                    except DriverControlError as e:
+                        log.warning("cannot stop driver %s: %s", driver, e)
+
     async def close(self) -> None:
         """Stop working on the server's shutdown. Devices and drivers stay as they are."""
         self._unwatch()
@@ -462,13 +533,170 @@ class EquipmentService:
             facade = ROLE_FACADE[role](client, name)
             # Roles can share a device (a camera with a built-in filter wheel).
             async with self._locks[name]:
-                if config.port is not None and not facade.connected and facade.has("DEVICE_PORT"):
-                    await facade.command("DEVICE_PORT", {"PORT": config.port})
+                if not facade.connected:
+                    await self._point_at_port(client, role, name, config)
                 await facade.connect()
         except (DeviceError, ConnectionError, KeyError, ValueError) as e:
             self._publish_role(role, status=DeviceStatus.ERROR, error=str(e))
         else:
             self._publish_role(role, status=DeviceStatus.READY)
+
+    async def _point_at_port(
+        self, client: IndiClient, role: Role, name: str, config: DeviceConfig
+    ) -> None:
+        """Give a serial device its port before it connects: the profile's, or one found
+        by trying them and then kept in the profile (ADR 0048). Leaves it connected when
+        it had to look."""
+        await self._wait_defined(client, name)
+        facade = Device(client, name)
+        if not facade.has("DEVICE_PORT"):
+            return
+        port = config.port
+        if port is not None and not self._unplugged(port):
+            await set_port(facade, port)
+            if uses_serial(facade):
+                await connect_serial(facade)
+            return
+        if not uses_serial(facade):
+            return  # over the network, or a simulator
+        profile = self._profile
+        exclude: list[str] = []
+        others: list[frozenset[str]] = []
+        if profile is not None:
+            for other_role, other in profile.devices.items():
+                if self._same_device(other_role, other, config.driver, name):
+                    continue
+                if other.port is not None:
+                    exclude.append(other.port)
+                others.append(words(other.device, other.model, other.driver))
+        if port is not None:
+            log.info("%s's port %s is not plugged in: looking for it", name, port)
+        found = await self._find_port(client, name, config, exclude=exclude, others=others)
+        await self._keep_port(config.driver, name, found)
+
+    def _unplugged(self, port: str) -> bool:
+        """Whether a stable port name is gone: the device came back on another adapter."""
+        return port.startswith(f"{BY_ID}/") and not any(p.path == port for p in self._ports())
+
+    def _same_device(self, role: Role, config: DeviceConfig, driver: str, name: str) -> bool:
+        """Whether ``role`` is played by the device ``name`` (a power box's weather too)."""
+        if config.driver != driver:
+            return False
+        return self._resolved.get(role, config.device) in (name, None)
+
+    async def _wait_defined(self, client: IndiClient, name: str) -> None:
+        """Wait for a device's ``CONNECTION``, and the rest of its definitions with it."""
+        if client.get_property(name, "CONNECTION") is None:
+            try:
+                await client.wait_for_property(name, "CONNECTION", self._driver_timeout)
+            except TimeoutError:
+                raise DeviceError(f"device {name} not found") from None
+            await anyio.sleep(SETTLE_QUIET)
+
+    async def _find_port(
+        self,
+        client: IndiClient,
+        name: str,
+        config: DeviceConfig,
+        *,
+        exclude: Collection[str] = (),
+        others: list[frozenset[str]] | None = None,
+    ) -> str:
+        """Try the serial ports for device ``name`` until it connects on one (ADR 0048)."""
+        async with self._detecting:
+            available = self._ports()
+            taken = [*exclude, *self._reserved_ports(), *self._ports_in_use(client, name)]
+            own = words(name, config.model, config.driver)
+            ports = [port.path for port in ranked(available, own, others or [], exclude=taken)]
+            remembered = self._remembered_port(client, name, available, taken)
+            if remembered is not None:
+                ports.append(remembered)
+            log.info("looking for %s on %s", name, ", ".join(ports) or "no serial port")
+
+            def progress(port: str, attempt: int, attempts: int) -> None:
+                detecting: Json = {
+                    "device": name,
+                    "port": port,
+                    "attempt": attempt,
+                    "attempts": attempts,
+                }
+                self._store.set((*ROOT, "detecting"), detecting)
+
+            try:
+                return await find_port(
+                    Device(client, name),
+                    ports,
+                    restart=lambda: self._restart_for_port(client, config.driver, name),
+                    progress=progress,
+                )
+            finally:
+                self._store.set((*ROOT, "detecting"), None)
+
+    def _ports_in_use(self, client: IndiClient, name: str) -> list[str]:
+        """The ports of the other connected serial devices on the server."""
+        used: list[str] = []
+        for device in client.devices:
+            if device == name:
+                continue
+            port = client.get_property(device, "DEVICE_PORT")
+            if port is not None and Device(client, device).connected and "PORT" in port.elements:
+                used.append(port.text("PORT"))
+        return used
+
+    def _remembered_port(
+        self, client: IndiClient, name: str, available: list[SerialPort], taken: Collection[str]
+    ) -> str | None:
+        """The port a driver saved, when it is none of the USB adapters' (a Pi's own
+        UART): tried last."""
+        prop = client.get_property(name, "DEVICE_PORT")
+        if prop is None or "PORT" not in prop.elements:
+            return None
+        port = prop.text("PORT").strip()
+        node = real_path(port)
+        if not port or any(p.device == node for p in available):
+            return None
+        if port in taken or node in {real_path(t) for t in taken}:
+            return None
+        return port if os.path.exists(node) else None
+
+    async def _restart_for_port(self, client: IndiClient, driver: str, name: str) -> None:
+        """Restart a driver that stopped answering on a wrong port, for the next one."""
+        if self._fifo is None:
+            raise DeviceError(
+                f"{name} stopped answering on a serial port, and indiserver has no driver "
+                "FIFO to restart it"
+            )
+        self._restarting.add(name)
+        try:
+            self._fifo.stop(driver)
+            await client.wait_for(lambda c: name not in c.devices, DRIVER_STOP_TIMEOUT)
+            self._fifo.start(driver)
+            await client.wait_for(
+                lambda c: c.get_property(name, "DEVICE_PORT") is not None, self._driver_timeout
+            )
+        except (DriverControlError, TimeoutError) as e:
+            raise DeviceError(f"cannot restart {driver}: {e or 'it did not come back'}") from e
+        finally:
+            self._restarting.discard(name)
+
+    async def _keep_port(self, driver: str, name: str, port: str) -> None:
+        """Save a port found for device ``name`` in the active profile, for every role
+        it plays."""
+        # Ports found at once for two devices: each saved on top of the other.
+        async with self._saving:
+            profile_id, profile = self._profile_id, self._profile
+            if profile_id is None or profile is None:
+                return
+            devices = {
+                role: config.model_copy(update={"port": port})
+                if self._same_device(role, config, driver, name)
+                else config
+                for role, config in profile.devices.items()
+            }
+            updated = profile.model_copy(update={"devices": devices})
+            self._profile = updated
+            await anyio.to_thread.run_sync(self._profiles.put, profile_id, updated)
+        log.info("%s is on %s: kept in profile %s", name, port, profile_id)
 
     async def _configure_cameras(self, client: IndiClient, profile: Profile) -> None:
         """Point the cameras at the rig's other devices and optics, for their FITS headers.

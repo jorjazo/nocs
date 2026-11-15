@@ -48,6 +48,23 @@ def state(store: StateStore) -> GpsState:
     return GpsState.model_validate(store.get(("gps",)))
 
 
+def test_the_ports_gpsd_holds(tmp_path: Path) -> None:
+    """A port search never tries them (ADR 0048): as gpsd 3.27 reports them."""
+    service, _, _ = make(tmp_path)
+    assert service.devices == frozenset()
+    device = {"class": "DEVICE", "path": "/dev/ttyACM1", "activated": "2026-11-15T15:31:16.901Z"}
+    service.on_message(json.dumps({"class": "DEVICES", "devices": [device]}).encode() + b"\n")
+    assert service.devices == {"/dev/ttyACM1"}
+    plugged = {"class": "DEVICE", "path": "/dev/ttyUSB3", "activated": "2026-11-15T16:00:00Z"}
+    service.on_message(json.dumps(plugged).encode() + b"\n")
+    assert service.devices == {"/dev/ttyACM1", "/dev/ttyUSB3"}
+    # One it lets go of comes without "activated".
+    service.on_message(b'{"class":"DEVICE","path":"/dev/ttyACM1"}\n')
+    assert service.devices == {"/dev/ttyUSB3"}
+    service.on_message(b'{"class":"DEVICES","devices":[]}\n')
+    assert service.devices == frozenset()
+
+
 def test_a_3d_fix_at_the_active_site(tmp_path: Path) -> None:
     service, sites, store = make(tmp_path)
     service.on_message(b'{"class":"VERSION","release":"3.25"}\n')

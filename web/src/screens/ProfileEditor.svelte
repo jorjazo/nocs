@@ -14,7 +14,15 @@
   import Toggle from "../components/Toggle.svelte";
   import ScreenHeader from "../components/ScreenHeader.svelte";
   import TextField from "../components/TextField.svelte";
-  import { deleteProfile, getProfile, listDriverDevices, listDrivers, listSerialPorts, putProfile } from "../lib/api";
+  import {
+    deleteProfile,
+    detectPort,
+    getProfile,
+    listDriverDevices,
+    listDrivers,
+    listSerialPorts,
+    putProfile,
+  } from "../lib/api";
   import { auth } from "../lib/auth.svelte";
   import { choiceFor, driverChoices, type DriverChoice } from "../lib/drivers";
   import { ROLE_ICONS, ROLES, SOLVE_EXPOSURE } from "../lib/equipment";
@@ -163,6 +171,53 @@
       .sort();
   }
 
+  // -- Serial ports (ADR 0048) ---------------------------------------------------------
+
+  // Cameras are USB devices of their own: never on a serial port.
+  const SERIAL_ROLES = new Set<Role>(["mount", "focuser", "filter_wheel", "power", "weather"]);
+  // The role whose port is being looked for, and what came of the last search, by role.
+  let detecting = $state<Role | null>(null);
+  let detected = $state<Partial<Record<Role, { port: string } | { error: string }>>>({});
+  const progress = $derived(live.app.equipment?.detecting ?? null);
+
+  // Roles played by the same device: a power box's weather, say.
+  function sameDevice(a: DeviceDraft, b: DeviceDraft): boolean {
+    return a.driver === b.driver && a.device.trim() === b.device.trim();
+  }
+
+  async function detect(role: Role): Promise<void> {
+    const draft = devices[role];
+    if (!draft?.driver) return;
+    detecting = role;
+    delete detected[role];
+    // The ports the other devices of the profile are on are theirs: never tried.
+    const others = ROLES.map((other) => devices[other]).filter(
+      (other): other is DeviceDraft => !!other && !sameDevice(other, draft),
+    );
+    try {
+      const port = await detectPort({
+        driver: draft.driver,
+        role,
+        device: draft.device.trim() || null,
+        exclude: others.map((other) => other.port).filter(Boolean),
+      });
+      for (const other of ROLES) {
+        const config = devices[other];
+        if (config && sameDevice(config, draft)) config.port = port;
+      }
+      detected[role] = { port };
+      ports = await listSerialPorts().catch(() => ports);
+    } catch (e) {
+      detected[role] = { error: errorText(e, t) };
+    } finally {
+      detecting = null;
+    }
+  }
+
+  function portName(port: string): string {
+    return port.replace("/dev/serial/by-id/", "");
+  }
+
   // -- Saving -------------------------------------------------------------------------
 
   let busy = $state<"save" | "delete" | null>(null);
@@ -304,6 +359,7 @@
               {@const names = draft.driver ? running(draft.driver) : []}
               {@const listing = listingFor(role, draft)}
               {@const listed = listing?.names ? deviceChoices(listing.names, draft.device) : null}
+              {@const result = detected[role]}
               <div class="role-fields">
                 <DriverField
                   label={t.editor.driver}
@@ -344,19 +400,42 @@
                     {#each names as device (device)}<option value={device}></option>{/each}
                   </datalist>
                 {/if}
-                <label class="select">
-                  <span class="label muted">{t.editor.port}</span>
-                  <select bind:value={draft.port}>
-                    <option value="">{t.editor.noPort}</option>
-                    {#if draft.port && !ports.some((port) => port.path === draft.port)}
-                      <option value={draft.port}>{draft.port} ({t.editor.unplugged})</option>
+                <div class="select">
+                  <label class="label muted" for="{role}-port">{t.editor.port}</label>
+                  <div class="port">
+                    <select id="{role}-port" bind:value={draft.port} aria-describedby="{role}-port-hint">
+                      <option value="">{t.editor.noPort}</option>
+                      {#if draft.port && !ports.some((port) => port.path === draft.port)}
+                        <option value={draft.port}>{portName(draft.port)} ({t.editor.unplugged})</option>
+                      {/if}
+                      {#each ports as port (port.path)}
+                        <option value={port.path}>{portName(port.path)} → {port.device}</option>
+                      {/each}
+                    </select>
+                    {#if SERIAL_ROLES.has(role) && draft.driver}
+                      <Button
+                        busy={detecting === role}
+                        disabled={detecting !== null || ports.length === 0}
+                        onclick={() => void detect(role)}>
+                        {t.editor.detect}
+                      </Button>
                     {/if}
-                    {#each ports as port (port.path)}
-                      <option value={port.path}>{port.path.replace("/dev/serial/by-id/", "")} → {port.device}</option>
-                    {/each}
-                  </select>
-                  <span class="caption muted">{t.editor.portHint}</span>
-                </label>
+                  </div>
+                  <span class="caption muted" id="{role}-port-hint" role="status">
+                    {#if detecting === role}
+                      {progress ? t.editor.detecting(progress.attempt, progress.attempts, portName(progress.port)) : t.editor.detectStarting}
+                    {:else if result && "port" in result}
+                      {t.editor.detected(portName(result.port))}
+                    {:else if SERIAL_ROLES.has(role) && draft.driver && ports.length === 0}
+                      {t.editor.noSerialPorts}
+                    {:else}
+                      {t.editor.portHint}
+                    {/if}
+                  </span>
+                  {#if detecting !== role && result && "error" in result}
+                    <Banner icon="alert" tone="error">{result.error}</Banner>
+                  {/if}
+                </div>
               </div>
             {/if}
           </li>
@@ -509,6 +588,15 @@
   }
   .select .label {
     font-size: 15px;
+  }
+  .port {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  .port select {
+    flex: 1;
+    min-width: 0;
   }
   select {
     min-height: var(--primary-height);

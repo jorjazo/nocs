@@ -43,6 +43,8 @@
   const focuser = $derived(live.app.focuser ?? null);
   const wheel = $derived(live.app.filter_wheel ?? null);
   const mount = $derived(live.app.mount ?? null);
+  // A serial port being looked for, connecting (ADR 0048).
+  const detecting = $derived(live.app.equipment?.detecting ?? null);
   let sheet = $state<"power" | "focuser" | "filter_wheel" | "mount" | null>(null);
 
   const ready = $derived(roles.filter(([, device]) => device.status === "ready").length);
@@ -93,6 +95,8 @@
 
   function subtitle(role: Role): string {
     const parts = [t.roles[role]];
+    const name = roles.find(([r]) => r === role)?.[1].device;
+    if (detecting && name === detecting.device) parts.push(t.rig.lookingForPort(detecting.attempt, detecting.attempts));
     const camera = role === "main_camera" || role === "guide_camera" ? cameras?.[role] : undefined;
     if (camera?.temperature != null) parts.push(`${formatDecimal(camera.temperature, locale, 1)} °C`);
     if (role === "power" && power?.input) {

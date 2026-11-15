@@ -3018,6 +3018,59 @@
       "title": "DestinationRequest",
       "type": "object"
     },
+    "DetectPortRequest": {
+      "additionalProperties": false,
+      "description": "Which device to look for on the serial ports (ADR 0048).",
+      "properties": {
+        "device": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "INDI device name, when the driver has several."
+        },
+        "driver": {
+          "description": "INDI driver executable, from the catalog.",
+          "type": "string"
+        },
+        "exclude": {
+          "description": "Ports the profile's other devices use: never tried.",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 32,
+          "type": "array"
+        },
+        "role": {
+          "$ref": "#/$defs/Role"
+        }
+      },
+      "required": [
+        "driver",
+        "role"
+      ],
+      "title": "DetectPortRequest",
+      "type": "object"
+    },
+    "DetectedPort": {
+      "properties": {
+        "port": {
+          "description": "The port the device answers on: its /dev/serial/by-id/ name when it has one.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "port"
+      ],
+      "title": "DetectedPort",
+      "type": "object"
+    },
     "DeviceConfig": {
       "additionalProperties": false,
       "properties": {
@@ -3350,6 +3403,17 @@
         "connection": {
           "$ref": "#/$defs/ConnectionName"
         },
+        "detecting": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PortDetection"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The serial port search in progress, connecting or from the editor."
+        },
         "devices": {
           "additionalProperties": {
             "$ref": "#/$defs/RoleState"
@@ -3383,7 +3447,8 @@
         "active",
         "connection",
         "error",
-        "devices"
+        "devices",
+        "detecting"
       ],
       "title": "EquipmentState",
       "type": "object"
@@ -8230,6 +8295,38 @@
         }
       },
       "title": "Policy",
+      "type": "object"
+    },
+    "PortDetection": {
+      "additionalProperties": false,
+      "description": "A serial port search in progress (ADR 0048).",
+      "properties": {
+        "attempt": {
+          "description": "Which try this is, from 1.",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "attempts": {
+          "description": "How many ports there are to try.",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "device": {
+          "description": "INDI device being looked for.",
+          "type": "string"
+        },
+        "port": {
+          "description": "The port being tried.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "device",
+        "port",
+        "attempt",
+        "attempts"
+      ],
+      "title": "PortDetection",
       "type": "object"
     },
     "PowerInputState": {
