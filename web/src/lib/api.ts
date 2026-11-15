@@ -17,6 +17,8 @@ import type {
   ClockReport,
   ClockRequest,
   ConnectRequest,
+  DetectedPort,
+  DetectPortRequest,
   CoolingRequest,
   DitherNowRequest,
   DitherRequest,
@@ -299,6 +301,12 @@ export function listDriverDevices(driver: string, role: Role): Promise<string[]>
 
 export function listSerialPorts(): Promise<SerialPortInfo[]> {
   return request("GET", "/api/system/serial-ports");
+}
+
+/** The serial port a driver's device answers on, found by trying them (ADR 0048). */
+export async function detectPort(request_: DetectPortRequest): Promise<string> {
+  const found = await request<DetectedPort>("POST", "/api/equipment/detect-port", request_);
+  return found.port;
 }
 
 export function connectProfile(profile: string): Promise<void> {

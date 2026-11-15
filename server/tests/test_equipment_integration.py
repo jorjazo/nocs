@@ -140,3 +140,31 @@ def test_list_a_drivers_devices(indi_address: tuple[str, int], indi_fifo: Path) 
             api.get("/api/indi/drivers/indi_nothing/devices", params={"role": "mount"}).status_code
             == 404
         )
+
+
+def test_detect_a_serial_port(indi_address: tuple[str, int], indi_fifo: Path) -> None:
+    """The PPBA's real driver defines its serial port before it connects: started for
+    the question, it finds none of this computer's ports (the container has none) and
+    is stopped again. The telescope simulator, which defines one too, needs none
+    (ADR 0048)."""
+    host, port = indi_address
+    settings = Settings(
+        indi_host=host,
+        indi_port=port,
+        indi_fifo=indi_fifo,
+        indi_drivers_dir=indi_fifo.parent / "drivers",
+    )
+    with TestClient(create_app(settings)) as api:
+        pair_owner(api)
+        wait(api, lambda s: "Telescope Simulator" in s["indi"]["devices"])
+        url = "/api/equipment/detect-port"
+        found = api.post(url, json={"driver": "indi_pegasus_ppba", "role": "power"})
+        assert found.status_code == 422, found.text
+        assert "Pegasus PPBA" in found.json()["detail"]
+        assert state(api)["equipment"]["detecting"] is None
+        wait(api, lambda s: "Pegasus PPBA" not in s["indi"]["devices"], timeout=15)
+        simulator = api.post(url, json={"driver": "indi_simulator_telescope", "role": "mount"})
+        assert simulator.status_code == 422
+        assert "does not use a serial port" in simulator.json()["detail"]
+        unknown = api.post(url, json={"driver": "indi_nothing", "role": "mount"})
+        assert unknown.status_code == 404

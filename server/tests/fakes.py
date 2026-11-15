@@ -128,6 +128,13 @@ def driver_info(device: str, interfaces: DeviceInterface, driver: str = "indi_fa
     return prop
 
 
+def text_property(device: str, name: str, **elements: str) -> Property:
+    prop = Property(device, name, PropertyType.TEXT, state=PropertyState.OK)
+    for key, value in elements.items():
+        prop.elements[key] = TextElement(key, key, value)
+    return prop
+
+
 def switch_property(device: str, name: str, **elements: bool) -> Property:
     prop = Property(device, name, PropertyType.SWITCH, state=PropertyState.OK)
     for key, value in elements.items():

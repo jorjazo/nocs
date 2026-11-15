@@ -46,6 +46,8 @@ from nocs.api.schemas import (
     ConnectRequest,
     CoolingRequest,
     DestinationRequest,
+    DetectedPort,
+    DetectPortRequest,
     Driver,
     EjectRequest,
     ExposeRequest,
@@ -367,7 +369,12 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
         )
         services.system = SystemService(store, services.jobs, settings.system_socket)
         services.equipment = EquipmentService(
-            store, ProfileStore(settings.config_dir), bridge, fifo
+            store,
+            ProfileStore(settings.config_dir),
+            bridge,
+            fifo,
+            # A port search never tries the GPS's port (ADR 0048).
+            reserved_ports=lambda: services.gps.devices if services.gps is not None else (),
         )
         services.worker = ImageWorker(settings.data_dir / "previews")
         services.worker.start()
@@ -932,6 +939,28 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
     @app.get("/api/system/serial-ports")
     async def ports() -> list[SerialPortInfo]:  # pyright: ignore[reportUnusedFunction]
         return [SerialPortInfo(path=p.path, device=p.device) for p in serial_ports()]
+
+    @app.post("/api/equipment/detect-port")
+    async def detect_port(request: DetectPortRequest) -> DetectedPort:  # pyright: ignore[reportUnusedFunction]
+        """Find the serial port a catalog driver's device answers on, trying them one by
+        one (ADR 0048); progress is in the state (``equipment.detecting``). A driver that
+        does not run is started for the question and stopped after."""
+        catalog = await anyio.to_thread.run_sync(load_catalog, settings.indi_drivers_dir)
+        if not any(entry.driver == request.driver for entry in catalog):
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND, f"{request.driver} is not in the INDI catalog"
+            )
+        try:
+            port = await equipment().detect_port(
+                request.driver, request.role, request.device, request.exclude
+            )
+        except ConnectionError as e:
+            raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(e)) from e
+        except DriverControlError as e:
+            raise HTTPException(status.HTTP_409_CONFLICT, str(e)) from e
+        except DeviceError as e:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e)) from e
+        return DetectedPort(port=port)
 
     @app.websocket("/api/ws")
     async def ws(websocket: WebSocket) -> None:  # pyright: ignore[reportUnusedFunction]

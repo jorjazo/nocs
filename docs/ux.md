@@ -260,7 +260,9 @@ Focuser, filter wheel and profile editor (stage 2.8):
 - The profile editor (Rig → Edit profile / New profile, `#/rig/profile/<id>`)
   edits one role per row: driver from the rig's INDI catalog (the role's own
   catalog groups first), device name with the devices that driver runs now as
-  suggestions, serial port from `/dev/serial/by-id/`; then both trains' optics.
+  suggestions, serial port from `/dev/serial/by-id/` ("Found when connecting" when
+  empty) with **Detect** beside it for serial roles, which tries the ports and shows
+  each try under the field (ADR 0048); then both trains' optics.
   Changes to a connected profile apply when it is next connected.
 - A role's driver is one field (an ARIA combobox, `DriverField`) that shows the
   model chosen, with the driver's executable under it. Tapping it selects its text

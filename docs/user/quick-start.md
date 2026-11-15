@@ -80,8 +80,10 @@ On **Rig**:
 
 1. **New profile**: pick the driver of each device (main camera, guide camera,
    mount, focuser, filter wheel, power box): type its model or maker in the driver
-   field, e.g. `AM5`, and tap it in the list under the field. Then the serial ports
-   of the mount and the power box, and the optics (focal length, aperture, reducer).
+   field, e.g. `AM5`, and tap it in the list under the field. Leave the serial port
+   of the mount and the power box as it is: NOCS finds it when it connects and keeps
+   it (**Detect** finds it right away). Then the optics (focal length, aperture,
+   reducer).
 2. **Site**, unless you set it up in the first run: add the place where the rig
    stands (latitude, longitude, elevation) and make it the active one. It belongs
    to the box, not to the profile, and the mount gets it when it connects.

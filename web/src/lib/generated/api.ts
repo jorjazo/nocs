@@ -1086,6 +1086,10 @@ export interface EquipmentState {
   active: string | null;
   connection: ConnectionName;
   /**
+   * The serial port search in progress, connecting or from the editor.
+   */
+  detecting: PortDetection | null;
+  /**
    * Roles of the active profile.
    */
   devices: {
@@ -1098,6 +1102,30 @@ export interface EquipmentState {
   profiles: {
     [k: string]: ProfileSummary;
   };
+}
+/**
+ * A serial port search in progress (ADR 0048).
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "PortDetection".
+ */
+export interface PortDetection {
+  /**
+   * Which try this is, from 1.
+   */
+  attempt: number;
+  /**
+   * How many ports there are to try.
+   */
+  attempts: number;
+  /**
+   * INDI device being looked for.
+   */
+  device: string;
+  /**
+   * The port being tried.
+   */
+  port: string;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -4079,6 +4107,39 @@ export interface DestinationRequest {
    * "auto", "internal" or the id of a mounted destination.
    */
   destination: string;
+}
+/**
+ * Which device to look for on the serial ports (ADR 0048).
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "DetectPortRequest".
+ */
+export interface DetectPortRequest {
+  /**
+   * INDI device name, when the driver has several.
+   */
+  device?: string | null;
+  /**
+   * INDI driver executable, from the catalog.
+   */
+  driver: string;
+  /**
+   * Ports the profile's other devices use: never tried.
+   *
+   * @maxItems 32
+   */
+  exclude?: string[];
+  role: Role;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "DetectedPort".
+ */
+export interface DetectedPort {
+  /**
+   * The port the device answers on: its /dev/serial/by-id/ name when it has one.
+   */
+  port: string;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema

@@ -63,8 +63,11 @@ the Pi's clock starts wherever it stopped. Open the app once at the start of the
 ## Devices
 
 **A device does not connect.** Rig shows why next to it. Check the cable and its
-power, and that the profile names the right driver and, for mounts and power boxes,
-the right serial port (`/dev/serial/by-id/…`).
+power, and that the profile names the right driver. A mount or a power box whose port
+is not in the profile is looked for on every serial port when it connects ("Looking
+for its port"); "answered on none of … serial ports" means it is unplugged, switched
+off, or needs another driver. If you moved it to another USB-serial adapter, choose
+**Found when connecting** as its port in the profile, or press **Detect**.
 
 **INDI "Not answering".** NOCS restarts indiserver by itself after about a minute;
 you can also restart it on Rig → Devices → Restart INDI. Every device

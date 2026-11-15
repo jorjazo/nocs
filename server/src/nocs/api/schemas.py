@@ -127,12 +127,24 @@ class RoleState(StateModel):
     unresponsive_since: str | None = Field(description="When it was noticed unresponsive, UTC.")
 
 
+class PortDetection(StateModel):
+    """A serial port search in progress (ADR 0048)."""
+
+    device: str = Field(description="INDI device being looked for.")
+    port: str = Field(description="The port being tried.")
+    attempt: int = Field(ge=1, description="Which try this is, from 1.")
+    attempts: int = Field(ge=1, description="How many ports there are to try.")
+
+
 class EquipmentState(StateModel):
     profiles: dict[str, ProfileSummary]
     active: str | None = Field(description="Id of the selected profile.")
     connection: ConnectionName
     error: str | None = Field(description="Why the profile cannot be connected right now.")
     devices: dict[Role, RoleState] = Field(description="Roles of the active profile.")
+    detecting: PortDetection | None = Field(
+        description="The serial port search in progress, connecting or from the editor."
+    )
 
 
 type FrameTypeName = Literal["light", "dark", "bias", "flat"]
@@ -1395,6 +1407,23 @@ class ConnectRequest(BaseModel):
     profile: str
 
 
+class DetectPortRequest(BaseModel):
+    """Which device to look for on the serial ports (ADR 0048)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    driver: str = Field(description="INDI driver executable, from the catalog.")
+    role: Role
+    device: str | None = Field(
+        default=None, min_length=1, description="INDI device name, when the driver has several."
+    )
+    exclude: list[str] = Field(
+        default_factory=list[str],
+        max_length=32,
+        description="Ports the profile's other devices use: never tried.",
+    )
+
+
 class CameraSettingsRequest(BaseModel):
     """Only the fields present are changed."""
 
@@ -2177,6 +2206,12 @@ class Driver(WireModel):
 class SerialPortInfo(WireModel):
     path: str = Field(description="Stable /dev/serial/by-id/ name.")
     device: str = Field(description="Device node it points to now.")
+
+
+class DetectedPort(WireModel):
+    port: str = Field(
+        description="The port the device answers on: its /dev/serial/by-id/ name when it has one."
+    )
 
 
 # -- Target catalog (ADR 0019) ---------------------------------------------------

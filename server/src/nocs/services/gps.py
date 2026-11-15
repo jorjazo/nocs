@@ -50,10 +50,17 @@ class GpsService:
         self._connected = False
         self._fix: dict[str, object] | None = None
         """gpsd's last TPV report."""
+        self._devices: set[str] = set()
+        """The serial ports gpsd reads, from its DEVICES and DEVICE reports."""
         self._published: dict[str, Json] | None = None
         self._last_publish = 0.0
         sites.add_listener(self._publish, saved=True)
         self._publish()
+
+    @property
+    def devices(self) -> frozenset[str]:
+        """The serial ports gpsd holds: no driver should try them (ADR 0048)."""
+        return frozenset(self._devices)
 
     async def run(self) -> None:
         """Follow gpsd until cancelled, reconnecting when it goes away."""
@@ -76,11 +83,14 @@ class GpsService:
                 if self._connected:
                     log.info("gpsd at %s:%s: %s", self._host, self._port, e)
             self._connected, self._fix = False, None
+            self._devices.clear()
             self._publish()
             await anyio.sleep(RETRY)
 
     def on_message(self, line: bytes) -> None:
-        """One line of gpsd's JSON stream; only TPV (time, position, velocity) counts."""
+        """One line of gpsd's JSON stream: TPV (time, position, velocity) reports, and
+        the devices gpsd reads (DEVICES when watching starts, DEVICE when one comes or
+        goes)."""
         try:
             message = json.loads(line)
         except (UnicodeDecodeError, json.JSONDecodeError):
@@ -88,11 +98,40 @@ class GpsService:
         if not isinstance(message, dict):
             return
         report = cast(dict[str, object], message)
-        if report.get("class") != "TPV":
-            return
+        match report.get("class"):
+            case "DEVICES":
+                listed = report.get("devices")
+                entries = cast(list[object], listed) if isinstance(listed, list) else []
+                # Every device gpsd knows, opened yet or not.
+                self._devices = {
+                    path
+                    for entry in entries
+                    if isinstance(entry, dict)
+                    and isinstance(path := cast(dict[str, object], entry).get("path"), str)
+                    and path
+                }
+                return
+            case "DEVICE":
+                self._on_device(report)
+                return
+            case "TPV":
+                pass
+            case _:
+                return
         previous = self._fix_name()
         self._fix = report
         self._publish(force=self._fix_name() != previous)
+
+    def _on_device(self, report: dict[str, object]) -> None:
+        path = report.get("path")
+        if not isinstance(path, str) or not path:
+            return
+        # An active device carries when it was activated; one gpsd let go of, none
+        # (older gpsd versions: 0).
+        if report.get("activated") in (None, 0, "0", ""):
+            self._devices.discard(path)
+        else:
+            self._devices.add(path)
 
     def site(self, name: str = "") -> Site:
         """The GPS's position as a site."""
