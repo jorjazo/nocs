@@ -303,7 +303,7 @@ class PointingService:
             shot = await self._capture.take(context, role, exposure, FrameType.LIGHT)
         finally:
             if rebin:
-                await _restore_binning(camera, binning)
+                await restore_binning(camera, binning)
         try:
             context.progress(None, "measuring the stars")
             stars = await self._capture.measure(shot, discard=False)
@@ -400,7 +400,8 @@ class PointingService:
         return float(value) if isinstance(value, int | float) else None
 
 
-async def _restore_binning(camera: CameraDevice, binning: int) -> None:
+async def restore_binning(camera: CameraDevice, binning: int) -> None:
+    """Set ``camera``'s binning back, even when cancelled; a failure is only logged."""
     try:
         with anyio.CancelScope(shield=True):
             await camera.set_binning(binning)

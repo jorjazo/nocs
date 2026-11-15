@@ -18,14 +18,14 @@ active one (ADR 0038), sent again whenever it changes.
 
 A go to within ``SUN_AVOIDANCE`` of the Sun while it is up waits for the owner to
 acknowledge the Sun's warning, which lasts until the site's local date changes
-(ADR 0049).
+(ADR 0049). The Sun and Moon finder tracks at the body's rate (``track_body``); the
+next go to that is not the finder's puts the rate it replaced back.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
-import math
 from collections.abc import Coroutine
 from datetime import date, datetime, timedelta
 from typing import Any, Literal, Protocol
@@ -158,10 +158,7 @@ def local_date(longitude: float, when: datetime) -> date:
 
 
 def _arcmin(a: Coordinates, b: Coordinates) -> float:
-    d1, d2 = math.radians(a.dec), math.radians(b.dec)
-    dra = math.radians((a.ra - b.ra) * 15)
-    h = math.sin((d2 - d1) / 2) ** 2 + math.cos(d1) * math.cos(d2) * math.sin(dra / 2) ** 2
-    return math.degrees(2 * math.asin(min(1.0, math.sqrt(h)))) * 60
+    return separation(a, b) * 60
 
 
 class MountService:
@@ -192,8 +189,10 @@ class MountService:
         self._tasks: set[asyncio.Task[object]] = set()
         self._changes: set[anyio.Event] = set()
         """Set when a property the state shows changes (``settle``)."""
-        self._sun_acknowledged: date | None = None
-        """The site's local date on which the Sun's warning was acknowledged."""
+        self._sun_acknowledged: datetime | None = None
+        """When the owner acknowledged the Sun's warning."""
+        self._body_rate: str | None = None
+        """The tracking rate that a body's (``track_body``) replaced, to put back."""
 
         store.set(ROOT, None)
         self._unwatch_bridge = bridge.watch(self._on_client)
@@ -252,14 +251,16 @@ class MountService:
         *,
         force: bool = False,
         frame: Frame = "j2000",
+        body_rate: bool = False,
     ) -> Coordinates:
         """Go to ``ra``, ``dec`` (J2000 unless ``frame``) inside ``context``'s job, which
         must hold the mount, and track there; returns the JNow position sent. Refused
-        as ``goto``."""
+        as ``goto``. A body's rate (``track_body``) is kept with ``body_rate``, and
+        replaced by the one it replaced otherwise."""
         if self._jobs.holder(RESOURCE) != context.id:
             raise RuntimeError(f"job {context.id} does not hold the mount")
         mount = self._check_goto(ra, dec, frame, force)
-        return await self._goto(context, mount, ra, dec, frame)
+        return await self._goto(context, mount, ra, dec, frame, body_rate=body_rate)
 
     async def settle(self, seconds: float, timeout: float = SETTLE_TIMEOUT) -> None:
         """Wait until the mount has stopped slewing, then ``seconds`` more for it to
@@ -277,18 +278,17 @@ class MountService:
             raise PointingError(f"the mount was still slewing after {timeout:g} s") from None
         await anyio.sleep(seconds)
 
+    def check_horizontal(self, alt: float, az: float) -> None:
+        """Raise what ``goto_horizontal`` would raise now, but for a busy mount."""
+        self._check_horizontal(alt, az)
+
     def goto_horizontal(self, alt: float, az: float) -> str:
         """Point at a place in the local sky (the zenith for flats) and stop tracking there."""
-        if not HORIZON <= alt <= 90 or not 0 <= az < 360:
-            raise ValueError(f"altitude must be {HORIZON:g}..90° and azimuth 0..360°")
-        mount = self._ready_to_slew()
-        self._require_site_and_time()
-        site = self._site()
-        assert site is not None  # the mount got one
-        aim = horizontal_to_jnow(alt, az, site, self._clock.now())
-        self._check_sun(aim.ra, aim.dec)
+        mount, site = self._check_horizontal(alt, az)
+        self._jobs.check_free([RESOURCE])
 
         async def run(context: JobContext) -> Json:
+            await self._restore_rate(mount)
             target = horizontal_to_jnow(alt, az, site, self._clock.now())
             context.progress(None, f"slewing to altitude {alt:g}°, azimuth {az:g}°")
 
@@ -306,12 +306,15 @@ class MountService:
     @property
     def sun_acknowledged(self) -> bool:
         """Whether the owner acknowledged the Sun's warning today (the site's date)."""
-        return self._sun_acknowledged is not None and self._sun_acknowledged == self._today()
+        when = self._sun_acknowledged
+        return when is not None and self._local_date(when) == self._local_date(self._clock.now())
 
     def acknowledge_sun(self) -> None:
         """The owner read the Sun's warning: go to near the Sun until the date changes."""
-        self._sun_acknowledged = self._today()
-        log.warning("the Sun's warning was acknowledged for %s", self._sun_acknowledged)
+        self._sun_acknowledged = self._clock.now()
+        log.warning(
+            "the Sun's warning was acknowledged for %s", self._local_date(self._sun_acknowledged)
+        )
         self._publish()
 
     def position(self) -> Coordinates:
@@ -384,10 +387,30 @@ class MountService:
         mount = self.mount()
         if mode is not None:
             await mount.set_track_mode(mode)
+            self._body_rate = None  # chosen: not to be put back
         if on is not None:
             if on and mount.parked:
                 raise ValueError(f"{mount.name} is parked")
             await mount.set_tracking(on)
+
+    async def track_body(self, mode: str | None, *, job: str) -> None:
+        """Track at a body's rate (``lunar``, ``solar``; the mount's own when ``None``)
+        inside ``job``, which holds the mount. The next go to without ``body_rate``, or
+        ``restore_rate``, puts the rate it replaced back."""
+        self._check_holder(job)
+        mount = self.mount()
+        if mount.parked:
+            raise ValueError(f"{mount.name} is parked")
+        if mode is not None and mode != mount.track_mode:
+            if self._body_rate is None:
+                self._body_rate = mount.track_mode
+            await mount.set_track_mode(mode)
+        await mount.set_tracking(True)
+
+    async def restore_rate(self, *, job: str) -> None:
+        """Put back the tracking rate that ``track_body`` replaced, if any."""
+        self._check_holder(job)
+        await self._restore_rate(self.mount())
 
     def park(self) -> str:
         mount = self.mount()
@@ -524,6 +547,19 @@ class MountService:
                 "the mount has not received the time yet: a client must report its clock first"
             )
 
+    def _check_horizontal(self, alt: float, az: float) -> tuple[Mount, Location]:
+        if not HORIZON <= alt <= 90 or not 0 <= az < 360:
+            raise ValueError(f"altitude must be {HORIZON:g}..90° and azimuth 0..360°")
+        mount = self.mount()
+        if mount.parked:
+            raise ValueError(f"{mount.name} is parked: unpark it first")
+        self._require_site_and_time()
+        site = self._site()
+        assert site is not None  # the mount got one
+        aim = horizontal_to_jnow(alt, az, site, self._clock.now())
+        self._check_sun(aim.ra, aim.dec)
+        return mount, site
+
     def _check_goto(self, ra: float, dec: float, frame: Frame, force: bool) -> Mount:
         if not 0 <= ra < 24 or not -90 <= dec <= 90:
             raise ValueError(f"coordinates out of range: RA {ra} h, Dec {dec}°")
@@ -537,8 +573,17 @@ class MountService:
         return mount
 
     async def _goto(
-        self, context: JobContext, mount: Mount, ra: float, dec: float, frame: Frame
+        self,
+        context: JobContext,
+        mount: Mount,
+        ra: float,
+        dec: float,
+        frame: Frame,
+        *,
+        body_rate: bool = False,
     ) -> Coordinates:
+        if not body_rate:
+            await self._restore_rate(mount)
         # Converted when the slew starts: a job may start it a while after the check.
         target = j2000_to_jnow(ra, dec, self._clock.now()) if frame == "j2000" else None
         to = target or Coordinates(ra, dec)
@@ -592,9 +637,15 @@ class MountService:
                 "the Sun's warning first"
             )
 
-    def _today(self) -> date:
+    def _local_date(self, when: datetime) -> date:
         site = self._site()
-        return local_date(site.longitude if site is not None else 0.0, self._clock.now())
+        return local_date(site.longitude if site is not None else 0.0, when)
+
+    async def _restore_rate(self, mount: Mount) -> None:
+        rate, self._body_rate = self._body_rate, None
+        if rate is not None and rate != mount.track_mode:
+            log.info("%s: tracking at the %s rate again", mount.name, rate)
+            await mount.set_track_mode(rate)
 
     def _site(self) -> Location | None:
         """Where the rig is: the active site, or else the mount's."""

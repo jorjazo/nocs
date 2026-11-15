@@ -26,14 +26,18 @@
           text:
             finder.phase === "searching"
               ? t.finder.searching(finder.searched, finder.positions)
-              : t.finder.phases[finder.phase ?? "tracking"],
+              : t.finder.phases[finder.phase],
         };
       case "succeeded":
         return { tone: "ok", text: t.finder.centred };
       case "cancelled":
         return { tone: "neutral", text: t.finder.cancelled };
       default:
-        return { tone: "error", text: finder.disc?.found ? t.finder.notCentred : t.finder.notFound };
+        // Failed: before the disc was seen, or after (measuring the axes, centring).
+        return {
+          tone: "error",
+          text: finder.phase === "tracking" || finder.phase === "searching" ? t.finder.notFound : t.finder.notCentred,
+        };
     }
   });
   const pointedOff = $derived(

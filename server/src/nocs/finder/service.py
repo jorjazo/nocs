@@ -7,18 +7,24 @@ centring locks. It:
 2. searches: slews to the body's ephemeris position (or where the mount points, with
    ``here``) and along a square spiral around it, a frame at each point, until a
    frame shows the disc. Aims are offsets from the body's position at each slew, so
-   its motion does not add up. A frame brighter than half the scale is taken again
-   at a quarter of the exposure;
+   its motion does not add up. Points below the horizon are skipped, and so are those
+   near the Sun before its warning is acknowledged. A frame without the disc and
+   brighter than half the scale is taken again at a quarter of the exposure;
 3. calibrates: moves east, then north, and measures how the disc moved in the frame;
 4. centres: moves so the disc's centre lands on the frame's, until within the
    tolerance;
-5. syncs the mount to the body's position.
+5. syncs the mount to where it then points: the body's position, less what is left
+   of the centring.
+
+A run that fails or is cancelled puts the tracking rate it replaced back; one that
+succeeds leaves the body's, until the next go to (``MountService.track_body``).
 
 Every frame becomes the main camera's preview, so Live view follows the search.
 
 State under ``("finder",)``: ``None`` until the first run, then that run as it goes::
 
-    {job, body, state, phase, options, exposure, binning, searched, positions, frames,
+    {job, body, state, phase, options, exposure, binning, searched, positions, skipped,
+     frames,
      disc, offset, error, attempts, track_mode, synced, warning, failure, started,
      finished}
 """
@@ -36,13 +42,15 @@ import anyio
 
 from nocs.clock import Clock
 from nocs.devices import Coordinates, DeviceError, FrameType, Location
+from nocs.devices.camera import Range
 from nocs.equipment import Role
 from nocs.finder.search import Axes, Offset, aim, offset_between, spiral
 from nocs.imaging import Disc, Shot
 from nocs.jobs import JobContext, JobManager
 from nocs.mount.coords import jnow_to_horizontal, jnow_to_j2000
-from nocs.mount.service import Frame, PointingError
-from nocs.pointing.solve import PointingService
+from nocs.mount.service import Frame, PointingError, SunWarningError
+from nocs.pointing import solve
+from nocs.pointing.solve import PointingService, restore_binning
 from nocs.sky.bodies import Body, BodyPosition, position
 from nocs.state import Json, Path, StateStore
 
@@ -54,6 +62,7 @@ EXPOSURE = 0.1
 """Seconds of the search's frames: the Sun behind its filter, the Moon by night and by
 day all stand out, saturated or not."""
 MIN_EXPOSURE = 1e-4
+"""Seconds: the shortest frame, or the camera's own shortest if longer."""
 BRIGHT = 0.5
 """A frame's median level, of the full scale, above which it is taken again shorter."""
 SHORTER = 4.0
@@ -61,6 +70,8 @@ MAX_BINNING = 4
 MAX_RADIUS = 30.0
 """Degrees: the widest search."""
 MAX_ATTEMPTS = 10
+MAX_POSITIONS = 2000
+"""Frames of the widest search: a few hours at most."""
 SEARCH_STEP = 0.7
 """Of the field's short side: the search's points overlap a little."""
 PROBE = 0.25
@@ -125,12 +136,9 @@ class FinderOptions:
             raise ValueError("the settling time must be 0..60 s")
 
 
-class CameraDevice(Protocol):
+class CameraDevice(solve.CameraDevice, Protocol):
     @property
-    def binning(self) -> tuple[int, int]: ...
-    @property
-    def max_binning(self) -> int: ...
-    async def set_binning(self, x: int, y: int | None = None) -> None: ...
+    def exposure_range(self) -> Range | None: ...
 
 
 class Frames(Protocol):
@@ -166,11 +174,11 @@ class Mounts(Protocol):
         *,
         force: bool = False,
         frame: Frame = "j2000",
+        body_rate: bool = False,
     ) -> Coordinates: ...
     async def settle(self, seconds: float) -> None: ...
-    async def set_tracking(
-        self, on: bool | None, mode: str | None = None, *, job: str | None = None
-    ) -> None: ...
+    async def track_body(self, mode: str | None, *, job: str) -> None: ...
+    async def restore_rate(self, *, job: str) -> None: ...
     async def sync(
         self,
         ra: float,
@@ -193,6 +201,8 @@ class _Run:
     phase: Phase = Phase.TRACKING
     searched: int = 0
     positions: int = 0
+    skipped: int = 0
+    """Search points near the Sun, skipped before its warning is acknowledged."""
     frames: int = 0
     disc: Disc | None = None
     offset: Offset | None = None
@@ -211,7 +221,7 @@ class _Run:
             "job": self.job,
             "body": options.body.value,
             "state": self.state.value,
-            "phase": self.phase.value if self.state is RunState.RUNNING else None,
+            "phase": self.phase.value,
             "options": {
                 "radius": options.radius,
                 "exposure": options.exposure,
@@ -225,6 +235,7 @@ class _Run:
             "binning": self.binning,
             "searched": self.searched,
             "positions": self.positions,
+            "skipped": self.skipped,
             "frames": self.frames,
             "disc": (
                 {
@@ -289,6 +300,12 @@ class FinderService:
         site = self._site()
         body = position(options.body, site, self._clock.now())
         _check_body(body, field)
+        positions = len(spiral(options.radius * 60, SEARCH_STEP * min(field) * 60))
+        if positions > MAX_POSITIONS:
+            raise ValueError(
+                f"a {options.radius:g}° search takes {positions} frames with this field, "
+                f"more than {MAX_POSITIONS}: narrow it"
+            )
         self._mount.check_goto(body.jnow.ra, body.jnow.dec, frame="jnow")
         self._jobs.check_free(r for r in self.resources() if r != Role.MOUNT.value)
         return body
@@ -337,13 +354,23 @@ class FinderService:
         camera = self._frames.camera(CAMERA)
         before = camera.binning[0]
         run.binning = options.binning or min(MAX_BINNING, camera.max_binning)
+        exposures = camera.exposure_range
+        shortest = max(MIN_EXPOSURE, exposures.min if exposures is not None else 0.0)
+        run.exposure = max(run.exposure, shortest)
         if run.binning != before:
             await camera.set_binning(run.binning)
         try:
-            await self._steps(context, run, field, site, body.semidiameter / field[0])
+            await self._steps(context, run, field, site, body.semidiameter / field[0], shortest)
+        except BaseException:
+            with anyio.CancelScope(shield=True):
+                try:
+                    await self._mount.restore_rate(job=context.id)
+                except (DeviceError, ConnectionError, RuntimeError) as e:
+                    log.error("finder: could not put the tracking rate back: %s", e)
+            raise
         finally:
             if run.binning != before:
-                await _restore_binning(camera, before)
+                await restore_binning(camera, before)
 
     async def _steps(
         self,
@@ -352,6 +379,7 @@ class FinderService:
         field: tuple[float, float],
         site: Location,
         radius: float,
+        shortest: float,
     ) -> None:
         options = run.options
         name = NAMES[options.body]
@@ -362,7 +390,7 @@ class FinderService:
             self._report(context, run, f"tracking the {name}")
             wanted = TRACK_MODES[options.body]
             mode = wanted if wanted in self._mount.track_modes() else None
-            await self._mount.set_tracking(True, mode, job=context.id)
+            await self._mount.track_body(mode, job=context.id)
             run.track_mode = mode
             if mode is None:
                 run.warning = f"the mount has no {wanted} tracking: it tracks at its own rate"
@@ -379,16 +407,32 @@ class FinderService:
         for number, point in enumerate(points, start=1):
             run.searched = number
             where = centre + point
-            disc = await self._look(
-                context, run, site, where, radius, f"looking {number} of {len(points)}"
-            )
+            try:
+                disc = await self._look(
+                    context,
+                    run,
+                    site,
+                    where,
+                    radius,
+                    shortest,
+                    f"looking {number} of {len(points)}",
+                )
+            except SunWarningError:
+                run.skipped += 1
+                continue
             if disc is not None and disc.found:
                 found = (where, disc)
                 break
         if found is None:
+            skipped = (
+                f"; {run.skipped} places near the Sun were not looked at, before its "
+                "warning is acknowledged"
+                if run.skipped
+                else ""
+            )
             raise FinderError(
                 f"the {name} is not within {options.radius:g}° of where the finder looked: "
-                f"bring it closer with the pad and search from there"
+                f"bring it closer with the pad and search from there{skipped}"
             )
         where, disc = found
         log.info("finder: the %s is %.1f' from its position", name, where.size)
@@ -396,10 +440,10 @@ class FinderService:
         run.phase = Phase.CALIBRATING
         probe = PROBE * short
         east, where, disc = await self._probe(
-            context, run, site, where, disc, Offset(probe, 0), radius
+            context, run, site, where, disc, Offset(probe, 0), radius, shortest
         )
         north, where, disc = await self._probe(
-            context, run, site, where, disc, Offset(0, probe), radius
+            context, run, site, where, disc, Offset(0, probe), radius, shortest
         )
         axes = Axes(east, north)
         problem = axes.problem(disc.width / (field[0] * 60))
@@ -407,6 +451,7 @@ class FinderService:
             raise FinderError(f"{problem}: is the mount moving and the camera still?")
 
         run.phase = Phase.CENTRING
+        move = Offset(0.0, 0.0)
         for attempt in range(options.attempts + 1):
             assert disc.x is not None
             assert disc.y is not None
@@ -423,7 +468,7 @@ class FinderService:
             run.attempts = attempt + 1
             where = where + move
             seen = await self._look(
-                context, run, site, where, radius, f"centring, move {attempt + 1}"
+                context, run, site, where, radius, shortest, f"centring, move {attempt + 1}"
             )
             if seen is None or not seen.found:
                 raise FinderError(f"the {name} left the frame while centring it")
@@ -436,7 +481,9 @@ class FinderService:
             self._report(context, run, "syncing the mount")
             now = self._clock.now()
             body = position(options.body, site, now)
-            j2000 = jnow_to_j2000(body.jnow.ra, body.jnow.dec, now)
+            # The mount points ``move`` short of the body: one more move would centre it.
+            there = aim(body.jnow, move * -1.0)
+            j2000 = jnow_to_j2000(there.ra, there.dec, now)
             try:
                 await self._mount.sync(j2000.ra, j2000.dec, now, job=context.id)
             except (PointingError, DeviceError) as e:
@@ -452,9 +499,11 @@ class FinderService:
         site: Location,
         where: Offset,
         radius: float,
+        shortest: float,
         message: str,
     ) -> Disc | None:
-        """Slew to ``where`` from the body and take a frame; ``None`` below the horizon."""
+        """Slew to ``where`` from the body and take a frame; ``None`` below the horizon.
+        Raises SunWarningError near the Sun before its warning is acknowledged."""
         now = self._clock.now()
         body = position(run.options.body, site, now)
         target = aim(body.jnow, where)
@@ -462,7 +511,7 @@ class FinderService:
             return None
         run.offset = where
         self._report(context, run, message)
-        await self._mount.slew(context, target.ra, target.dec, frame="jnow")
+        await self._mount.slew(context, target.ra, target.dec, frame="jnow", body_rate=True)
         await self._mount.settle(run.options.settle)
         while True:
             shot = await self._frames.take(
@@ -478,9 +527,9 @@ class FinderService:
             run.frames += 1
             run.disc = disc
             self._publish()
-            if disc.found or disc.background <= BRIGHT or run.exposure <= MIN_EXPOSURE:
+            if disc.found or disc.background <= BRIGHT or run.exposure <= shortest:
                 return disc
-            run.exposure = max(MIN_EXPOSURE, run.exposure / SHORTER)
+            run.exposure = max(shortest, run.exposure / SHORTER)
             log.info("finder: a bright frame; %g s now", run.exposure)
 
     async def _probe(
@@ -492,6 +541,7 @@ class FinderService:
         seen: Disc,
         step: Offset,
         radius: float,
+        shortest: float,
     ) -> tuple[tuple[float, float], Offset, Disc]:
         """Move ``step`` from ``start``, where the frame showed ``seen`` (or the other
         way, if the disc leaves the frame): pixels the disc moved per arcminute, where
@@ -500,7 +550,9 @@ class FinderService:
         assert seen.y is not None
         for sign in (1.0, -1.0):
             where = start + step * sign
-            disc = await self._look(context, run, site, where, radius, "measuring the axes")
+            disc = await self._look(
+                context, run, site, where, radius, shortest, "measuring the axes"
+            )
             if disc is not None and disc.found:
                 assert disc.x is not None
                 assert disc.y is not None
@@ -552,14 +604,6 @@ def _check_body(body: BodyPosition, field: tuple[float, float]) -> None:
             f"the {name}'s disc ({size:.2f}°) does not fit the main camera's field "
             f"({field[0]:.2f}° by {field[1]:.2f}°): the finder needs a wider field"
         )
-
-
-async def _restore_binning(camera: CameraDevice, binning: int) -> None:
-    try:
-        with anyio.CancelScope(shield=True):
-            await camera.set_binning(binning)
-    except (DeviceError, ConnectionError) as e:
-        log.error("could not restore the binning to %d: %s", binning, e)
 
 
 def _delete(path: FsPath) -> None:

@@ -4010,22 +4010,15 @@
           "$ref": "#/$defs/FinderOptionsState"
         },
         "phase": {
-          "anyOf": [
-            {
-              "enum": [
-                "tracking",
-                "searching",
-                "calibrating",
-                "centring",
-                "syncing"
-              ],
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "description": "The step it is at, or the one it ended at.",
+          "enum": [
+            "tracking",
+            "searching",
+            "calibrating",
+            "centring",
+            "syncing"
           ],
-          "description": "While running."
+          "type": "string"
         },
         "positions": {
           "description": "Points of the search in all.",
@@ -4033,6 +4026,10 @@
         },
         "searched": {
           "description": "Points of the search looked at.",
+          "type": "integer"
+        },
+        "skipped": {
+          "description": "Points near the Sun not looked at, before its warning is acknowledged.",
           "type": "integer"
         },
         "started": {
@@ -4082,6 +4079,7 @@
         "binning",
         "searched",
         "positions",
+        "skipped",
         "frames",
         "disc",
         "offset",

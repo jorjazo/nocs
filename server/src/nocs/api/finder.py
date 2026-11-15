@@ -40,7 +40,7 @@ def finder_router(
             # Refused before PHD2 stops, not after: the Sun's warning, a body that is down.
             finder().check(options)
         if body is Body.SUN:
-            await _stop_phd2(guiding())
+            await stop_phd2(guiding())
         else:
             await stop_guiding_first(guiding(), request.stop_guiding)
         with _errors():
@@ -49,7 +49,7 @@ def finder_router(
     return router
 
 
-async def _stop_phd2(guiding: GuidingService) -> None:
+async def stop_phd2(guiding: GuidingService) -> None:
     """PHD2's guide camera must not look at the Sun: stop its looping or guiding."""
     if guiding.phd2 is None:
         return

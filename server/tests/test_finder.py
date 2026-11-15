@@ -6,24 +6,28 @@ import itertools
 import math
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import anyio
 import numpy as np
 import pytest
+from fastapi import HTTPException
 from numpy.typing import NDArray
 from synthdisc import disc_frame
 
+from nocs.api.finder import stop_phd2
 from nocs.api.schemas import FinderState, JobInfo
 from nocs.clock import Clock
-from nocs.devices import Coordinates, FrameType, Location
+from nocs.devices import Coordinates, DeviceError, FrameType, Location
+from nocs.devices.camera import Range
 from nocs.equipment import Role
 from nocs.finder import Body, FinderError, FinderOptions, FinderService
 from nocs.finder.search import Axes, Offset, aim, offset_between, spiral
+from nocs.guiding import GuidingNotReadyError, GuidingService, Phd2Error
 from nocs.imaging import Disc, Shot
 from nocs.imaging.disc import locate
 from nocs.jobs import JobContext, JobManager
-from nocs.mount.coords import jnow_to_j2000
+from nocs.mount.coords import j2000_to_jnow
 from nocs.mount.service import Frame, SunWarningError, local_date, near_sun
 from nocs.sky.bodies import position, separation
 from nocs.state import StateStore
@@ -44,6 +48,7 @@ class FakeCameraDevice:
         self.binning = (1, 1)
         self.max_binning = 4
         self.binnings: list[int] = []
+        self.exposure_range: Range | None = Range(0.0, 3600.0)
 
     async def set_binning(self, x: int, y: int | None = None) -> None:
         self.binnings.append(x)
@@ -59,9 +64,14 @@ class FakeMount:
         self.said = Coordinates(3.0, -60.0)
         self.error = (1.5, -1.0)
         self.modes = ["sidereal", "lunar", "solar"]
+        self.mode = "sidereal"
         self.refusal: Exception | None = None
+        self.near_sun: Coordinates | None = None
+        """Slews within 20° of this are refused as near the Sun."""
         self.slews: list[Coordinates] = []
-        self.tracking: list[tuple[bool | None, str | None]] = []
+        self.tracking: list[str | None] = []
+        self.restored = 0
+        self.sync_error: Exception | None = None
         self.syncs: list[tuple[float, float]] = []
         self.hold: anyio.Event | None = None
 
@@ -92,10 +102,14 @@ class FakeMount:
         *,
         force: bool = False,
         frame: Frame = "j2000",
+        body_rate: bool = False,
     ) -> Coordinates:
         assert frame == "jnow"
+        assert body_rate
         assert self.jobs.holder(Role.MOUNT.value) == context.id
         self.check_goto(ra, dec, frame=frame)
+        if self.near_sun is not None and separation(Coordinates(ra, dec), self.near_sun) < 20:
+            raise SunWarningError("near the Sun")
         await asyncio.sleep(0)
         self.said = Coordinates(ra, dec)
         self.slews.append(self.said)
@@ -106,11 +120,16 @@ class FakeMount:
             await self.hold.wait()
         await asyncio.sleep(0)
 
-    async def set_tracking(
-        self, on: bool | None, mode: str | None = None, *, job: str | None = None
-    ) -> None:
-        assert job is not None
-        self.tracking.append((on, mode))
+    async def track_body(self, mode: str | None, *, job: str) -> None:
+        assert self.jobs.holder(Role.MOUNT.value) == job
+        self.tracking.append(mode)
+        if mode is not None:
+            self.mode = mode
+
+    async def restore_rate(self, *, job: str) -> None:
+        assert self.jobs.holder(Role.MOUNT.value) == job
+        self.restored += 1
+        self.mode = "sidereal"
 
     async def sync(
         self,
@@ -122,6 +141,8 @@ class FakeMount:
         check: bool = True,
     ) -> Coordinates:
         assert job is not None
+        if self.sync_error is not None:
+            raise self.sync_error
         self.syncs.append((ra, dec))
         return Coordinates(ra, dec)
 
@@ -144,6 +165,11 @@ class FakeCapture:
         self.frames: dict[Path, NDArray[np.uint16]] = {}
         self.exposures: list[float] = []
         self.shown = 0
+        self.still = False
+        """The disc drawn where it was first seen, whatever the mount does."""
+        self.first: Coordinates | None = None
+        self.lost_after: int | None = None
+        """Frames after which the disc is not drawn any more."""
 
     def camera(self, role: Role) -> FakeCameraDevice:
         assert role is Role.MAIN_CAMERA
@@ -169,7 +195,13 @@ class FakeCapture:
         width, height = SIZE
         scale = width / (FIELD[0] * 60)
         body = position(self.body, SITE, self.clock.now())
-        seen = offset_between(self.mount.sky, body.jnow)
+        sky = self.mount.sky
+        if self.still:
+            self.first = self.first or sky
+            sky = self.first
+        seen = offset_between(sky, body.jnow)
+        if self.lost_after is not None and len(self.exposures) > self.lost_after:
+            seen = Offset(600.0, 600.0)
         a = math.radians(self.angle)
         east, north = seen.east, -seen.north if self.mirrored else seen.north
         dx = (east * math.cos(a) - north * math.sin(a)) * scale
@@ -220,6 +252,11 @@ class Rig:
         assert isinstance(state, dict)
         FinderState.model_validate(state)
         return state
+
+    def synced(self) -> Coordinates:
+        """Where the mount was synced, JNow."""
+        ra, dec = self.mount.syncs[-1]
+        return j2000_to_jnow(ra, dec, self.clock.now())
 
     def off(self, body: Body = Body.MOON) -> float:
         """Arcminutes from where the mount truly points to the body."""
@@ -290,11 +327,15 @@ async def test_finds_and_centres_the_moon(tmp_path: Path) -> None:
     assert rig.off() < 2.0
     assert state["error"] <= 2.0
     assert state["track_mode"] == "lunar"
-    assert rig.mount.tracking[0] == (True, "lunar")
+    assert rig.mount.tracking == ["lunar"]
+    assert rig.mount.mode == "lunar"  # kept: the finder succeeded
+    assert rig.mount.restored == 0
     assert state["synced"] is True
     moon = position(Body.MOON, SITE, NIGHT).jnow
-    j2000 = jnow_to_j2000(moon.ra, moon.dec, NIGHT)
-    assert rig.mount.syncs[0] == pytest.approx((j2000.ra, j2000.dec))
+    # Synced to where it truly points: the Moon, less the centring's last error.
+    synced = rig.synced()
+    assert separation(synced, rig.mount.sky) * 60 < 0.5
+    assert separation(synced, moon) * 60 == pytest.approx(state["error"], abs=0.5)
     # The pointing error, from the body: what the mount missed it by.
     offset = state["offset"]
     assert math.hypot(offset["east"], offset["north"]) == pytest.approx(
@@ -347,7 +388,9 @@ async def test_not_found_within_the_radius(tmp_path: Path) -> None:
     assert state["state"] == "failed"
     assert "not within 1°" in state["failure"]
     assert state["searched"] == state["positions"] == 21  # 0.56° steps out to 1°
+    assert state["phase"] == "searching"
     assert rig.capture.device.binnings == [4, 1]
+    assert rig.mount.restored == 1
 
 
 async def test_a_bright_sky_is_taken_again_shorter(tmp_path: Path) -> None:
@@ -369,7 +412,7 @@ async def test_without_lunar_tracking(tmp_path: Path) -> None:
     assert state["state"] == "succeeded"
     assert state["track_mode"] is None
     assert "no lunar tracking" in state["warning"]
-    assert rig.mount.tracking == [(True, None)]
+    assert rig.mount.tracking == [None]
 
 
 async def test_cancelled(tmp_path: Path) -> None:
@@ -381,7 +424,10 @@ async def test_cancelled(tmp_path: Path) -> None:
     rig.jobs.cancel(job_id)
     await rig.jobs.wait(job_id)
     assert rig.state()["state"] == "cancelled"
-    assert rig.capture.device.binning == (1, 1)
+    assert rig.mount.slews  # cancelled while it settled, after binning
+    assert rig.capture.device.binnings == [4, 1]
+    assert rig.mount.restored == 1
+    assert rig.mount.mode == "sidereal"
 
 
 def test_the_sun_needs_its_warning(tmp_path: Path) -> None:
@@ -427,3 +473,127 @@ def test_options_are_checked(tmp_path: Path) -> None:
         rig.service.start(FinderOptions(Body.MOON, radius=50))
     with pytest.raises(ValueError, match="binning"):
         rig.service.start(FinderOptions(Body.MOON, binning=8))
+
+
+async def test_places_near_the_sun_are_skipped(tmp_path: Path) -> None:
+    rig = Rig(tmp_path)
+    moon = position(Body.MOON, SITE, NIGHT).jnow
+    # As if the Sun were 20.7° west of the Moon, up, and its warning not acknowledged.
+    west = 20.7 / 15 / math.cos(math.radians(moon.dec))
+    rig.mount.near_sun = Coordinates((moon.ra - west) % 24, moon.dec)
+    rig.mount.error = (8.0, 8.0)
+    await rig.find(radius=1.0)
+    state = rig.state()
+    assert state["state"] == "failed"
+    assert 0 < state["skipped"] < state["positions"]
+    assert "near the Sun were not looked at" in state["failure"]
+    assert all(separation(slew, rig.mount.near_sun) >= 20 for slew in rig.mount.slews)
+
+
+async def test_the_camera_s_shortest_exposure(tmp_path: Path) -> None:
+    rig = Rig(tmp_path)
+    rig.mount.error = (0.1, 0.1)
+    rig.capture.device.exposure_range = Range(0.05, 3600.0)
+    rig.capture.sky = 1_000_000.0  # saturated at any exposure: no disc to see
+    rig.capture.body = Body.MOON
+    await rig.find(radius=0.0)
+    assert rig.capture.exposures == pytest.approx([0.1, 0.05])
+    assert rig.state()["state"] == "failed"
+
+
+async def test_a_camera_that_does_not_move_fails_the_axes(tmp_path: Path) -> None:
+    rig = Rig(tmp_path)
+    rig.mount.error = (0.1, 0.1)
+    rig.capture.still = True
+    await rig.find()
+    state = rig.state()
+    assert state["state"] == "failed"
+    assert state["phase"] == "calibrating"
+    assert "is the mount moving" in state["failure"]
+    assert rig.mount.restored == 1
+    assert rig.capture.device.binnings == [4, 1]
+
+
+async def test_the_disc_lost_while_measuring_the_axes(tmp_path: Path) -> None:
+    rig = Rig(tmp_path)
+    rig.mount.error = (0.1, 0.1)
+    rig.capture.lost_after = 1
+    await rig.find()
+    state = rig.state()
+    assert state["state"] == "failed"
+    assert "measured the camera's axes" in state["failure"]
+
+
+async def test_the_disc_lost_while_centring(tmp_path: Path) -> None:
+    rig = Rig(tmp_path)
+    rig.mount.error = (0.3, 0.2)
+    rig.capture.lost_after = 3  # found, then both probes
+    await rig.find()
+    state = rig.state()
+    assert state["state"] == "failed"
+    assert state["phase"] == "centring"
+    assert "left the frame while centring" in state["failure"]
+
+
+async def test_out_of_attempts(tmp_path: Path) -> None:
+    rig = Rig(tmp_path)
+    rig.mount.error = (0.3, 0.2)
+    await rig.find(attempts=1, tolerance=0.01)
+    state = rig.state()
+    assert state["state"] == "failed"
+    assert "after 1 moves" in state["failure"]
+    assert state["attempts"] == 1
+
+
+async def test_a_sync_refused_is_a_warning(tmp_path: Path) -> None:
+    rig = Rig(tmp_path)
+    rig.mount.error = (0.1, 0.1)
+    rig.mount.sync_error = DeviceError("sync refused")
+    await rig.find()
+    state = rig.state()
+    assert state["state"] == "succeeded"
+    assert state["synced"] is False
+    assert "sync refused" in state["warning"]
+
+
+async def test_the_body_low_skips_places_below_the_horizon(tmp_path: Path) -> None:
+    low = datetime(2026, 11, 15, 4, 0, tzinfo=UTC)
+    assert 0 < position(Body.MOON, SITE, low).alt < 2
+    rig = Rig(tmp_path, low)
+    rig.mount.error = (8.0, 8.0)
+    await rig.find(radius=3.0)
+    state = rig.state()
+    assert state["state"] == "failed"
+    assert len(rig.mount.slews) < state["positions"]
+
+
+def test_a_search_too_wide_for_the_field(tmp_path: Path) -> None:
+    rig = Rig(tmp_path)
+    rig.store.set(("cameras", "main_camera", "field"), {"width": 0.9, "height": 0.6})
+    with pytest.raises(ValueError, match="narrow it"):
+        rig.service.start(FinderOptions(Body.MOON, radius=30))
+
+
+class _Guiding:
+    def __init__(self, phd2: object, error: Exception | None = None) -> None:
+        self.phd2 = phd2
+        self.error = error
+        self.stopped = 0
+
+    async def stop(self) -> None:
+        self.stopped += 1
+        if self.error is not None:
+            raise self.error
+
+
+async def test_finding_the_sun_stops_phd2() -> None:
+    guiding = _Guiding(object())
+    await stop_phd2(cast(GuidingService, guiding))
+    assert guiding.stopped == 1
+    # Not there, or not connected to its devices: nothing to stop.
+    await stop_phd2(cast(GuidingService, _Guiding(None)))
+    await stop_phd2(cast(GuidingService, _Guiding(object(), GuidingNotReadyError("no"))))
+    # PHD2 refused: the finder must not start with the guide camera looking at the Sun.
+    with pytest.raises(HTTPException) as refused:
+        await stop_phd2(cast(GuidingService, _Guiding(object(), Phd2Error("stop_capture", 1, "x"))))
+    assert refused.value.status_code == 502

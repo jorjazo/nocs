@@ -752,14 +752,17 @@ class FinderState(StateModel):
     job: str
     body: FinderBody
     state: Literal["running", "succeeded", "failed", "cancelled"]
-    phase: Literal["tracking", "searching", "calibrating", "centring", "syncing"] | None = Field(
-        description="While running."
+    phase: Literal["tracking", "searching", "calibrating", "centring", "syncing"] = Field(
+        description="The step it is at, or the one it ended at."
     )
     options: FinderOptionsState
     exposure: float = Field(description="Seconds of the frames now.")
     binning: int | None = Field(description="Of the frames; None until the run starts them.")
     searched: int = Field(description="Points of the search looked at.")
     positions: int = Field(description="Points of the search in all.")
+    skipped: int = Field(
+        description="Points near the Sun not looked at, before its warning is acknowledged."
+    )
     frames: int
     disc: FinderDisc | None
     offset: FinderOffset | None = Field(

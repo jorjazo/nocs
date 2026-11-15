@@ -1238,9 +1238,9 @@ export interface FinderState {
   offset: FinderOffset | null;
   options: FinderOptionsState;
   /**
-   * While running.
+   * The step it is at, or the one it ended at.
    */
-  phase: ("tracking" | "searching" | "calibrating" | "centring" | "syncing") | null;
+  phase: "tracking" | "searching" | "calibrating" | "centring" | "syncing";
   /**
    * Points of the search in all.
    */
@@ -1249,6 +1249,10 @@ export interface FinderState {
    * Points of the search looked at.
    */
   searched: number;
+  /**
+   * Points near the Sun not looked at, before its warning is acknowledged.
+   */
+  skipped: number;
   started: string;
   state: "running" | "succeeded" | "failed" | "cancelled";
   synced: boolean;

@@ -25,7 +25,8 @@ NOCS restarts). Finding the Sun stops PHD2, whose guide camera would see the Sun
 Open the mount (Rig → the mount, or the mount button in Live) and, under **Sun and
 Moon**, tap **Find the Moon** or **Find the Sun**. NOCS then:
 
-1. tracks it at the lunar or solar rate, when the mount offers one;
+1. tracks it at the lunar or solar rate, when the mount offers one (the next go to
+   elsewhere goes back to the rate the mount had before);
 2. points where it should be and takes short frames (0.1 s, binned), looking further
    around in a spiral, up to the **search radius**, until a frame shows its disc;
 3. moves the mount a little east and north to learn how the camera sits;
@@ -40,6 +41,9 @@ search takes many frames. It is quicker to bring the body near yourself: stop th
 finder, move the mount with the arrows (for the Sun, until the tube's shadow is as
 small as it gets; never by looking through the finder), switch on **Search from
 here** and start it again.
+
+By day, the Moon near the Sun is searched only away from the Sun until you read the
+Sun's warning: places within 20° of it are skipped.
 
 Something brighter in the frame (a planet in a wide field at night, a lit building)
 can fool it, and an eclipse or a Moon a day or two from new is not handled.

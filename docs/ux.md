@@ -442,8 +442,9 @@ The Sun and the Moon (ADR 0049):
 - A finder card shows the body, its chip (Searching · 12 of 129, Measuring the
   axes, Centring…, then Centred, Not found, Not centred or Cancelled), the frames
   and their exposure, how far the disc is from the centre, how far the mount
-  pointed off, the tracking rate and whether the mount was synced. Live view
-  shows it while it runs, under the centring card; the frames are its previews.
+  pointed off, the tracking rate and whether the mount was synced. Not found is a
+  run that failed before seeing the disc, Not centred one that failed after. Live
+  view shows it while it runs, under the centring card; the frames are its previews.
 
 Tonight and Plan (stage 3.6):
 

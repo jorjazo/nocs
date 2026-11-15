@@ -53,6 +53,9 @@ def mount_router(
     @router.post("/mount/goto", status_code=status.HTTP_202_ACCEPTED)
     async def goto(request: GotoRequest) -> JobStarted:  # pyright: ignore[reportUnusedFunction]
         if not isinstance(request, EquatorialGoto):
+            with _mount_errors():
+                # Refused before guiding stops, not after: near the Sun, say.
+                mount().check_horizontal(request.alt, request.az)
             await stop_guiding(request.stop_guiding)
             with _mount_errors():
                 return JobStarted(job=mount().goto_horizontal(request.alt, request.az))
