@@ -208,6 +208,11 @@ export type SolveFailureReason = "unavailable" | "no_database" | "no_stars" | "n
 export type ConnectionName = "disconnected" | "connecting" | "connected" | "disconnecting";
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "FinderBody".
+ */
+export type FinderBody = "sun" | "moon";
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "Phd2AppState".
  */
 export type Phd2AppState = "Stopped" | "Selected" | "Calibrating" | "Guiding" | "LostLock" | "Paused" | "Looping";
@@ -564,6 +569,10 @@ export interface AppState {
    * None: no filter wheel is ready.
    */
   filter_wheel?: FilterWheelState | null;
+  /**
+   * None: never run.
+   */
+  finder?: FinderState | null;
   /**
    * None: never run (ADR 0036).
    */
@@ -1190,6 +1199,123 @@ export interface FilterWheelState {
    */
   slot: number | null;
   slots: number;
+}
+/**
+ * The running Sun or Moon finder, or the most recent one (ADR 0049).
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "FinderState".
+ */
+export interface FinderState {
+  /**
+   * Moves made to centre it.
+   */
+  attempts: number;
+  /**
+   * Of the frames; None until the run starts them.
+   */
+  binning: number | null;
+  body: FinderBody;
+  disc: FinderDisc | null;
+  /**
+   * Arcminutes from the disc's centre to the frame's.
+   */
+  error: number | null;
+  /**
+   * Seconds of the frames now.
+   */
+  exposure: number;
+  /**
+   * Why it failed.
+   */
+  failure: string | null;
+  finished: string | null;
+  frames: number;
+  job: string;
+  /**
+   * Where the mount aims from the body; once centred: how far off the mount pointed, before the sync.
+   */
+  offset: FinderOffset | null;
+  options: FinderOptionsState;
+  /**
+   * While running.
+   */
+  phase: ("tracking" | "searching" | "calibrating" | "centring" | "syncing") | null;
+  /**
+   * Points of the search in all.
+   */
+  positions: number;
+  /**
+   * Points of the search looked at.
+   */
+  searched: number;
+  started: string;
+  state: "running" | "succeeded" | "failed" | "cancelled";
+  synced: boolean;
+  /**
+   * The rate set; None: the mount's own.
+   */
+  track_mode: string | null;
+  warning: string | null;
+}
+/**
+ * The latest frame's disc, pixels of that frame.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "FinderDisc".
+ */
+export interface FinderDisc {
+  /**
+   * The frame's median level, of the full scale.
+   */
+  background: number;
+  found: boolean;
+  height: number;
+  radius: number | null;
+  width: number;
+  /**
+   * The disc's centre; it may lie outside the frame.
+   */
+  x: number | null;
+  y: number | null;
+}
+/**
+ * Arcminutes on the sky from the body's position.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "FinderOffset".
+ */
+export interface FinderOffset {
+  east: number;
+  north: number;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "FinderOptionsState".
+ */
+export interface FinderOptionsState {
+  /**
+   * None: the camera's largest up to 4.
+   */
+  binning: number | null;
+  /**
+   * Seconds the search starts with.
+   */
+  exposure: number;
+  /**
+   * The search was centred where the mount pointed.
+   */
+  here: boolean;
+  /**
+   * Degrees searched around the body (or the mount).
+   */
+  radius: number;
+  sync: boolean;
+  /**
+   * Arcminutes.
+   */
+  tolerance: number;
+  track: boolean;
 }
 /**
  * The flats wizard's run in progress or the last one (ADR 0036).
@@ -1898,6 +2024,10 @@ export interface MountState {
    */
   slew_rates: string[];
   slewing: boolean;
+  /**
+   * The owner acknowledged the Sun's warning today (the site's date): go to near the Sun is allowed (ADR 0049).
+   */
+  sun_acknowledged: boolean;
   /**
    * The mount's clock as it last reported it, UTC.
    */
@@ -4352,6 +4482,49 @@ export interface FilterSelectRequest {
    * 1-based.
    */
   slot?: number | null;
+}
+/**
+ * Find the Sun or the Moon and centre it in the main camera (ADR 0049). The Sun, and
+ * anything within 20° of it while it is up, needs the Sun's warning acknowledged today;
+ * finding the Sun stops PHD2.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "FinderRequest".
+ */
+export interface FinderRequest {
+  /**
+   * None: the camera's largest up to 4.
+   */
+  binning?: number | null;
+  body: FinderBody;
+  /**
+   * Seconds.
+   */
+  exposure?: number;
+  /**
+   * Search around where the mount points, not the body.
+   */
+  here?: boolean;
+  /**
+   * Degrees to search.
+   */
+  radius?: number;
+  /**
+   * Stop guiding first; refused while guiding otherwise (ADR 0023).
+   */
+  stop_guiding?: boolean;
+  /**
+   * Sync the mount to the body once centred.
+   */
+  sync?: boolean;
+  /**
+   * Arcminutes.
+   */
+  tolerance?: number;
+  /**
+   * Track at the body's rate.
+   */
+  track?: boolean;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema

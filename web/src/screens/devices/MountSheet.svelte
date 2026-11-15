@@ -30,12 +30,15 @@
   import { solveExposure } from "../../lib/equipment";
   import { errorText } from "../../lib/errors";
   import { formatDateTime, formatDecimal, formatPlain } from "../../lib/format";
+  import { goRefusal } from "../../lib/goto";
   import { i18n } from "../../lib/i18n";
   import { live } from "../../lib/live.svelte";
   import { formatDec, formatRa, mountActivity, parseDec, parseRa } from "../../lib/mount.svelte";
   import { router } from "../../lib/router.svelte";
   import CenteringCard from "../live/CenteringCard.svelte";
+  import FinderSection from "./FinderSection.svelte";
   import MountPad from "./MountPad.svelte";
+  import SunWarning from "./SunWarning.svelte";
 
   let { onclose }: { onclose: () => void } = $props();
 
@@ -50,6 +53,14 @@
   let error = $state("");
   // A go to (or go and centre) refused below the horizon, ready to be forced.
   let refused = $state<{ ra: number; dec: number; center: boolean } | null>(null);
+  // A go to refused near the Sun, to send again once its warning is acknowledged.
+  let nearSun = $state<(() => void) | null>(null);
+
+  function sunRefusal(e: unknown, again: () => void): boolean {
+    if (!(e instanceof ApiError) || goRefusal(e.status, e.message) !== "sun") return false;
+    nearSun = again;
+    return true;
+  }
 
   async function run(kind: string, action: () => Promise<unknown>): Promise<void> {
     busy = kind;
@@ -57,7 +68,7 @@
     try {
       await action();
     } catch (e) {
-      error = errorText(e, t);
+      if (!sunRefusal(e, () => void run(kind, action))) error = errorText(e, t);
     } finally {
       busy = null;
     }
@@ -88,7 +99,7 @@
       else await gotoMount({ frame: "j2000", ra: target.ra, dec: target.dec, force });
     } catch (e) {
       if (e instanceof ApiError && e.status === 409 && e.message.includes("below the horizon")) refused = target;
-      else error = errorText(e, t);
+      else if (!sunRefusal(e, () => void goTo(force, center))) error = errorText(e, t);
     } finally {
       busy = null;
     }
@@ -277,6 +288,8 @@
       {/if}
     </section>
 
+    <FinderSection {mount} {guiding} busyMount={!!job} />
+
     {#if live.app.cameras?.main_camera}
       <Button wide onclick={() => router.go({ screen: "polar" })}>{t.polar.open}</Button>
     {/if}
@@ -342,6 +355,16 @@
     </section>
   {/if}
 </Sheet>
+
+{#if nearSun}
+  <SunWarning
+    onclose={() => (nearSun = null)}
+    onacknowledged={() => {
+      const again = nearSun;
+      nearSun = null;
+      again?.();
+    }} />
+{/if}
 
 <style>
   .position {

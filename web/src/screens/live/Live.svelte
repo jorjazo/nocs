@@ -41,6 +41,7 @@
   import Stepper from "../../components/Stepper.svelte";
   import { guidingActive } from "../../lib/guiding.svelte";
   import CenteringCard from "./CenteringCard.svelte";
+  import FinderCard from "../devices/FinderCard.svelte";
   import SolvePanel from "./SolvePanel.svelte";
   import { folderName } from "../../lib/storage";
   import TargetSheet from "./TargetSheet.svelte";
@@ -136,6 +137,7 @@
       }
       if (running.info.kind === "solve") return { tone: "accent", text: t.live.status.solving };
       if (running.info.kind === "center") return { tone: "accent", text: t.live.status.centering };
+      if (running.info.kind === "find") return { tone: "accent", text: t.finder.title };
       return { tone: "accent", text: looping ? t.live.status.looping : t.live.status.processing };
     }
     if (failed) return { tone: "error", text: t.live.status.failed };
@@ -426,6 +428,9 @@
       {/if}
       {#if main && live.app.centering}
         <CenteringCard centering={live.app.centering} />
+      {/if}
+      {#if main && live.app.finder?.state === "running"}
+        <FinderCard finder={live.app.finder} />
       {/if}
 
       {#if inUse}<Banner icon="guide">{t.live.guideInUse}</Banner>{/if}
