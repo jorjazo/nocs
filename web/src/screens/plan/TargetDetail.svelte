@@ -40,6 +40,7 @@
   import { siteKey, tonight } from "../../lib/tonight.svelte";
   import type { CatalogObject, PlannedTarget, SolvedFrames, TargetVisibility } from "../../lib/types";
   import CenteringCard from "../live/CenteringCard.svelte";
+  import SunWarning from "../devices/SunWarning.svelte";
 
   let { id }: { id: string } = $props();
 
@@ -210,6 +211,8 @@
   type Guiding = "resume" | "stop" | undefined;
   let refused = $state<{ kind: Go; guiding: Guiding } | null>(null);
   let guidingRefused = $state<Go | null>(null);
+  // Refused near the Sun (by day): sent again once its warning is acknowledged.
+  let nearSun = $state<(() => void) | null>(null);
 
   const mountJob = $derived(holder(live.app.jobs, "mount"));
   const goReason = $derived.by((): string | null => {
@@ -270,6 +273,7 @@
       const why = e instanceof ApiError ? goRefusal(e.status, e.message) : null;
       if (why === "horizon") refused = { kind, guiding };
       else if (why === "guiding") guidingRefused = kind;
+      else if (why === "sun") nearSun = () => void go(kind, force, guiding);
       else error = errorText(e, t);
     } finally {
       busy = null;
@@ -452,6 +456,16 @@
   {/if}
 </div>
 
+
+{#if nearSun}
+  <SunWarning
+    onclose={() => (nearSun = null)}
+    onacknowledged={() => {
+      const again = nearSun;
+      nearSun = null;
+      again?.();
+    }} />
+{/if}
 <style>
   .page {
     display: flex;

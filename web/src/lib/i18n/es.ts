@@ -588,6 +588,8 @@ export const es: Messages = {
     badRa: "AR de 0 a 24 h, p. ej. 00 42 44.",
     badDec: "Dec de −90° a +90°, p. ej. +41 16 09.",
     belowHorizon: "Ese objeto está bajo el horizonte ahora.",
+    nearSun: "Ese objeto está cerca del Sol: lee primero la advertencia sobre el Sol.",
+    sunWarning: "Leer la advertencia",
     goAnyway: "Ir igual",
     goAnywayConfirm: "Toca otra vez para ir",
     trackingMode: "Velocidad de seguimiento",
@@ -680,6 +682,52 @@ export const es: Messages = {
     gaveUp: (error: string, frames: number, tolerance: string) =>
       `Aún a ${error} del objetivo tras ${frames} imágenes (tolerancia ${tolerance}). Revisa el balance y el asentamiento de la montura, o amplía la tolerancia.`,
     neverSolved: (frames: number) => `Ninguna de ${frames} imágenes se resolvió.`,
+  },
+  sun: {
+    title: "Apuntar al Sol",
+    blind:
+      "Nunca mires el Sol por un telescopio, un buscador o el visor de una cámara: ciega al instante y para siempre.",
+    filter:
+      "Apunta al Sol solo con un filtro solar certificado (lámina o vidrio ISO 12312-2, o un telescopio solar) que cubra todo el frente del telescopio principal. Nunca un filtro en el lado del ocular.",
+    others:
+      "Tapa o filtra también el buscador y el telescopio guía. La luz del Sol sin filtro quema el sensor de una cámara y los filtros en segundos, y puede encender fuego.",
+    nobody: "Que nadie esté en el ocular mientras el telescopio se mueve cerca del Sol.",
+    lasts: "NOCS vuelve a preguntar mañana. Buscar el Sol detiene PHD2.",
+    acknowledge: "El filtro está puesto",
+    acknowledgeConfirm: "Toca otra vez: entiendo",
+  },
+  finder: {
+    title: "Sol y Luna",
+    findMoon: "Buscar la Luna",
+    findSun: "Buscar el Sol",
+    hint: "Apunta y busca alrededor hasta que una imagen muestre su disco; luego lo centra por su borde, lo sigue a su velocidad y sincroniza la montura. Sin resolver placas.",
+    radius: "Radio de búsqueda",
+    here: "Buscar desde aquí",
+    hereHint:
+      "Alrededor de donde apunta la montura: acércala antes con las flechas. Para el Sol, haz que la sombra del tubo sea lo más pequeña posible.",
+    guidingStops: "El guiado se detiene antes.",
+    noCamera: "El buscador necesita una cámara principal.",
+    cameraBusy: "La cámara principal está ocupada.",
+    noField: "El buscador necesita la distancia focal del telescopio en el perfil.",
+    bodies: { sun: "Sol", moon: "Luna" },
+    phases: {
+      tracking: "Siguiendo",
+      searching: "Buscando",
+      calibrating: "Midiendo los ejes",
+      centring: "Centrando",
+      syncing: "Sincronizando",
+    },
+    searching: (n, total) => `Buscando · ${n} de ${total}`,
+    centred: "Centrado",
+    notFound: "No encontrado",
+    notCentred: "No centrado",
+    cancelled: "Cancelado",
+    frames: (n, seconds, binning) =>
+      `${n} ${n === 1 ? "imagen" : "imágenes"} de ${seconds} s${binning ? `, bin ${binning}` : ""}`,
+    fromCentre: (off) => `A ${off} del centro`,
+    pointedOff: (off) => `La montura apuntaba a ${off} de él`,
+    synced: "La montura se sincronizó con él.",
+    tracking: (mode) => `Seguimiento: ${mode}`,
   },
   focuser: {
     title: "Enfocador",

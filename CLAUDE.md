@@ -36,6 +36,7 @@ server/   Python package `nocs` (nocsd): indi/ (protocol + async client, driver
           guide steps and RMS),
           solving/ (ASTAP, fields of view), pointing/ (solve and sync, centre),
           align/ (polar alignment: axis from three solves, knobs; ADR 0034),
+          finder/ (the Sun and the Moon found and centred by brightness; ADR 0049),
           sky/ (a night's almanac at the site, targets' visibility),
           sites/ (the saved sites and the box's active one, ADR 0038),
           preparation/ (what blocks each step of Tonight's checklist, ADR 0041),

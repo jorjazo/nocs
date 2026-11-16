@@ -53,6 +53,9 @@ def mount_router(
     @router.post("/mount/goto", status_code=status.HTTP_202_ACCEPTED)
     async def goto(request: GotoRequest) -> JobStarted:  # pyright: ignore[reportUnusedFunction]
         if not isinstance(request, EquatorialGoto):
+            with _mount_errors():
+                # Refused before guiding stops, not after: near the Sun, say.
+                mount().check_horizontal(request.alt, request.az)
             await stop_guiding(request.stop_guiding)
             with _mount_errors():
                 return JobStarted(job=mount().goto_horizontal(request.alt, request.az))
@@ -68,6 +71,13 @@ def mount_router(
                 request.ra, request.dec, request.frame, force=request.force, afterwards=afterwards
             )
         return JobStarted(job=job)
+
+    @router.post("/mount/sun-warning", status_code=status.HTTP_204_NO_CONTENT)
+    async def sun_warning() -> Response:  # pyright: ignore[reportUnusedFunction]
+        """The owner read the Sun's warning: go to near the Sun is allowed until the
+        site's date changes (ADR 0049)."""
+        mount().acknowledge_sun()
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     @router.post("/mount/abort", status_code=status.HTTP_202_ACCEPTED)
     async def abort() -> None:  # pyright: ignore[reportUnusedFunction]

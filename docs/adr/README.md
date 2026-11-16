@@ -54,5 +54,6 @@ that supersedes the old one.
 | [0046](0046-no-host-name-check.md) | No host name check: any name reaches the box, pairing guards it | Proposed |
 | [0047](0047-observers-do-not-see-where.md) | Observers do not see where the box is, or which networks it knows | Proposed |
 | [0048](0048-serial-ports-found-by-trying.md) | Serial ports are found by trying them, and the profile keeps the one that works | Proposed |
+| [0049](0049-sun-and-moon-finder.md) | The Sun and the Moon are found by their brightness, and the Sun needs a warning acknowledged | Proposed |
 
 Template: Context → Decision → Consequences.

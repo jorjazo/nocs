@@ -426,6 +426,26 @@ Centre (stage 3.3):
   of frames says how far it still was and what to check. The card stays with the
   latest run until the next one.
 
+The Sun and the Moon (ADR 0049):
+
+- The mount's sheet has a "Sun and Moon" group under tracking: the search radius
+  (degrees), "Search from here" with what it means (bring it near with the arrows;
+  for the Sun, the tube's shadow), and "Find the Moon" and "Find the Sun". A
+  disabled pair says why (no main camera, camera busy, no focal length); while
+  PHD2 guides, a line says guiding stops first.
+- The Sun's warning is a sheet: never look, a full-aperture certified filter, the
+  finder and guide scope capped, nobody at the eyepiece; then that it asks again
+  tomorrow and that finding the Sun stops PHD2. "The filter is on" takes a second
+  tap. It opens before finding the Sun the first time each day, and whenever a go
+  to (Go, Go and centre, Zenith, a target's page) is refused near the Sun; once
+  acknowledged, the refused action is sent again.
+- A finder card shows the body, its chip (Searching · 12 of 129, Measuring the
+  axes, Centring…, then Centred, Not found, Not centred or Cancelled), the frames
+  and their exposure, how far the disc is from the centre, how far the mount
+  pointed off, the tracking rate and whether the mount was synced. Not found is a
+  run that failed before seeing the disc, Not centred one that failed after. Live
+  view shows it while it runs, under the centring card; the frames are its previews.
+
 Tonight and Plan (stage 3.6):
 
 - Tonight is the home screen: the conditions, then the night as one bar from

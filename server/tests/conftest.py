@@ -1,4 +1,5 @@
 import os
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -17,6 +18,22 @@ def indi_address() -> tuple[str, int]:
         pytest.skip("NOCS_TEST_INDI not set")
     host, _, port = value.rpartition(":")
     return host, int(port)
+
+
+@pytest.fixture(autouse=True, scope="session")
+def sun_anywhere() -> Iterator[None]:
+    """Tests point the mount wherever they need, at whatever hour CI runs them: by day,
+    the Sun's warning (ADR 0049) would refuse those that land near the Sun. A test of
+    the warning patches ``near_sun`` again for itself. Only the mount service's name is
+    patched: a test that imports ``near_sun`` itself (``from nocs.mount.service import
+    near_sun``, at collection) gets the real one, as ``test_finder.py`` needs."""
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr("nocs.mount.service.near_sun", _far_from_the_sun)
+        yield
+
+
+def _far_from_the_sun(*_: object) -> float | None:
+    return None
 
 
 @pytest.fixture(autouse=True)

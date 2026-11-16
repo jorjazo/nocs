@@ -8,6 +8,7 @@ import type {
   ConnectionName,
   DeviceStatusName,
   FailureKind,
+  FinderState,
   FocusCalibrationState,
   FrameTypeName,
   SavedFrameTypeName,
@@ -20,6 +21,7 @@ import type { Miss } from "../sky/survey";
 type AutofocusPhase = NonNullable<AutofocusState["phase"]>;
 type AutofocusProblem = NonNullable<AutofocusState["problem"]>;
 type PolarPhase = NonNullable<PolarAlignmentState["phase"]>;
+type FinderPhase = NonNullable<FinderState["phase"]>;
 
 export const en = {
   tabs: {
@@ -605,6 +607,8 @@ export const en = {
     badRa: "RA from 0 to 24 h, e.g. 00 42 44.",
     badDec: "Dec from −90° to +90°, e.g. +41 16 09.",
     belowHorizon: "That target is below the horizon now.",
+    nearSun: "That target is near the Sun: read the Sun's warning first.",
+    sunWarning: "Read the warning",
     goAnyway: "Go anyway",
     goAnywayConfirm: "Tap again to go",
     trackingMode: "Tracking rate",
@@ -700,6 +704,51 @@ export const en = {
     gaveUp: (error: string, frames: number, tolerance: string) =>
       `Still ${error} from the target after ${frames} frames (tolerance ${tolerance}). Check the mount's balance and settling, or widen the tolerance.`,
     neverSolved: (frames: number) => `None of ${frames} frames solved.`,
+  },
+  sun: {
+    title: "Pointing at the Sun",
+    blind: "Never look at the Sun through a telescope, a finder or a camera's viewfinder: it blinds at once, and for good.",
+    filter:
+      "Point at the Sun only with a certified solar filter (ISO 12312-2 film or glass, or a solar telescope) covering the whole front of the main telescope. Never a filter at the eyepiece end.",
+    others:
+      "Cap or filter the finder and the guide scope too. Unfiltered sunlight burns a camera's sensor and filters within seconds, and can set things alight.",
+    nobody: "Keep everyone away from the eyepiece while the telescope moves near the Sun.",
+    lasts: "NOCS asks again tomorrow. Finding the Sun stops PHD2.",
+    acknowledge: "The filter is on",
+    acknowledgeConfirm: "Tap again: I understand",
+  },
+  finder: {
+    title: "Sun and Moon",
+    findMoon: "Find the Moon",
+    findSun: "Find the Sun",
+    hint: "Points at it and searches around until a frame shows its disc, then centres it by its edge, tracks it at its rate and syncs the mount. No plate solving.",
+    radius: "Search radius",
+    here: "Search from here",
+    hereHint:
+      "Around where the mount points: bring it near with the arrows first. For the Sun, make the tube's shadow as small as you can.",
+    guidingStops: "Guiding stops first.",
+    noCamera: "The finder needs a main camera.",
+    cameraBusy: "The main camera is busy.",
+    noField: "The finder needs the telescope's focal length in the profile.",
+    bodies: { sun: "Sun", moon: "Moon" } satisfies Record<FinderState["body"], string>,
+    phases: {
+      tracking: "Tracking",
+      searching: "Searching",
+      calibrating: "Measuring the axes",
+      centring: "Centring",
+      syncing: "Syncing",
+    } satisfies Record<FinderPhase, string>,
+    searching: (n: number, total: number) => `Searching · ${n} of ${total}`,
+    centred: "Centred",
+    notFound: "Not found",
+    notCentred: "Not centred",
+    cancelled: "Cancelled",
+    frames: (n: number, seconds: string, binning: number | null) =>
+      `${n} ${n === 1 ? "frame" : "frames"} of ${seconds} s${binning ? `, bin ${binning}` : ""}`,
+    fromCentre: (off: string) => `${off} from the centre`,
+    pointedOff: (off: string) => `The mount pointed ${off} off it`,
+    synced: "The mount was synced to it.",
+    tracking: (mode: string) => `Tracking: ${mode}`,
   },
   focuser: {
     title: "Focuser",

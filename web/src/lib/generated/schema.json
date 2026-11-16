@@ -321,6 +321,18 @@
           "default": null,
           "description": "None: no filter wheel is ready."
         },
+        "finder": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FinderState"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "None: never run."
+        },
         "flats": {
           "anyOf": [
             {
@@ -3706,6 +3718,383 @@
       "title": "FilterWheelState",
       "type": "object"
     },
+    "FinderBody": {
+      "enum": [
+        "sun",
+        "moon"
+      ],
+      "type": "string"
+    },
+    "FinderDisc": {
+      "additionalProperties": false,
+      "description": "The latest frame's disc, pixels of that frame.",
+      "properties": {
+        "background": {
+          "description": "The frame's median level, of the full scale.",
+          "type": "number"
+        },
+        "found": {
+          "type": "boolean"
+        },
+        "height": {
+          "type": "integer"
+        },
+        "radius": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "width": {
+          "type": "integer"
+        },
+        "x": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The disc's centre; it may lie outside the frame."
+        },
+        "y": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "found",
+        "x",
+        "y",
+        "radius",
+        "width",
+        "height",
+        "background"
+      ],
+      "title": "FinderDisc",
+      "type": "object"
+    },
+    "FinderOffset": {
+      "additionalProperties": false,
+      "description": "Arcminutes on the sky from the body's position.",
+      "properties": {
+        "east": {
+          "type": "number"
+        },
+        "north": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "east",
+        "north"
+      ],
+      "title": "FinderOffset",
+      "type": "object"
+    },
+    "FinderOptionsState": {
+      "additionalProperties": false,
+      "properties": {
+        "binning": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "None: the camera's largest up to 4."
+        },
+        "exposure": {
+          "description": "Seconds the search starts with.",
+          "type": "number"
+        },
+        "here": {
+          "description": "The search was centred where the mount pointed.",
+          "type": "boolean"
+        },
+        "radius": {
+          "description": "Degrees searched around the body (or the mount).",
+          "type": "number"
+        },
+        "sync": {
+          "type": "boolean"
+        },
+        "tolerance": {
+          "description": "Arcminutes.",
+          "type": "number"
+        },
+        "track": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "radius",
+        "exposure",
+        "binning",
+        "tolerance",
+        "here",
+        "sync",
+        "track"
+      ],
+      "title": "FinderOptionsState",
+      "type": "object"
+    },
+    "FinderRequest": {
+      "additionalProperties": false,
+      "description": "Find the Sun or the Moon and centre it in the main camera (ADR 0049). The Sun, and\nanything within 20\u00b0 of it while it is up, needs the Sun's warning acknowledged today;\nfinding the Sun stops PHD2.",
+      "properties": {
+        "binning": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "None: the camera's largest up to 4."
+        },
+        "body": {
+          "$ref": "#/$defs/FinderBody"
+        },
+        "exposure": {
+          "default": 0.1,
+          "description": "Seconds.",
+          "maximum": 10,
+          "minimum": 0.0001,
+          "type": "number"
+        },
+        "here": {
+          "default": false,
+          "description": "Search around where the mount points, not the body.",
+          "type": "boolean"
+        },
+        "radius": {
+          "default": 5.0,
+          "description": "Degrees to search.",
+          "maximum": 30,
+          "minimum": 0,
+          "type": "number"
+        },
+        "stop_guiding": {
+          "default": false,
+          "description": "Stop guiding first; refused while guiding otherwise (ADR 0023).",
+          "type": "boolean"
+        },
+        "sync": {
+          "default": true,
+          "description": "Sync the mount to the body once centred.",
+          "type": "boolean"
+        },
+        "tolerance": {
+          "default": 2.0,
+          "description": "Arcminutes.",
+          "exclusiveMinimum": 0,
+          "maximum": 60,
+          "type": "number"
+        },
+        "track": {
+          "default": true,
+          "description": "Track at the body's rate.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "body"
+      ],
+      "title": "FinderRequest",
+      "type": "object"
+    },
+    "FinderState": {
+      "additionalProperties": false,
+      "description": "The running Sun or Moon finder, or the most recent one (ADR 0049).",
+      "properties": {
+        "attempts": {
+          "description": "Moves made to centre it.",
+          "type": "integer"
+        },
+        "binning": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Of the frames; None until the run starts them."
+        },
+        "body": {
+          "$ref": "#/$defs/FinderBody"
+        },
+        "disc": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FinderDisc"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Arcminutes from the disc's centre to the frame's."
+        },
+        "exposure": {
+          "description": "Seconds of the frames now.",
+          "type": "number"
+        },
+        "failure": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Why it failed."
+        },
+        "finished": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "frames": {
+          "type": "integer"
+        },
+        "job": {
+          "type": "string"
+        },
+        "offset": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FinderOffset"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Where the mount aims from the body; once centred: how far off the mount pointed, before the sync."
+        },
+        "options": {
+          "$ref": "#/$defs/FinderOptionsState"
+        },
+        "phase": {
+          "description": "The step it is at, or the one it ended at.",
+          "enum": [
+            "tracking",
+            "searching",
+            "calibrating",
+            "centring",
+            "syncing"
+          ],
+          "type": "string"
+        },
+        "positions": {
+          "description": "Points of the search in all.",
+          "type": "integer"
+        },
+        "searched": {
+          "description": "Points of the search looked at.",
+          "type": "integer"
+        },
+        "skipped": {
+          "description": "Points near the Sun not looked at, before its warning is acknowledged.",
+          "type": "integer"
+        },
+        "started": {
+          "type": "string"
+        },
+        "state": {
+          "enum": [
+            "running",
+            "succeeded",
+            "failed",
+            "cancelled"
+          ],
+          "type": "string"
+        },
+        "synced": {
+          "type": "boolean"
+        },
+        "track_mode": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The rate set; None: the mount's own."
+        },
+        "warning": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "job",
+        "body",
+        "state",
+        "phase",
+        "options",
+        "exposure",
+        "binning",
+        "searched",
+        "positions",
+        "skipped",
+        "frames",
+        "disc",
+        "offset",
+        "error",
+        "attempts",
+        "track_mode",
+        "synced",
+        "warning",
+        "failure",
+        "started",
+        "finished"
+      ],
+      "title": "FinderState",
+      "type": "object"
+    },
     "FlatFilter": {
       "additionalProperties": false,
       "properties": {
@@ -6762,6 +7151,10 @@
         "slewing": {
           "type": "boolean"
         },
+        "sun_acknowledged": {
+          "description": "The owner acknowledged the Sun's warning today (the site's date): go to near the Sun is allowed (ADR 0049).",
+          "type": "boolean"
+        },
         "time": {
           "anyOf": [
             {
@@ -6826,7 +7219,8 @@
         "site_check",
         "site_sent",
         "time_sent",
-        "limits"
+        "limits",
+        "sun_acknowledged"
       ],
       "title": "MountState",
       "type": "object"

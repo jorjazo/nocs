@@ -141,6 +141,30 @@ def test_goto_below_the_horizon_is_refused(api: TestClient) -> None:
     assert "below the horizon" in response.json()["detail"]
 
 
+def test_goto_near_the_sun_waits_for_its_warning(
+    api: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The Sun 5° from anything, whatever the hour: the check's wiring, not the ephemeris.
+    monkeypatch.setattr("nocs.mount.service.near_sun", _five_degrees_away)
+    assert mount(api)["sun_acknowledged"] is False
+    for goto in (
+        {"frame": "j2000", "ra": 1.0, "dec": -60.0, "force": True},
+        {"frame": "altaz", "alt": 90, "az": 0},
+    ):
+        response = api.post("/api/mount/goto", json=goto)
+        assert response.status_code == 409
+        assert "near the Sun" in response.json()["detail"]
+    assert api.post("/api/mount/sun-warning").status_code == 204
+    wait(api, lambda s: s["mount"]["sun_acknowledged"])
+    response = api.post("/api/mount/goto", json={"frame": "j2000", "ra": 1.0, "dec": -60.0})
+    assert response.status_code == 202, response.text
+    wait(api, finished(response.json()["job"]))
+
+
+def _five_degrees_away(*_: object) -> float | None:
+    return 5.0
+
+
 def test_goto_zenith_stops_tracking(api: TestClient) -> None:
     response = api.post("/api/mount/goto", json={"frame": "altaz", "alt": 90, "az": 0})
     assert response.status_code == 202, response.text

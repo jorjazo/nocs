@@ -79,6 +79,7 @@ import type {
   CalibrationReport,
   CalibrationSequence,
   CalibrationSequenceRequest,
+  FinderRequest,
   FlatPlan,
   FlatWindows,
   WifiNetwork,
@@ -544,6 +545,19 @@ export function syncToSolution(): Promise<void> {
 // Goes to a J2000 target and centres it in the main camera's frame (stage 3.3).
 export async function centerOn(body: CenterRequest): Promise<string> {
   const started = await request<JobStarted>("POST", "/api/solver/center", body);
+  return started.job;
+}
+
+// -- The Sun and the Moon (ADR 0049) -------------------------------------------------
+
+// The owner read the Sun's warning: go to near the Sun until the site's date changes.
+export function acknowledgeSun(): Promise<void> {
+  return request("POST", "/api/mount/sun-warning");
+}
+
+// Finds the Sun or the Moon by its brightness and centres it in the main camera.
+export async function findBody(body: FinderRequest): Promise<string> {
+  const started = await request<JobStarted>("POST", "/api/finder", body);
   return started.job;
 }
 
