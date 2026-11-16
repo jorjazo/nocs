@@ -1,6 +1,6 @@
 # NOCS — UX and Design System
 
-Status: draft (Phase 1) · Last updated: 2026-11-14
+Status: draft (Phase 1) · Last updated: 2026-11-15
 
 This document captures the information architecture, the key screens and the
 design tokens of the NOCS web client. Mockups live on a design canvas (private
@@ -36,7 +36,7 @@ Navigation follows the night, not the device tree.
 | Screen | Notes |
 |---|---|
 | First run | Create owner passphrase, pair this device, take time and location from the phone. Shows the hotspot name. |
-| Tonight | Astronomical night window, environment from the power box sensor, setup checklist. |
+| Tonight | Setup checklist (first while a step is left), astronomical night window and the darkness left, tonight's target, the weather; each a card that opens and closes. |
 | Rig | The profile and its connection on top; below, collapsible sections in groups: imaging and guiding trains with derived FOV and pixel scale, devices with status; the saved sites and the active one; the box; settings (§7, "Rig"). |
 | Polar alignment | Target view with the axis error, per-axis readouts with plain-language direction ("Raise", "Turn west"). |
 | Autofocus | Live V-curve with fit, best position / HFR / stars / temperature, cancel restores the previous position. |
@@ -238,9 +238,9 @@ Power box (stage 2.10):
 - A new voltage is picked first and applied with its own button, with a reminder
   to check what is plugged in. Dew heaters are set by hand only with auto-dew
   off.
-- Tonight shows the conditions from the weather role (temperature, humidity,
-  dew point and the margin to it, in the warning color under 3 °C) above the
-  rest of the screen, which arrives in phase 3.
+- Tonight's Weather card shows the conditions from the weather role (temperature,
+  humidity, dew point and the margin to it, in the warning color under 3 °C) and
+  the device they come from.
 
 Focuser, filter wheel and profile editor (stage 2.8):
 
@@ -448,7 +448,7 @@ The Sun and the Moon (ADR 0049):
 
 Tonight and Plan (stage 3.6):
 
-- Tonight is the home screen: the conditions, then the night as one bar from
+- Tonight is the home screen: the night as one bar from
   sunset to sunrise (daylight and the three twilights lighter, the dark window
   black, a line at now, the Moon's time up under it) with sunset, the dark
   window and sunrise under it; the dark window's length (or how dark it gets when
@@ -459,6 +459,17 @@ Tonight and Plan (stage 3.6):
   Connect, Focus (with a focuser), Frame the target and Guide (with a guide
   camera); each step says how it stands, and the first pending one carries the
   screen's primary button. Polar alignment and the sequence join in their phases.
+- Tonight's cards open and close like Rig's sections, and closed they still say
+  how they stand: the checklist how many steps are done, the night how much of the
+  dark window is left, the target its altitude now, the weather the temperature
+  and the margin to the dew point (a "Dew near" chip open or closed). The night
+  starts open and the rest closed, and each browser keeps what its user opened or
+  closed; the checklist instead goes first and open while a step is left, last
+  and closed once all are done.
+- The night says how the dark window stands now: "Dark in 1 h 20 min, for
+  7 h 20 min" before it, "5 h 28 min of darkness left · 3 h 30 min without the
+  Moon" during it (the Moon only when over 10 % lit), "The dark window is over"
+  after it.
 - Plan opens on tonight's target (Open, Forget with a second tap) and the search:
   a designation or a name, in either language and without accents; a few targets
   to start from when it is empty. Each result says what it is (type,

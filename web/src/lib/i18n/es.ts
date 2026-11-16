@@ -436,12 +436,14 @@ export const es: Messages = {
     amps: (amps: string) => `${amps} A`,
   },
   weather: {
-    title: "Ambiente",
+    title: "El tiempo",
     temperature: "Temperatura",
     humidity: "Humedad",
     dewPoint: "Punto de rocío",
     margin: (degrees: string) => `${degrees} sobre el punto de rocío`,
     dewNear: "Cerca del punto de rocío: ¿calefactores encendidos?",
+    dewNearShort: "Rocío cerca",
+    source: (device) => `Fuente: ${device}`,
   },
   live: {
     target: "Objetivo",
@@ -1145,6 +1147,11 @@ export const es: Messages = {
     darkest: (kind) => `Sin oscuridad total: a lo más ${kind}`,
     darkness: { civil: "crepúsculo civil", nautical: "crepúsculo náutico", astronomical: "oscuridad astronómica" },
     noDark: "El Sol no baja lo suficiente esta noche.",
+    darkIn: (wait, length) => `Oscuro en ${wait}, por ${length}`,
+    darkLeft: (left) => `Quedan ${left} de oscuridad`,
+    darkLeftMoonless: (left) => `${left} sin Luna`,
+    darkLeftMoonUp: "toda con Luna",
+    darkOver: "Terminó la oscuridad.",
     moon: "Luna",
     phases: {
       new: "Luna nueva",
@@ -1194,6 +1201,7 @@ export const es: Messages = {
     stepDone: "Hecho",
     stepPending: "Pendiente",
     stepBlocked: "Bloqueado",
+    prepared: (done, total) => `${done} de ${total} listos`,
   },
   preparation: {
     blockers: {

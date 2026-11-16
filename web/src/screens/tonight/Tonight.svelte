@@ -1,14 +1,17 @@
 <script lang="ts">
-  // Tonight (stage 3.6), the home screen: conditions, the night from sunset to
-  // sunrise with the dark window and the Moon, tonight's target, and the
-  // get-ready checklist whose next step carries the one primary button (docs/ux.md
-  // §1): the first one not done that can run. One that cannot says why and where to
-  // fix it, from what the server says each step needs (ADR 0041).
+  // Tonight (stage 3.6), the home screen: the night from sunset to sunrise with the
+  // dark window and the Moon, tonight's target, the weather, and the get-ready
+  // checklist whose next step carries the one primary button (docs/ux.md §1): the
+  // first one not done that can run. One that cannot says why and where to fix it,
+  // from what the server says each step needs (ADR 0041). Each is a card that opens
+  // and closes, and says how it stands when closed; the checklist goes first and
+  // open while something is left, last and closed once all is done.
   import Button from "../../components/Button.svelte";
   import Chip from "../../components/Chip.svelte";
   import NightBar from "../../components/NightBar.svelte";
   import RigStatus from "../../components/RigStatus.svelte";
   import ScreenHeader from "../../components/ScreenHeader.svelte";
+  import Section from "../../components/Section.svelte";
   import WeatherCard from "../../components/WeatherCard.svelte";
   import { getVisibility } from "../../lib/api";
   import { plannedName } from "../../lib/catalog.svelte";
@@ -30,9 +33,11 @@
   import { live } from "../../lib/live.svelte";
   import { href, router, type Route } from "../../lib/router.svelte";
   import { calibratedFor } from "../../lib/focus";
-  import { nearest, phase } from "../../lib/sky/night";
+  import { darkLeft, nearest, phase, type DarkLeft } from "../../lib/sky/night";
   import { separation } from "../../lib/sky/projection";
+  import { prefs } from "../../lib/prefs.svelte";
   import { siteKey, tonight } from "../../lib/tonight.svelte";
+  import { arrange, type TonightSection } from "../../lib/tonightsections";
   import { formatAngle } from "../polar/angle";
   import type { TargetVisibility } from "../../lib/types";
 
@@ -70,6 +75,21 @@
     almanac?.dark ? (Date.parse(almanac.dark.end) - Date.parse(almanac.dark.start)) / 1000 : null,
   );
   const moonPhase = $derived(almanac ? phase(almanac.moon.phase) : null);
+  // A thin Moon does not brighten the sky: then the dark window is all that counts.
+  const moonMatters = $derived(!!almanac && almanac.moon.fraction > 0.1);
+  const left = $derived(almanac ? darkLeft(almanac.dark, moonMatters ? almanac.dark_moonless : null, now) : null);
+  const leftText = $derived(darkText(left));
+
+  function darkText(value: DarkLeft | null): string | null {
+    if (!value) return null;
+    if (value.when === "before") return t.tonight.darkIn(formatDuration(value.in), formatDuration(value.length));
+    if (value.when === "after") return t.tonight.darkOver;
+    const text = t.tonight.darkLeft(formatDuration(value.left));
+    // Within a minute of the whole: the Moon takes nothing from what is left.
+    if (value.moonless === null || value.left - value.moonless < 60) return text;
+    const moonless = value.moonless < 60 ? t.tonight.darkLeftMoonUp : t.tonight.darkLeftMoonless(formatDuration(value.moonless));
+    return `${text} · ${moonless}`;
+  }
 
   // -- Tonight's target --------------------------------------------------------------
 
@@ -201,6 +221,36 @@
 
   const status = $derived(statuses(steps.map((s) => ({ done: s.done, blocked: s.blockers.length > 0 }))));
 
+  // -- The cards ----------------------------------------------------------------------
+
+  const prepared = $derived(steps.every((step) => step.done));
+  const order = $derived(arrange(prepared));
+  // The checklist is open while something is left: opened or closed by hand, it
+  // keeps that only until it is done, or undone, again.
+  let prepChoice: boolean | null = $state(null);
+  $effect(() => {
+    void prepared;
+    prepChoice = null;
+  });
+  const prepOpen = $derived(prepChoice ?? !prepared);
+
+  function open(section: TonightSection): boolean {
+    return section === "preparation" ? prepOpen : prefs.tonightOpen(section);
+  }
+  function toggle(section: TonightSection): (open: boolean) => void {
+    return (value) => {
+      if (section === "preparation") prepChoice = value;
+      else prefs.setTonightOpen(section, value);
+    };
+  }
+  const targetSummary = $derived(
+    planned
+      ? [plannedName(planned, locale), altitudeNow === null ? null : t.tonight.altitudeNow(formatDecimal(altitudeNow, locale, 0))]
+          .filter((part) => part !== null)
+          .join(" · ")
+      : null,
+  );
+
   function statusText(value: StepStatus | undefined): string {
     return value === "done" ? t.tonight.stepDone : value === "blocked" ? t.tonight.stepBlocked : t.tonight.stepPending;
   }
@@ -211,10 +261,21 @@
 </ScreenHeader>
 
 <div class="screen">
-  {#if weather}<WeatherCard {weather} />{/if}
+  {#each order as section (section)}
+    {#if section === "preparation"}
+      {@render preparationCard()}
+    {:else if section === "night"}
+      {@render nightCard()}
+    {:else if section === "target" && planned}
+      {@render targetCard(planned)}
+    {:else if section === "weather" && weather}
+      <WeatherCard {weather} open={open("weather")} ontoggle={toggle("weather")} />
+    {/if}
+  {/each}
+</div>
 
-  <section class="card night" aria-labelledby="night-title">
-    <h2 id="night-title">{nightTitle}</h2>
+{#snippet nightCard()}
+  <Section scope="tonight" id="night" title={nightTitle} summary={leftText} open={open("night")} ontoggle={toggle("night")}>
     {#if almanac}
       <NightBar {almanac} {now} />
       <div class="facts">
@@ -240,7 +301,8 @@
           </span>
         </div>
       </div>
-      {#if almanac.dark_moonless.length && almanac.moon.fraction > 0.1}
+      {#if leftText}<p class="left" data-dark={left?.when}>{leftText}</p>{/if}
+      {#if almanac.dark_moonless.length && moonMatters}
         <p class="caption muted">
           {t.tonight.moonless(
             almanac.dark_moonless.map((i) => `${formatTime(i.start, locale)}–${formatTime(i.end, locale)}`).join(", "),
@@ -258,35 +320,40 @@
     {:else}
       <p class="muted" role="status">{t.tonight.loading}</p>
     {/if}
-  </section>
+  </Section>
+{/snippet}
 
-  {#if planned}
-    <section class="card target" aria-labelledby="target-title">
-      <div class="row">
-        <h2 id="target-title">
-          {#if planned.id}<a href={href({ screen: "target", id: planned.id })}>{plannedName(planned, locale)}</a>{:else}{planned.name}{/if}
-        </h2>
-        {#if altitudeNow !== null}
-          <Chip tone={altitudeNow > 0 ? "accent" : "neutral"}>{t.tonight.altitudeNow(formatDecimal(altitudeNow, locale, 0))}</Chip>
-        {/if}
-      </div>
+{#snippet targetCard(target: NonNullable<typeof planned>)}
+  <Section scope="tonight" id="target" title={t.tonight.target} summary={targetSummary} open={open("target")} ontoggle={toggle("target")}>
+    <div class="row">
+      <span class="name">
+        {#if target.id}<a href={href({ screen: "target", id: target.id })}>{plannedName(target, locale)}</a>{:else}{target.name}{/if}
+      </span>
+      {#if altitudeNow !== null}
+        <Chip tone={altitudeNow > 0 ? "accent" : "neutral"}>{t.tonight.altitudeNow(formatDecimal(altitudeNow, locale, 0))}</Chip>
+      {/if}
+    </div>
+    {#if seen}
       <p class="muted">
-        {#if seen}
-          {#if seen.observable > 0}
-            {t.tonight.observable(formatDuration(seen.observable))}
-            {#if seen.transit}· {t.tonight.transit(formatTime(seen.transit, locale), formatDecimal(seen.transit_altitude, locale, 0))}{/if}
-          {:else}
-            {t.tonight.notObservable}
-          {/if}
+        {#if seen.observable > 0}
+          {t.tonight.observable(formatDuration(seen.observable))}
+          {#if seen.transit}· {t.tonight.transit(formatTime(seen.transit, locale), formatDecimal(seen.transit_altitude, locale, 0))}{/if}
         {:else}
-          {t.tonight.target}
+          {t.tonight.notObservable}
         {/if}
       </p>
-    </section>
-  {/if}
+    {/if}
+  </Section>
+{/snippet}
 
-  <section class="card" aria-labelledby="checklist-title">
-    <h2 id="checklist-title">{t.tonight.checklist}</h2>
+{#snippet preparationCard()}
+  <Section
+    scope="tonight"
+    id="preparation"
+    title={t.tonight.checklist}
+    summary={t.tonight.prepared(steps.filter((step) => step.done).length, steps.length)}
+    open={open("preparation")}
+    ontoggle={toggle("preparation")}>
     <ol class="steps">
       {#each steps as step, i (step.key)}
         {@const stepState = status[i]}
@@ -315,8 +382,8 @@
         </li>
       {/each}
     </ol>
-  </section>
-</div>
+  </Section>
+{/snippet}
 
 <style>
   .screen {
@@ -324,14 +391,6 @@
     flex-direction: column;
     gap: var(--space-4);
     margin-top: var(--space-4);
-  }
-  .card {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-  }
-  h2 {
-    margin: 0;
   }
   p {
     margin: 0;
@@ -354,6 +413,14 @@
   .readout {
     font-size: 20px;
     line-height: 26px;
+  }
+  .left {
+    font-weight: 500;
+  }
+  .name {
+    font-size: 17px;
+    line-height: 24px;
+    font-weight: 600;
   }
   .row {
     display: flex;

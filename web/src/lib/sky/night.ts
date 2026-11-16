@@ -71,3 +71,31 @@ export function nearest(times: readonly string[], time: number): number | null {
   });
   return best;
 }
+
+export interface Span {
+  start: string;
+  end: string;
+}
+
+// How the dark window stands at `now`, in seconds: still to come (how soon and how
+// long), under way (how much is left, and how much of that is without the Moon,
+// when the Moon matters), or over.
+export type DarkLeft =
+  | { when: "before"; in: number; length: number }
+  | { when: "during"; left: number; moonless: number | null }
+  | { when: "after" };
+
+// `moonless` is the dark window's stretches without the Moon, or null when the
+// Moon does not matter tonight (too thin to brighten the sky).
+export function darkLeft(dark: Span | null, moonless: readonly Span[] | null, now: number): DarkLeft | null {
+  if (!dark) return null;
+  const start = Date.parse(dark.start);
+  const end = Date.parse(dark.end);
+  if (now < start) return { when: "before", in: (start - now) / 1000, length: (end - start) / 1000 };
+  if (now >= end) return { when: "after" };
+  const free = moonless?.reduce((sum, span) => {
+    const from = Math.max(Date.parse(span.start), now);
+    return sum + Math.max(0, Date.parse(span.end) - from);
+  }, 0);
+  return { when: "during", left: (end - now) / 1000, moonless: free === undefined ? null : free / 1000 };
+}

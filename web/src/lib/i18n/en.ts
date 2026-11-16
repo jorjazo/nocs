@@ -455,12 +455,14 @@ export const en = {
     amps: (amps: string) => `${amps} A`,
   },
   weather: {
-    title: "Conditions",
+    title: "Weather",
     temperature: "Temperature",
     humidity: "Humidity",
     dewPoint: "Dew point",
     margin: (degrees: string) => `${degrees} above the dew point`,
     dewNear: "Close to the dew point: dew heaters on?",
+    dewNearShort: "Dew near",
+    source: (device: string) => `Source: ${device}`,
   },
   live: {
     target: "Target",
@@ -1168,6 +1170,11 @@ export const en = {
     darkest: (kind: string) => `No full darkness: ${kind} at most`,
     darkness: { civil: "civil twilight", nautical: "nautical twilight", astronomical: "astronomical darkness" },
     noDark: "The Sun stays too high tonight.",
+    darkIn: (wait: string, length: string) => `Dark in ${wait}, for ${length}`,
+    darkLeft: (left: string) => `${left} of darkness left`,
+    darkLeftMoonless: (left: string) => `${left} without the Moon`,
+    darkLeftMoonUp: "the Moon is up all of it",
+    darkOver: "The dark window is over.",
     moon: "Moon",
     phases: {
       new: "New Moon",
@@ -1217,6 +1224,7 @@ export const en = {
     stepDone: "Done",
     stepPending: "To do",
     stepBlocked: "Blocked",
+    prepared: (done: number, total: number) => `${done} of ${total} done`,
   },
   preparation: {
     // Why a step of the checklist cannot run yet (the state's `preparation`).

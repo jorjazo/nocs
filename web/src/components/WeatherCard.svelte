@@ -1,11 +1,14 @@
 <script lang="ts">
-  // Conditions from the weather role (ADR 0017): temperature, humidity and dew
-  // point, and how far the air is from dew.
+  // Tonight's weather: conditions from the weather role (ADR 0017), temperature,
+  // humidity and dew point, how far the air is from dew, and which device says so.
+  // Closed, its header still says the temperature and the margin, and warns of dew.
   import { formatDecimal, formatTemperature } from "../lib/format";
   import { i18n } from "../lib/i18n";
   import type { WeatherState } from "../lib/types";
+  import Section from "./Section.svelte";
 
-  let { weather }: { weather: WeatherState } = $props();
+  let { weather, open, ontoggle }: { weather: WeatherState; open: boolean; ontoggle: (open: boolean) => void } =
+    $props();
 
   // Below this margin optics start to dew up without heaters.
   const DEW_MARGIN = 3;
@@ -15,10 +18,20 @@
   const margin = $derived(
     weather.temperature !== null && weather.dew_point !== null ? weather.temperature - weather.dew_point : null,
   );
+  const summary = $derived(
+    [
+      weather.temperature === null ? null : formatTemperature(weather.temperature, locale),
+      margin === null ? null : t.weather.margin(formatTemperature(margin, locale)),
+    ]
+      .filter((part) => part !== null)
+      .join(" · "),
+  );
+  const status = $derived(
+    margin !== null && margin < DEW_MARGIN ? { tone: "warning" as const, text: t.weather.dewNearShort } : null,
+  );
 </script>
 
-<section class="card" aria-labelledby="weather-title">
-  <h2 class="heading" id="weather-title">{t.weather.title}</h2>
+<Section scope="tonight" id="weather" title={t.weather.title} {summary} {status} {open} {ontoggle}>
   <div class="readouts">
     <div>
       <span class="label muted">{t.weather.temperature}</span>
@@ -38,17 +51,10 @@
       {margin < DEW_MARGIN ? t.weather.dewNear : t.weather.margin(formatTemperature(margin, locale))}
     </p>
   {/if}
-</section>
+  <p class="caption">{t.weather.source(weather.device)}</p>
+</Section>
 
 <style>
-  .card {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-  }
-  h2 {
-    margin: 0;
-  }
   .readouts {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
