@@ -214,6 +214,11 @@ export async function addSite(site: Site): Promise<string> {
 }
 
 // The active site only while no job holds the mount (409).
+// The time zones a site may name (ADR 0052).
+export function getSiteZones(): Promise<string[]> {
+  return request("GET", "/api/sites/zones");
+}
+
 export function putSite(id: string, site: Site): Promise<void> {
   return request("PUT", `/api/sites/${encodeURIComponent(id)}`, site);
 }

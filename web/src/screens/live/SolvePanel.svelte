@@ -10,7 +10,7 @@
   import { solve, syncToSolution } from "../../lib/api";
   import type { CameraJob } from "../../lib/camera.svelte";
   import { solveExposure } from "../../lib/equipment";
-  import { formatDecimal, formatPlain } from "../../lib/format";
+  import { formatClock, formatDecimal, formatPlain } from "../../lib/format";
   import { i18n } from "../../lib/i18n";
   import { live } from "../../lib/live.svelte";
   import { formatDec, formatRa } from "../../lib/mount.svelte";
@@ -82,7 +82,7 @@
   }
 
   function time(iso: string): string {
-    return new Intl.DateTimeFormat(locale, { timeStyle: "medium" }).format(new Date(iso));
+    return formatClock(iso, locale);
   }
 </script>
 

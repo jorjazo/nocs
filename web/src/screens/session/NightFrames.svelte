@@ -9,7 +9,7 @@
   import Icon from "../../components/Icon.svelte";
   import { getFrames, getNights } from "../../lib/api";
   import { errorText } from "../../lib/errors";
-  import { formatBytes, formatDecimal, formatDuration, formatSeconds } from "../../lib/format";
+  import { formatBytes, formatClock, formatDecimal, formatDuration, formatSeconds } from "../../lib/format";
   import { i18n } from "../../lib/i18n";
   import { live } from "../../lib/live.svelte";
   import { router } from "../../lib/router.svelte";
@@ -123,7 +123,7 @@
   }
 
   function clock(iso: string): string {
-    return new Intl.DateTimeFormat(locale, { timeStyle: "medium" }).format(new Date(iso));
+    return formatClock(iso, locale);
   }
 
   // Live stacks (ADR 0040) are made of the night's lights: counting them too would

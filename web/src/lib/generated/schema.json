@@ -287,6 +287,17 @@
           "default": null,
           "description": "None: never run."
         },
+        "clients": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ClientsState"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "clock": {
           "anyOf": [
             {
@@ -368,6 +379,18 @@
           ],
           "default": null,
           "description": "None: no focuser is ready."
+        },
+        "forecast": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ForecastState"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "None while the active profile asks for no forecast."
         },
         "gps": {
           "anyOf": [
@@ -2620,6 +2643,29 @@
       ],
       "type": "string"
     },
+    "ClientsState": {
+      "additionalProperties": false,
+      "description": "Who is connected now: paired devices, and how many observers (Tonight's Host).",
+      "properties": {
+        "devices": {
+          "description": "Connected paired devices by name; empty for observers (ADR 0047).",
+          "items": {
+            "$ref": "#/$defs/ConnectedDevice"
+          },
+          "type": "array"
+        },
+        "observers": {
+          "description": "Pages open without pairing (observer access).",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "devices",
+        "observers"
+      ],
+      "title": "ClientsState",
+      "type": "object"
+    },
     "ClockReport": {
       "properties": {
         "corrected": {
@@ -2755,6 +2801,29 @@
         "profile"
       ],
       "title": "ConnectRequest",
+      "type": "object"
+    },
+    "ConnectedDevice": {
+      "additionalProperties": false,
+      "properties": {
+        "connections": {
+          "description": "Pages it has open now (tabs, windows).",
+          "type": "integer"
+        },
+        "id": {
+          "description": "The paired device's id.",
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "connections"
+      ],
+      "title": "ConnectedDevice",
       "type": "object"
     },
     "ConnectionName": {
@@ -5165,6 +5234,202 @@
         "calibration"
       ],
       "title": "FocuserState",
+      "type": "object"
+    },
+    "ForecastHour": {
+      "additionalProperties": false,
+      "properties": {
+        "cloud_cover": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "% of the sky."
+        },
+        "cloud_high": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "% of the sky, high clouds (above 8 km)."
+        },
+        "cloud_low": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "% of the sky, low clouds (up to 3 km)."
+        },
+        "cloud_mid": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "% of the sky, mid clouds (3 to 8 km)."
+        },
+        "humidity": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Relative humidity at 2 m, %."
+        },
+        "precipitation": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "mm in the hour."
+        },
+        "precipitation_probability": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "%."
+        },
+        "temperature": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "\u00b0C at 2 m."
+        },
+        "time": {
+          "description": "UTC, the start of the hour.",
+          "type": "string"
+        },
+        "wind_gusts": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "km/h at 10 m."
+        },
+        "wind_speed": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "km/h at 10 m."
+        }
+      },
+      "required": [
+        "time",
+        "temperature",
+        "humidity",
+        "precipitation",
+        "precipitation_probability",
+        "cloud_cover",
+        "cloud_low",
+        "cloud_mid",
+        "cloud_high",
+        "wind_speed",
+        "wind_gusts"
+      ],
+      "title": "ForecastHour",
+      "type": "object"
+    },
+    "ForecastProvider": {
+      "const": "open-meteo",
+      "type": "string"
+    },
+    "ForecastState": {
+      "additionalProperties": false,
+      "description": "Tonight's forecast for the active site, from the profile's provider (ADR 0051).",
+      "properties": {
+        "attempted": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The last attempt since nocsd started, UTC."
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Why the last attempt failed (no internet, say)."
+        },
+        "fetched": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "When the forecast was fetched, UTC; None: none yet for this site."
+        },
+        "hours": {
+          "description": "From the current hour on, while the forecast is less than 48 h old.",
+          "items": {
+            "$ref": "#/$defs/ForecastHour"
+          },
+          "type": "array"
+        },
+        "provider": {
+          "$ref": "#/$defs/ForecastProvider"
+        }
+      },
+      "required": [
+        "provider",
+        "fetched",
+        "attempted",
+        "error",
+        "hours"
+      ],
+      "title": "ForecastState",
       "type": "object"
     },
     "FrameGuiding": {
@@ -9090,6 +9355,9 @@
           },
           "type": "object"
         },
+        "forecast": {
+          "$ref": "#/$defs/WeatherForecast"
+        },
         "guiding": {
           "anyOf": [
             {
@@ -9137,6 +9405,17 @@
     "ProfileSummary": {
       "additionalProperties": false,
       "properties": {
+        "forecast": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ForecastProvider"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Where tonight's forecast comes from, as saved (`forecast.provider`)."
+        },
         "name": {
           "type": "string"
         },
@@ -9147,7 +9426,8 @@
       },
       "required": [
         "name",
-        "solve_exposure"
+        "solve_exposure",
+        "forecast"
       ],
       "title": "ProfileSummary",
       "type": "object"
@@ -9531,6 +9811,72 @@
         "stack"
       ],
       "type": "string"
+    },
+    "SavedSite": {
+      "additionalProperties": false,
+      "properties": {
+        "elevation": {
+          "default": 0.0,
+          "description": "Metres above sea level.",
+          "type": "number"
+        },
+        "horizon": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/HorizonPoint"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The local horizon (hills, trees, buildings): straight lines between points, all round the sky. None: a flat horizon at 0\u00b0."
+        },
+        "latitude": {
+          "description": "Degrees, north positive.",
+          "maximum": 90,
+          "minimum": -90,
+          "type": "number"
+        },
+        "longitude": {
+          "description": "Degrees, east positive.",
+          "maximum": 180,
+          "minimum": -180,
+          "type": "number"
+        },
+        "name": {
+          "default": "",
+          "maxLength": 80,
+          "type": "string"
+        },
+        "timezone": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IANA time zone the app shows the site's times in (America/Santiago); None: the one at its position (ADR 0052)."
+        },
+        "zone": {
+          "description": "The time zone the app shows the site's times in: its own, else the one at its position (ADR 0052).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "latitude",
+        "longitude",
+        "zone"
+      ],
+      "title": "SavedSite",
+      "type": "object"
     },
     "SelectFilter": {
       "additionalProperties": false,
@@ -10322,6 +10668,19 @@
           "default": "",
           "maxLength": 80,
           "type": "string"
+        },
+        "timezone": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IANA time zone the app shows the site's times in (America/Santiago); None: the one at its position (ADR 0052)."
         }
       },
       "required": [
@@ -10360,7 +10719,7 @@
         },
         "saved": {
           "additionalProperties": {
-            "$ref": "#/$defs/Site"
+            "$ref": "#/$defs/SavedSite"
           },
           "description": "Every saved site, by id.",
           "type": "object"
@@ -11678,6 +12037,17 @@
           ],
           "description": "\u00b0C."
         },
+        "cpu_used": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Percent of the CPUs' time in use since the last reading (a few seconds ago), to 5 %; None at the first."
+        },
         "disk_free": {
           "anyOf": [
             {
@@ -11760,6 +12130,7 @@
         "throttled",
         "memory_used",
         "disk_free",
+        "cpu_used",
         "warnings"
       ],
       "title": "SystemHealth",
@@ -12698,6 +13069,26 @@
         }
       },
       "title": "Warm",
+      "type": "object"
+    },
+    "WeatherForecast": {
+      "additionalProperties": false,
+      "description": "Where tonight's forecast comes from (ADR 0051).",
+      "properties": {
+        "provider": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ForecastProvider"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "None: no forecast. open-meteo: Open-Meteo, free and without a key; the box sends it the active site's position rounded to 0.1\u00b0 (about 10 km)."
+        }
+      },
+      "title": "WeatherForecast",
       "type": "object"
     },
     "WeatherState": {

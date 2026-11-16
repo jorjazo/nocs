@@ -69,12 +69,44 @@ export function formatBytes(bytes: number, locale: string): string {
   }).format(value);
 }
 
+// The time zone the app shows times in: the active site's (ADR 0052), else the
+// browser's. The shell sets it, and draws the screens again when it changes.
+let zone: string | undefined;
+
+export function setTimeZone(value: string | null | undefined): void {
+  zone = undefined;
+  if (!value) return;
+  try {
+    new Intl.DateTimeFormat("en", { timeZone: value });
+    zone = value;
+  } catch {
+    // A zone this browser does not know: its own then.
+  }
+}
+
+export function timeZone(): string | undefined {
+  return zone;
+}
+
 export function formatDateTime(iso: string, locale: string): string {
-  return new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(new Date(iso));
+  return new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short", timeZone: zone }).format(
+    new Date(iso),
+  );
 }
 
 export function formatTime(iso: string, locale: string): string {
-  return new Intl.DateTimeFormat(locale, { timeStyle: "short" }).format(new Date(iso));
+  return new Intl.DateTimeFormat(locale, { timeStyle: "short", timeZone: zone }).format(new Date(iso));
+}
+
+// Times with seconds (a frame's, a solve's).
+export function formatClock(iso: string, locale: string): string {
+  return new Intl.DateTimeFormat(locale, { timeStyle: "medium", timeZone: zone }).format(new Date(iso));
+}
+
+// The hour of the day (0–23) at `time` (ms) in the app's time zone.
+export function hourOf(time: number): number {
+  const parts = new Intl.DateTimeFormat("en-GB", { hour: "numeric", hourCycle: "h23", timeZone: zone }).formatToParts(time);
+  return Number(parts.find((part) => part.type === "hour")?.value ?? 0);
 }
 
 // Plain numbers in the interface (gain, offset, ranges), without grouping.

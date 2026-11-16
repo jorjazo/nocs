@@ -1430,6 +1430,11 @@ export const en = {
     needName: "Give the site a name.",
     needPosition: "Give the latitude and longitude.",
     notFound: "This site is not saved.",
+    timeZone: "Time zone",
+    timeZoneHint: "The app shows the site's times in it. Empty: the one at its position.",
+    timeZoneAuto: (zone: string) => `From its position: ${zone}`,
+    timeZoneAutoNew: "From its position",
+    unknownZone: "Choose a time zone from the list, or leave it empty.",
   },
   sequence: {
     plan: "Plan",

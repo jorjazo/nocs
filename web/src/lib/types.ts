@@ -163,6 +163,7 @@ export type {
   ShareRequest,
   ShareState,
   ShutdownRequest,
+  SavedSite,
   Site,
   SiteCreated,
   SitesState,

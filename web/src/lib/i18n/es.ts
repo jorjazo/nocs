@@ -1406,6 +1406,11 @@ export const es: Messages = {
     needName: "Ponle un nombre al sitio.",
     needPosition: "Indica la latitud y la longitud.",
     notFound: "Este sitio no está guardado.",
+    timeZone: "Zona horaria",
+    timeZoneHint: "La app muestra las horas del sitio en ella. Vacía: la de su posición.",
+    timeZoneAuto: (zone) => `Según su posición: ${zone}`,
+    timeZoneAutoNew: "Según su posición",
+    unknownZone: "Elige una zona horaria de la lista, o déjala vacía.",
   },
   sequence: {
     plan: "Plan",

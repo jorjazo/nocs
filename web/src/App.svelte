@@ -8,7 +8,7 @@
   import { reportClock } from "./lib/api";
   import { auth } from "./lib/auth.svelte";
   import { errorText } from "./lib/errors";
-  import { formatDuration } from "./lib/format";
+  import { formatDuration, setTimeZone } from "./lib/format";
   import { i18n } from "./lib/i18n";
   import { pageWidth } from "./lib/layout";
   import { live } from "./lib/live.svelte";
@@ -67,6 +67,14 @@
   });
   const clock = $derived(live.app.clock ?? null);
 
+  // Times show in the active site's time zone (ADR 0052): the screens are drawn again
+  // when it changes, which is when the site does.
+  const zone = $derived.by(() => {
+    const sites = live.app.sites;
+    return sites?.active ? (sites.saved[sites.active]?.zone ?? null) : null;
+  });
+  $effect.pre(() => setTimeZone(zone));
+
   // Phones suspend pages; reconnect as soon as the page is visible again.
   $effect(() => {
     const wake = () => {
@@ -100,64 +108,69 @@
   <AuthScreen mode={view} />
 {:else if setupBox}
   <BoxSetup />
-{:else if router.route.screen === "focus"}
-  <!-- Guided flows take the whole screen, without the tabs (docs/ux.md §1). -->
-  <Focus {offline} />
-{:else if router.route.screen === "focus-calibration"}
-  <FocusCalibration {offline} />
-{:else if router.route.screen === "guiding"}
-  <Guiding {offline} />
-{:else if router.route.screen === "polar"}
-  <Polar {offline} />
-{:else if router.route.screen === "flats"}
-  <Flats {offline} night={router.route.night} />
 {:else}
-  <NavBar />
-  <main class="content" class:full={width === "full"} class:wide={width === "wide"}>
-    {#if offline}
-      <div class="banner"><Banner icon="offline" tone="warning">{t.link.offline}</Banner></div>
+  <!-- Drawn again in another time zone when the active site changes (ADR 0052). -->
+  {#key zone}
+    {#if router.route.screen === "focus"}
+      <!-- Guided flows take the whole screen, without the tabs (docs/ux.md §1). -->
+      <Focus {offline} />
+    {:else if router.route.screen === "focus-calibration"}
+      <FocusCalibration {offline} />
+    {:else if router.route.screen === "guiding"}
+      <Guiding {offline} />
+    {:else if router.route.screen === "polar"}
+      <Polar {offline} />
+    {:else if router.route.screen === "flats"}
+      <Flats {offline} night={router.route.night} />
+    {:else}
+      <NavBar />
+      <main class="content" class:full={width === "full"} class:wide={width === "wide"}>
+        {#if offline}
+          <div class="banner"><Banner icon="offline" tone="warning">{t.link.offline}</Banner></div>
+        {/if}
+        {#if clock?.corrected && clock.offset !== null}
+          <div class="banner">
+            <Banner icon="alert" tone="warning">
+              {clock.offset > 0 ? t.clock.behind(formatDuration(clock.offset)) : t.clock.ahead(formatDuration(clock.offset))}
+            </Banner>
+          </div>
+        {/if}
+        {#if role === "observer"}
+          <div class="banner">
+            <Banner icon="eye">
+              {t.link.observer}
+              {#snippet action()}
+                <Button variant="text" onclick={() => (auth.wantsPair = true)}>{t.link.pair}</Button>
+              {/snippet}
+            </Banner>
+          </div>
+        {/if}
+        {#if router.route.screen === "rig"}
+          <Rig />
+        {:else if router.route.screen === "live"}
+          <Live />
+        {:else if router.route.screen === "session"}
+          <Session />
+        {:else if router.route.screen === "dev"}
+          <Dev />
+        {:else if router.route.screen === "tonight"}
+          <Tonight />
+        {:else if router.route.screen === "plan"}
+          <Plan />
+        {:else if router.route.screen === "report"}
+          {#key router.route.id}<Report id={router.route.id} />{/key}
+        {:else if router.route.screen === "sequence"}
+          <SequenceScreen />
+        {:else if router.route.screen === "target"}
+          {#key router.route.id}<TargetDetail id={router.route.id} />{/key}
+        {:else if router.route.screen === "profile"}
+          {#key router.route.id}<ProfileEditor id={router.route.id} />{/key}
+        {:else if router.route.screen === "site"}
+          {#key router.route.id}<SiteEditor id={router.route.id} />{/key}
+        {/if}
+      </main>
     {/if}
-    {#if clock?.corrected && clock.offset !== null}
-      <div class="banner">
-        <Banner icon="alert" tone="warning">
-          {clock.offset > 0 ? t.clock.behind(formatDuration(clock.offset)) : t.clock.ahead(formatDuration(clock.offset))}
-        </Banner>
-      </div>
-    {/if}
-    {#if role === "observer"}
-      <div class="banner">
-        <Banner icon="eye">
-          {t.link.observer}
-          {#snippet action()}
-            <Button variant="text" onclick={() => (auth.wantsPair = true)}>{t.link.pair}</Button>
-          {/snippet}
-        </Banner>
-      </div>
-    {/if}
-    {#if router.route.screen === "rig"}
-      <Rig />
-    {:else if router.route.screen === "live"}
-      <Live />
-    {:else if router.route.screen === "session"}
-      <Session />
-    {:else if router.route.screen === "dev"}
-      <Dev />
-    {:else if router.route.screen === "tonight"}
-      <Tonight />
-    {:else if router.route.screen === "plan"}
-      <Plan />
-    {:else if router.route.screen === "report"}
-      {#key router.route.id}<Report id={router.route.id} />{/key}
-    {:else if router.route.screen === "sequence"}
-      <SequenceScreen />
-    {:else if router.route.screen === "target"}
-      {#key router.route.id}<TargetDetail id={router.route.id} />{/key}
-    {:else if router.route.screen === "profile"}
-      {#key router.route.id}<ProfileEditor id={router.route.id} />{/key}
-    {:else if router.route.screen === "site"}
-      {#key router.route.id}<SiteEditor id={router.route.id} />{/key}
-    {/if}
-  </main>
+  {/key}
 {/if}
 
 <style>

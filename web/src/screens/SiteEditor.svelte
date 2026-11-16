@@ -1,7 +1,8 @@
 <script lang="ts">
   // A saved site (ADR 0038): its name and position, typed by hand or filled from the
-  // mount's own site or a USB GPS's fix (ADR 0042). A new site may become the active
-  // one as it is saved. The horizon is kept as it is: the app does not edit it yet.
+  // mount's own site or a USB GPS's fix (ADR 0042), and its time zone (ADR 0052): the
+  // one at its position unless one is chosen. A new site may become the active one as
+  // it is saved. The horizon is kept as it is: the app does not edit it yet.
   import { untrack } from "svelte";
   import Banner from "../components/Banner.svelte";
   import Button from "../components/Button.svelte";
@@ -11,13 +12,13 @@
   import SitePosition from "../components/SitePosition.svelte";
   import TextField from "../components/TextField.svelte";
   import Toggle from "../components/Toggle.svelte";
-  import { activateSite, addSite, deleteSite, putSite } from "../lib/api";
+  import { activateSite, addSite, deleteSite, getSiteZones, putSite } from "../lib/api";
   import { auth } from "../lib/auth.svelte";
   import { errorText } from "../lib/errors";
   import { i18n } from "../lib/i18n";
   import { live } from "../lib/live.svelte";
   import { href, router } from "../lib/router.svelte";
-  import type { Site } from "../lib/types";
+  import type { SavedSite, Site } from "../lib/types";
 
   let { id }: { id: string | null } = $props();
 
@@ -27,12 +28,23 @@
 
   // The editor is re-created for another site (App keys it by id), and starts
   // from the site as the state has it then.
-  const original: Site | null = untrack(() => (id !== null ? (live.app.sites?.saved[id] ?? null) : null));
+  const saved: SavedSite | null = untrack(() => (id !== null ? (live.app.sites?.saved[id] ?? null) : null));
+  // What the state adds (the zone in effect) is not part of the site.
+  const original: Site | null = saved ? withoutZone(saved) : null;
   const missing = untrack(() => id !== null && original === null);
   let name = $state(original?.name ?? "");
   let latitude = $state<number | null>(original?.latitude ?? null);
   let longitude = $state<number | null>(original?.longitude ?? null);
   let elevation = $state<number | null>(original?.elevation ?? null);
+  let timezone = $state(original?.timezone ?? "");
+  let zones = $state<string[]>([]);
+  $effect(() => {
+    getSiteZones()
+      .then((list) => (zones = list))
+      .catch(() => {});
+  });
+  // The zone in effect while none is chosen (the server works it out on save).
+  const automatic = $derived(original && !original.timezone && saved ? t.sites.timeZoneAuto(saved.zone) : t.sites.timeZoneAutoNew);
   // New sites are usually where the rig stands now.
   let activate = $state(true);
   let positionValid = $state(true);
@@ -40,6 +52,7 @@
   const problem = $derived.by(() => {
     if (!name.trim()) return t.sites.needName;
     if (latitude === null || longitude === null) return t.sites.needPosition;
+    if (timezone.trim() && zones.length > 0 && !zones.includes(timezone.trim())) return t.sites.unknownZone;
     return "";
   });
   const valid = $derived(!problem && positionValid);
@@ -49,7 +62,13 @@
 
   function site(): Site | null {
     if (latitude === null || longitude === null) return null;
-    return { ...original, name: name.trim(), latitude, longitude, elevation: elevation ?? 0 };
+    const zone = timezone.trim() || null;
+    return { ...original, name: name.trim(), latitude, longitude, elevation: elevation ?? 0, timezone: zone };
+  }
+
+  function withoutZone(site: SavedSite): Site {
+    const { zone: _, ...rest } = site;
+    return rest;
   }
 
   async function save(): Promise<void> {
@@ -107,6 +126,10 @@
     <fieldset class="section" disabled={!auth.owner}>
       <legend class="heading">{t.sites.position}</legend>
       <SitePosition bind:latitude bind:longitude bind:elevation bind:valid={positionValid} editing={id} />
+      <TextField label={t.sites.timeZone} hint={t.sites.timeZoneHint} bind:value={timezone} maxlength={64} placeholder={automatic} list="site-zones" />
+      <datalist id="site-zones">
+        {#each zones as zone (zone)}<option value={zone}></option>{/each}
+      </datalist>
     </fieldset>
 
     {#if id === null}
