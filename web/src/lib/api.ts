@@ -69,6 +69,7 @@ import type {
   Site,
   SiteCreated,
   SkyChart,
+  SkyPointing,
   SkyVisibility,
   SolvedFrames,
   SolveRequest,
@@ -652,6 +653,12 @@ export function getTonight(): Promise<Almanac> {
 }
 
 // Tonight's altitude curves of targets: catalog ids or "RA,Dec" (J2000 hours, degrees).
+// What a frame around a J2000 point shows: the Sun or the Moon, catalog objects.
+export function getSkyPointing(ra: number, dec: number, radius: number): Promise<SkyPointing> {
+  const params = new URLSearchParams({ ra: String(ra), dec: String(dec), radius: String(radius) });
+  return request("GET", `/api/sky/pointing?${params}`);
+}
+
 export function getVisibility(targets: string[], minAltitude?: number): Promise<SkyVisibility> {
   const params = new URLSearchParams(targets.map((target) => ["target", target]));
   if (minAltitude !== undefined) params.set("min_altitude", String(minAltitude));

@@ -10790,6 +10790,39 @@
       "title": "SkyChart",
       "type": "object"
     },
+    "SkyPointing": {
+      "description": "What lies around a point: what a mount pointing there has in its frame.",
+      "properties": {
+        "body": {
+          "anyOf": [
+            {
+              "enum": [
+                "sun",
+                "moon"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The Sun or the Moon, when its disc reaches into the circle (the Sun first); None also without an active site."
+        },
+        "objects": {
+          "description": "Catalog objects that reach into the circle, nearest centre first (5 at most).",
+          "items": {
+            "$ref": "#/$defs/CatalogObject"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "body",
+        "objects"
+      ],
+      "title": "SkyPointing",
+      "type": "object"
+    },
     "SkyPosition": {
       "additionalProperties": false,
       "properties": {

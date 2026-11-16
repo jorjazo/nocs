@@ -1,45 +1,36 @@
 <script lang="ts">
-  // Tonight (stage 3.6), the home screen: the night from sunset to sunrise with the
-  // dark window and the Moon, tonight's target, the weather, and the get-ready
-  // checklist whose next step carries the one primary button (docs/ux.md §1): the
-  // first one not done that can run. One that cannot says why and where to fix it,
-  // from what the server says each step needs (ADR 0041). Each is a card that opens
-  // and closes, and says how it stands when closed; the checklist goes first and
-  // open while something is left, last and closed once all is done.
+  // Tonight, the home screen (docs/ux.md §1): the night and how things stand now.
+  // The get-ready checklist (connect, focus, polar align) comes first while a step
+  // is left; its next step carries the one primary button: the first one not done
+  // that can run, and one that cannot says why and where to fix it, from what the
+  // server says each step needs (ADR 0041). Then the night from sunset to sunrise
+  // with the darkness left, where the mount points, the weather, the actuators, the
+  // location and time, and the host; the checklist goes last once all is done. Each
+  // is a card that opens and closes, and says how it stands when closed.
   import Button from "../../components/Button.svelte";
-  import Chip from "../../components/Chip.svelte";
   import NightBar from "../../components/NightBar.svelte";
   import RigStatus from "../../components/RigStatus.svelte";
   import ScreenHeader from "../../components/ScreenHeader.svelte";
   import Section from "../../components/Section.svelte";
   import WeatherCard from "../../components/WeatherCard.svelte";
-  import { getVisibility } from "../../lib/api";
-  import { plannedName } from "../../lib/catalog.svelte";
+  import { connectProfile } from "../../lib/api";
   import { auth } from "../../lib/auth.svelte";
-  import {
-    applies,
-    blockerText,
-    blockersOf,
-    fixRoute,
-    statuses,
-    type Blocker,
-    type StepKey,
-    type StepStatus,
-  } from "../../lib/checklist";
+  import { applies, blockerText, blockersOf, fixRoute, statuses, type Blocker, type StepKey, type StepStatus } from "../../lib/checklist";
   import { errorText } from "../../lib/errors";
+  import { calibratedFor } from "../../lib/focus";
   import { formatDecimal, formatDuration, formatTime } from "../../lib/format";
-  import { guidingActive } from "../../lib/guiding.svelte";
   import { i18n } from "../../lib/i18n";
   import { live } from "../../lib/live.svelte";
   import { href, router, type Route } from "../../lib/router.svelte";
-  import { calibratedFor } from "../../lib/focus";
-  import { darkLeft, nearest, phase, type DarkLeft } from "../../lib/sky/night";
-  import { separation } from "../../lib/sky/projection";
+  import { darkLeft, phase, type DarkLeft } from "../../lib/sky/night";
   import { prefs } from "../../lib/prefs.svelte";
   import { siteKey, tonight } from "../../lib/tonight.svelte";
   import { arrange, type TonightSection } from "../../lib/tonightsections";
   import { formatAngle } from "../polar/angle";
-  import type { TargetVisibility } from "../../lib/types";
+  import ActuatorsCard from "./ActuatorsCard.svelte";
+  import HostCard from "./HostCard.svelte";
+  import LocationCard from "./LocationCard.svelte";
+  import PointingCard from "./PointingCard.svelte";
 
   const t = $derived(i18n.t);
   const locale = $derived(i18n.locale);
@@ -47,20 +38,22 @@
   const profile = $derived(equipment?.active ?? null);
   const site = $derived(siteKey(live.app.sites));
   const weather = $derived(live.app.weather ?? null);
+  const forecast = $derived(live.app.forecast ?? null);
   const almanac = $derived(tonight.almanac);
-  const planned = $derived(live.app.plan?.target ?? null);
 
   $effect(() => {
     void tonight.load(site);
   });
 
+  // The clock the cards read; the almanac is asked for again every minute.
   let now = $state(Date.now());
   $effect(() => {
-    const timer = setInterval(() => {
-      now = Date.now();
-      void tonight.load(site);
-    }, 60_000);
-    return () => clearInterval(timer);
+    const tick = setInterval(() => (now = Date.now()), 15_000);
+    const reload = setInterval(() => void tonight.load(site), 60_000);
+    return () => {
+      clearInterval(tick);
+      clearInterval(reload);
+    };
   });
 
   // -- The night -------------------------------------------------------------------
@@ -79,6 +72,8 @@
   const moonMatters = $derived(!!almanac && almanac.moon.fraction > 0.1);
   const left = $derived(almanac ? darkLeft(almanac.dark, moonMatters ? almanac.dark_moonless : null, now) : null);
   const leftText = $derived(darkText(left));
+  // The forecast runs to the end of the dark window (else of the night).
+  const forecastUntil = $derived(almanac ? Date.parse(almanac.dark?.end ?? almanac.end) : now + 12 * 3600_000);
 
   function darkText(value: DarkLeft | null): string | null {
     if (!value) return null;
@@ -90,28 +85,6 @@
     const moonless = value.moonless < 60 ? t.tonight.darkLeftMoonUp : t.tonight.darkLeftMoonless(formatDuration(value.moonless));
     return `${text} · ${moonless}`;
   }
-
-  // -- Tonight's target --------------------------------------------------------------
-
-  let seen: TargetVisibility | null = $state(null);
-  let seenFor = "";
-  $effect(() => {
-    const key = planned && almanac ? `${planned.ra},${planned.dec}|${almanac.night}` : "";
-    if (key === seenFor) return;
-    seenFor = key;
-    seen = null;
-    if (!planned || !almanac) return;
-    getVisibility([`${planned.ra},${planned.dec}`])
-      .then((v) => {
-        if (seenFor === key) seen = v.targets[0] ?? null;
-      })
-      .catch(() => {});
-  });
-  const altitudeNow = $derived.by(() => {
-    if (!seen || !almanac) return null;
-    const i = nearest(almanac.times, now);
-    return i === null ? null : (seen.altitude[i] ?? null);
-  });
 
   // -- Checklist ----------------------------------------------------------------------
 
@@ -128,19 +101,52 @@
   const nightStart = $derived(almanac ? Date.parse(almanac.start) : now - 12 * 3600_000);
   const preparation = $derived(live.app.preparation ?? null);
   const savedSites = $derived(Object.keys(live.app.sites?.saved ?? {}).length);
+  const profileName = $derived(profile ? (equipment?.profiles[profile]?.name ?? profile) : null);
+  const connection = $derived(equipment?.connection ?? "disconnected");
+  let connecting = $state(false);
+  let connectError = $state("");
+
   const steps = $derived.by((): Step[] => {
-    const connected = equipment?.connection === "connected";
+    const connected = connection === "connected";
     const list: Step[] = [
       {
         key: "connect",
         title: t.tonight.steps.connect,
-        detail: connected && profile ? t.tonight.connected(equipment?.profiles[profile]?.name ?? profile) : t.tonight.notConnected,
+        detail: connected && profileName
+          ? t.tonight.connected(profileName)
+          : connection === "connecting" || connecting
+            ? t.tonight.connecting
+            : t.tonight.notConnected,
         done: connected,
         action: t.tonight.openRig,
         route: { screen: "rig" },
         blockers: [],
       },
     ];
+    if (applies(preparation, "focus")) {
+      const run = live.app.autofocus ?? null;
+      const tonightRun = run?.finished && Date.parse(run.finished) > nightStart ? run : null;
+      const focused = tonightRun?.state === "succeeded";
+      // Calibrating focuses too (ADR 0044): offered instead until the focuser has a
+      // calibration for this profile, and it goes straight to the calibration.
+      const calibrated = calibratedFor(live.app.focuser?.calibration, profile);
+      list.push({
+        key: "focus",
+        title: t.tonight.steps.focus,
+        detail: focused
+          ? t.tonight.focused(formatTime(tonightRun.finished ?? "", locale), tonightRun.hfr === null ? "—" : formatDecimal(tonightRun.hfr, locale, 2))
+          : !calibrated && live.app.focuser
+            ? t.tonight.notCalibrated
+            : tonightRun
+              ? t.tonight.focusFailed
+              : t.tonight.notFocused,
+        done: focused,
+        action: calibrated || !live.app.focuser ? t.tonight.focus : t.tonight.calibrate,
+        route: calibrated || !live.app.focuser ? { screen: "focus" } : { screen: "focus-calibration" },
+        blockers: blockersOf(preparation, "focus", savedSites),
+      });
+    }
+    // Plate solving needs focused stars: polar alignment comes after focusing.
     if (applies(preparation, "polar")) {
       const run = live.app.polar_alignment ?? null;
       const tonightRun = run?.finished && Date.parse(run.finished) > nightStart && run.axis ? run : null;
@@ -160,71 +166,35 @@
         blockers: blockersOf(preparation, "polar", savedSites),
       });
     }
-    if (applies(preparation, "focus")) {
-      const run = live.app.autofocus ?? null;
-      const tonightRun = run?.finished && Date.parse(run.finished) > nightStart ? run : null;
-      const focused = tonightRun?.state === "succeeded";
-      // Calibrating focuses too (ADR 0044): offered instead until the focuser has a
-      // calibration for this profile.
-      const calibrated = calibratedFor(live.app.focuser?.calibration, profile);
-      list.push({
-        key: "focus",
-        title: t.tonight.steps.focus,
-        detail: focused
-          ? t.tonight.focused(formatTime(tonightRun.finished ?? "", locale), tonightRun.hfr === null ? "—" : formatDecimal(tonightRun.hfr, locale, 2))
-          : !calibrated && live.app.focuser
-            ? t.tonight.notCalibrated
-            : tonightRun
-              ? t.tonight.focusFailed
-              : t.tonight.notFocused,
-        done: focused,
-        action: calibrated || !live.app.focuser ? t.tonight.focus : t.tonight.calibrate,
-        route: calibrated || !live.app.focuser ? { screen: "focus" } : { screen: "focus-calibration" },
-        blockers: blockersOf(preparation, "focus", savedSites),
-      });
-    }
-    if (applies(preparation, "frame")) list.push(frameStep());
-    if (applies(preparation, "guide")) {
-      const guiding = guidingActive(live.app.guiding);
-      list.push({
-        key: "guide",
-        title: t.tonight.steps.guide,
-        detail: guiding ? t.tonight.guiding : t.tonight.notGuiding,
-        done: guiding,
-        action: t.tonight.openGuiding,
-        route: { screen: "guiding" },
-        blockers: blockersOf(preparation, "guide", savedSites),
-      });
-    }
     return list;
   });
 
-  function frameStep(): Step {
-    const centering = live.app.centering ?? null;
-    const centred =
-      !!planned &&
-      centering?.state === "succeeded" &&
-      !!centering.finished &&
-      Date.parse(centering.finished) > nightStart &&
-      separation(centering.target, planned) * 60 <= Math.max(5, 2 * centering.tolerance);
-    return {
-      key: "frame",
-      title: t.tonight.steps.frame,
-      detail: !planned ? t.tonight.noTarget : centred ? t.tonight.centred(plannedName(planned, locale)) : t.tonight.notCentred(plannedName(planned, locale)),
-      done: centred,
-      action: planned ? t.tonight.openTarget : t.tonight.chooseTarget,
-      route: planned?.id ? { screen: "target", id: planned.id } : { screen: "plan" },
-      // Choosing a target needs nothing.
-      blockers: planned ? blockersOf(preparation, "frame", savedSites) : [],
-    };
+  const status = $derived(statuses(steps.map((s) => ({ done: s.done, blocked: s.blockers.length > 0 }))));
+  // The connect step connects the profile last used right here, besides leading to Rig.
+  const canConnect = $derived(auth.owner && profile !== null && connection === "disconnected" && !connecting);
+
+  async function connect(): Promise<void> {
+    if (!profile) return;
+    connecting = true;
+    connectError = "";
+    try {
+      await connectProfile(profile);
+    } catch (e) {
+      connectError = errorText(e, t);
+    } finally {
+      connecting = false;
+    }
   }
 
-  const status = $derived(statuses(steps.map((s) => ({ done: s.done, blocked: s.blockers.length > 0 }))));
+  function statusText(value: StepStatus | undefined): string {
+    return value === "done" ? t.tonight.stepDone : value === "blocked" ? t.tonight.stepBlocked : t.tonight.stepPending;
+  }
 
   // -- The cards ----------------------------------------------------------------------
 
   const prepared = $derived(steps.every((step) => step.done));
-  const order = $derived(arrange(prepared));
+  // Observers do not see where the box is (ADR 0047).
+  const order = $derived(arrange(prepared).filter((section) => section !== "location" || auth.owner));
   // The checklist is open while something is left: opened or closed by hand, it
   // keeps that only until it is done, or undone, again.
   let prepChoice: boolean | null = $state(null);
@@ -243,17 +213,6 @@
       else prefs.setTonightOpen(section, value);
     };
   }
-  const targetSummary = $derived(
-    planned
-      ? [plannedName(planned, locale), altitudeNow === null ? null : t.tonight.altitudeNow(formatDecimal(altitudeNow, locale, 0))]
-          .filter((part) => part !== null)
-          .join(" · ")
-      : null,
-  );
-
-  function statusText(value: StepStatus | undefined): string {
-    return value === "done" ? t.tonight.stepDone : value === "blocked" ? t.tonight.stepBlocked : t.tonight.stepPending;
-  }
 </script>
 
 <ScreenHeader title={t.tabs.tonight}>
@@ -266,10 +225,16 @@
       {@render preparationCard()}
     {:else if section === "night"}
       {@render nightCard()}
-    {:else if section === "target" && planned}
-      {@render targetCard(planned)}
-    {:else if section === "weather" && weather}
-      <WeatherCard {weather} open={open("weather")} ontoggle={toggle("weather")} />
+    {:else if section === "pointing"}
+      <PointingCard {almanac} {now} open={open("pointing")} ontoggle={toggle("pointing")} />
+    {:else if section === "weather" && (weather || forecast)}
+      <WeatherCard {weather} {forecast} until={forecastUntil} {now} open={open("weather")} ontoggle={toggle("weather")} />
+    {:else if section === "actuators"}
+      <ActuatorsCard {now} open={open("actuators")} ontoggle={toggle("actuators")} />
+    {:else if section === "location"}
+      <LocationCard {now} open={open("location")} ontoggle={toggle("location")} />
+    {:else if section === "host"}
+      <HostCard open={open("host")} ontoggle={toggle("host")} />
     {/if}
   {/each}
 </div>
@@ -323,29 +288,6 @@
   </Section>
 {/snippet}
 
-{#snippet targetCard(target: NonNullable<typeof planned>)}
-  <Section scope="tonight" id="target" title={t.tonight.target} summary={targetSummary} open={open("target")} ontoggle={toggle("target")}>
-    <div class="row">
-      <span class="name">
-        {#if target.id}<a href={href({ screen: "target", id: target.id })}>{plannedName(target, locale)}</a>{:else}{target.name}{/if}
-      </span>
-      {#if altitudeNow !== null}
-        <Chip tone={altitudeNow > 0 ? "accent" : "neutral"}>{t.tonight.altitudeNow(formatDecimal(altitudeNow, locale, 0))}</Chip>
-      {/if}
-    </div>
-    {#if seen}
-      <p class="muted">
-        {#if seen.observable > 0}
-          {t.tonight.observable(formatDuration(seen.observable))}
-          {#if seen.transit}· {t.tonight.transit(formatTime(seen.transit, locale), formatDecimal(seen.transit_altitude, locale, 0))}{/if}
-        {:else}
-          {t.tonight.notObservable}
-        {/if}
-      </p>
-    {/if}
-  </Section>
-{/snippet}
-
 {#snippet preparationCard()}
   <Section
     scope="tonight"
@@ -357,11 +299,13 @@
     <ol class="steps">
       {#each steps as step, i (step.key)}
         {@const stepState = status[i]}
+        {@const offered = stepState === "next" || stepState === "ready"}
         <li class:done={step.done} class:blocked={stepState === "blocked"} data-step={step.key} data-status={stepState}>
           <span class="mark" aria-hidden="true">{step.done ? "✓" : ""}</span>
           <div class="text">
             <span class="title">{step.title}</span>
             <span class="muted">{step.detail}</span>
+            {#if step.key === "connect" && connectError}<span class="error">{connectError}</span>{/if}
             {#if stepState === "blocked"}
               <ul class="blockers">
                 {#each step.blockers as blocker (`${blocker.reason}:${blocker.role}`)}
@@ -375,7 +319,14 @@
               </ul>
             {/if}
           </div>
-          {#if stepState === "next" || stepState === "ready" || (step.key === "frame" && step.done)}
+          {#if offered && step.key === "connect" && canConnect && profileName}
+            <div class="actions">
+              <Button variant={stepState === "next" ? "primary" : "text"} onclick={() => void connect()}>
+                {t.tonight.connectProfile(profileName)}
+              </Button>
+              <Button variant="text" onclick={() => router.go(step.route)}>{step.action}</Button>
+            </div>
+          {:else if offered && !(step.key === "connect" && (connecting || connection === "connecting"))}
             <Button variant={stepState === "next" ? "primary" : "text"} onclick={() => router.go(step.route)}>{step.action}</Button>
           {/if}
           <span class="visually-hidden">{statusText(stepState)}</span>
@@ -416,18 +367,6 @@
   }
   .left {
     font-weight: 500;
-  }
-  .name {
-    font-size: 17px;
-    line-height: 24px;
-    font-weight: 600;
-  }
-  .row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-2);
-    flex-wrap: wrap;
   }
   .steps {
     list-style: none;
@@ -484,5 +423,13 @@
   }
   .blockers a {
     white-space: nowrap;
+  }
+  .actions {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+  }
+  .error {
+    color: var(--error);
   }
 </style>

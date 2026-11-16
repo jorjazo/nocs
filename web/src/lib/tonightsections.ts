@@ -5,7 +5,15 @@
 
 import { parseOpen, type OpenSections } from "./rigsections.ts";
 
-export const TONIGHT_SECTIONS = ["preparation", "night", "target", "weather"] as const;
+export const TONIGHT_SECTIONS = [
+  "preparation",
+  "night",
+  "pointing",
+  "weather",
+  "actuators",
+  "location",
+  "host",
+] as const;
 export type TonightSection = (typeof TONIGHT_SECTIONS)[number];
 
 // The night is what the screen is for; the rest is a look now and then.

@@ -78,6 +78,7 @@ export type {
   FrameRecord,
   FrameTypeName,
   SavedFrameTypeName,
+  SavedSite,
   StackSaved,
   StackSavedState,
   GpsSiteRequest,
@@ -163,7 +164,6 @@ export type {
   ShareRequest,
   ShareState,
   ShutdownRequest,
-  SavedSite,
   Site,
   SiteCreated,
   SitesState,
@@ -199,6 +199,11 @@ export type {
   WeatherState,
   WifiCountry,
   WifiNetwork,
+  ClientsState,
+  ConnectedDevice,
+  ForecastHour,
+  ForecastState,
+  SkyPointing,
 } from "./generated/api";
 
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };

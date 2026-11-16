@@ -5813,6 +5813,22 @@ export interface SkyChart {
   truncated: boolean;
 }
 /**
+ * What lies around a point: what a mount pointing there has in its frame.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "SkyPointing".
+ */
+export interface SkyPointing {
+  /**
+   * The Sun or the Moon, when its disc reaches into the circle (the Sun first); None also without an active site.
+   */
+  body: ("sun" | "moon") | null;
+  /**
+   * Catalog objects that reach into the circle, nearest centre first (5 at most).
+   */
+  objects: CatalogObject[];
+}
+/**
  * ``GET /api/sky/visibility``: targets during a night at the active site.
  *
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
