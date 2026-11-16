@@ -105,8 +105,25 @@ export function formatClock(iso: string, locale: string): string {
 
 // The hour of the day (0–23) at `time` (ms) in the app's time zone.
 export function hourOf(time: number): number {
-  const parts = new Intl.DateTimeFormat("en-GB", { hour: "numeric", hourCycle: "h23", timeZone: zone }).formatToParts(time);
-  return Number(parts.find((part) => part.type === "hour")?.value ?? 0);
+  return clockOf(time).hour;
+}
+
+// The first whole hour of the app's time zone at or after `time` (ms): zones a half
+// or three quarters of an hour off UTC start their hours mid-UTC-hour.
+export function nextWholeHour(time: number): number {
+  const first = Math.ceil(time / 60_000) * 60_000;
+  return first + ((60 - clockOf(first).minute) % 60) * 60_000;
+}
+
+function clockOf(time: number): { hour: number; minute: number } {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    hour: "numeric",
+    minute: "numeric",
+    hourCycle: "h23",
+    timeZone: zone,
+  }).formatToParts(time);
+  const part = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? 0);
+  return { hour: part("hour"), minute: part("minute") };
 }
 
 // Plain numbers in the interface (gain, offset, ranges), without grouping.

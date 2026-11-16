@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { arrange, isOpen } from "./tonightsections.ts";
+import { arrange, isOpen, preparationOpen } from "./tonightsections.ts";
 
 test("the night starts open, the rest closed, and the browser's choice wins", () => {
   assert.equal(isOpen({}, "night"), true);
@@ -10,8 +10,14 @@ test("the night starts open, the rest closed, and the browser's choice wins", ()
 });
 
 test("the checklist goes first while something is left, last once done", () => {
-  assert.equal(arrange(false)[0], "preparation");
-  assert.equal(arrange(true).at(-1), "preparation");
-  assert.equal(arrange(true).length, arrange(false).length);
-  assert.equal(new Set(arrange(true)).size, arrange(true).length);
+  const rest = ["night", "pointing", "weather", "actuators", "location", "host"];
+  assert.deepEqual(arrange(false), ["preparation", ...rest]);
+  assert.deepEqual(arrange(true), [...rest, "preparation"]);
+});
+
+test("the checklist is open while something is left, unless chosen by hand", () => {
+  assert.equal(preparationOpen(false, null), true);
+  assert.equal(preparationOpen(true, null), false);
+  assert.equal(preparationOpen(false, false), false);
+  assert.equal(preparationOpen(true, true), true);
 });

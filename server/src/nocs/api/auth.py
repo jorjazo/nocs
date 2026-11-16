@@ -147,6 +147,7 @@ async def _deny(scope: Scope, receive: Receive, send: Send, code: int, detail: s
 @dataclass(eq=False)
 class _Socket:
     who: Identity
+    page: bool = True
     revoked: anyio.Event = field(default_factory=anyio.Event)
 
 
@@ -163,9 +164,10 @@ class Sockets:
         self._publish()
 
     @contextlib.contextmanager
-    def track(self, who: Identity) -> Generator[anyio.Event]:
-        """Register a WebSocket; the event is set when it must be closed."""
-        socket = _Socket(who)
+    def track(self, who: Identity, *, page: bool = True) -> Generator[anyio.Event]:
+        """Register a WebSocket; the event is set when it must be closed. ``page``: it is
+        a page's state channel (counted in ``clients``), not a side one (a slew pad)."""
+        socket = _Socket(who, page)
         self._open.add(socket)
         self._publish()
         try:
@@ -180,6 +182,8 @@ class Sockets:
         devices: dict[str, ConnectedDevice] = {}
         observers = 0
         for socket in self._open:
+            if not socket.page:
+                continue
             device = socket.who.device
             if device is not None:
                 seen = devices.get(device.id)

@@ -47,6 +47,7 @@ test("tonight's target first, then the Sun or the Moon, then the catalog", () =>
 test("a frame's reach and when to ask again", () => {
   assert.equal(frameRadius({ width: 3, height: 4 }), 2.5);
   assert.equal(frameRadius(null), 0.5);
+  assert.equal(frameRadius({ width: 40, height: 27 }), 10); // a 50 mm lens: what the server takes
   assert.equal(movedFrom(null, { ra: 1, dec: 0 }, 1), true);
   assert.equal(movedFrom({ ra: 1, dec: 0 }, { ra: 1, dec: 0.2 }, 1), false);
   assert.equal(movedFrom({ ra: 1, dec: 0 }, { ra: 1, dec: 0.3 }, 1), true);
@@ -56,7 +57,7 @@ test("the cooler is off target only once its ramp had time", () => {
   // From 20 °C to −10 °C at 3 °C/min: 10 minutes, and 5 more.
   const start = { at: 0, temperature: 20, target: -10 };
   assert.equal(settledBy(start, 3), 15 * 60_000);
-  assert.equal(settledBy(start, 0), 5 * 60_000);
+  assert.equal(settledBy(start, 0), 20 * 60_000);
   assert.equal(coolerOffTarget(start, 0, 3, 14 * 60_000), false);
   assert.equal(coolerOffTarget(start, 0, 3, 15 * 60_000), true);
   assert.equal(coolerOffTarget(start, -9.5, 3, 60 * 60_000), false);

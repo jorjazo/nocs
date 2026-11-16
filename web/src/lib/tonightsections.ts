@@ -25,6 +25,12 @@ export function isOpen(open: OpenSections, section: TonightSection): boolean {
   return open[section] ?? OPEN_BY_DEFAULT.includes(section);
 }
 
+// Whether the checklist is open: while something is left, unless opened or closed by
+// hand since it last turned done or undone.
+export function preparationOpen(prepared: boolean, choice: boolean | null): boolean {
+  return choice ?? !prepared;
+}
+
 // The cards in order: the checklist first while something is left, last once done.
 export function arrange(prepared: boolean): TonightSection[] {
   const rest = TONIGHT_SECTIONS.filter((section) => section !== "preparation");

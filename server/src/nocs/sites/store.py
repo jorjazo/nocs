@@ -15,13 +15,23 @@ from pathlib import Path
 from typing import Self
 
 import tzfpy
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    ValidationInfo,
+    field_validator,
+    model_validator,
+)
 
 from nocs.equipment.profiles import write_atomic
 
 log = logging.getLogger(__name__)
 
 FILE_NAME = "sites.json"
+SAVED = "saved"
+"""Validation context of what is read from the file: lenient with time zone names."""
 SITE_ID = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 EARTH_RADIUS_M = 6_371_000.0
 
@@ -54,10 +64,15 @@ class Site(SiteModel):
 
     @field_validator("timezone")
     @classmethod
-    def _known_zone(cls, value: str | None) -> str | None:
-        if value is not None and value not in known_zones():
-            raise ValueError(f"unknown time zone {value!r}")
-        return value
+    def _known_zone(cls, value: str | None, info: ValidationInfo) -> str | None:
+        if value is None or is_known_zone(value):
+            return value
+        if info.context == SAVED:
+            # Saved where the name was known (another tz database): the site keeps its
+            # place, and its zone becomes its position's again.
+            log.warning("unknown time zone %r in %s: the position's instead", value, FILE_NAME)
+            return None
+        raise ValueError(f"unknown time zone {value!r}")
 
     @property
     def resolved_zone(self) -> str:
@@ -97,7 +112,7 @@ class SiteStore:
 
     def load(self) -> SiteFile:
         try:
-            return SiteFile.model_validate_json(self._path.read_bytes())
+            return SiteFile.model_validate_json(self._path.read_bytes(), context=SAVED)
         except FileNotFoundError:
             return SiteFile()
         except (OSError, ValidationError) as e:
@@ -130,7 +145,18 @@ def zone_at(latitude: float, longitude: float) -> str:
 
 
 @functools.cache
+def _map_zones() -> frozenset[str]:
+    """The zones of the bundled map, and the nautical ones: in memory, no files read."""
+    nautical = {f"Etc/GMT{h:+d}" for h in range(-14, 13) if h} | {"Etc/UTC", "Etc/GMT"}
+    return frozenset(tzfpy.timezonenames()) | nautical
+
+
+def is_known_zone(name: str) -> bool:
+    """Whether a site may name this zone; the system's list (files) only when needed."""
+    return name in _map_zones() or name in known_zones()
+
+
+@functools.cache
 def known_zones() -> frozenset[str]:
     """The time zones a site may name: the map's, the nautical ones and the system's."""
-    nautical = {f"Etc/GMT{h:+d}" for h in range(-14, 13) if h} | {"Etc/UTC", "Etc/GMT"}
-    return frozenset(tzfpy.timezonenames()) | nautical | zoneinfo.available_timezones()
+    return _map_zones() | zoneinfo.available_timezones()

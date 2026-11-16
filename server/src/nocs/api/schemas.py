@@ -1138,7 +1138,7 @@ class SitesState(StateModel):
 
 class ConnectedDevice(StateModel):
     id: str = Field(description="The paired device's id.")
-    name: str
+    name: str = Field(description="The name it was paired with.")
     connections: int = Field(description="Pages it has open now (tabs, windows).")
 
 
@@ -1159,7 +1159,10 @@ class ForecastState(StateModel):
         description="When the forecast was fetched, UTC; None: none yet for this site."
     )
     attempted: str | None = Field(description="The last attempt since nocsd started, UTC.")
-    error: str | None = Field(description="Why the last attempt failed (no internet, say).")
+    error: Literal["offline", "refused", "invalid"] | None = Field(
+        description="Why the last attempt failed: no network or no answer, an HTTP error, or"
+        " an answer that was not a forecast."
+    )
     hours: list[ForecastHour] = Field(
         description="From the current hour on, while the forecast is less than 48 h old."
     )
@@ -1437,7 +1440,7 @@ class AppState(StateModel):
     share: ShareState | None = Field(
         default=None, description="None where NOCS does not share the frames (a PC)."
     )
-    clients: ClientsState | None = None
+    clients: ClientsState | None = Field(default=None, description="None until nocsd serves.")
     forecast: ForecastState | None = Field(
         default=None, description="None while the active profile asks for no forecast."
     )

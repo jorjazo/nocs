@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 from collections.abc import Callable, Generator
 
+import anyio.to_thread
 from fastapi import APIRouter, HTTPException, Response, status
 
 from nocs.api.schemas import ActiveSiteRequest, SiteCreated
@@ -17,8 +18,8 @@ def sites_router(sites: Callable[[], SiteService]) -> APIRouter:
 
     @router.get("/zones")
     async def zones() -> list[str]:  # pyright: ignore[reportUnusedFunction]
-        """The time zones a site may name, sorted."""
-        return sorted(known_zones())
+        """The time zones a site may name, sorted (the system's list reads files)."""
+        return sorted(await anyio.to_thread.run_sync(known_zones))
 
     @router.post("", status_code=status.HTTP_201_CREATED)
     async def add(site: Site) -> SiteCreated:  # pyright: ignore[reportUnusedFunction]

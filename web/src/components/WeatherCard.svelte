@@ -144,7 +144,7 @@
         <p class="caption">{f.from(PROVIDERS[forecast.provider], formatDuration(fetchedAgo))}</p>
       {/if}
       {#if forecast.error && hours.length === 0}
-        <p class="caption">{f.failed(forecast.error)}</p>
+        <p class="caption">{f.failed[forecast.error]}</p>
       {/if}
     </div>
   {/if}

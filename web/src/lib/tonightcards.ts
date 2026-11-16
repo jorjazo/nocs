@@ -21,9 +21,12 @@ export type Pointed =
 // Without the camera's field, a frame is taken to reach this far from its centre.
 export const DEFAULT_RADIUS = 0.5;
 
+// The widest circle the server looks in (a camera lens's field can be wider).
+export const MAX_RADIUS = 10;
+
 // Degrees from a frame's centre to its corner.
 export function frameRadius(field: { width: number; height: number } | null | undefined): number {
-  return field ? Math.hypot(field.width, field.height) / 2 : DEFAULT_RADIUS;
+  return field ? Math.min(MAX_RADIUS, Math.hypot(field.width, field.height) / 2) : DEFAULT_RADIUS;
 }
 
 // What the mount points at: tonight's target when it is in the frame, else the Sun
@@ -49,8 +52,10 @@ export function movedFrom(asked: Sky | null, now: Sky, radius: number): boolean 
 
 // Degrees the sensor may stay from its target once the ramp had time to get there.
 export const COOLER_TOLERANCE = 1;
-// Minutes allowed without a ramp limit (the cooler's own pace), and on top of a ramp's.
+// Minutes allowed on top of a ramp's time, and without a ramp limit (the cooler's
+// own pace: from room temperature to −10 °C takes a cooled camera 10 to 15 minutes).
 export const COOLER_SETTLE = 5;
+export const COOLER_NO_RAMP = 20;
 
 export interface CoolerStart {
   at: number; // ms, when this target was first seen with the cooler on
@@ -60,8 +65,8 @@ export interface CoolerStart {
 
 // When the sensor should have reached its target (ms).
 export function settledBy(start: CoolerStart, ramp: number | null): number {
-  const minutes = ramp && ramp > 0 ? Math.abs(start.temperature - start.target) / ramp : 0;
-  return start.at + (minutes + COOLER_SETTLE) * 60_000;
+  const minutes = ramp && ramp > 0 ? Math.abs(start.temperature - start.target) / ramp + COOLER_SETTLE : COOLER_NO_RAMP;
+  return start.at + minutes * 60_000;
 }
 
 export function coolerOffTarget(

@@ -25,7 +25,7 @@
   import { darkLeft, phase, type DarkLeft } from "../../lib/sky/night";
   import { prefs } from "../../lib/prefs.svelte";
   import { siteKey, tonight } from "../../lib/tonight.svelte";
-  import { arrange, type TonightSection } from "../../lib/tonightsections";
+  import { arrange, preparationOpen, type TonightSection } from "../../lib/tonightsections";
   import { formatAngle } from "../polar/angle";
   import ActuatorsCard from "./ActuatorsCard.svelte";
   import HostCard from "./HostCard.svelte";
@@ -202,7 +202,11 @@
     void prepared;
     prepChoice = null;
   });
-  const prepOpen = $derived(prepChoice ?? !prepared);
+  const prepOpen = $derived(preparationOpen(prepared, prepChoice));
+  // A step that cannot run shows on the checklist's header even while it is closed.
+  const prepStatus = $derived(
+    status.includes("blocked") ? { tone: "warning" as const, text: t.tonight.stepBlocked } : null,
+  );
 
   function open(section: TonightSection): boolean {
     return section === "preparation" ? prepOpen : prefs.tonightOpen(section);
@@ -294,6 +298,7 @@
     id="preparation"
     title={t.tonight.checklist}
     summary={t.tonight.prepared(steps.filter((step) => step.done).length, steps.length)}
+    status={prepStatus}
     open={open("preparation")}
     ontoggle={toggle("preparation")}>
     <ol class="steps">

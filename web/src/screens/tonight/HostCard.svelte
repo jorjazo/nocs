@@ -37,7 +37,7 @@
       const low = health.under_voltage;
       items.push({ label: t.system.supply, value: low ? t.system.supplyLow : t.system.supplyOk, low });
     }
-    if (health.throttled) items.push({ label: h.cpuTemperature, value: h.throttled, low: true });
+    if (health.throttled) items.push({ label: h.speed, value: h.throttled, low: true });
     return items;
   });
 

@@ -1,5 +1,6 @@
 """Tonight's forecast: when it is fetched, kept and shown (ADR 0051)."""
 
+import http.client
 import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -109,7 +110,7 @@ async def test_offline_it_keeps_the_last_and_tries_every_ten_minutes(tmp_path: P
     rig.offline = True
     state = await rig.at(timedelta(hours=3))
     assert state is not None
-    assert state.error == "no route to host"
+    assert state.error == "offline"
     assert state.fetched == START.isoformat(timespec="seconds")
     assert state.hours  # the last one still serves
     await rig.at(timedelta(minutes=5))
@@ -123,6 +124,22 @@ async def test_offline_it_keeps_the_last_and_tries_every_ten_minutes(tmp_path: P
     assert state.fetched == rig.now.isoformat(timespec="seconds")
 
 
+async def test_a_broken_answer_is_tried_again(tmp_path: Path) -> None:
+    rig = Rig(tmp_path)
+    broken = http.client.IncompleteRead(b"")
+
+    def fetch(provider: ForecastProvider, latitude: float, longitude: float) -> list[ForecastHour]:
+        rig.asked.append((provider, latitude, longitude))
+        raise broken
+
+    rig.service._fetcher = fetch  # pyright: ignore[reportPrivateUsage]
+    state = await rig.at(timedelta())
+    assert state is not None
+    assert state.error
+    await rig.at(timedelta(minutes=10))
+    assert len(rig.asked) == 2
+
+
 async def test_the_one_fetched_at_home_serves_in_the_field(tmp_path: Path) -> None:
     home = Rig(tmp_path)
     await home.at(timedelta())
@@ -130,7 +147,7 @@ async def test_the_one_fetched_at_home_serves_in_the_field(tmp_path: Path) -> No
     field.offline = True
     state = await field.at(timedelta(hours=5))
     assert state is not None
-    assert state.error == "no route to host"
+    assert state.error == "offline"
     assert state.fetched == START.isoformat(timespec="seconds")
     assert state.hours[0].time == "2026-11-16T02:00:00+00:00"
     # Two days later it says nothing any more, but when it was fetched.

@@ -140,7 +140,7 @@ from nocs.services.gps import GpsService, NoFixError
 from nocs.services.indi_bridge import IndiBridge, NotConnectedError
 from nocs.services.system import OperationUnavailableError, SystemService
 from nocs.services.timekeeping import TimeKeeper
-from nocs.sites import SiteService, SiteStore
+from nocs.sites import SiteService, SiteStore, known_zones
 from nocs.sky import Target as SkyTarget
 from nocs.solving import Astap, SolverService
 from nocs.stacking.service import LiveStackService
@@ -547,6 +547,9 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
             site=lambda: sites().active,
         )
         forecast_task = asyncio.create_task(forecast.run(), name="forecast")
+        # The zones a site may name come partly from the system's tz files: read them
+        # once now, in a thread, so a site's validation never waits on the card.
+        zones_task = asyncio.create_task(anyio.to_thread.run_sync(known_zones), name="zones")
         preparation_task = asyncio.create_task(services.preparation.run(), name="preparation")
         watchdog_task = asyncio.create_task(watchdog.run(), name="systemd-watchdog")
         recovery_task = asyncio.create_task(
@@ -567,6 +570,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
                 watchdog_task,
                 gps_task,
                 forecast_task,
+                zones_task,
                 time_task,
                 system_task,
                 guiding_task,

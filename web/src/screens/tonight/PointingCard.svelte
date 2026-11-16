@@ -39,15 +39,20 @@
   let askedAt = 0;
   $effect(() => {
     if (!at || mount?.slewing) return;
-    if (!movedFrom(asked, at, radius) && now - askedAt < REASK) return;
+    const moved = movedFrom(asked, at, radius);
+    if (!moved && now - askedAt < REASK) return;
     const here = at;
+    // What was around the last field is not around this one.
+    if (moved) around = null;
     asked = here;
     askedAt = now;
     getSkyPointing(here.ra, here.dec, radius)
       .then((found) => {
         if (asked === here) around = found;
       })
-      .catch(() => {});
+      .catch(() => {
+        if (asked === here) asked = null; // asked again at the next tick
+      });
   });
 
   const pointed = $derived(at ? pointedAt(at, radius, planned, around) : null);
@@ -84,7 +89,9 @@
       .then((v) => {
         if (seenFor === key) seen = v.targets[0] ?? null;
       })
-      .catch(() => {});
+      .catch(() => {
+        if (seenFor === key) seenFor = ""; // asked again when the card next updates
+      });
   });
   const curve = $derived.by(() => {
     if (!almanac) return null;
@@ -104,8 +111,8 @@
     if (mount.parked) return t.tonight.pointing.parked;
     const parts = [
       mount.slewing ? t.tonight.pointing.slewing : (name ?? `${formatRa(mount.ra_j2000)} ${formatDec(mount.dec_j2000)}`),
-      mount.alt === null ? null : t.tonight.pointing.up(formatDecimal(mount.alt, locale, 0)),
-      stats?.rms_total != null ? t.tonight.pointing.rms(arcsec(stats.rms_total)) : null,
+      mount.alt === null ? null : `${formatDecimal(mount.alt, locale, 0)}°`,
+      stats?.rms_total != null ? t.tonight.pointing.rms(formatDecimal(stats.rms_total, locale, 1)) : null,
     ];
     return parts.filter((part) => part !== null).join(" · ");
   });

@@ -15,7 +15,9 @@ from nocs.forecast.model import ForecastHour
 
 URL = "https://api.open-meteo.com/v1/forecast"
 TIMEOUT = 20.0
-"""Seconds for the whole request."""
+"""Seconds each step of the request (connecting, each read) may wait."""
+MAX_SIZE = 2_000_000
+"""Bytes of an answer at most (three days of hours are ~20 kB)."""
 DAYS = 3
 """Days of hours asked for, from today's midnight UTC: tonight, wherever it is."""
 VARIABLES = {
@@ -79,10 +81,11 @@ def parse(data: bytes) -> list[ForecastHour]:
 
 
 def fetch(latitude: float, longitude: float) -> list[ForecastHour]:
-    """Ask Open-Meteo; raises OSError (no network, an HTTP error) or ValueError."""
+    """Ask Open-Meteo; raises OSError (no network, an HTTP error), http.client's
+    HTTPException (a broken answer), ValueError or OverflowError (not a forecast)."""
     request = urllib.request.Request(url(latitude, longitude), headers={"User-Agent": "nocs"})
     with urllib.request.urlopen(request, timeout=TIMEOUT) as response:
-        data: bytes = response.read()
+        data: bytes = response.read(MAX_SIZE)
     try:
         return parse(data)
     except ValueError as e:

@@ -124,7 +124,7 @@ def mount_router(
     @router.websocket("/mount/pad")
     async def pad(websocket: WebSocket) -> None:  # pyright: ignore[reportUnusedFunction]
         who = identity(websocket)
-        with sockets.track(who) as revoked:
+        with sockets.track(who, page=False) as revoked:
             await websocket.accept()
             service = mount()
             pad = service.pad(who.device.name if who.device is not None else "a client")

@@ -4,6 +4,10 @@ State under ``("forecast",)``, None while the profile asks for none::
 
     {provider, fetched, attempted, error, hours}
 
+``error`` is why the last attempt failed, as a word the app translates: ``offline``
+(no network, no answer), ``refused`` (the provider answered with an HTTP error) or
+``invalid`` (what it sent was not a forecast).
+
 The box asks the profile's provider for the active site's position, rounded to 0.1°
 (about 10 km: enough for a forecast, and no closer to where the rig is). A forecast
 is fetched again after ``REFRESH``; a failed attempt (no internet in the field, the
@@ -16,9 +20,11 @@ fetched.
 from __future__ import annotations
 
 import logging
+import urllib.error
 from collections.abc import Callable
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Literal
 
 import anyio
 import anyio.to_thread
@@ -30,6 +36,8 @@ from nocs.forecast import openmeteo
 from nocs.forecast.model import Forecast, ForecastHour, ForecastProvider
 from nocs.sites import Site
 from nocs.state import Json, StateStore
+
+type ForecastError = Literal["offline", "refused", "invalid"]
 
 log = logging.getLogger(__name__)
 
@@ -74,16 +82,19 @@ class ForecastService:
         self._fetcher = fetcher
         self._forecast = self._load()
         self._attempted: datetime | None = None
-        self._error: str | None = None
+        self._error: ForecastError | None = None
         self._published: Json = None
         self._asked: tuple[ForecastProvider, float, float] | None = None
         """What the last attempt asked for: another provider or place starts afresh."""
         self._publish()
 
     async def run(self) -> None:
-        """Keep the forecast current until cancelled."""
+        """Keep the forecast current until cancelled; a failure is logged, not fatal."""
         while True:
-            await self.update()
+            try:
+                await self.update()
+            except Exception:
+                log.exception("the forecast could not be updated")
             await anyio.sleep(CHECK)
 
     async def update(self) -> None:
@@ -97,10 +108,11 @@ class ForecastService:
             self._attempted = self._clock.now()
             try:
                 hours = await anyio.to_thread.run_sync(self._fetcher, provider, latitude, longitude)
-            except (OSError, ValueError) as e:
+            except Exception as e:
+                # Whatever goes wrong with a service on the internet is tried again later.
                 if self._error is None:
-                    log.info("no forecast from %s: %s", provider, e)
-                self._error = str(e) or type(e).__name__
+                    log.info("no forecast from %s: %r", provider, e)
+                self._error = _error(e)
             else:
                 self._error = None
                 self._forecast = Forecast(
@@ -110,7 +122,10 @@ class ForecastService:
                     fetched=self._attempted.isoformat(timespec="seconds"),
                     hours=hours,
                 )
-                await anyio.to_thread.run_sync(self._save, self._forecast)
+                try:
+                    await anyio.to_thread.run_sync(self._save, self._forecast)
+                except OSError as e:
+                    log.warning("the forecast is not kept on disk: %s", e)
                 log.info("forecast from %s: %d hours", provider, len(hours))
         self._publish()
 
@@ -180,3 +195,9 @@ class ForecastService:
     def _save(self, forecast: Forecast) -> None:
         self._path.parent.mkdir(parents=True, exist_ok=True)
         write_atomic(self._path, forecast.model_dump_json() + "\n")
+
+
+def _error(e: Exception) -> ForecastError:
+    if isinstance(e, urllib.error.HTTPError):
+        return "refused"
+    return "offline" if isinstance(e, OSError) else "invalid"

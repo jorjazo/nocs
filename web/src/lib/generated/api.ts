@@ -572,6 +572,9 @@ export interface AppState {
    * None: never run.
    */
   centering?: CenteringState | null;
+  /**
+   * None until nocsd serves.
+   */
   clients?: ClientsState | null;
   clock?: ClockState | null;
   equipment?: EquipmentState | null;
@@ -1105,6 +1108,9 @@ export interface ConnectedDevice {
    * The paired device's id.
    */
   id: string;
+  /**
+   * The name it was paired with.
+   */
   name: string;
 }
 /**
@@ -1650,9 +1656,9 @@ export interface ForecastState {
    */
   attempted: string | null;
   /**
-   * Why the last attempt failed (no internet, say).
+   * Why the last attempt failed: no network or no answer, an HTTP error, or an answer that was not a forecast.
    */
-  error: string | null;
+  error: ("offline" | "refused" | "invalid") | null;
   /**
    * When the forecast was fetched, UTC; None: none yet for this site.
    */

@@ -214,12 +214,12 @@ export async function addSite(site: Site): Promise<string> {
   return (await request<SiteCreated>("POST", "/api/sites", site)).id;
 }
 
-// The active site only while no job holds the mount (409).
 // The time zones a site may name (ADR 0052).
 export function getSiteZones(): Promise<string[]> {
   return request("GET", "/api/sites/zones");
 }
 
+// The active site only while no job holds the mount (409).
 export function putSite(id: string, site: Site): Promise<void> {
   return request("PUT", `/api/sites/${encodeURIComponent(id)}`, site);
 }
@@ -652,13 +652,13 @@ export function getTonight(): Promise<Almanac> {
   return request("GET", "/api/sky/tonight");
 }
 
-// Tonight's altitude curves of targets: catalog ids or "RA,Dec" (J2000 hours, degrees).
 // What a frame around a J2000 point shows: the Sun or the Moon, catalog objects.
 export function getSkyPointing(ra: number, dec: number, radius: number): Promise<SkyPointing> {
   const params = new URLSearchParams({ ra: String(ra), dec: String(dec), radius: String(radius) });
   return request("GET", `/api/sky/pointing?${params}`);
 }
 
+// Tonight's altitude curves of targets: catalog ids or "RA,Dec" (J2000 hours, degrees).
 export function getVisibility(targets: string[], minAltitude?: number): Promise<SkyVisibility> {
   const params = new URLSearchParams(targets.map((target) => ["target", target]));
   if (minAltitude !== undefined) params.set("min_altitude", String(minAltitude));

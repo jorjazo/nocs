@@ -14,7 +14,16 @@ from nocs.api import create_app
 from nocs.api.schemas import SavedSite, SitesState
 from nocs.config import Settings
 from nocs.jobs import JobManager, ResourceBusyError
-from nocs.sites import HorizonPoint, Site, SiteError, SiteService, SiteStore, distance, zone_at
+from nocs.sites import (
+    HorizonPoint,
+    Site,
+    SiteError,
+    SiteFile,
+    SiteService,
+    SiteStore,
+    distance,
+    zone_at,
+)
 from nocs.state import StateStore
 
 DIAGUITAS = Site(name="Diaguitas", latitude=-30.0277, longitude=-70.6733, elevation=700)
@@ -97,6 +106,17 @@ def test_a_site_s_time_zone_is_its_own_or_the_one_at_its_position() -> None:
     assert madrid.resolved_zone == "Europe/Madrid"
     with pytest.raises(ValueError, match="unknown time zone"):
         Site(latitude=0, longitude=0, timezone="Mars/Olympus_Mons")
+
+
+def test_a_saved_zone_this_box_does_not_know(tmp_path: Path) -> None:
+    """A name from another tz database keeps the site, with its position's zone."""
+    SiteStore(tmp_path).save(SiteFile(active="d", sites={"d": DIAGUITAS}))
+    path = tmp_path / "sites.json"
+    path.write_text(path.read_text().replace('"name"', '"timezone": "Nowhere/Never", "name"'))
+    sites = SiteStore(tmp_path).load()
+    assert sites.active == "d"
+    assert sites.sites["d"].timezone is None
+    assert sites.sites["d"].resolved_zone == "America/Santiago"
 
 
 def test_unknown_sites(tmp_path: Path) -> None:
