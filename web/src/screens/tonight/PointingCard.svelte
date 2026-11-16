@@ -51,7 +51,8 @@
         if (asked === here) around = found;
       })
       .catch(() => {
-        if (asked === here) asked = null; // asked again at the next tick
+        // Asked again in a minute; what is shown stays while the mount stays.
+        if (asked === here) askedAt = Date.now() - REASK + 60_000;
       });
   });
 

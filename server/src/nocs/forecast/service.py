@@ -19,6 +19,7 @@ fetched.
 
 from __future__ import annotations
 
+import http.client
 import logging
 import urllib.error
 from collections.abc import Callable
@@ -84,6 +85,7 @@ class ForecastService:
         self._attempted: datetime | None = None
         self._error: ForecastError | None = None
         self._published: Json = None
+        self._failure: str | None = None
         self._asked: tuple[ForecastProvider, float, float] | None = None
         """What the last attempt asked for: another provider or place starts afresh."""
         self._publish()
@@ -93,8 +95,13 @@ class ForecastService:
         while True:
             try:
                 await self.update()
-            except Exception:
-                log.exception("the forecast could not be updated")
+            except Exception as e:
+                # Once per kind of failure: the same one every 30 s would fill the log.
+                if repr(e) != self._failure:
+                    log.exception("the forecast could not be updated")
+                self._failure = repr(e)
+            else:
+                self._failure = None
             await anyio.sleep(CHECK)
 
     async def update(self) -> None:
@@ -200,4 +207,5 @@ class ForecastService:
 def _error(e: Exception) -> ForecastError:
     if isinstance(e, urllib.error.HTTPError):
         return "refused"
-    return "offline" if isinstance(e, OSError) else "invalid"
+    # An answer cut short (http.client's IncompleteRead) is the network's doing too.
+    return "offline" if isinstance(e, OSError | http.client.HTTPException) else "invalid"

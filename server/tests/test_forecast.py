@@ -135,7 +135,7 @@ async def test_a_broken_answer_is_tried_again(tmp_path: Path) -> None:
     rig.service._fetcher = fetch  # pyright: ignore[reportPrivateUsage]
     state = await rig.at(timedelta())
     assert state is not None
-    assert state.error
+    assert state.error == "offline"
     await rig.at(timedelta(minutes=10))
     assert len(rig.asked) == 2
 
