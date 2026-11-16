@@ -11,14 +11,19 @@ from fastapi.testclient import TestClient
 from owner import pair_owner
 
 from nocs.api import create_app
-from nocs.api.schemas import SitesState
+from nocs.api.schemas import SavedSite, SitesState
 from nocs.config import Settings
 from nocs.jobs import JobManager, ResourceBusyError
-from nocs.sites import HorizonPoint, Site, SiteError, SiteService, SiteStore, distance
+from nocs.sites import HorizonPoint, Site, SiteError, SiteService, SiteStore, distance, zone_at
 from nocs.state import StateStore
 
 DIAGUITAS = Site(name="Diaguitas", latitude=-30.0277, longitude=-70.6733, elevation=700)
 VICUNA = Site(name="Vicuña", latitude=-30.0319, longitude=-70.7081, elevation=650)
+
+
+def saved(site: Site) -> SavedSite:
+    """A site as the state shows it, with its time zone."""
+    return SavedSite(**site.model_dump(), zone=site.resolved_zone)
 
 
 def state(store: StateStore) -> SitesState:
@@ -33,7 +38,9 @@ def test_saved_and_active_sites_persist(tmp_path: Path) -> None:
     vicuna = sites.add(VICUNA, activate=True)
     assert diaguitas != vicuna
     assert (sites.active_id, sites.active) == (vicuna, VICUNA)
-    assert state(store) == SitesState(active=vicuna, saved={diaguitas: DIAGUITAS, vicuna: VICUNA})
+    assert state(store) == SitesState(
+        active=vicuna, saved={diaguitas: saved(DIAGUITAS), vicuna: saved(VICUNA)}
+    )
 
     again = SiteService(StateStore(), SiteStore(tmp_path))
     assert (again.active_id, again.saved()) == (vicuna, {diaguitas: DIAGUITAS, vicuna: VICUNA})
@@ -80,6 +87,16 @@ def test_the_active_site_waits_while_a_job_holds_the_mount(tmp_path: Path) -> No
     jobs.release(token)
     sites.activate(None)
     assert sites.active is None
+
+
+def test_a_site_s_time_zone_is_its_own_or_the_one_at_its_position() -> None:
+    assert DIAGUITAS.resolved_zone == "America/Santiago"
+    assert zone_at(51.48, 0.0) == "Europe/London"
+    assert zone_at(0.0, -150.0) == "Etc/GMT+10"  # the Pacific: no country's zone
+    madrid = DIAGUITAS.model_copy(update={"timezone": "Europe/Madrid"})
+    assert madrid.resolved_zone == "Europe/Madrid"
+    with pytest.raises(ValueError, match="unknown time zone"):
+        Site(latitude=0, longitude=0, timezone="Mars/Olympus_Mons")
 
 
 def test_unknown_sites(tmp_path: Path) -> None:
@@ -135,13 +152,13 @@ def test_sites_api(client: TestClient) -> None:
     assert response.status_code == 201, response.text
     diaguitas = response.json()["id"]
     assert sites_state(client) == SitesState(
-        active=None, saved={diaguitas: DIAGUITAS.model_copy(update={"horizon": hill})}
+        active=None, saved={diaguitas: saved(DIAGUITAS.model_copy(update={"horizon": hill}))}
     )
     assert client.put("/api/sites/active", json={"id": diaguitas}).status_code == 204
     assert client.get("/api/sky/tonight").status_code == 200
     response = client.put(f"/api/sites/{diaguitas}", json=VICUNA.model_dump())
     assert response.status_code == 204
-    assert sites_state(client).saved[diaguitas] == VICUNA
+    assert sites_state(client).saved[diaguitas] == saved(VICUNA)
     assert client.put("/api/sites/active", json={"id": None}).status_code == 204
     assert client.get("/api/sky/tonight").status_code == 409
     assert client.delete(f"/api/sites/{diaguitas}").status_code == 204
@@ -154,6 +171,14 @@ def test_sites_api_refusals(client: TestClient) -> None:
     assert client.delete("/api/sites/nowhere").status_code == 404
     bad = {**DIAGUITAS.model_dump(), "latitude": 91}
     assert client.post("/api/sites", json=bad).status_code == 422
+    nowhen = {**DIAGUITAS.model_dump(), "timezone": "Nowhere/Never"}
+    assert client.post("/api/sites", json=nowhen).status_code == 422
+
+
+def test_time_zones_a_site_may_name(client: TestClient) -> None:
+    zones = client.get("/api/sites/zones").json()
+    assert zones == sorted(zones)
+    assert {"America/Santiago", "Europe/Madrid", "Etc/GMT+10", "Etc/UTC"} <= set(zones)
 
 
 def test_observers_neither_see_nor_change_the_sites(client: TestClient) -> None:

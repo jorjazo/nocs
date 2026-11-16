@@ -9,11 +9,16 @@ from fastapi import APIRouter, HTTPException, Response, status
 
 from nocs.api.schemas import ActiveSiteRequest, SiteCreated
 from nocs.jobs import ResourceBusyError
-from nocs.sites import Site, SiteError, SiteService
+from nocs.sites import Site, SiteError, SiteService, known_zones
 
 
 def sites_router(sites: Callable[[], SiteService]) -> APIRouter:
     router = APIRouter(prefix="/api/sites")
+
+    @router.get("/zones")
+    async def zones() -> list[str]:  # pyright: ignore[reportUnusedFunction]
+        """The time zones a site may name, sorted."""
+        return sorted(known_zones())
 
     @router.post("", status_code=status.HTTP_201_CREATED)
     async def add(site: Site) -> SiteCreated:  # pyright: ignore[reportUnusedFunction]

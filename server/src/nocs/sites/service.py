@@ -142,6 +142,9 @@ class SiteService:
             ROOT,
             {
                 "active": self._file.active,
-                "saved": {k: v.model_dump(mode="json") for k, v in self._file.sites.items()},
+                "saved": {
+                    k: {**v.model_dump(mode="json"), "zone": v.resolved_zone}
+                    for k, v in self._file.sites.items()
+                },
             },
         )

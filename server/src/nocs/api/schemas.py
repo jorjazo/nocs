@@ -1118,11 +1118,18 @@ class GpsState(StateModel):
     )
 
 
+class SavedSite(Site):
+    zone: str = Field(
+        description="The time zone the app shows the site's times in: its own, else the one "
+        "at its position (ADR 0052)."
+    )
+
+
 class SitesState(StateModel):
     """The saved sites and the box's active one (ADR 0038)."""
 
     active: str | None = Field(description="The active site's id; None: no site is active.")
-    saved: dict[str, Site] = Field(description="Every saved site, by id.")
+    saved: dict[str, SavedSite] = Field(description="Every saved site, by id.")
 
 
 class SystemHealth(StateModel):
