@@ -1,6 +1,6 @@
 # NOCS — UX and Design System
 
-Status: draft (Phase 1) · Last updated: 2026-11-15
+Status: draft (Phase 1) · Last updated: 2026-11-16
 
 This document captures the information architecture, the key screens and the
 design tokens of the NOCS web client. Mockups live on a design canvas (private
@@ -13,7 +13,7 @@ Navigation follows the night, not the device tree.
 
 | Tab | Purpose | Main screens |
 |---|---|---|
-| **Tonight** | Home. Night window, conditions, and a "get ready" checklist that leads to each setup flow | Tonight · Polar alignment · Autofocus (full-screen flows) |
+| **Tonight** | Home: the night and how the rig stands now. A "get ready" checklist that leads to each setup flow, the night window, where the mount points, the weather, the actuators, the location and time, the host (ADR 0053) | Tonight · Polar alignment · Autofocus (full-screen flows) |
 | **Live** | Manual imaging: preview, exposure settings, loop, save | Live view |
 | **Plan** | Choose a target and build what to do with it | Target (search + framing) · Sequence |
 | **Session** | Watch and control what the server is running | Session monitor |
@@ -23,7 +23,8 @@ Navigation follows the night, not the device tree.
 - Guided flows (first run, polar alignment, autofocus) open full screen with a
   close button and a step indicator, and return to where they were started.
 - The checklist on **Tonight** is the primary path for new users:
-  connect → polar align → focus → frame → guide → sequence. Each step shows its last
+  connect → focus → polar align (ADR 0053; framing and guiding belong to the target
+  and sequence views). Each step shows its last
   result, and the next step carries the single primary button: the first one not
   done that can run. A step that cannot run yet shows what blocks it (the site, the
   plate solver, a device not ready, a parked mount, PHD2) with a link to where it is
@@ -36,7 +37,7 @@ Navigation follows the night, not the device tree.
 | Screen | Notes |
 |---|---|
 | First run | Create owner passphrase, pair this device, take time and location from the phone. Shows the hotspot name. |
-| Tonight | Setup checklist (first while a step is left), astronomical night window and the darkness left, tonight's target, the weather; each a card that opens and closes. |
+| Tonight | Setup checklist (first while a step is left), astronomical night window and the darkness left, where the mount points, the weather and its forecast, actuators, location and time, host; each a card that opens and closes. |
 | Rig | The profile and its connection on top; below, collapsible sections in groups: imaging and guiding trains with derived FOV and pixel scale, devices with status; the saved sites and the active one; the box; settings (§7, "Rig"). |
 | Polar alignment | Target view with the axis error, per-axis readouts with plain-language direction ("Raise", "Turn west"). |
 | Autofocus | Live V-curve with fit, best position / HFR / stars / temperature, cancel restores the previous position. |
@@ -240,7 +241,9 @@ Power box (stage 2.10):
   off.
 - Tonight's Weather card shows the conditions from the weather role (temperature,
   humidity, dew point and the margin to it, in the warning color under 3 °C) and
-  the device they come from.
+  the device they come from, then the forecast (ADR 0051) hour by hour until the
+  end of the dark window: clouds (and low, mid, high), rain (and its chance), wind
+  (and gusts), humidity and temperature, with the provider and its age.
 
 Focuser, filter wheel and profile editor (stage 2.8):
 
@@ -454,18 +457,35 @@ Tonight and Plan (stage 3.6):
   window and sunrise under it; the dark window's length (or how dark it gets when
   it never gets fully dark) and the Moon's phase, light and rise and set. Without
   an active site it says so and leads to Rig's Site section (`#/rig/site`).
-- Tonight's target, when one is chosen, shows its altitude now and how long it
-  is above 30° in the dark, and opens its page. The get-ready checklist lists
-  Connect, Focus (with a focuser), Frame the target and Guide (with a guide
-  camera); each step says how it stands, and the first pending one carries the
-  screen's primary button. Polar alignment and the sequence join in their phases.
+- The get-ready checklist lists Connect, Focus (with a focuser) and Polar align
+  (ADR 0053); each step says how it stands, and the first pending one carries the
+  screen's primary button. Connect offers "Connect <profile>" for the selected
+  profile besides Open Rig; Focus goes to the focuser's calibration while it has
+  none.
 - Tonight's cards open and close like Rig's sections, and closed they still say
   how they stand: the checklist how many steps are done, the night how much of the
-  dark window is left, the target its altitude now, the weather the temperature
-  and the margin to the dew point (a "Dew near" chip open or closed). The night
-  starts open and the rest closed, and each browser keeps what its user opened or
-  closed; the checklist instead goes first and open while a step is left, last
-  and closed once all are done.
+  dark window is left, Pointing the object, its altitude and the guiding RMS, the
+  weather the next hour's forecast (else the sensor's reading; a "Dew near" chip
+  open or closed), the actuators the power drawn and the sensor's temperature, the
+  location the site, the time and whether all matches, the host the CPU, the memory
+  and the room for frames. The night starts open and the rest closed, and each
+  browser keeps what its user opened or closed; the checklist instead goes first and
+  open while a step is left, last and closed once all are done. Order: checklist,
+  night, Pointing, Weather, Actuators, Location and time (the owner's only), Host.
+- Pointing: the mount's altitude and azimuth and J2000 coordinates, what is there
+  (tonight's target when it is in the main camera's frame, else the Sun or the Moon,
+  else the nearest catalog object, else nothing), its altitude through the night,
+  and the guiding RMS (total, RA and Dec). Parked and no mount say so.
+- Actuators, read only: the camera's cooler (sensor against target, power, ramp; a
+  chip when it stays more than 1 °C off once the ramp had time), dew heaters (fixed
+  or automatic), 12 V outputs, the input (a chip under 12.0 V, red under 11.5 V).
+- Location and time: the active site, its position and time zone; the box's time
+  and what keeps it; the mount's site against the active one and whether NOCS gave
+  it the time; the GPS's fix. A "Check" chip and a link to the site when something
+  is off.
+- Host: CPU use, memory, room for frames and on the system disk, CPU temperature,
+  fan, supply, and who is connected (paired devices by name, observers counted).
+- Every time in the app is in the active site's time zone (ADR 0052).
 - The night says how the dark window stands now: "Dark in 1 h 20 min, for
   7 h 20 min" before it, "5 h 28 min of darkness left · 3 h 30 min without the
   Moon" during it (the Moon only when over 10 % lit), "The dark window is over"

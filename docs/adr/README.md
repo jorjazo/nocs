@@ -56,5 +56,8 @@ that supersedes the old one.
 | [0048](0048-serial-ports-found-by-trying.md) | Serial ports are found by trying them, and the profile keeps the one that works | Proposed |
 | [0049](0049-sun-and-moon-finder.md) | The Sun and the Moon are found by their brightness, and the Sun needs a warning acknowledged | Proposed |
 | [0050](0050-dev-images-from-ghcr.md) | CI pulls the simulators' and PHD2's images from GHCR, built each week from the PPAs | Proposed |
+| [0051](0051-forecast-from-the-profile-s-provider.md) | Tonight's forecast comes from a provider the profile names, fetched by the box | Proposed |
+| [0052](0052-site-time-zone.md) | A site has a time zone, worked out from its position, and the app shows its times in it | Proposed |
+| [0053](0053-tonight-the-night-and-its-state.md) | Tonight is the night and how the rig stands: its checklist connects, focuses and polar aligns | Proposed |
 
 Template: Context → Decision → Consequences.
