@@ -17,6 +17,7 @@ from starlette.websockets import WebSocketDisconnect
 
 from nocs.api import create_app
 from nocs.api.auth import COOKIE, REVOKED, required_access
+from nocs.api.schemas import ClientsState
 from nocs.auth import AuthStore, ThrottledError, WrongPassphraseError
 from nocs.config import Settings
 from nocs.state import Json, StateStore
@@ -404,3 +405,25 @@ async def test_passphrase_is_normalized(tmp_path: Path) -> None:
     store = AuthStore(tmp_path / "auth.json")
     await store.setup("café au lait", "owner")  # é precomposed
     await store.pair("café au lait", "phone")  # e + combining accent
+
+
+def test_clients_say_who_is_connected(client: TestClient) -> None:
+    def clients(cookie: dict[str, str]) -> Json:
+        return client.get("/api/state", headers=cookie).json()["state"]["clients"]
+
+    owner = as_device(pair_owner(client))
+    tablet = as_device(pair_other(client, "tablet"))
+    assert client.put("/api/auth/observer", json={"enabled": True}).status_code == 204
+    anonymous(client)
+    assert clients(owner) == {"devices": [], "observers": 0}
+    with (
+        client.websocket_connect("/api/ws", headers=tablet),
+        client.websocket_connect("/api/ws", headers=tablet),
+        client.websocket_connect("/api/ws"),
+    ):
+        seen = ClientsState.model_validate(clients(owner))
+        assert seen.observers == 1
+        assert [(d.name, d.connections) for d in seen.devices] == [("tablet", 2)]
+        # Observers learn how many watch, not who else is connected (ADR 0047).
+        assert clients({}) == {"devices": [], "observers": 1}
+    assert clients(owner) == {"devices": [], "observers": 0}

@@ -23,6 +23,7 @@ def full_state() -> dict[str, Json]:
             "time": "2026-11-14T03:00:00Z",
             "site": "lab",
         },
+        "clients": {"devices": [{"id": "a1", "name": "Pixel", "connections": 2}], "observers": 1},
         "network": {
             "mode": "station",
             "ssid": "Home",
@@ -79,8 +80,10 @@ def test_observers_get_no_location_or_networks() -> None:
         },
         "messages": [{"device": "AM5", "timestamp": None, "text": "Slew complete"}],
     }
+    assert view["clients"] == {"devices": [], "observers": 1}
     assert "-30.03" not in repr(view)
     assert "Home" not in repr(view)
+    assert "Pixel" not in repr(view)
 
 
 def test_missing_parts_stay_missing() -> None:
@@ -119,6 +122,7 @@ def test_redacted_state_is_still_valid() -> None:
         [Op("set", ("sites",), {"active": None, "saved": {}})],
         [Op("delete", ("sites",))],
         [Op("set", ("network", "known"), ["Neighbour"])],
+        [Op("set", ("clients",), {"devices": [{"id": "b", "name": "Tab", "connections": 1}]})],
         [Op("set", ("indi", "devices", "GPSD", "properties", "GEOGRAPHIC_COORD"), COORD)],
         [Op("delete", ("indi", "devices", "GPSD", "properties", "GEOGRAPHIC_COORD"))],
         [

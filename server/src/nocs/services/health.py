@@ -3,7 +3,9 @@
 Everything comes from files any user can read: hwmon for temperatures, the fan
 and the Raspberry Pi's under-voltage alarm (``rpi_volt``), cpufreq for throttling
 (the Pi 5 lowers ``scaling_max_freq`` when it is too hot; ``vcgencmd`` needs root
-on Ubuntu), ``/proc/meminfo`` and the root filesystem's free space. A value the
+on Ubuntu), ``/proc/stat`` for the CPU's time (busy and in all, since boot: its use
+is the difference between two readings), ``/proc/meminfo`` and the root
+filesystem's free space. A value the
 computer does not report is ``None``: a PC has no under-voltage alarm.
 
 ``read_health`` blocks (file system access): call it from a thread.
@@ -31,6 +33,7 @@ class HealthPaths:
     hwmon: Path = Path("/sys/class/hwmon")
     cpufreq: Path = Path("/sys/devices/system/cpu/cpufreq/policy0")
     meminfo: Path = Path("/proc/meminfo")
+    stat: Path = Path("/proc/stat")
     root: Path = Path("/")
 
 
@@ -46,6 +49,8 @@ class Health:
     """The CPU runs below its top speed because it is too hot or under-powered."""
     memory_used: float | None
     """Fraction of memory in use."""
+    cpu_time: tuple[int, int] | None
+    """Ticks of all CPUs since boot: busy, and in all."""
     disk_free: int | None
     """Bytes free on the system disk."""
 
@@ -67,6 +72,7 @@ def read_health(paths: HealthPaths) -> Health:
         under_voltage=None if alarm is None else alarm != 0,
         throttled=None if top is None or limit is None else limit < top,
         memory_used=_memory_used(paths.meminfo),
+        cpu_time=_cpu_time(paths.stat),
         disk_free=_disk_free(paths.root),
     )
 
@@ -108,6 +114,27 @@ def _int(path: Path) -> int | None:
         return int(path.read_text().strip())
     except (OSError, ValueError):
         return None
+
+
+def cpu_used(before: tuple[int, int] | None, after: tuple[int, int] | None) -> float | None:
+    """Fraction of the CPUs' time spent busy between two readings."""
+    if before is None or after is None or after[1] <= before[1]:
+        return None
+    return min(1.0, max(0.0, (after[0] - before[0]) / (after[1] - before[1])))
+
+
+def _cpu_time(stat: Path) -> tuple[int, int] | None:
+    """The first line of /proc/stat: user nice system idle iowait irq softirq steal …"""
+    try:
+        with stat.open() as file:
+            fields = file.readline().split()
+    except OSError:
+        return None
+    if len(fields) < 9 or fields[0] != "cpu" or not all(f.isdigit() for f in fields[1:9]):
+        return None
+    ticks = [int(f) for f in fields[1:9]]
+    idle = ticks[3] + ticks[4]
+    return sum(ticks) - idle, sum(ticks)
 
 
 def _memory_used(meminfo: Path) -> float | None:

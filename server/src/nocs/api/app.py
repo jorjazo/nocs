@@ -181,7 +181,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
     )
     fifo = DriverFifo(settings.indi_fifo) if settings.indi_fifo is not None else None
     auth = AuthStore(settings.config_dir / "auth.json")
-    sockets = Sockets()
+    sockets = Sockets(store)
     # Created in the lifespan: they publish to the store and spawn tasks on its loop.
     services = _Services()
 

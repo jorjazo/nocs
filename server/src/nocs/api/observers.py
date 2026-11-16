@@ -91,6 +91,8 @@ RULES: tuple[Rule, ...] = (
     Rule(("network", "known"), _empty),
     Rule(("network", "joining"), _none),
     Rule(("network", "last_join"), _none),
+    # Who else is connected is the owner's business: observers get the count only.
+    Rule(("clients", "devices"), _empty),
     Rule(("indi", "devices", "*", "properties", "GEOGRAPHIC_COORD"), _remove),
     Rule(("indi", "devices", "*", "properties", "*", "message"), _message, fixed=False),
     Rule(("indi", "messages"), _messages, fixed=False),

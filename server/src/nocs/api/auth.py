@@ -20,6 +20,8 @@ from starlette.websockets import WebSocketClose
 from nocs.api.schemas import (
     AuthStatus,
     ClientRole,
+    ClientsState,
+    ConnectedDevice,
     ObserverRequest,
     PairedDevice,
     PairRequest,
@@ -33,7 +35,9 @@ from nocs.auth import (
     ThrottledError,
     WrongPassphraseError,
 )
+from nocs.state import StateStore
 
+CLIENTS = ("clients",)
 COOKIE = "nocs_device"
 COOKIE_MAX_AGE = timedelta(days=400)
 """Browsers cap cookie lifetimes at 400 days; ``GET /api/auth`` renews it."""
@@ -147,20 +151,48 @@ class _Socket:
 
 
 class Sockets:
-    """Open WebSockets and the identity each was opened with, to close them when revoked."""
+    """Open WebSockets and the identity each was opened with, to close them when revoked.
 
-    def __init__(self) -> None:
+    With a store, ``clients`` in the state says who is connected: each paired device
+    with its number of open pages, and how many observers watch (Tonight's Host card).
+    """
+
+    def __init__(self, store: StateStore | None = None) -> None:
         self._open: set[_Socket] = set()
+        self._store = store
+        self._publish()
 
     @contextlib.contextmanager
     def track(self, who: Identity) -> Generator[anyio.Event]:
         """Register a WebSocket; the event is set when it must be closed."""
         socket = _Socket(who)
         self._open.add(socket)
+        self._publish()
         try:
             yield socket.revoked
         finally:
             self._open.discard(socket)
+            self._publish()
+
+    def _publish(self) -> None:
+        if self._store is None:
+            return
+        devices: dict[str, ConnectedDevice] = {}
+        observers = 0
+        for socket in self._open:
+            device = socket.who.device
+            if device is not None:
+                seen = devices.get(device.id)
+                connections = 1 if seen is None else seen.connections + 1
+                devices[device.id] = ConnectedDevice(
+                    id=device.id, name=device.name, connections=connections
+                )
+            elif socket.who.role == "observer":
+                observers += 1
+        listed = sorted(devices.values(), key=lambda d: (d.name.casefold(), d.id))
+        self._store.set(
+            CLIENTS, ClientsState(devices=listed, observers=observers).model_dump(mode="json")
+        )
 
     def revoke_device(self, device_id: str) -> None:
         for socket in self._open:

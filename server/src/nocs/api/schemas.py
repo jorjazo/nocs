@@ -1132,6 +1132,21 @@ class SitesState(StateModel):
     saved: dict[str, SavedSite] = Field(description="Every saved site, by id.")
 
 
+class ConnectedDevice(StateModel):
+    id: str = Field(description="The paired device's id.")
+    name: str
+    connections: int = Field(description="Pages it has open now (tabs, windows).")
+
+
+class ClientsState(StateModel):
+    """Who is connected now: paired devices, and how many observers (Tonight's Host)."""
+
+    devices: list[ConnectedDevice] = Field(
+        description="Connected paired devices by name; empty for observers (ADR 0047)."
+    )
+    observers: int = Field(description="Pages open without pairing (observer access).")
+
+
 class SystemHealth(StateModel):
     """Read every few seconds; None where the computer does not report it."""
 
@@ -1148,6 +1163,10 @@ class SystemHealth(StateModel):
     )
     memory_used: int | None = Field(description="Percent.")
     disk_free: int | None = Field(description="Bytes free on the system disk, to 100 MB.")
+    cpu_used: int | None = Field(
+        description="Percent of the CPUs' time in use since the last reading (a few seconds"
+        " ago), to 5 %; None at the first."
+    )
     warnings: list[HealthWarningName] = Field(
         description="Most serious first: hot from 80 °C, memory from 90 %, disk under 2 GB."
     )
@@ -1400,6 +1419,7 @@ class AppState(StateModel):
     share: ShareState | None = Field(
         default=None, description="None where NOCS does not share the frames (a PC)."
     )
+    clients: ClientsState | None = None
 
 
 # -- HTTP --------------------------------------------------------------------
