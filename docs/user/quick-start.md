@@ -100,11 +100,17 @@ clock is right in the field even without network or RTC battery.
 
 ## 5. The night
 
-**Tonight** leads through the night with its checklist: connect, polar alignment,
-focus, framing the target and guiding. The next step, with the big button, is the
-first one not done that can run; a step that cannot run yet says what is missing (the
-site, the plate solver, a device that is not ready, a parked mount) and links to
-where to fix it, and the checklist moves on to the next step that can. **Live** takes
+**Tonight** gets the rig ready with its checklist: connect (the profile you used
+last, right there), focus, polar alignment. The next step, with the big button, is
+the first one not done that can run; a step that cannot run yet says what is missing
+(the site, the plate solver, a device that is not ready, a parked mount) and links to
+where to fix it, and the checklist moves on to the next step that can. Once all is
+done the checklist goes to the bottom, and Tonight shows the night: the darkness
+left, where the mount points, the weather (and the forecast, if the profile asks for
+one: the box fetches it whenever it has internet, so fetch it at home), the dew
+heaters and the camera's cooler, the site and the clocks, and the box itself. Each
+card opens and closes, and says how it stands when closed. Every time is the site's
+local time. **Live** takes
 single frames and loops. **Session** shows what the box is doing. The box runs the
 night by itself: you can lock the phone, or close the browser, and come back to it
 later.
