@@ -25,14 +25,14 @@ def targets_router() -> APIRouter:
         limit: Annotated[int, Query(ge=1, le=100)] = 20,
     ) -> list[CatalogMatch]:
         matches = (await _catalog()).search(q, limit)
-        return [CatalogMatch(object=_object(m.target), matched=m.matched) for m in matches]
+        return [CatalogMatch(object=catalog_object(m.target), matched=m.matched) for m in matches]
 
     @router.get("/objects/{designation}")
     async def get_object(designation: str) -> CatalogObject:  # pyright: ignore[reportUnusedFunction]
         target = (await _catalog()).get(designation)
         if target is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, f"no object {designation}")
-        return _object(target)
+        return catalog_object(target)
 
     @router.get("/sources")
     async def sources() -> list[CatalogSource]:  # pyright: ignore[reportUnusedFunction]
@@ -65,7 +65,7 @@ def targets_router() -> APIRouter:
             truncated=field.truncated,
             star_catalog=len(stars) > 0,
             # A wide view near the Magellanic Clouds holds a thousand: the brightest.
-            objects=[_object(t) for t in _brightest(catalog.near(ra, dec, radius), objects)],
+            objects=[catalog_object(t) for t in _brightest(catalog.near(ra, dec, radius), objects)],
         )
 
     return router
@@ -87,7 +87,8 @@ async def _stars() -> StarCatalog:
     return loaded_stars() or await anyio.to_thread.run_sync(bundled_stars)
 
 
-def _object(target: Target) -> CatalogObject:
+def catalog_object(target: Target) -> CatalogObject:
+    """A catalog object as the API sends it."""
     return CatalogObject(
         id=target.id,
         label=target.label,

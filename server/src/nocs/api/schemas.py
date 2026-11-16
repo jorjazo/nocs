@@ -2354,6 +2354,18 @@ class CatalogObject(WireModel):
     names_es: list[str] = Field(description="Common names in Spanish, where they differ.")
 
 
+class SkyPointing(WireModel):
+    """What lies around a point: what a mount pointing there has in its frame."""
+
+    body: Literal["sun", "moon"] | None = Field(
+        description="The Sun or the Moon, when its disc reaches into the circle (the Sun "
+        "first); None also without an active site."
+    )
+    objects: list[CatalogObject] = Field(
+        description="Catalog objects that reach into the circle, nearest centre first (5 at most)."
+    )
+
+
 class CatalogMatch(WireModel):
     object: CatalogObject
     matched: str = Field(description="The designation or name the query matched.")

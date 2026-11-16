@@ -13,12 +13,15 @@ from nocs.api.auth import identity
 from nocs.api.schemas import (
     Almanac,
     MoonNight,
+    SkyPointing,
     SkyVisibility,
     TargetVisibility,
     TimeInterval,
 )
+from nocs.api.targets import catalog_object
 from nocs.clock import Clock
-from nocs.devices import Location
+from nocs.devices import Coordinates, Location
+from nocs.mount.coords import jnow_to_j2000
 from nocs.sites import Site
 from nocs.sky import (
     Floats,
@@ -30,8 +33,12 @@ from nocs.sky import (
     tonight,
     visibility,
 )
+from nocs.sky.bodies import Body, position, separation
+from nocs.targets import bundled_catalog, loaded_catalog
+from nocs.targets.catalog import separation as catalog_separation
 
 MAX_TARGETS = 50
+MAX_POINTED = 5
 
 type Resolver = Callable[[str], Target | None]
 """Finds a target by name (e.g. a catalog id), or None if there is none."""
@@ -86,6 +93,28 @@ def sky_router(
                 azimuth=_rounded(moon.az),
             ),
         )
+
+    @router.get("/pointing")
+    async def pointing(  # pyright: ignore[reportUnusedFunction]
+        ra: Annotated[float, Query(ge=0, lt=24, description="J2000, hours.")],
+        dec: Annotated[float, Query(ge=-90, le=90, description="J2000, degrees.")],
+        radius: Annotated[float, Query(gt=0, le=10, description="Degrees.")],
+    ) -> SkyPointing:
+        """What a frame around a point shows: the Sun or the Moon, and catalog objects (the
+        Tonight screen's "Pointing" card: what the mount points at)."""
+        where, now = site(), clock().now()
+
+        def find() -> SkyPointing:
+            catalog = loaded_catalog() or bundled_catalog()
+            near = catalog.near(ra, dec, radius)
+            near.sort(key=lambda t: catalog_separation(ra, dec, t.ra, t.dec))
+            body = None if where is None else _body_at(where, now, ra, dec, radius)
+            return SkyPointing(
+                body=None if body is None else body.value,
+                objects=[catalog_object(t) for t in near[:MAX_POINTED]],
+            )
+
+        return await anyio.to_thread.run_sync(find)
 
     @router.get("/visibility")
     async def target_visibility(  # pyright: ignore[reportUnusedFunction]
@@ -192,3 +221,15 @@ def _interval(i: Interval | None) -> TimeInterval | None:
 
 def _rounded(values: Floats) -> list[float]:
     return [round(v, 1) for v in values.tolist()]
+
+
+def _body_at(where: Site, now: datetime, ra: float, dec: float, radius: float) -> Body | None:
+    """The Sun or the Moon when its disc reaches within ``radius`` of a J2000 point."""
+    location = Location(where.latitude, where.longitude, where.elevation)
+    point = Coordinates(ra, dec)
+    for body in (Body.SUN, Body.MOON):
+        seen = position(body, location, now)
+        j2000 = jnow_to_j2000(seen.jnow.ra, seen.jnow.dec, now)
+        if separation(j2000, point) <= radius + seen.semidiameter:
+            return body
+    return None
