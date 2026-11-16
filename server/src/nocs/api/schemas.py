@@ -16,6 +16,7 @@ from pydantic import (
 )
 
 from nocs.equipment import Role
+from nocs.forecast import ForecastHour, ForecastProvider
 from nocs.sites import Site
 from nocs.stacking.settings import StackLook
 from nocs.state import Patch
@@ -114,6 +115,9 @@ class ProfileSummary(StateModel):
     name: str
     solve_exposure: float = Field(
         description="Seconds of the frames NOCS solves to point, as saved (`solving.exposure`)."
+    )
+    forecast: ForecastProvider | None = Field(
+        description="Where tonight's forecast comes from, as saved (`forecast.provider`)."
     )
 
 
@@ -1147,6 +1151,20 @@ class ClientsState(StateModel):
     observers: int = Field(description="Pages open without pairing (observer access).")
 
 
+class ForecastState(StateModel):
+    """Tonight's forecast for the active site, from the profile's provider (ADR 0051)."""
+
+    provider: ForecastProvider
+    fetched: str | None = Field(
+        description="When the forecast was fetched, UTC; None: none yet for this site."
+    )
+    attempted: str | None = Field(description="The last attempt since nocsd started, UTC.")
+    error: str | None = Field(description="Why the last attempt failed (no internet, say).")
+    hours: list[ForecastHour] = Field(
+        description="From the current hour on, while the forecast is less than 48 h old."
+    )
+
+
 class SystemHealth(StateModel):
     """Read every few seconds; None where the computer does not report it."""
 
@@ -1420,6 +1438,9 @@ class AppState(StateModel):
         default=None, description="None where NOCS does not share the frames (a PC)."
     )
     clients: ClientsState | None = None
+    forecast: ForecastState | None = Field(
+        default=None, description="None while the active profile asks for no forecast."
+    )
 
 
 # -- HTTP --------------------------------------------------------------------

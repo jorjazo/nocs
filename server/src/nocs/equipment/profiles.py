@@ -26,6 +26,7 @@ from pydantic import (
     model_validator,
 )
 
+from nocs.forecast.model import ForecastProvider
 from nocs.indi.drivers import DRIVER_NAME
 
 log = logging.getLogger(__name__)
@@ -127,6 +128,16 @@ class Solving(ProfileModel):
     )
 
 
+class WeatherForecast(ProfileModel):
+    """Where tonight's forecast comes from (ADR 0051)."""
+
+    provider: ForecastProvider | None = Field(
+        default=None,
+        description="None: no forecast. open-meteo: Open-Meteo, free and without a key; the "
+        "box sends it the active site's position rounded to 0.1° (about 10 km).",
+    )
+
+
 class Profile(ProfileModel):
     name: str = Field(min_length=1, max_length=80)
     devices: dict[Role, DeviceConfig] = Field(default_factory=dict[Role, DeviceConfig])
@@ -140,6 +151,7 @@ class Profile(ProfileModel):
         "a guide sensor built into the main camera. Guiding then uses the imaging optics.",
     )
     solving: Solving = Field(default_factory=Solving)
+    forecast: WeatherForecast = Field(default_factory=WeatherForecast)
 
     @property
     def guiding_optics(self) -> Optics | None:

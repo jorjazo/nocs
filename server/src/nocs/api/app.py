@@ -107,6 +107,8 @@ from nocs.focus.autofocus import AutofocusService
 from nocs.focus.calibration import FocuserCalibrationService, Scale
 from nocs.focus.focusers import FocuserStore
 from nocs.focus.service import FocuserNotReadyError, FocuserService
+from nocs.forecast import PROVIDERS, ForecastProvider
+from nocs.forecast.service import ForecastService
 from nocs.guiding import GuidingService, Settle
 from nocs.imaging import (
     FRAME_TYPES,
@@ -354,6 +356,12 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
             optics.focal_length * optics.reducer / optics.aperture, float(pixel) * max(1, factor)
         )
 
+    def forecast_provider() -> ForecastProvider | None:
+        """The active profile's, as saved (its summary in the state)."""
+        active = equipment().active
+        value = store.get(("equipment", "profiles", active, "forecast")) if active else None
+        return next((p for p in PROVIDERS if p == value), None)
+
     def solve_exposure() -> float | None:
         """The active profile's, as saved (its summary in the state): no reconnection."""
         active = equipment().active
@@ -531,6 +539,14 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
         time_task = asyncio.create_task(time_keeper.run(), name="timekeeping")
         services.gps = GpsService(store, services.sites, settings.gpsd_host, settings.gpsd_port)
         gps_task = asyncio.create_task(services.gps.run(), name="gpsd")
+        forecast = ForecastService(
+            store,
+            settings.data_dir,
+            services.clock,
+            provider=forecast_provider,
+            site=lambda: sites().active,
+        )
+        forecast_task = asyncio.create_task(forecast.run(), name="forecast")
         preparation_task = asyncio.create_task(services.preparation.run(), name="preparation")
         watchdog_task = asyncio.create_task(watchdog.run(), name="systemd-watchdog")
         recovery_task = asyncio.create_task(
@@ -550,6 +566,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
                 recovery_task,
                 watchdog_task,
                 gps_task,
+                forecast_task,
                 time_task,
                 system_task,
                 guiding_task,
