@@ -183,6 +183,17 @@ def test_color_preview_keeps_red_red(tmp_path: Path) -> None:
         assert channel.shadows < 1000 / 65535 < channel.midtones
 
 
+def test_the_stretch_comes_red_first(tmp_path: Path) -> None:
+    # A red-tinted sky on an RGGB mosaic: the red channel's stretch sits higher.
+    rng = np.random.default_rng(4)
+    mosaic = rng.normal(1000, 10, (400, 600))
+    mosaic[0::2, 0::2] += 3000
+    source = write_fits(tmp_path / "red.fits", mosaic.astype(np.uint16), BAYERPAT="RGGB")
+    red, green, blue = analyze(source, str(tmp_path / "preview.jpg")).stretch
+    assert red.shadows > green.shadows + 1000 / 65535
+    assert red.shadows > blue.shadows + 1000 / 65535
+
+
 def test_bayer_hint_when_the_header_has_none(tmp_path: Path) -> None:
     source = write_fits(tmp_path / "color.fits", np.full((100, 100), 500, dtype=np.uint16))
     assert analyze(source, str(tmp_path / "p.jpg"), bayer="RGGB").color

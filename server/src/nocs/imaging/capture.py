@@ -34,9 +34,10 @@ import shutil
 import tempfile
 import time
 import uuid
+from collections import defaultdict
 from collections.abc import Awaitable, Callable, Coroutine
-from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from dataclasses import dataclass, field, replace
+from datetime import UTC, datetime, timedelta
 from pathlib import Path as FsPath
 from pathlib import PurePosixPath
 from typing import Any, Protocol, cast
@@ -157,6 +158,64 @@ class KeptFrame:
     hfr: float | None
     frame_id: int | None = None
     """The saved frame's id in the catalog; ``None`` for a preview's file."""
+    facts: FrameFacts | None = None
+    """What storage needs, read as a preview's frame arrived: saving it later
+    (Explore's "Save") must not take the filter or the gain as they are by then."""
+
+
+@dataclass(frozen=True, slots=True)
+class ShownSaved:
+    """The frame on screen, saved (``save_shown``)."""
+
+    id: int
+    path: FsPath
+    relative: str
+    """Below ``<destination>/NOCS/``."""
+    destination: str
+    taken: datetime
+    """Mid-exposure, as a plate solution of it says."""
+
+
+class NothingToSaveError(Exception):
+    """No frame of the camera is on screen to save, or it is saved already."""
+
+
+def hold_frame(source: FsPath, held: FsPath) -> None:
+    """Keep ``source``'s data under ``held`` while it is saved, so that a newer frame
+    replacing (and deleting) it meanwhile does not lose it: a hard link, or a copy when
+    the kernel refuses to link a file another user wrote (``fs.protected_hardlinks``:
+    indiserver in a container, as in development and CI; on the box both run as nocs).
+    """
+    try:
+        os.link(source, held)
+    except PermissionError:
+        shutil.copyfile(source, held)
+
+
+type Namer = Callable[[float, float, float], str | None]
+"""The catalog object nearest a J2000 point (hours, degrees) within a radius (degrees)."""
+
+
+def solved_name(solution: Json, shot: Shot, namer: Namer) -> str | None:
+    """The catalog object nearest the centre of ``shot``'s plate solution (the state's
+    ``solver.last``) within half its field, when the solution is of that frame."""
+    if not isinstance(solution, dict):
+        return None
+    taken, ra, dec = solution.get("taken"), solution.get("ra"), solution.get("dec")
+    fov = solution.get("fov")
+    if not isinstance(taken, str) or not isinstance(ra, float | int):
+        return None
+    if not isinstance(dec, float | int) or not isinstance(fov, list):
+        return None
+    sizes = [float(v) for v in fov if isinstance(v, float | int)]
+    try:
+        solved = datetime.fromisoformat(taken)
+    except ValueError:
+        return None
+    middle = shot.taken - timedelta(seconds=shot.exposure / 2)
+    if not sizes or abs((solved - middle).total_seconds()) > 1.5:
+        return None  # a solution of another frame
+    return namer(float(ra), float(dec), min(sizes) / 2)
 
 
 @dataclass(frozen=True, slots=True)
@@ -334,6 +393,8 @@ class CaptureService:
         self._following: dict[Role, asyncio.Task[None]] = {}
         self._kept: dict[Role, KeptFrame] = {}
         self._pointing: Callable[[], Coordinates | None] = lambda: None
+        self._namer: Namer = lambda _ra, _dec, _radius: None
+        self._saving: defaultdict[Role, anyio.Lock] = defaultdict(anyio.Lock)
 
         # Frames left by a previous run (stopped mid-exposure) are of no use now.
         for leftover in self._incoming_dir.glob("*"):
@@ -414,6 +475,68 @@ class CaptureService:
     def use_pointing(self, position: Callable[[], Coordinates | None]) -> None:
         """Where the mount points (J2000), recorded with the frame kept for solving."""
         self._pointing = position
+
+    def use_namer(self, namer: Namer) -> None:
+        """What names a frame saved from the screen by its plate solution (ADR 0054)."""
+        self._namer = namer
+
+    async def save_shown(self, role: Role = Role.MAIN_CAMERA) -> ShownSaved:
+        """Save the frame behind ``role``'s preview, as it was when it arrived (Explore's
+        "Save", ADR 0054).
+
+        Its name is the storage's target (the last go to); without one, the catalog
+        object nearest the centre of the frame's plate solution, within its field.
+        One save at a time: a second one finds the frame saved.
+        """
+        async with self._saving[role]:
+            return await self._save_shown(role)
+
+    async def _save_shown(self, role: Role) -> ShownSaved:
+        kept = self.kept(role)
+        if kept is None:
+            raise NothingToSaveError("no frame on screen to save: take one first")
+        if not kept.owned:
+            raise NothingToSaveError("the frame on screen is saved already")
+        if kept.facts is None:
+            raise NothingToSaveError("the camera could not be read as that frame arrived")
+        shot = kept.shot
+        # Read on the event loop; the name is looked up in a thread (the catalog's first
+        # use loads it, 0.36 s on the Pi 5).
+        target = self._storage.target
+        solution = self._store.get(("solver", "last"))
+        # A newer frame may replace (and delete) the preview's file meanwhile: save a link.
+        link = shot.path.with_name(f"{shot.path.stem}.saving{shot.path.suffix}")
+        try:
+            await anyio.to_thread.run_sync(hold_frame, shot.path, link)
+        except FileNotFoundError:
+            raise NothingToSaveError("a newer frame replaced it: save that one") from None
+        try:
+            name = None
+            if not target:
+                name = await anyio.to_thread.run_sync(solved_name, solution, shot, self._namer)
+            facts = replace(kept.facts, source=link, target=name)
+            saved = await anyio.to_thread.run_sync(self._storage.save, facts)
+        except BaseException:
+            await anyio.to_thread.run_sync(lambda: link.unlink(missing_ok=True))
+            raise
+        await anyio.to_thread.run_sync(self._storage.set_metrics, saved.id, kept.stars, kept.hfr)
+        if self._kept.get(role) is kept:
+            # The saved file is now the one behind the preview; the preview's own goes.
+            self._kept[role] = replace(
+                kept,
+                shot=replace(shot, path=saved.path),
+                owned=False,
+                frame_id=saved.id,
+            )
+            self._publish(role)
+            await anyio.to_thread.run_sync(lambda: shot.path.unlink(missing_ok=True))
+        return ShownSaved(
+            saved.id,
+            saved.path,
+            str(saved.relative),
+            saved.destination,
+            shot.taken - timedelta(seconds=shot.exposure / 2),
+        )
 
     def kept(self, role: Role = Role.MAIN_CAMERA) -> KeptFrame | None:
         """The frame behind ``role``'s preview, if it is still on disk."""
@@ -931,6 +1054,10 @@ class CaptureService:
         self, role: Role, shot: Shot, *, discard: bool, frame_id: int | None = None
     ) -> FrameAnalysis | None:
         """Analyse a frame in the worker and publish its preview; never raises."""
+        # Read as the frame arrives: the worker takes a second or two, and after a loop
+        # nothing keeps the binning, the gain or the filter from changing meanwhile.
+        binning = self._binning(role)
+        facts = self._kept_facts(role, shot) if role in SAVING_ROLES and discard else None
         analysis: FrameAnalysis | None = None
         try:
             analysis = await self._worker.analyze(role.value, str(shot.path), shot.bayer)
@@ -947,7 +1074,15 @@ class CaptureService:
         if role in SAVING_ROLES:
             await self._keep(
                 role,
-                KeptFrame(shot, discard, self._pointing(), analysis.stars, analysis.hfr, frame_id),
+                KeptFrame(
+                    shot,
+                    discard,
+                    self._pointing(),
+                    analysis.stars,
+                    analysis.hfr,
+                    frame_id,
+                    facts,
+                ),
             )
         self._previews[role] = {
             "url": f"/api/previews/{FsPath(analysis.preview).name}",
@@ -968,7 +1103,7 @@ class CaptureService:
             ],
             "frame_width": analysis.frame_width,
             "frame_height": analysis.frame_height,
-            "binning": self._binning(role),
+            "binning": binning,
             "exposure": shot.exposure,
             "frame_type": FRAME_TYPE_NAMES[shot.frame_type],
             "time": shot.taken.isoformat(timespec="seconds"),
@@ -977,9 +1112,16 @@ class CaptureService:
         self._publish(role)
         return analysis
 
+    def _kept_facts(self, role: Role, shot: Shot) -> FrameFacts | None:
+        """A preview's facts as it arrives, for saving it later; None if unreadable."""
+        try:
+            return self._facts(role, shot)
+        except (CameraNotReadyError, DeviceError, KeyError) as e:
+            log.debug("no facts kept for %s: %s", shot.path.name, e)
+            return None
+
     def _binning(self, role: Role) -> int | None:
-        """The camera's binning as a preview is published: settings cannot change while
-        a job holds the camera, so it is the frame's."""
+        """The camera's binning as a frame arrives: the frame's."""
         try:
             return self.camera(role).binning[0]
         except (CameraNotReadyError, DeviceError, KeyError):
@@ -1118,7 +1260,9 @@ class CaptureService:
         summary["exposure"] = self._exposures.get(role, EXPOSURE_DEFAULT)
         summary["last_frame"] = self._last_frames.get(role)
         summary["preview"] = self._previews.get(role)
-        summary["solvable"] = self.kept(role) is not None
+        kept = self.kept(role)
+        summary["solvable"] = kept is not None
+        summary["saved"] = kept is not None and not kept.owned
         summary["used_by"] = self._used_by.get(role)
         previous = self._published.get(role)
         path = (*ROOT, role.value)

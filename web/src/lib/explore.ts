@@ -12,6 +12,9 @@ export const PANES = ["histogram", "guiding", "focus", "goto", "panel"] as const
 export type Pane = (typeof PANES)[number];
 export type Orientation = "portrait" | "landscape";
 
+// The tools over the image.
+export const TOOLS: readonly Pane[] = ["guiding", "focus", "goto"];
+
 // Lying down there is room for everything; upright the image comes first, and the
 // panes start folded into their icons.
 export function isOpen(open: OpenSections, pane: Pane, orientation: Orientation): boolean {
@@ -52,4 +55,9 @@ export function stretched(value: number, stretch: { shadows: number; midtones: n
   const m = Math.min(1 - 1e-6, Math.max(1e-6, (midtones - shadows) / scale));
   const y = ((m - 1) * x) / ((2 * m - 1) * x - m);
   return Math.min(1, Math.max(0, y));
+}
+
+// Explore's focuser moves the step set on this device times a speed, a step at least.
+export function speedStep(step: number, speed: number): number {
+  return Math.max(1, Math.round(step * speed));
 }

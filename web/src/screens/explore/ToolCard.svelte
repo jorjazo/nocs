@@ -75,7 +75,7 @@
     display: flex;
     align-items: center;
     gap: var(--space-2);
-    min-height: 36px;
+    min-height: var(--touch);
   }
   .title {
     font-weight: 600;
@@ -90,8 +90,8 @@
     display: grid;
     place-items: center;
     flex: none;
-    width: 36px;
-    height: 36px;
+    width: var(--touch);
+    height: var(--touch);
     margin-left: auto;
     border: 0;
     border-radius: var(--radius-button);

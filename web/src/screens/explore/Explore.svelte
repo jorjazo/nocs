@@ -13,13 +13,13 @@
   import SegmentedControl from "../../components/SegmentedControl.svelte";
   import ThemeButton from "../../components/ThemeButton.svelte";
   import Tile from "../../components/Tile.svelte";
-  import { cancelJob, expose, loop, selectFilter, setCameraSettings } from "../../lib/api";
+  import { cancelJob, expose, loop, saveShown, saveStack, selectFilter, setCameraSettings, solve } from "../../lib/api";
   import { auth } from "../../lib/auth.svelte";
   import {
     CAMERA_ROLES,
+    type CameraJob,
     cameraJobs,
     capture,
-    DITHER_EVERY,
     holder,
     MAX_LOOP_EXPOSURE,
     MAX_SERIES,
@@ -27,10 +27,10 @@
   } from "../../lib/camera.svelte";
   import SequenceHold from "../../components/SequenceHold.svelte";
   import { errorText } from "../../lib/errors";
-  import { formatPlain, formatSeconds, formatTemperature } from "../../lib/format";
+  import { formatDecimal, formatPlain, formatSeconds, formatTemperature } from "../../lib/format";
   import { i18n } from "../../lib/i18n";
   import { live } from "../../lib/live.svelte";
-  import { href, router } from "../../lib/router.svelte";
+  import { router } from "../../lib/router.svelte";
   import FilterWheelSheet from "../devices/FilterWheelSheet.svelte";
   import FocuserSheet from "../devices/FocuserSheet.svelte";
   import FocusTool from "./FocusTool.svelte";
@@ -44,9 +44,7 @@
   import SettingSheet, { type Setting } from "./SettingSheet.svelte";
   import Shutter from "./Shutter.svelte";
   import Stepper from "../../components/Stepper.svelte";
-  import SolvePanel from "./SolvePanel.svelte";
-  import { folderName } from "../../lib/storage";
-  import TargetSheet from "./TargetSheet.svelte";
+  import { solveExposure } from "../../lib/equipment";
   import StackCard from "./StackCard.svelte";
   import Viewer from "./Viewer.svelte";
   import { stackView } from "../../lib/stackview.svelte";
@@ -94,23 +92,31 @@
 
   let dismissed = $state<string | null>(null);
   // Only this screen's own jobs: workflows that use the camera report their
-  // failures where they are shown (autofocus on its screen, solving in its panel).
-  const failed = $derived(
-    jobs.latest?.info.state === "failed" &&
-      (jobs.latest.info.kind === "expose" || jobs.latest.info.kind === "loop") &&
-      jobs.latest.id !== dismissed
-      ? jobs.latest
-      : null,
-  );
-  const solveJob = $derived(jobs.latest?.info.kind === "solve" ? jobs.latest : null);
-  // Where the last frame went: a single frame's result, or a series' last frame.
-  const savedPath = $derived.by(() => {
-    const latest = jobs.latest?.info;
-    if (latest?.kind !== "expose" || latest.state !== "succeeded") return null;
-    const frames = latest.result?.frames;
-    const last: unknown = Array.isArray(frames) ? frames.at(-1) : latest.result;
-    const path = typeof last === "object" && last !== null && "path" in last ? last.path : null;
-    return typeof path === "string" ? path : null;
+  // failures where they are shown (autofocus on its screen, the finder in its card).
+  // Solving the frame on screen holds no device, so it is not among the camera's jobs.
+  const solveJob = $derived.by((): CameraJob | null => {
+    let latest: CameraJob | null = null;
+    for (const [id, info] of Object.entries(live.app.jobs ?? {})) {
+      if (info.kind === "solve" && (!latest || info.started > latest.info.started)) latest = { id, info };
+    }
+    return latest;
+  });
+  const failed = $derived.by((): CameraJob | null => {
+    const own = jobs.latest;
+    const candidates = [
+      own && (own.info.kind === "expose" || own.info.kind === "loop") ? own : null,
+      main ? solveJob : null,
+    ].filter((job): job is CameraJob => job !== null && job.info.state === "failed" && job.id !== dismissed);
+    return candidates.sort((a, b) => b.info.started.localeCompare(a.info.started))[0] ?? null;
+  });
+  // A failed solve, explained when the solver says why.
+  const failure = $derived.by((): string | null => {
+    if (!failed) return null;
+    const why = live.app.solver?.failure;
+    if (failed.info.kind === "solve" && why && why.message === failed.info.error) {
+      return why.reason === "error" ? `${t.solve.failures.error} ${why.message}` : t.solve.failures[why.reason];
+    }
+    return failed.info.error ?? t.live.status.failed;
   });
 
   // "frame 3/10: …" from a series' job, as "3/10 · ".
@@ -141,6 +147,7 @@
       if (running.info.kind === "find") return { tone: "accent", text: t.finder.title };
       return { tone: "accent", text: looping ? t.live.status.looping : t.live.status.processing };
     }
+    if (solving) return { tone: "accent", text: t.live.status.solving };
     if (failed) return { tone: "error", text: t.live.status.failed };
     return null;
   }
@@ -169,8 +176,8 @@
         return;
       }
       if (exposure === null) return;
-      const dither = capture.ditherEvery > 0 ? { every: capture.ditherEvery, pixels: capture.ditherPixels } : null;
-      await expose(role, exposure, main ? capture.save : undefined, main ? { count: capture.count, dither } : undefined);
+      // Explore takes lights and keeps nothing at the time: Save keeps what is on screen.
+      await expose(role, exposure, main ? { save: false, count: capture.count, light: true } : {});
     });
   }
 
@@ -184,7 +191,7 @@
       if (exposure > MAX_LOOP_EXPOSURE) {
         throw new Error(t.live.loopMax(formatSeconds(MAX_LOOP_EXPOSURE, locale)));
       }
-      await loop(role, exposure);
+      await loop(role, exposure, main);
     });
   }
 
@@ -195,16 +202,11 @@
   // -- Layout ----------------------------------------------------------------------------
 
   let editing = $state<Setting | null>(null);
-  let naming = $state(false);
-  // Lights of the main camera go to a folder named after the target (ADR 0013).
-  const target = $derived(live.app.storage?.target ?? null);
-  const targetFolder = $derived(folderName(target ?? "") || "Untitled");
   let device = $state<"focuser" | "filter_wheel" | null>(null);
 
   // The mount, framed by hand with the go to panel's pad: while it is open the image's
   // centre is marked, and while the mount moves the newest frame shows.
   const mount = $derived(live.app.mount ?? null);
-  const mountJob = $derived(holder(live.app.jobs, "mount"));
   const framing = $derived(mount !== null && exploreLayout.overlays && exploreLayout.open("goto"));
   const moving = $derived(!!mount && (mount.slewing || mount.moving.ns !== null || mount.moving.we !== null));
   // The live stack replaces the frame in the viewer while it has one, unless this
@@ -247,17 +249,60 @@
   $effect(() => {
     if (count !== null) capture.setCount(count);
   });
-  const shutterLabel = $derived.by(() => {
-    const series = main && (count ?? 1) > 1;
-    if (main && capture.save) return series ? t.live.captureSeriesSave(count ?? 1) : t.live.captureSave;
-    return series ? t.live.captureSeries(count ?? 1) : t.live.capture;
+  const shutterLabel = $derived(main && (count ?? 1) > 1 ? t.live.captureSeries(count ?? 1) : t.live.capture);
+
+  // -- What is on screen --------------------------------------------------------------
+
+  // Save keeps what is on screen (ADR 0054): the live stack while it is shown, else the
+  // frame behind the preview. What was saved is said until the image changes.
+  let saved = $state<{ url: string; path: string } | null>(null);
+  const savedPath = $derived(saved && saved.url === shown?.url ? saved.path : null);
+  const saveReason = $derived.by((): string | null => {
+    if (!owner) return t.live.saveOwner;
+    if (stacked?.preview) return stack?.saving ? t.live.saving : null;
+    if (!camera?.solvable) return t.live.saveNothing;
+    if (camera.saved) return t.live.savedAlready;
+    return null;
   });
-  const ditherLabel = (every: number) => (every === 0 ? t.live.ditherOff : t.live.every(every));
+
+  function saveOnScreen(): void {
+    const url = shown?.url;
+    if (!url) return;
+    void act(async () => {
+      const result = stacked?.preview ? await saveStack() : await saveShown();
+      saved = { url, path: result.path };
+    });
+  }
+
+  // Solve tells where the frame on screen points, nothing more: syncing belongs to Go
+  // and centre. Without a database for the field, a reason instead.
+  const solver = $derived(live.app.solver ?? null);
+  const solving = $derived(solveJob?.info.state === "running");
+  const solveReason = $derived.by((): string | null => {
+    if (!solver?.available) return t.solve.unavailable;
+    const height = camera?.field?.height;
+    if (height !== undefined && solver.databases.length > 0) {
+      const covered = solver.databases.some((d) => d.min_fov <= height && height <= d.max_fov);
+      if (!covered) return t.solve.noDatabase(`${formatDecimal(height, locale, 2)}°`);
+    }
+    if (!camera?.solvable) return t.solve.hint(formatPlain(solveExposure(live.app.equipment), locale));
+    return null;
+  });
+
+  // The JPEG on screen, named after the camera and when it arrived.
+  const download = $derived.by(() => {
+    if (!shown?.url || !camera) return null;
+    const when = (stacked?.preview ? new Date() : new Date(preview?.time ?? Date.now())).toISOString();
+    const stamp = when.slice(0, 19).replace(/[-:]/g, "").replace("T", "_");
+    const kind = stacked?.preview ? "stack" : camera.device.replace(/[^A-Za-z0-9]+/g, "_");
+    return { url: shown.url, name: `NOCS_${kind}_${stamp}.jpg` };
+  });
 </script>
 
 <svelte:window
   onkeydown={(event) => {
-    if (event.key === "Escape" && expanded && !editing) expanded = false;
+    // A sheet open over the screen takes its Escape first.
+    if (event.key === "Escape" && expanded && !document.querySelector("dialog[open]")) expanded = false;
   }} />
 
 <h1 class="visually-hidden">{t.live.title}</h1>
@@ -287,7 +332,7 @@
               <p class="muted">{t.live.noPreviewBody}</p>
             </div>
           {/snippet}
-          <div class="overlay top">
+          <div class="overlay top" class:goto={exploreLayout.open("goto")}>
             <div class="tools">
               {#if overlays && (cameras.guide_camera || guiding?.phd2.connected)}
                 <GuidingTool
@@ -396,48 +441,16 @@
           </div>
         {/if}
 
-        {#if mount && main}
-          <a class="autofocus" href={href({ screen: "polar" })}>
-            <Icon name="mount" size={20} />
-            {mountJob?.info.kind === "polar_align" ? t.live.polarRunning : t.polar.open}
-          </a>
-        {/if}
-
-        {#if main && live.app.solver}
-          <SolvePanel
-            solver={live.app.solver}
-            {mount}
-            field={camera.field}
-            job={solveJob}
-            disabled={!owner || busy || !!running}
-            shown={owner && camera.solvable && solveJob?.info.state !== "running"}
-            mountBusy={mountJob !== null}
-            run={act} />
-        {/if}
-
         {#if inUse}<Banner icon="guide">{t.live.guideInUse}</Banner>{/if}
 
         {#if main}
-          <div class="series">
-            <Stepper label={t.live.frames} bind:value={count} min={1} max={MAX_SERIES} disabled={!owner || !!running} />
-            <div class="group">
-              <span class="label muted">{t.live.ditherEvery}</span>
-              <SegmentedControl
-                label={t.live.ditherEvery}
-                options={DITHER_EVERY.map((every) => ({ value: String(every), label: ditherLabel(every) }))}
-                value={String(capture.ditherEvery)}
-                disabled={!owner || !!running || (count ?? 1) <= 1}
-                onchange={(value) => capture.setDitherEvery(Number(value))} />
-            </div>
-          </div>
-        {/if}
-
-        {#if main && camera.frame_type === "light"}
-          <button type="button" class="readout-button target" disabled={!owner} onclick={() => (naming = true)}>
-            <span class="label muted">{t.live.target}</span>
-            <span class="value" class:muted={!target}>{target ?? t.live.untitled}</span>
-            <span class="caption muted">{t.live.targetFolder(`Light/${targetFolder}/`)}</span>
-          </button>
+          <Stepper
+            label={t.live.frames}
+            bind:value={count}
+            min={1}
+            max={MAX_SERIES}
+            hint={t.live.framesHint}
+            disabled={!owner || !!running} />
         {/if}
 
         <div class="tiles">
@@ -461,15 +474,6 @@
             value="{camera.binning[0]}×{camera.binning[1]}"
             disabled={!owner || !!running || inUse || camera.max_binning <= 1}
             onclick={() => (editing = "binning")} />
-          {#if main}
-            <!-- Guide frames are only for looking; PHD2 keeps its own darks. -->
-            <Tile
-              label={t.live.frame}
-              value={t.live.frameTypes[camera.frame_type]}
-              word
-              disabled={!owner || !!running}
-              onclick={() => (editing = "frame")} />
-          {/if}
           <Tile
             label={t.live.cooler}
             value={!camera.can_cool
@@ -523,7 +527,7 @@
         {/if}
         {#if failed}
           <Banner icon="alert" tone="error">
-            {failed.info.error ?? t.live.status.failed}
+            {failure}
             {#snippet action()}
               <Button variant="text" onclick={() => (dismissed = failed.id)}>{t.live.dismiss}</Button>
             {/snippet}
@@ -550,10 +554,8 @@
             <button
               type="button"
               class="action"
-              class:on={capture.save}
-              aria-pressed={capture.save}
-              disabled={!owner}
-              onclick={() => capture.setSave(!capture.save)}>
+              disabled={busy || saveReason !== null || savedPath !== null}
+              onclick={saveOnScreen}>
               <Icon name="save" />
               {t.live.save}
             </button>
@@ -561,16 +563,35 @@
             <span class="action placeholder" aria-hidden="true"></span>
           {/if}
         </div>
+        <div class="more">
+          {#if main && solver}
+            <button
+              type="button"
+              class="small"
+              disabled={!owner || busy || solving || solveReason !== null}
+              onclick={() => void act(() => solve({ frame: "last" }))}>
+              <Icon name="plan" size={18} />
+              {solving ? t.live.status.solving : t.solve.solve}
+            </button>
+          {/if}
+          {#if download}
+            <a class="small" href={download.url} download={download.name}>
+              <Icon name="download" size={18} />
+              {t.live.download}
+            </a>
+          {/if}
+        </div>
         <p class="caption muted outcome" aria-live="polite">
-          {#if savedPath}{t.live.saved(savedPath)}{:else if main}{capture.save ? t.live.willSave : t.live.wontSave}{/if}
+          {#if savedPath}
+            {t.live.saved(savedPath)}
+          {:else if main}
+            {saveReason ?? (owner && solver && solveReason ? solveReason : t.live.saveHint)}
+          {/if}
         </p>
       </div>
     </section>
   </div>
 
-  {#if naming}
-    <TargetSheet current={target} onclose={() => (naming = false)} />
-  {/if}
   {#if editing}
     <SettingSheet setting={editing} {role} {camera} onclose={() => (editing = null)} />
   {/if}
@@ -630,7 +651,8 @@
   }
   .overlay :global(button),
   .overlay :global(a),
-  .overlay :global([data-overlay]) {
+  .overlay :global([data-overlay]),
+  .overlay :global(dialog) {
     pointer-events: auto;
   }
   /* Over the whole image, in two columns that scroll when their tools are taller
@@ -642,6 +664,32 @@
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr);
+  }
+  /* Upright, one column: the buttons (and go to) first, then the tools on the left;
+     one tool is open at a time, as wide as the image. */
+  .portrait .top {
+    display: flex;
+    flex-direction: column;
+  }
+  /* The side holding the open tool gives way when the image is short. */
+  .portrait .buttons {
+    order: -1;
+    flex: 0 0 auto;
+  }
+  .portrait .tools {
+    flex: 0 1 auto;
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+  .portrait .goto .buttons {
+    flex-shrink: 1;
+  }
+  .portrait .goto .tools {
+    flex-shrink: 0;
+  }
+  .portrait .buttons :global(.card),
+  .portrait .tools :global(.card) {
+    width: 100%;
   }
   .tools,
   .buttons {
@@ -741,43 +789,6 @@
     flex-direction: column;
     gap: var(--space-1);
   }
-  .series {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: var(--space-3);
-  }
-  .series .group {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-  }
-  .autofocus {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-1);
-    align-self: flex-start;
-    min-height: var(--touch);
-    color: var(--accent);
-    font-weight: 600;
-    text-decoration: none;
-  }
-  .readout-button {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    min-width: 0;
-    min-height: var(--touch);
-    padding: 0;
-    border: 0;
-    background: transparent;
-    text-align: left;
-    cursor: pointer;
-  }
-  .readout-button .value {
-    font-size: 20px;
-    line-height: 26px;
-    font-weight: 500;
-  }
   .tiles {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -833,6 +844,31 @@
   }
   .placeholder {
     visibility: hidden;
+  }
+  .more {
+    display: flex;
+    justify-content: center;
+    gap: var(--space-2);
+  }
+  .small {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    min-height: var(--touch);
+    padding: 0 var(--space-3);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-full);
+    background: transparent;
+    color: var(--accent);
+    font-size: 15px;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .small:disabled {
+    color: var(--muted);
+    cursor: default;
+    opacity: 0.6;
   }
   .outcome {
     min-height: 16px;

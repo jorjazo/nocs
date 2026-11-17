@@ -277,6 +277,10 @@ class CameraState(StateModel):
     solvable: bool = Field(
         default=False, description="The preview's frame is kept to solve it (main camera)."
     )
+    saved: bool = Field(
+        default=False,
+        description="The frame behind the preview is saved: Explore's Save has nothing to do.",
+    )
     used_by: Literal["phd2"] | None = Field(
         description="Another client drives the camera (PHD2, ADR 0023): NOCS shows its frames"
         " and takes none of its own."
@@ -1482,6 +1486,14 @@ class Health(WireModel):
 class StateSnapshot(WireModel):
     version: int
     state: dict[str, Any]
+
+
+class FrameSaved(WireModel):
+    """The frame on screen, saved (Explore's "Save", ADR 0054)."""
+
+    id: int = Field(description="The saved frame's id in the catalog.")
+    path: str = Field(description="Below <destination>/NOCS/.")
+    destination: str = Field(description="Id of the destination it was saved to.")
 
 
 class StackSaved(WireModel):

@@ -197,9 +197,9 @@ it was, and still hold where Explore kept the same piece (viewer, shutter, sheet
 - A single tap on the image (after the double tap's 320 ms) shows or hides
   everything over it; the eye button does the same and stays visible. The camera
   switch is a pill over the image.
-- The browser keeps, per orientation, which panes are open (`nocs.explore.panes`),
-  whether the overlays show and the histogram's scale. Lying down they start open,
-  upright folded.
+- The browser keeps which panes are open per orientation (`nocs.explore.panes`), and
+  whether the overlays show and the histogram's scale per device. Lying down the
+  tools start open; upright folded, one open at a time and as wide as the image.
 - Tools over the image are cards with rounded corners (`ToolCard`) that fold into
   their icon, with a dot in the tool's tone; they size to the image (container
   units). Guiding, at the top left: PHD2's state, RA, Dec and total RMS of its last
@@ -212,11 +212,24 @@ it was, and still hold where Explore kept the same piece (viewer, shutter, sheet
   doing, the slew pad (narrow: smaller arrows, the speed under them), and a search of
   what is above the horizon now (`GET /api/sky/search`: catalog objects, and the Sun
   and the Moon by their English or Spanish names). A match offers Go and Go and centre;
-  for the Sun or the Moon, Go and centre runs the finder. A go to refused below the
-  horizon, while PHD2 guides or near the Sun is asked about as on the target's page.
+  for the Sun or the Moon, Go and centre runs the finder. While PHD2 guides, both stop
+  it and guide again once there in the same job (`resume_guiding`), said under the
+  buttons; at the Sun or the Moon guiding only stops. A go to refused below the horizon
+  or near the Sun is asked about as on the target's page.
   Going somewhere sets the lights' target name. While the panel is open the image's
   centre is marked; while the mount moves the newest frame shows instead of the stack.
   The mount's sheet (park, tracking) is in Rig only.
+- The panel keeps the live stack, filters, the number of frames (a short stack), the
+  exposure's tiles and the cooler; Explore exposes lights only, saves nothing at the
+  time and never dithers. Under the shutter's row: Loop, the shutter, **Save**, and
+  smaller **Solve** and **Download**. Save keeps what is on screen: the live stack
+  while it is shown, else the frame behind the preview (`POST
+  /api/cameras/main_camera/save`, with the facts read as it arrived), named after the
+  last go to or else the object at its solved centre (a solution of it is kept with
+  it); the caption then says where it went until the image changes, and the camera's
+  `saved` keeps Save off for a frame saved already. Solve solves the frame on screen and only tells where
+  it points (the status bar); syncing is part of Go and centre. Download is the JPEG on
+  screen (`NOCS_<camera>_<time>.jpg`); sharing waits for HTTPS on the box.
 
 Live view (stage 2.7):
 

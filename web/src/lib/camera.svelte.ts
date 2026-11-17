@@ -48,12 +48,7 @@ export const FOCUS_STEPS: readonly number[] = [10, 50, 100, 500, 1000];
 // Explore's focuser speeds (ADR 0054): half, once or twice the step set.
 export const FOCUS_SPEEDS: readonly number[] = [0.5, 1, 2];
 
-export function speedStep(step: number, speed: number): number {
-  return Math.max(1, Math.round(step * speed));
-}
-
-// Dither before every n-th frame of a series (0 = never), and by how far.
-export const DITHER_EVERY: readonly number[] = [0, 1, 2, 3, 5];
+// How far "Dither now" dithers, on the guiding screen.
 export const DITHER_PIXELS = 5;
 export const MAX_SERIES = 1000;
 
@@ -67,9 +62,9 @@ export function slotLabel(wheel: FilterWheelState, slot: number, t: Messages): s
 }
 
 // -- Capture choices ------------------------------------------------------------
-// Per device, like the theme: the camera shown, whether to save (a choice made
-// before each frame), the focuser's step and Explore's speed of it, and how many frames a capture takes
-// with how often it dithers (ADR 0024). The exposure time is in the camera's state.
+// Per device, like the theme: the camera shown, the focuser's step and Explore's speed
+// of it, how many frames a capture takes (a short stack, ADR 0054), and how far
+// "Dither now" dithers. The exposure time is in the camera's state.
 
 function readNumber(key: string): number | null {
   try {
@@ -103,21 +98,14 @@ function readRole(): CameraRoleName {
 
 class CapturePrefs {
   role: CameraRoleName = $state(readRole());
-  save: boolean = $state(readNumber("nocs.save") !== 0);
   focusStep: number = $state(FOCUS_STEPS.find((step) => step === readNumber("nocs.focusStep")) ?? 100);
   focusSpeed: number = $state(FOCUS_SPEEDS.find((speed) => speed === readNumber("nocs.focusSpeed")) ?? 1);
   count: number = $state(clamp(readNumber("nocs.frames") ?? 1, 1, MAX_SERIES));
-  ditherEvery: number = $state(DITHER_EVERY.find((n) => n === readNumber("nocs.ditherEvery")) ?? 1);
   ditherPixels: number = $state(clamp(readNumber("nocs.ditherPixels") ?? DITHER_PIXELS, 1, 100));
 
   setRole(role: CameraRoleName): void {
     this.role = role;
     write("nocs.camera", role);
-  }
-
-  setSave(save: boolean): void {
-    this.save = save;
-    write("nocs.save", save ? "1" : "0");
   }
 
   setFocusStep(step: number): void {
@@ -133,11 +121,6 @@ class CapturePrefs {
   setCount(count: number): void {
     this.count = clamp(Math.round(count), 1, MAX_SERIES);
     write("nocs.frames", String(this.count));
-  }
-
-  setDitherEvery(every: number): void {
-    this.ditherEvery = every;
-    write("nocs.ditherEvery", String(every));
   }
 
   setDitherPixels(pixels: number): void {

@@ -2,8 +2,8 @@
   // The slew pad: the mount moves only while an arrow is held (two at once move
   // diagonally) and stops when it is let go, the page goes to the background or
   // the link drops; the server enforces it too (ADR 0015). Arrow keys work on a
-  // keyboard. Shown in the mount's sheet and, folded, in Explore, where it is
-  // compact: the speed beside the arrows, so the preview above stays in sight.
+  // keyboard. Shown in the mount's sheet and in Explore's go to, where it is
+  // compact and narrow: smaller arrows, the speed under them.
   import { untrack } from "svelte";
   import Button from "../../components/Button.svelte";
   import Icon from "../../components/Icon.svelte";

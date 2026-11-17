@@ -796,6 +796,10 @@ export interface CameraState {
    * Seconds left in the current exposure.
    */
   remaining: number | null;
+  /**
+   * The frame behind the preview is saved: Explore's Save has nothing to do.
+   */
+  saved?: boolean;
   sensor: SensorInfo;
   /**
    * The preview's frame is kept to solve it (main camera).
@@ -4931,6 +4935,26 @@ export interface FrameRecord {
    */
   volume: string;
   width: number | null;
+}
+/**
+ * The frame on screen, saved (Explore's "Save", ADR 0054).
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "FrameSaved".
+ */
+export interface FrameSaved {
+  /**
+   * Id of the destination it was saved to.
+   */
+  destination: string;
+  /**
+   * The saved frame's id in the catalog.
+   */
+  id: number;
+  /**
+   * Below <destination>/NOCS/.
+   */
+  path: string;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema

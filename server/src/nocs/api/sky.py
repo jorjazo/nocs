@@ -254,7 +254,8 @@ def _search_up(query: str, limit: int, site: Location, now: datetime) -> list[Sk
     found: list[SkyMatch] = []
     words = fold(query)
     for body, names in BODY_NAMES.items():
-        if words and any(name.startswith(words) for name in names):
+        # Two letters at least: "m" is for Messier, not the Moon.
+        if len(words) >= 2 and any(name.startswith(words) for name in names):
             seen = position(body, site, now)
             if seen.alt > 0:
                 found.append(

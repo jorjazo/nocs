@@ -21,7 +21,6 @@ import type {
   DetectPortRequest,
   CoolingRequest,
   DitherNowRequest,
-  DitherRequest,
   Driver,
   EjectRequest,
   EquatorialGoto,
@@ -29,6 +28,7 @@ import type {
   FilterNamesRequest,
   FilterSelectRequest,
   FrameRecord,
+  FrameSaved,
   FrameTypeName,
   SavedFrameTypeName,
   StackSaved,
@@ -406,25 +406,30 @@ export function setCooling(role: CameraRoleName, body: CoolingRequest): Promise<
 // The frame type is the camera's current one; `save` defaults to the server's
 // choice (the main camera saves, the guide camera never does). A series of the
 // main camera may dither between its frames while PHD2 guides (ADR 0024).
+// A frame, or `count` of them, of a camera. Explore takes lights and saves nothing at
+// the time (ADR 0054): what is worth keeping is saved afterwards with `saveShown`.
 export async function expose(
   role: CameraRoleName,
   exposure: number,
-  save?: boolean,
-  series?: { count: number; dither: DitherRequest | null },
+  options: { save?: boolean; count?: number; light?: boolean } = {},
 ): Promise<string> {
-  const body: ExposeRequest = save === undefined ? { exposure } : { exposure, save };
-  if (series && series.count > 1) {
-    body.count = series.count;
-    body.dither = series.dither;
-  }
+  const body: ExposeRequest = { exposure };
+  if (options.save !== undefined) body.save = options.save;
+  if (options.count !== undefined && options.count > 1) body.count = options.count;
+  if (options.light) body.frame_type = "light";
   const started = await request<JobStarted>("POST", `/api/cameras/${role}/expose`, body);
   return started.job;
 }
 
-export async function loop(role: CameraRoleName, exposure: number): Promise<string> {
-  const body: LoopRequest = { exposure };
+export async function loop(role: CameraRoleName, exposure: number, light = false): Promise<string> {
+  const body: LoopRequest = light ? { exposure, frame_type: "light" } : { exposure };
   const started = await request<JobStarted>("POST", `/api/cameras/${role}/loop`, body);
   return started.job;
+}
+
+// Save the frame on screen, the one behind the main camera's preview (ADR 0054).
+export function saveShown(): Promise<FrameSaved> {
+  return request("POST", "/api/cameras/main_camera/save");
 }
 
 export function cancelJob(job: string): Promise<void> {

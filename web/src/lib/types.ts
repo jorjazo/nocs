@@ -76,6 +76,7 @@ export type {
   FrameGuiding,
   FrameInfo,
   FrameRecord,
+  FrameSaved,
   FrameTypeName,
   SavedFrameTypeName,
   SavedSite,

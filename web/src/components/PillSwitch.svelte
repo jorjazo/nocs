@@ -39,7 +39,7 @@
     border: 1px solid var(--line);
   }
   button {
-    min-height: 28px;
+    min-height: var(--touch);
     padding: 0 12px;
     border: 0;
     border-radius: var(--radius-full);

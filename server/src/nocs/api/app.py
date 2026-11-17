@@ -54,6 +54,7 @@ from nocs.api.schemas import (
     ExposeRequest,
     FrameGuiding,
     FrameRecord,
+    FrameSaved,
     GpsSiteRequest,
     Health,
     Hello,
@@ -117,7 +118,7 @@ from nocs.imaging import (
     CaptureService,
     image_connector,
 )
-from nocs.imaging.capture import DitherPlan, UploadDirs
+from nocs.imaging.capture import DitherPlan, NothingToSaveError, UploadDirs
 from nocs.imaging.worker import ImageWorker
 from nocs.indi.drivers import DriverControlError, DriverFifo, load_catalog
 from nocs.jobs import JobManager, ResourceBusyError
@@ -499,6 +500,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
         services.plan = PlanService(store, settings.config_dir)
         services.capture.use_guider(services.guiding)
         services.capture.use_pointing(lambda: _pointing(services.mount))
+        services.capture.use_namer(_nearest_object)
         services.stacking = LiveStackService(
             store, services.worker, storage, settings.config_dir, settings.data_dir
         )
@@ -811,6 +813,17 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
         with _camera_errors():
             job_id = capture().loop(Role(role), request.exposure, frame_type)
         return JobStarted(job=job_id)
+
+    @app.post("/api/cameras/{role}/save", status_code=status.HTTP_201_CREATED)
+    async def camera_save(role: CameraRoleName) -> FrameSaved:  # pyright: ignore[reportUnusedFunction]
+        """Save the frame on screen, the one behind the preview (Explore, ADR 0054)."""
+        try:
+            saved = await capture().save_shown(Role(role))
+        except (NothingToSaveError, StorageError) as e:
+            raise HTTPException(status.HTTP_409_CONFLICT, str(e)) from e
+        # Solved before it was saved: its solution goes with it, for the framing chart.
+        pointing().keep_saved(saved.id, saved.path, saved.taken)
+        return FrameSaved(id=saved.id, path=saved.relative, destination=saved.destination)
 
     @app.get("/api/previews/{name}")
     async def preview(name: str) -> FileResponse:  # pyright: ignore[reportUnusedFunction]
@@ -1257,6 +1270,13 @@ def _catalog_target(name: str) -> SkyTarget | None:
     catalog: TargetCatalog = loaded_catalog() or bundled_catalog()
     found = catalog.get(name)
     return SkyTarget(found.ra, found.dec) if found else None
+
+
+def _nearest_object(ra: float, dec: float, radius: float) -> str | None:
+    """The label of the catalog object nearest a J2000 point within ``radius`` degrees
+    (blocking: the first use loads the catalog)."""
+    found = (loaded_catalog() or bundled_catalog()).nearest(ra, dec, radius)
+    return found.label if found is not None else None
 
 
 def _pointing(mount: MountService | None) -> Coordinates | None:

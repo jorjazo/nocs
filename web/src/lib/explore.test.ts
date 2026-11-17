@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { isOpen, parseOpen, solvedShown, stretched, untilMeridian } from "./explore.ts";
+import { isOpen, parseOpen, solvedShown, speedStep, stretched, untilMeridian } from "./explore.ts";
 import { siderealTime } from "./polar.ts";
 
 test("panes start open lying down and folded upright", () => {
@@ -42,4 +42,11 @@ test("the stretch turns its shadows black and its midtones grey", () => {
   assert.equal(stretched(0.005, stretch), 0);
   assert.ok(Math.abs(stretched(0.02, stretch) - 0.5) < 1e-9);
   assert.equal(stretched(1, stretch), 1);
+});
+
+test("the focuser's speed scales its step, a step at least", () => {
+  assert.equal(speedStep(100, 0.5), 50);
+  assert.equal(speedStep(100, 2), 200);
+  assert.equal(speedStep(1, 0.5), 1);
+  assert.equal(speedStep(15, 0.5), 8);
 });

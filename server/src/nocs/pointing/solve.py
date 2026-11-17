@@ -25,6 +25,7 @@ saved frame's solution is also kept with it in the catalog (``nocs.pointing.save
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import math
 import os
@@ -194,6 +195,7 @@ class PointingService:
         self._recorder = recorder
         self._default_exposure = exposure
         self._last: FrameSolve | None = None
+        self._tasks: set[asyncio.Task[None]] = set()
 
     def start(self, options: SolveOptions, role: Role = Role.MAIN_CAMERA) -> str:
         """Solve (and sync) in a job of its own (locking ``resources``); returns the job id."""
@@ -220,6 +222,20 @@ class PointingService:
 
         return self._jobs.start("solve", [], job)
 
+    def keep_saved(self, frame_id: int, path: FsPath, taken: datetime) -> None:
+        """A frame solved on screen and saved afterwards (Explore's "Save", ADR 0054): keep
+        its solution with it, when the last solve was of that very frame (``taken``,
+        mid-exposure, computed as ``FrameSolve.taken`` is). In the background: the
+        recorder draws the frame's image in the worker, which the save need not wait for."""
+        last = self._last
+        if last is None or self._recorder is None or last.taken != taken:
+            return
+        task = asyncio.get_running_loop().create_task(
+            self._recorder.record(frame_id, path, last.result)
+        )
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
+
     async def solve_kept(self, context: JobContext, role: Role = Role.MAIN_CAMERA) -> FrameSolve:
         """Solve the frame behind ``role``'s preview; raises SolveError or PointingError."""
         kept = self._capture.kept(role)
@@ -242,9 +258,12 @@ class PointingService:
         finally:
             if kept.owned:
                 await anyio.to_thread.run_sync(lambda: image.unlink(missing_ok=True))
-        if kept.frame_id is not None and self._recorder is not None:
-            # A saved light: the framing chart can show it under its target.
-            await self._recorder.record(kept.frame_id, shot.path, result)
+        if self._recorder is not None:
+            # A saved light, or one saved while it was being solved: the framing chart
+            # can show it under its target.
+            now = self._capture.kept(role) if kept.frame_id is None else kept
+            if now is not None and now.frame_id is not None and now.shot.taken == shot.taken:
+                await self._recorder.record(now.frame_id, now.shot.path, result)
         solution = result.solution
         solved = FrameSolve(
             result,

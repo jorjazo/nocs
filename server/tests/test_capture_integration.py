@@ -402,3 +402,38 @@ def test_loop_makes_previews_and_keeps_nothing(
         for path in directory.glob("main_camera_*")
     ]
     assert len(left) == 1, left
+
+
+def test_save_the_frame_on_screen(api: TestClient, data_dir: Path) -> None:
+    """Explore's Save (ADR 0054): the frame behind the preview, after the fact."""
+    api.post(
+        "/api/cameras/main_camera/settings",
+        json={"region": SMALL, "binning": 1, "frame_type": "light"},
+    )
+    assert api.put("/api/storage/target", json={"target": "NGC 253"}).status_code == 204
+    shown = api.post("/api/cameras/main_camera/expose", json={"exposure": 0.1, "save": False})
+    wait(api, finished(shown.json()["job"]))
+    wait(api, lambda s: s["cameras"]["main_camera"]["solvable"])
+    preview = camera(api)["preview"]
+    assert (preview["binning"], preview["frame_width"]) == (1, SMALL["width"])
+    assert camera(api)["saved"] is False
+    # Saved as it was when it arrived, whatever the gain is by then.
+    gain = camera(api)["gain"]
+    other = gain + 10 if gain + 10 <= camera(api)["gain_range"]["max"] else gain - 10
+    assert api.post("/api/cameras/main_camera/settings", json={"gain": other}).status_code == 204
+    response = api.post("/api/cameras/main_camera/save")
+    assert response.status_code == 201, response.text
+    saved = response.json()
+    relative = Path(saved["path"])
+    assert relative.parts[1:3] == ("Light", "NGC_253")
+    assert (data_dir / "NOCS" / relative).read_bytes().startswith(b"SIMPLE")
+    wait(api, lambda s: s["cameras"]["main_camera"]["saved"])
+    api.post("/api/cameras/main_camera/settings", json={"gain": gain})
+    [record] = api.get("/api/frames", params={"limit": 1}).json()
+    assert (record["id"], record["target"]) == (saved["id"], "NGC 253")
+    assert (record["stars"], record["hfr"]) == (preview["stars"], preview["hfr"])
+    assert record["gain"] == pytest.approx(gain)
+    # Saved once; the guide camera's frames are never saved.
+    assert api.post("/api/cameras/main_camera/save").status_code == 409
+    assert api.post("/api/cameras/guide_camera/save").status_code == 409
+    assert api.put("/api/storage/target", json={"target": None}).status_code == 204
