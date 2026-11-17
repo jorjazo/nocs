@@ -3,8 +3,8 @@
   // what is above the horizon now (catalog objects, the Sun and the Moon) with "Go"
   // and "Go and centre". Going somewhere names the frames saved there after it. For
   // the Sun or the Moon, "Go and centre" runs their finder (ADR 0049); near the Sun,
-  // its warning comes first. Refused go tos say why and offer the way on, as the
-  // target's page does.
+  // its warning comes first. While PHD2 guides, going stops it and guides again once
+  // there (not at the Sun or the Moon). Refused go tos say why and offer the way on.
   import Banner from "../../components/Banner.svelte";
   import Button from "../../components/Button.svelte";
   import ConfirmButton from "../../components/ConfirmButton.svelte";
@@ -122,40 +122,49 @@
   type Go = "goto" | "center";
   let busy = $state<Go | null>(null);
   let error = $state("");
-  let belowHorizon = $state<{ kind: Go; stopGuiding: boolean } | null>(null);
-  let guidingRefused = $state<Go | null>(null);
+  let belowHorizon = $state<{ kind: Go; guided: boolean } | null>(null);
   let nearSun = $state<(() => void) | null>(null);
 
-  async function go(kind: Go, force = false, stopGuiding = false, acknowledged = false): Promise<void> {
+  // Guiding stops for the move and, at an object, guides again once there: the Sun or
+  // the Moon is no place to guide (the Sun's finder stops it whatever was asked).
+  async function go(kind: Go, force = false, acknowledged = false, guided = guiding): Promise<void> {
     const target = chosen;
     if (!target) return;
     if (target.body === "sun" && !mount.sun_acknowledged && !acknowledged) {
-      nearSun = () => void go(kind, force, stopGuiding, true);
+      nearSun = () => void go(kind, force, true, guided);
       return;
     }
+    const resume = guided && !target.body;
     busy = kind;
     error = "";
     belowHorizon = null;
-    guidingRefused = null;
     try {
       if (target.body && kind === "center") {
-        await findBody({ body: target.body, radius: 5, stop_guiding: stopGuiding || target.body === "sun" });
+        await findBody({ body: target.body, radius: 5, stop_guiding: guided || target.body === "sun" });
       } else if (kind === "center") {
-        await centerOn({ ra: target.ra, dec: target.dec, force, stop_guiding: stopGuiding });
+        await centerOn({ ra: target.ra, dec: target.dec, force, resume_guiding: resume });
       } else {
         // The Sun and the Moon move: where they are now, not when they were found.
         const now = target.body
           ? ((await searchUp(target.body, 5)).find((m) => m.body === target.body) ?? target)
           : target;
-        await gotoMount({ frame: now.frame, ra: now.ra, dec: now.dec, force, stop_guiding: stopGuiding });
+        await gotoMount({
+          frame: now.frame,
+          ra: now.ra,
+          dec: now.dec,
+          force,
+          stop_guiding: guided && !resume,
+          resume_guiding: resume,
+        });
       }
       // The frames saved here are named after it (ADR 0054).
       await setTarget(targetName(target));
     } catch (e) {
       const why = e instanceof ApiError ? goRefusal(e.status, e.message) : null;
-      if (why === "horizon") belowHorizon = { kind, stopGuiding };
-      else if (why === "guiding") guidingRefused = kind;
-      else if (why === "sun") nearSun = () => void go(kind, force, stopGuiding, true);
+      if (why === "horizon") belowHorizon = { kind, guided };
+      // PHD2 started guiding after this was asked: the same, guiding again there.
+      else if (why === "guiding" && !guided) await go(kind, force, acknowledged, true);
+      else if (why === "sun") nearSun = () => void go(kind, force, true, guided);
       else error = errorText(e, t);
     } finally {
       busy = null;
@@ -220,6 +229,9 @@
       </Button>
     </div>
     {#if centerReason ?? goReason}<p class="caption muted">{centerReason ?? goReason}</p>{/if}
+    {#if guiding && !goReason}
+      <p class="caption muted">{chosen.body ? t.live.guidingStops : t.live.guidingResumes}</p>
+    {/if}
   {/if}
 
   {#if belowHorizon}
@@ -227,16 +239,7 @@
     <Banner icon="alert" tone="warning">
       {t.mount.belowHorizon}
       {#snippet action()}
-        <ConfirmButton label={t.mount.goAnyway} confirmLabel={t.mount.goAnywayConfirm} onconfirm={() => void go(refused.kind, true, refused.stopGuiding)} />
-      {/snippet}
-    </Banner>
-  {/if}
-  {#if guidingRefused}
-    {@const kind = guidingRefused}
-    <Banner icon="alert" tone="warning">
-      {t.live.guidingHolds}
-      {#snippet action()}
-        <Button variant="text" onclick={() => void go(kind, false, true)}>{t.plan.goStopGuiding}</Button>
+        <ConfirmButton label={t.mount.goAnyway} confirmLabel={t.mount.goAnywayConfirm} onconfirm={() => void go(refused.kind, true, false, refused.guided)} />
       {/snippet}
     </Banner>
   {/if}

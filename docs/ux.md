@@ -212,8 +212,10 @@ it was, and still hold where Explore kept the same piece (viewer, shutter, sheet
   doing, the slew pad (narrow: smaller arrows, the speed under them), and a search of
   what is above the horizon now (`GET /api/sky/search`: catalog objects, and the Sun
   and the Moon by their English or Spanish names). A match offers Go and Go and centre;
-  for the Sun or the Moon, Go and centre runs the finder. A go to refused below the
-  horizon, while PHD2 guides or near the Sun is asked about as on the target's page.
+  for the Sun or the Moon, Go and centre runs the finder. While PHD2 guides, both stop
+  it and guide again once there in the same job (`resume_guiding`), said under the
+  buttons; at the Sun or the Moon guiding only stops. A go to refused below the horizon
+  or near the Sun is asked about as on the target's page.
   Going somewhere sets the lights' target name. While the panel is open the image's
   centre is marked; while the mount moves the newest frame shows instead of the stack.
   The mount's sheet (park, tracking) is in Rig only.
