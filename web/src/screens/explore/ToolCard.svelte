@@ -14,6 +14,7 @@
     ontoggle,
     tone = null,
     toneText = "",
+    side = "left",
     status,
     children,
   }: {
@@ -24,6 +25,8 @@
     // How the tool stands, as a dot on the folded icon, said in words for screen readers.
     tone?: "ok" | "accent" | "warning" | "error" | null;
     toneText?: string;
+    // Which edge of the image it sits on: it folds towards it.
+    side?: "left" | "right";
     // Beside the title while open.
     status?: Snippet;
     children: Snippet;
@@ -39,7 +42,7 @@
       <span class="title">{title}</span>
       {#if status}<span class="status">{@render status()}</span>{/if}
       <button type="button" class="fold" aria-label={t.live.fold(title)} aria-expanded="true" onclick={ontoggle}>
-        <Icon name="chevronLeft" size={18} />
+        <Icon name={side === "left" ? "chevronLeft" : "chevronRight"} size={18} />
       </button>
     </div>
     {@render children()}
@@ -61,15 +64,12 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
-    width: min(280px, calc(50cqw - var(--space-4)));
-    min-width: 220px;
-    max-height: calc(100cqh - var(--space-6));
-    overflow-y: auto;
+    flex: none;
+    width: min(280px, 100%);
     padding: var(--space-2) var(--space-3) var(--space-3);
     border: 1px solid var(--line);
     border-radius: var(--radius-card);
-    background: color-mix(in srgb, var(--bg) 84%, transparent);
-    backdrop-filter: blur(6px);
+    background: color-mix(in srgb, var(--bg) 88%, transparent);
   }
   .header {
     display: flex;

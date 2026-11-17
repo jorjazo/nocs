@@ -203,6 +203,7 @@ export type {
   ConnectedDevice,
   ForecastHour,
   ForecastState,
+  SkyMatch,
   SkyPointing,
 } from "./generated/api";
 

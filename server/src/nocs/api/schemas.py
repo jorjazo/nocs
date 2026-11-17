@@ -2396,6 +2396,23 @@ class CatalogObject(WireModel):
     names_es: list[str] = Field(description="Common names in Spanish, where they differ.")
 
 
+class SkyMatch(WireModel):
+    """A catalog object, or the Sun or the Moon, that matched a search and is above the
+    horizon now (Explore's go to, ADR 0054)."""
+
+    object: CatalogObject | None = Field(description="None for the Sun and the Moon.")
+    body: Literal["sun", "moon"] | None
+    matched: str = Field(description="The designation or name the query matched.")
+    frame: Literal["j2000", "jnow"] = Field(
+        description="Of ``ra`` and ``dec``: J2000 for catalog objects, of the date for the"
+        " Sun and the Moon (where they are now)."
+    )
+    ra: float = Field(description="Hours.")
+    dec: float = Field(description="Degrees.")
+    altitude: float = Field(description="Degrees above the horizon now (geometric).")
+    azimuth: float = Field(description="Degrees from north through east.")
+
+
 class SkyPointing(WireModel):
     """What lies around a point: what a mount pointing there has in its frame."""
 

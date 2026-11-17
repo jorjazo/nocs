@@ -216,6 +216,8 @@
   $effect(() => {
     const onwheel = (event: WheelEvent) => {
       if (!shown) return;
+      // Over a tool, the wheel scrolls the tool.
+      if (event.target instanceof Element && event.target.closest("[data-overlay]")) return;
       event.preventDefault();
       zoomAt(zoom * Math.exp(-event.deltaY * 0.002), local(event));
     };

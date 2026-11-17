@@ -22,8 +22,9 @@ NOCS restarts). Finding the Sun stops PHD2, whose guide camera would see the Sun
 
 ## Finding the Sun or the Moon
 
-Open the mount (Rig → the mount, or the mount button in Explore) and, under **Sun and
-Moon**, tap **Find the Moon** or **Find the Sun**. NOCS then:
+Open the mount (Rig → the mount) and, under **Sun and Moon**, tap **Find the Moon** or
+**Find the Sun**; or, in Explore's **Go to**, search "Moon" or "Sun" and tap **Go and
+centre**. NOCS then:
 
 1. tracks it at the lunar or solar rate, when the mount offers one (the next go to
    elsewhere goes back to the rate the mount had before);

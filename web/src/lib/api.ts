@@ -69,6 +69,7 @@ import type {
   Site,
   SiteCreated,
   SkyChart,
+  SkyMatch,
   SkyPointing,
   SkyVisibility,
   SolvedFrames,
@@ -656,6 +657,12 @@ export function getTonight(): Promise<Almanac> {
 export function getSkyPointing(ra: number, dec: number, radius: number): Promise<SkyPointing> {
   const params = new URLSearchParams({ ra: String(ra), dec: String(dec), radius: String(radius) });
   return request("GET", `/api/sky/pointing?${params}`);
+}
+
+// Catalog objects, the Sun and the Moon matching a search that are above the horizon
+// at the active site now (Explore's go to, ADR 0054).
+export function searchUp(query: string, limit = 10): Promise<SkyMatch[]> {
+  return request("GET", `/api/sky/search?${new URLSearchParams({ q: query, limit: String(limit) })}`);
 }
 
 // Tonight's altitude curves of targets: catalog ids or "RA,Dec" (J2000 hours, degrees).

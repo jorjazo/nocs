@@ -5850,6 +5850,44 @@ export interface SkyChart {
   truncated: boolean;
 }
 /**
+ * A catalog object, or the Sun or the Moon, that matched a search and is above the
+ * horizon now (Explore's go to, ADR 0054).
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "SkyMatch".
+ */
+export interface SkyMatch {
+  /**
+   * Degrees above the horizon now (geometric).
+   */
+  altitude: number;
+  /**
+   * Degrees from north through east.
+   */
+  azimuth: number;
+  body: ("sun" | "moon") | null;
+  /**
+   * Degrees.
+   */
+  dec: number;
+  /**
+   * Of ``ra`` and ``dec``: J2000 for catalog objects, of the date for the Sun and the Moon (where they are now).
+   */
+  frame: "j2000" | "jnow";
+  /**
+   * The designation or name the query matched.
+   */
+  matched: string;
+  /**
+   * None for the Sun and the Moon.
+   */
+  object: CatalogObject | null;
+  /**
+   * Hours.
+   */
+  ra: number;
+}
+/**
  * What lies around a point: what a mount pointing there has in its frame.
  *
  * This interface was referenced by `NOCSAPI`'s JSON-Schema

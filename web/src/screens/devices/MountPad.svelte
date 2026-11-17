@@ -18,6 +18,7 @@
     disabled = false,
     reason = null,
     compact = false,
+    narrow = false,
     onhide,
   }: {
     mount: MountState;
@@ -25,6 +26,8 @@
     // Why it is disabled, when that is not obvious.
     reason?: string | null;
     compact?: boolean;
+    // In a narrow card (Explore's go to): the speed under smaller arrows.
+    narrow?: boolean;
     // Folds the pad away, offered beside the speed.
     onhide?: () => void;
   } = $props();
@@ -123,7 +126,7 @@
 
 <svelte:window onkeydown={keydown} onkeyup={keyup} />
 
-<div class="pad" class:compact>
+<div class="pad" class:compact class:narrow>
   <div class="cross" role="group" aria-label={t.mount.pad}>
     {#each buttons as { direction, icon } (direction)}
       <button
@@ -208,6 +211,18 @@
   }
   .compact p {
     grid-column: 1 / -1;
+  }
+  .narrow {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: center;
+  }
+  .narrow .cross {
+    grid-template-columns: repeat(3, 48px);
+    grid-template-rows: repeat(3, 48px);
+  }
+  .narrow .rate {
+    flex-direction: row;
+    gap: var(--space-2);
   }
   .rate {
     display: flex;

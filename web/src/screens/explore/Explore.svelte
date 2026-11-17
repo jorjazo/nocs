@@ -30,13 +30,11 @@
   import { formatPlain, formatSeconds, formatTemperature } from "../../lib/format";
   import { i18n } from "../../lib/i18n";
   import { live } from "../../lib/live.svelte";
-  import { formatDec, formatRa, mountActivity } from "../../lib/mount.svelte";
   import { href, router } from "../../lib/router.svelte";
   import FilterWheelSheet from "../devices/FilterWheelSheet.svelte";
   import FocuserSheet from "../devices/FocuserSheet.svelte";
-  import MountPad from "../devices/MountPad.svelte";
-  import MountSheet from "../devices/MountSheet.svelte";
   import FocusTool from "./FocusTool.svelte";
+  import GoToTool from "./GoToTool.svelte";
   import FrameStatus from "./FrameStatus.svelte";
   import GuidingTool from "./GuidingTool.svelte";
   import HistogramBar from "./HistogramBar.svelte";
@@ -46,9 +44,6 @@
   import SettingSheet, { type Setting } from "./SettingSheet.svelte";
   import Shutter from "./Shutter.svelte";
   import Stepper from "../../components/Stepper.svelte";
-  import { guidingActive } from "../../lib/guiding.svelte";
-  import CenteringCard from "./CenteringCard.svelte";
-  import FinderCard from "../devices/FinderCard.svelte";
   import SolvePanel from "./SolvePanel.svelte";
   import { folderName } from "../../lib/storage";
   import TargetSheet from "./TargetSheet.svelte";
@@ -68,7 +63,6 @@
   // While PHD2 has the guide camera, it is PHD2's: its frames show here (ADR 0023).
   const inUse = $derived(camera?.used_by === "phd2");
   const guiding = $derived(live.app.guiding ?? null);
-  const guideActive = $derived(guidingActive(guiding));
 
   // Only the main camera saves frames, and only it gets the filter and the
   // focuser (ADR 0013). A main camera exposure locks both; a loop does not, so
@@ -205,33 +199,25 @@
   // Lights of the main camera go to a folder named after the target (ADR 0013).
   const target = $derived(live.app.storage?.target ?? null);
   const targetFolder = $derived(folderName(target ?? "") || "Untitled");
-  let device = $state<"focuser" | "filter_wheel" | "mount" | null>(null);
+  let device = $state<"focuser" | "filter_wheel" | null>(null);
 
-  // The mount, to frame by hand while a loop runs: its pad folds away.
+  // The mount, framed by hand with the go to panel's pad: while it is open the image's
+  // centre is marked, and while the mount moves the newest frame shows.
   const mount = $derived(live.app.mount ?? null);
   const mountJob = $derived(holder(live.app.jobs, "mount"));
-  let showPad = $state(false);
-  // Framing: the pad sits with the actions and the preview stays in sight above,
-  // with its centre marked, so a star can be watched while it moves.
-  const framing = $derived(showPad && mount !== null);
+  const framing = $derived(mount !== null && exploreLayout.overlays && exploreLayout.open("goto"));
+  const moving = $derived(!!mount && (mount.slewing || mount.moving.ns !== null || mount.moving.we !== null));
   // The live stack replaces the frame in the viewer while it has one, unless this
   // device chose to watch the frames (ADR 0040).
   const stack = $derived(live.app.stack ?? null);
-  // While framing with the pad, the newest frame shows whatever the choice: the stack
+  // While the mount moves, the newest frame shows whatever the choice: the stack
   // cannot show where the mount points now.
   const stacked = $derived(
-    role === "main_camera" && stack?.on && stackView.view === "stack" && !framing
+    role === "main_camera" && stack?.on && stackView.view === "stack" && !moving
       ? (stack.current ?? null)
       : null,
   );
   const shown = $derived(stacked?.preview ?? preview);
-  const padReason = $derived.by((): string | null => {
-    if (!owner) return t.mount.locked;
-    if (mount?.parked) return t.mount.padParked;
-    if (guideActive) return t.guiding.padHeld;
-    if (mountJob) return t.mount.padBusy;
-    return null;
-  });
   let expanded = $state(false);
   const portrait = $derived(exploreLayout.orientation === "portrait");
   const overlays = $derived(exploreLayout.overlays);
@@ -353,6 +339,9 @@
                   value={role}
                   onchange={(value) => capture.setRole(value)} />
               {/if}
+              {#if overlays && mount}
+                <GoToTool {mount} {owner} open={exploreLayout.open("goto")} ontoggle={() => exploreLayout.toggle("goto")} />
+              {/if}
             </div>
           </div>
         </Viewer>
@@ -407,18 +396,6 @@
           </div>
         {/if}
 
-        {#if mount}
-          <div class="focuser">
-            <button type="button" class="readout-button" onclick={() => (device = "mount")}>
-              <span class="label muted">{t.mount.title}</span>
-              <span class="value mono coordinates"
-                ><span>{formatRa(mount.ra_j2000)}</span> <span>{formatDec(mount.dec_j2000)}</span></span>
-              <span class="caption muted">{mountActivity(mount, t).text}</span>
-            </button>
-            <Button onclick={() => (showPad = !showPad)}>{showPad ? t.mount.hidePad : t.mount.showPad}</Button>
-          </div>
-        {/if}
-
         {#if mount && main}
           <a class="autofocus" href={href({ screen: "polar" })}>
             <Icon name="mount" size={20} />
@@ -436,12 +413,6 @@
             shown={owner && camera.solvable && solveJob?.info.state !== "running"}
             mountBusy={mountJob !== null}
             run={act} />
-        {/if}
-        {#if main && live.app.centering}
-          <CenteringCard centering={live.app.centering} />
-        {/if}
-        {#if main && live.app.finder?.state === "running"}
-          <FinderCard finder={live.app.finder} />
         {/if}
 
         {#if inUse}<Banner icon="guide">{t.live.guideInUse}</Banner>{/if}
@@ -558,9 +529,6 @@
             {/snippet}
           </Banner>
         {/if}
-        {#if framing && mount}
-          <MountPad {mount} compact disabled={padReason !== null} reason={padReason} onhide={() => (showPad = false)} />
-        {/if}
         <div class="actions">
           <button
             type="button"
@@ -610,8 +578,6 @@
     <FocuserSheet onclose={() => (device = null)} />
   {:else if device === "filter_wheel"}
     <FilterWheelSheet onclose={() => (device = null)} />
-  {:else if device === "mount"}
-    <MountSheet onclose={() => (device = null)} />
   {/if}
 {/if}
 
@@ -642,12 +608,10 @@
     min-height: 0;
     flex: 1 1 auto;
   }
-  /* The tools over the image size themselves to it (cqw). */
   .image {
     position: relative;
     flex: 1 1 auto;
     min-height: 0;
-    container-type: size;
   }
   .expanded .stage {
     position: fixed;
@@ -669,23 +633,31 @@
   .overlay :global([data-overlay]) {
     pointer-events: auto;
   }
+  /* Over the whole image, in two columns that scroll when their tools are taller
+     than it: each tool takes at most its column's width. (No container query: it
+     would make the image the containing block of the sheets the tools open.) */
   .top {
     top: env(safe-area-inset-top);
-    justify-content: space-between;
-    align-items: flex-start;
+    bottom: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
   }
-  .tools {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    min-width: 0;
-  }
+  .tools,
   .buttons {
     display: flex;
     flex-direction: column;
-    align-items: flex-end;
     gap: var(--space-2);
     min-width: 0;
+    min-height: 0;
+    overflow-y: auto;
+    scrollbar-width: none;
+  }
+  .buttons {
+    align-items: flex-end;
+  }
+  .tools {
+    align-items: flex-start;
   }
   .row {
     display: flex;
@@ -769,13 +741,6 @@
     flex-direction: column;
     gap: var(--space-1);
   }
-  .focuser {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
-    gap: var(--space-3);
-    padding: var(--space-2) var(--space-2) var(--space-2) 0;
-  }
   .series {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
@@ -812,13 +777,6 @@
     font-size: 20px;
     line-height: 26px;
     font-weight: 500;
-  }
-  .readout-button .coordinates {
-    font-size: 17px;
-    line-height: 24px;
-  }
-  .coordinates > span {
-    white-space: nowrap;
   }
   .tiles {
     display: grid;

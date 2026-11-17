@@ -208,6 +208,15 @@ it was, and still hold where Explore kept the same piece (viewer, shutter, sheet
   the step is set), a speed of half, once or twice that step (`nocs.focusSpeed`), in
   and out, and Autofocus, which starts at once with the profile's sweep, and "The
   curve" to its screen.
+- Go to, at the top right under the buttons: the mount's position and what it is
+  doing, the slew pad (narrow: smaller arrows, the speed under them), and a search of
+  what is above the horizon now (`GET /api/sky/search`: catalog objects, and the Sun
+  and the Moon by their English or Spanish names). A match offers Go and Go and centre;
+  for the Sun or the Moon, Go and centre runs the finder. A go to refused below the
+  horizon, while PHD2 guides or near the Sun is asked about as on the target's page.
+  Going somewhere sets the lights' target name. While the panel is open the image's
+  centre is marked; while the mount moves the newest frame shows instead of the stack.
+  The mount's sheet (park, tracking) is in Rig only.
 
 Live view (stage 2.7):
 
