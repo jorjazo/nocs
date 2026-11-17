@@ -22,7 +22,7 @@
   import Guiding from "./screens/guiding/Guiding.svelte";
   import Polar from "./screens/polar/Polar.svelte";
   import Flats from "./screens/flats/Flats.svelte";
-  import Live from "./screens/live/Live.svelte";
+  import Explore from "./screens/explore/Explore.svelte";
   import Plan from "./screens/plan/Plan.svelte";
   import SequenceScreen from "./screens/plan/Sequence.svelte";
   import TargetDetail from "./screens/plan/TargetDetail.svelte";
@@ -90,7 +90,7 @@
   const setupBox = $derived(
     auth.owner && (live.app.network?.set_up === false || boxSetup.done !== null),
   );
-  // How wide the page grows: Live view edge to edge, Session in columns on a PC.
+  // How wide the page grows: Explore edge to edge, Session in columns on a PC.
   const width = $derived(pageWidth(router.route));
 </script>
 
@@ -147,8 +147,8 @@
         {/if}
         {#if router.route.screen === "rig"}
           <Rig />
-        {:else if router.route.screen === "live"}
-          <Live />
+        {:else if router.route.screen === "explore"}
+          <Explore />
         {:else if router.route.screen === "session"}
           <Session />
         {:else if router.route.screen === "dev"}

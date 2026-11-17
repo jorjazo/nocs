@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Plate solving from Live view (phase 3.2): solve a frame of the main camera,
+  // Plate solving from Explore (phase 3.2): solve a frame of the main camera,
   // or solve and sync the mount in one go, or solve the frame on screen without
   // taking another (even while a loop runs), then the latest solution: where the
   // frame points, its angle and scale, and how far that is from where the mount

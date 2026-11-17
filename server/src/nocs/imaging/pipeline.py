@@ -12,7 +12,7 @@ import math
 import os
 import tempfile
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -37,6 +37,8 @@ HISTOGRAM_TAIL = 0.005
 """Fraction of the data at each end (hot pixels, say) left out when choosing the range."""
 HISTOGRAM_MARGIN = 0.3
 """Room at each side of the histogram's range, as a fraction of it."""
+FULL_SCALE = 65536
+"""Values on the 16-bit scale every frame is brought to (8-bit frames are scaled up)."""
 
 # FITS BAYERPAT -> OpenCV code producing BGR. OpenCV names patterns by a different
 # corner: an RGGB sensor is OpenCV's "BG".
@@ -63,6 +65,18 @@ class Histogram:
     minimum: int
     maximum: int
     """Darkest and brightest sampled values, which may lie outside the bins."""
+    full: list[int] = field(default_factory=list[int])
+    """Counts in ``HISTOGRAM_BINS`` equal bins over the whole 16-bit scale (0..65535)."""
+
+
+@dataclass(frozen=True, slots=True)
+class Stretch:
+    """How the automatic stretch mapped one channel of the preview: data at or below
+    ``shadows`` turns black, and ``midtones`` (both on the 0..1 scale of the 16-bit
+    data) turns mid grey; the brightest value stays white."""
+
+    shadows: float
+    midtones: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,6 +92,11 @@ class FrameAnalysis:
     histogram: Histogram
     seconds: float
     """Processing time."""
+    frame_width: int = 0
+    frame_height: int = 0
+    """The frame's own size in pixels (as binned), before the preview's downscale."""
+    stretch: tuple[Stretch, ...] = ()
+    """Per channel of the preview, red, green and blue for a colour frame."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -116,7 +135,8 @@ def analyze(
         if pattern is not None
         else data
     )
-    stretched = stretch(_downscale(image, width))
+    stretches: list[Stretch] = []
+    stretched = stretch(_downscale(image, width), applied=stretches)
     if bottom_up:
         stretched = np.ascontiguousarray(stretched[::-1])
     write_jpeg(Path(preview_path), stretched)
@@ -129,6 +149,10 @@ def analyze(
         hfr=hfr,
         histogram=histogram,
         seconds=round(time.perf_counter() - start, 3),
+        frame_width=int(data.shape[1]),
+        frame_height=int(data.shape[0]),
+        # OpenCV's channels are blue, green, red.
+        stretch=tuple(reversed(stretches)) if pattern is not None else tuple(stretches),
     )
 
 
@@ -170,18 +194,26 @@ def load(path: str) -> tuple[Mono16, str | None, bool]:
 
 
 def stretch(
-    image: Image, target_background: float = 0.25, shadows_sigma: float = -2.8
+    image: Image,
+    target_background: float = 0.25,
+    shadows_sigma: float = -2.8,
+    *,
+    applied: list[Stretch] | None = None,
 ) -> NDArray[np.uint8]:
     """Automatic midtones-transfer stretch to 8 bits, each channel on its own.
 
     The usual "screen stretch": clip shadows a few MADs below the median and map
-    the median to ``target_background``. Statistics come from a subsample.
+    the median to ``target_background``. Statistics come from a subsample. The
+    parameters chosen for each channel, in the image's order, are appended to
+    ``applied`` when given.
     """
     channels = image[..., np.newaxis] if image.ndim == 2 else image
     out = np.empty(channels.shape, dtype=np.uint8)
     for c in range(channels.shape[2]):
         data = channels[..., c] / np.float32(65535.0)
         shadows, midtones = mtf_parameters(data[::2, ::2], target_background, shadows_sigma)
+        if applied is not None:
+            applied.append(Stretch(shadows, midtone_point(shadows, midtones)))
         out[..., c] = (apply_mtf(data, shadows, midtones) * 255).astype(np.uint8)
     return out[..., 0] if image.ndim == 2 else out
 
@@ -202,6 +234,11 @@ def mtf_parameters(
         else 0.5
     )
     return shadows, midtones
+
+
+def midtone_point(shadows: float, midtones: float) -> float:
+    """The value (0..1) that ``apply_mtf`` with these parameters maps to mid grey."""
+    return shadows + midtones * max(1.0 - shadows, 1e-6)
 
 
 def apply_mtf(data: Image, shadows: float, midtones: float) -> Image:
@@ -254,7 +291,7 @@ def measure_histogram(data: Mono16) -> Histogram:
     per_value = np.bincount(data[::4, ::4].ravel(), minlength=65536)
     present = np.flatnonzero(per_value)
     if present.size == 0:  # an empty frame
-        return Histogram([0] * HISTOGRAM_BINS, 0, 1, 0, 0)
+        return Histogram([0] * HISTOGRAM_BINS, 0, 1, 0, 0, [0] * HISTOGRAM_BINS)
     minimum, maximum = int(present[0]), int(present[-1])
     step = int(np.gcd.reduce(present)) if maximum > 0 else 1
     cumulative = np.cumsum(per_value)
@@ -271,7 +308,10 @@ def measure_histogram(data: Mono16) -> Histogram:
     available = per_value[first : first + window.size]
     window[: available.size] = available
     counts = window.reshape(HISTOGRAM_BINS, width).sum(axis=1)
-    return Histogram([int(c) for c in counts], first, width, minimum, maximum)
+    full = per_value[:FULL_SCALE].reshape(HISTOGRAM_BINS, -1).sum(axis=1)
+    return Histogram(
+        [int(c) for c in counts], first, width, minimum, maximum, [int(c) for c in full]
+    )
 
 
 def _downscale(image: NDArray[np.uint16], most: int = PREVIEW_WIDTH) -> Image:

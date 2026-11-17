@@ -141,7 +141,7 @@
 {:else if !night}
   <EmptyState icon="save" title={t.nights.empty} body={t.nights.emptyBody}>
     {#snippet action()}
-      <Button variant="primary" onclick={() => router.go({ screen: "live" })}>{t.nights.openLive}</Button>
+      <Button variant="primary" onclick={() => router.go({ screen: "explore" })}>{t.nights.openExplore}</Button>
     {/snippet}
   </EmptyState>
 {:else}

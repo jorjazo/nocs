@@ -1,7 +1,7 @@
 <script lang="ts">
   // The running Sun or Moon finder, or the latest one (ADR 0049): where it stands,
   // its frames, how far the disc is from the centre and how far the mount pointed
-  // off. Shown in the mount's sheet, which starts it, and in Live view.
+  // off. Shown in the mount's sheet, which starts it, and in Explore.
   import Chip from "../../components/Chip.svelte";
   import type { Tone } from "../../components/Chip.svelte";
   import { formatDecimal, formatPlain } from "../../lib/format";

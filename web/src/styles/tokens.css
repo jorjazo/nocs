@@ -14,6 +14,9 @@
   --error: #ff6b5e;
   --guide-ra: #7db7ff;
   --guide-dec: #f5a04c;
+  --channel-red: #ff7b72;
+  --channel-green: #56d364;
+  --channel-blue: #79b8ff;
   /* How much of a status color tints its chip; chip text stays above 4.5:1. */
   --tint: 14%;
 
@@ -64,6 +67,9 @@
   --error: #ffb0a6;
   --guide-ra: #ff6a5c;
   --guide-dec: #b8382e;
+  --channel-red: #ff6a5c;
+  --channel-green: #e0473b;
+  --channel-blue: #b8382e;
   --tint: 6%;
 }
 

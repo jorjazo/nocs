@@ -1,7 +1,7 @@
 <script lang="ts">
   // The running centring, or the latest one (stage 3.3): the target, where it
   // stands, and every frame with how far it landed from the target. Shown in
-  // Live view and in the mount's sheet, which starts it.
+  // Explore and in the mount's sheet, which starts it.
   import Chip from "../../components/Chip.svelte";
   import type { Tone } from "../../components/Chip.svelte";
   import { formatDecimal } from "../../lib/format";

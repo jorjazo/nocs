@@ -27,7 +27,7 @@ export function frameName(target: PlannedTarget): string {
 }
 
 // The camera's gain and offset as a new sequence's rows take them: written into the
-// rows, so that a later change in Live view does not change the sequence's frames.
+// rows, so that a later change in Explore does not change the sequence's frames.
 export type CameraSettings = { gain: number | null; offset: number | null };
 
 export function newTemplate(

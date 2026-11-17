@@ -7,7 +7,8 @@
   // on a canvas so Night mode can map it to red only (docs/ux.md §3): never
   // white stars, whatever the image holds. The zoom survives new frames of the
   // same size, which is what focusing needs. The reticle marks the frame's
-  // centre, for framing with the slew pad.
+  // centre, for framing with the slew pad. A single tap (not the first of a double
+  // one) is the screen's: Explore shows or hides what lies over the image.
   let {
     url,
     width,
@@ -15,6 +16,7 @@
     label,
     empty,
     reticle = false,
+    ontap,
     children,
   }: {
     url: string | null;
@@ -25,6 +27,8 @@
     // Shown while there is no image.
     empty?: Snippet;
     reticle?: boolean;
+    // A single tap on the image, once it cannot be the start of a double tap.
+    ontap?: () => void;
     // Overlays (readouts, buttons) on top of the image.
     children?: Snippet;
   } = $props();
@@ -137,6 +141,9 @@
   const pointers = new Map<number, Point>();
   let moved = false;
   let lastTap = { time: 0, x: 0, y: 0 };
+  const DOUBLE_TAP = 320;
+  let pendingTap: ReturnType<typeof setTimeout> | undefined;
+  $effect(() => () => clearTimeout(pendingTap));
 
   function toggleZoom(at: Point): void {
     if (zoom > 1.01) {
@@ -150,8 +157,8 @@
 
   function onpointerdown(event: PointerEvent): void {
     if (!shown || (event.pointerType === "mouse" && event.button !== 0)) return;
-    // Overlay buttons handle their own taps.
-    if (event.target instanceof Element && event.target.closest("button, a")) return;
+    // Overlays (buttons, the widgets marked data-overlay) handle their own taps.
+    if (event.target instanceof Element && event.target.closest("button, a, input, [data-overlay]")) return;
     try {
       box.setPointerCapture(event.pointerId);
     } catch {
@@ -188,11 +195,16 @@
     if (!pointers.delete(event.pointerId) || moved || pointers.size > 0) return;
     const point = local(event);
     const now = event.timeStamp;
-    if (now - lastTap.time < 320 && Math.hypot(point.x - lastTap.x, point.y - lastTap.y) < 30) {
+    if (now - lastTap.time < DOUBLE_TAP && Math.hypot(point.x - lastTap.x, point.y - lastTap.y) < 30) {
+      clearTimeout(pendingTap);
       toggleZoom(point);
       lastTap = { time: 0, x: 0, y: 0 };
     } else {
       lastTap = { time: now, ...point };
+      if (ontap) {
+        clearTimeout(pendingTap);
+        pendingTap = setTimeout(() => ontap?.(), DOUBLE_TAP);
+      }
     }
   }
 

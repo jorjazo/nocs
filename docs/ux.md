@@ -14,7 +14,7 @@ Navigation follows the night, not the device tree.
 | Tab | Purpose | Main screens |
 |---|---|---|
 | **Tonight** | Home: the night and how the rig stands now. A "get ready" checklist that leads to each setup flow, the night window, where the mount points, the weather, the actuators, the location and time, the host (ADR 0053) | Tonight · Polar alignment · Autofocus (full-screen flows) |
-| **Live** | Manual imaging: preview, exposure settings, loop, save | Live view |
+| **Explore** | Try the sky tonight: the image, its histogram and status, the tools over it (guiding, focus, go to), loop, capture, save what is on screen (ADR 0054) | Explore |
 | **Plan** | Choose a target and build what to do with it | Target (search + framing) · Sequence |
 | **Session** | Watch and control what the server is running | Session monitor |
 | **Rig** | Equipment profile, optical trains, devices, the site, the box, settings | Rig · device details |
@@ -42,7 +42,7 @@ Navigation follows the night, not the device tree.
 | Polar alignment | Target view with the axis error, per-axis readouts with plain-language direction ("Raise", "Turn west"). |
 | Autofocus | Live V-curve with fit, best position / HFR / stars / temperature, cancel restores the previous position. |
 | Framing | Target search, sky view with camera frame and rotation, altitude tonight, "Go and center". |
-| Live view | Preview with metrics overlay, histogram, filter selector, exposure parameters, loop / capture / save. |
+| Explore | The image edge to edge with a status bar and a folding histogram under it, guiding, focus and go to over it, and a panel of actions at its side (a sheet when upright): stack, filter, exposure, loop / capture, save / solve / download what is on screen (ADR 0054). |
 | Sequence | Template: target, exposures per filter, behaviors during the night, end-of-session actions, time and disk estimates. |
 | Session | Progress, current exposure countdown, HFR / guiding / sensor, guiding graph, event timeline, pause / stop. |
 | Session (tablet) | Same content in two columns, with the latest frame large and a filmstrip of recent frames. |
@@ -69,6 +69,9 @@ preserving dark adaptation.
 | `error` | `#FF6B5E` | `#FFB0A6` |
 | `guide-ra` | `#7DB7FF` | `#FF6A5C` |
 | `guide-dec` | `#F5A04C` | `#B8382E` (dotted) |
+| `channel-red` | `#FF7B72` | `#FF6A5C` |
+| `channel-green` | `#56D364` | `#E0473B` (dashed) |
+| `channel-blue` | `#79B8FF` | `#B8382E` (dotted) |
 
 Rules:
 
@@ -116,8 +119,8 @@ custom properties, so the breakpoints are written out where they are used):
 Each screen's page is one of three widths (`web/src/lib/layout.ts`): **narrow**,
 one readable column of at most 760 px (forms, lists, settings; most screens);
 **wide**, the same below 1200 px and up to 2400 px from there, for screens laid
-out in columns (Session, Rig); **full**, edge to edge without the page's margins (Live
-view). A screen becomes wide only with a layout of its own for that width:
+out in columns (Session, Rig); **full**, edge to edge without the page's margins
+(Explore). A screen becomes wide only with a layout of its own for that width:
 widening a single column only makes its lines longer.
 
 ## 6. Components (initial set)
@@ -178,6 +181,25 @@ Rig (2026-11-14):
   pair.
 - From 1200 px the groups sit in two columns: the rig and its site on the left, the
   box and settings on the right.
+
+Explore (ADR 0054) replaced Live view: the notes on Live view below describe what
+it was, and still hold where Explore kept the same piece (viewer, shutter, sheets).
+
+- The image takes the screen's height: on a screen lying down the panel of actions
+  is a column at its side (clamped 300–400 px) that scrolls with its actions at the
+  foot; upright, the actions sit under the image and the rest of the panel is a
+  sheet over it, opened from a handle above them.
+- Under the image, a folding histogram and the status bar (one line, scrolling
+  sideways). The histogram's "Stretch" spans where the data is, with the stretch's
+  curve per channel; "Full" spans 0–65535. Both mark the stretch's black point
+  (solid) and mid grey (dashed) per channel, in `channel-red`, `-green`, `-blue`
+  (one `text` mark for mono).
+- A single tap on the image (after the double tap's 320 ms) shows or hides
+  everything over it; the eye button does the same and stays visible. The camera
+  switch is a pill over the image.
+- The browser keeps, per orientation, which panes are open (`nocs.explore.panes`),
+  whether the overlays show and the histogram's scale. Lying down they start open,
+  upright folded.
 
 Live view (stage 2.7):
 
@@ -659,13 +681,12 @@ Live stacking (ADR 0040, after v1.0):
 - How to expose the full sequence tree editor (advanced) without cluttering the
   template view (v0.1 shows the tree read only under Advanced).
 - Image interaction on phones: star inspection, FITS header view (pinch-zoom is
-  in Live view since stage 2.7).
+  in Explore, and Live view before it, since stage 2.7).
 - Spanish copy review: text lengths in Spanish are ~20–30 % longer; layouts must
   be checked with both languages.
 - Other screens on a PC: only Session has a wide layout so far. Plan (the target's
   framing chart beside its details), the session report (its charts) and Tonight
-  could use one; Live view is already edge to edge, and its rework is a topic of its
-  own. Each needs its own layout for that width, not just a wider column.
+  could use one; Explore is already edge to edge (ADR 0054). Each needs its own layout for that width, not just a wider column.
 
 Appliance (phase 6):
 

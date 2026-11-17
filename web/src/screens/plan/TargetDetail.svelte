@@ -39,7 +39,7 @@
   import { commonNames, objectSummary } from "../../lib/targets";
   import { siteKey, tonight } from "../../lib/tonight.svelte";
   import type { CatalogObject, PlannedTarget, SolvedFrames, TargetVisibility } from "../../lib/types";
-  import CenteringCard from "../live/CenteringCard.svelte";
+  import CenteringCard from "../explore/CenteringCard.svelte";
   import SunWarning from "../devices/SunWarning.svelte";
 
   let { id }: { id: string } = $props();

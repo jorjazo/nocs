@@ -9265,14 +9265,32 @@
     "Preview": {
       "additionalProperties": false,
       "properties": {
+        "binning": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The camera's binning for the frame."
+        },
         "color": {
           "type": "boolean"
         },
         "exposure": {
           "type": "number"
         },
+        "frame_height": {
+          "type": "integer"
+        },
         "frame_type": {
           "$ref": "#/$defs/FrameTypeName"
+        },
+        "frame_width": {
+          "description": "The frame's own width in pixels, as binned.",
+          "type": "integer"
         },
         "height": {
           "type": "integer"
@@ -9290,6 +9308,13 @@
         },
         "histogram": {
           "description": "256 equal bins of the linear data (sampled), over where most of it is.",
+          "items": {
+            "type": "integer"
+          },
+          "type": "array"
+        },
+        "histogram_full": {
+          "description": "256 equal bins of the linear data (sampled) over the whole 16-bit scale, 0..65535 ADU.",
           "items": {
             "type": "integer"
           },
@@ -9318,6 +9343,13 @@
         "stars": {
           "type": "integer"
         },
+        "stretch": {
+          "description": "How the automatic stretch drew each channel: one for mono; red, green and blue for colour.",
+          "items": {
+            "$ref": "#/$defs/PreviewStretch"
+          },
+          "type": "array"
+        },
         "time": {
           "description": "UTC, ISO 8601, when the frame arrived.",
           "type": "string"
@@ -9342,12 +9374,36 @@
         "histogram_step",
         "minimum",
         "maximum",
+        "histogram_full",
+        "stretch",
+        "frame_width",
+        "frame_height",
+        "binning",
         "exposure",
         "frame_type",
         "time",
         "seconds"
       ],
       "title": "Preview",
+      "type": "object"
+    },
+    "PreviewStretch": {
+      "additionalProperties": false,
+      "properties": {
+        "midtones": {
+          "description": "Data that turns mid grey; 0..1 of the 16-bit scale.",
+          "type": "number"
+        },
+        "shadows": {
+          "description": "Data at or below this turns black; 0..1 of the 16-bit scale.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "shadows",
+        "midtones"
+      ],
+      "title": "PreviewStretch",
       "type": "object"
     },
     "Profile": {

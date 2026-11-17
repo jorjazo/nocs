@@ -1,7 +1,7 @@
 <script lang="ts">
   // The mount: where it points, the slew pad, go to (J2000 or the zenith) and go
   // and centre, tracking, park and home, the site and time it was given, and the limits it
-  // keeps. Opened from Rig and from Live view.
+  // keeps. Opened from Rig and from Explore.
   import Banner from "../../components/Banner.svelte";
   import SequenceHold from "../../components/SequenceHold.svelte";
   import Button from "../../components/Button.svelte";
@@ -35,7 +35,7 @@
   import { live } from "../../lib/live.svelte";
   import { formatDec, formatRa, mountActivity, parseDec, parseRa } from "../../lib/mount.svelte";
   import { router } from "../../lib/router.svelte";
-  import CenteringCard from "../live/CenteringCard.svelte";
+  import CenteringCard from "../explore/CenteringCard.svelte";
   import FinderSection from "./FinderSection.svelte";
   import MountPad from "./MountPad.svelte";
   import SunWarning from "./SunWarning.svelte";

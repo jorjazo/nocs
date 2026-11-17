@@ -19,7 +19,7 @@ centring locks. It:
 A run that fails or is cancelled puts the tracking rate it replaced back; one that
 succeeds leaves the body's, until the next go to (``MountService.track_body``).
 
-Every frame becomes the main camera's preview, so Live view follows the search.
+Every frame becomes the main camera's preview, so Explore follows the search.
 
 State under ``("finder",)``: ``None`` until the first run, then that run as it goes::
 

@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Live stacking in Live view (ADR 0040): the switch, what the stack holds and
+  // Live stacking in Explore (ADR 0040): the switch, what the stack holds and
   // how its frames are calibrated, the latest frame's outcome, a new stack and
   // its look. Which image the viewer shows is chosen here, per device.
   import Button from "../../components/Button.svelte";

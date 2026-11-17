@@ -1,6 +1,6 @@
 <script lang="ts">
   // In and out by the chosen step, or Stop while the focuser moves: what
-  // focusing by hand needs while a loop runs, in Live view and in the
+  // focusing by hand needs while a loop runs, in Explore and in the
   // focuser's sheet.
   import Icon from "../../components/Icon.svelte";
   import { abortFocuser, moveFocuser } from "../../lib/api";

@@ -200,6 +200,13 @@ class FrameInfo(StateModel):
     guiding: FrameGuiding | None = Field(description="None: PHD2 did not guide meanwhile.")
 
 
+class PreviewStretch(StateModel):
+    shadows: float = Field(
+        description="Data at or below this turns black; 0..1 of the 16-bit scale."
+    )
+    midtones: float = Field(description="Data that turns mid grey; 0..1 of the 16-bit scale.")
+
+
 class Preview(StateModel):
     url: str = Field(description="JPEG, at most 1920 px wide; immutable.")
     width: int
@@ -214,6 +221,17 @@ class Preview(StateModel):
     histogram_step: int = Field(description="ADU per bin.")
     minimum: int = Field(description="Darkest sampled value, ADU; may be below the bins.")
     maximum: int = Field(description="Brightest sampled value, ADU; may be above the bins.")
+    histogram_full: list[int] = Field(
+        description="256 equal bins of the linear data (sampled) over the whole 16-bit scale,"
+        " 0..65535 ADU."
+    )
+    stretch: list[PreviewStretch] = Field(
+        description="How the automatic stretch drew each channel: one for mono; red, green"
+        " and blue for colour."
+    )
+    frame_width: int = Field(description="The frame's own width in pixels, as binned.")
+    frame_height: int
+    binning: int | None = Field(description="The camera's binning for the frame.")
     exposure: float
     frame_type: FrameTypeName
     time: str = Field(description="UTC, ISO 8601, when the frame arrived.")
