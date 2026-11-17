@@ -2,7 +2,7 @@
 // orientation, whether the overlays show over the image, and the histogram's scale.
 // Choices about this screen, kept in the browser like the other per-device ones.
 
-import { isOpen, parseOpen, type HistogramScale, type OpenSections, type Orientation, type Pane } from "./explore";
+import { isOpen, parseOpen, TOOLS, type HistogramScale, type OpenSections, type Orientation, type Pane } from "./explore";
 
 function read(key: string): string | null {
   try {
@@ -43,8 +43,13 @@ class ExploreLayout {
     write("nocs.explore.panes", JSON.stringify(this.#open));
   }
 
+  // Upright there is room for one tool over the image: opening one folds the others.
   toggle(pane: Pane): void {
-    this.setOpen(pane, !this.open(pane));
+    const open = !this.open(pane);
+    if (open && this.orientation === "portrait" && TOOLS.includes(pane)) {
+      for (const other of TOOLS) if (other !== pane && this.open(other)) this.setOpen(other, false);
+    }
+    this.setOpen(pane, open);
   }
 
   toggleOverlays(): void {

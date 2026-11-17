@@ -12,6 +12,9 @@ export const PANES = ["histogram", "guiding", "focus", "goto", "panel"] as const
 export type Pane = (typeof PANES)[number];
 export type Orientation = "portrait" | "landscape";
 
+// The tools over the image.
+export const TOOLS: readonly Pane[] = ["guiding", "focus", "goto"];
+
 // Lying down there is room for everything; upright the image comes first, and the
 // panes start folded into their icons.
 export function isOpen(open: OpenSections, pane: Pane, orientation: Orientation): boolean {

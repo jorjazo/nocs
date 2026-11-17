@@ -330,7 +330,7 @@
               <p class="muted">{t.live.noPreviewBody}</p>
             </div>
           {/snippet}
-          <div class="overlay top">
+          <div class="overlay top" class:goto={exploreLayout.open("goto")}>
             <div class="tools">
               {#if overlays && (cameras.guide_camera || guiding?.phd2.connected)}
                 <GuidingTool
@@ -662,7 +662,32 @@
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr);
   }
-  .tools,
+  /* Upright, one column: the buttons (and go to) first, then the tools on the left;
+     one tool is open at a time, as wide as the image. */
+  .portrait .top {
+    display: flex;
+    flex-direction: column;
+  }
+  /* The side holding the open tool gives way when the image is short. */
+  .portrait .buttons {
+    order: -1;
+    flex: 0 0 auto;
+  }
+  .portrait .tools {
+    flex: 0 1 auto;
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+  .portrait .goto .buttons {
+    flex-shrink: 1;
+  }
+  .portrait .goto .tools {
+    flex-shrink: 0;
+  }
+  .portrait .buttons :global(.card),
+  .portrait .tools :global(.card) {
+    width: 100%;
+  }  .tools,
   .buttons {
     display: flex;
     flex-direction: column;
