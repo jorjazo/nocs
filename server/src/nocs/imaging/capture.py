@@ -180,6 +180,18 @@ class NothingToSaveError(Exception):
     """No frame of the camera is on screen to save, or it is saved already."""
 
 
+def hold_frame(source: FsPath, held: FsPath) -> None:
+    """Keep ``source``'s data under ``held`` while it is saved, so that a newer frame
+    replacing (and deleting) it meanwhile does not lose it: a hard link, or a copy when
+    the kernel refuses to link a file another user wrote (``fs.protected_hardlinks``:
+    indiserver in a container, as in development and CI; on the box both run as nocs).
+    """
+    try:
+        os.link(source, held)
+    except PermissionError:
+        shutil.copyfile(source, held)
+
+
 type Namer = Callable[[float, float, float], str | None]
 """The catalog object nearest a J2000 point (hours, degrees) within a radius (degrees)."""
 
@@ -495,7 +507,7 @@ class CaptureService:
         # A newer frame may replace (and delete) the preview's file meanwhile: save a link.
         link = shot.path.with_name(f"{shot.path.stem}.saving{shot.path.suffix}")
         try:
-            await anyio.to_thread.run_sync(os.link, shot.path, link)
+            await anyio.to_thread.run_sync(hold_frame, shot.path, link)
         except FileNotFoundError:
             raise NothingToSaveError("a newer frame replaced it: save that one") from None
         try:
