@@ -5784,6 +5784,30 @@
       "title": "FrameRecord",
       "type": "object"
     },
+    "FrameSaved": {
+      "description": "The frame on screen, saved (Explore's \"Save\", ADR 0054).",
+      "properties": {
+        "destination": {
+          "description": "Id of the destination it was saved to.",
+          "type": "string"
+        },
+        "id": {
+          "description": "The saved frame's id in the catalog.",
+          "type": "integer"
+        },
+        "path": {
+          "description": "Below <destination>/NOCS/.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "path",
+        "destination"
+      ],
+      "title": "FrameSaved",
+      "type": "object"
+    },
     "FrameTypeName": {
       "enum": [
         "light",

@@ -1484,6 +1484,14 @@ class StateSnapshot(WireModel):
     state: dict[str, Any]
 
 
+class FrameSaved(WireModel):
+    """The frame on screen, saved (Explore's "Save", ADR 0054)."""
+
+    id: int = Field(description="The saved frame's id in the catalog.")
+    path: str = Field(description="Below <destination>/NOCS/.")
+    destination: str = Field(description="Id of the destination it was saved to.")
+
+
 class StackSaved(WireModel):
     id: int = Field(description="The saved stack's frame id.")
     path: str = Field(description="Below <destination>/NOCS/.")

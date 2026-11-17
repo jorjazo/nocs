@@ -217,6 +217,16 @@ it was, and still hold where Explore kept the same piece (viewer, shutter, sheet
   Going somewhere sets the lights' target name. While the panel is open the image's
   centre is marked; while the mount moves the newest frame shows instead of the stack.
   The mount's sheet (park, tracking) is in Rig only.
+- The panel keeps the live stack, filters, the number of frames (a short stack), the
+  exposure's tiles and the cooler; Explore exposes lights only, saves nothing at the
+  time and never dithers. Under the shutter's row: Loop, the shutter, **Save**, and
+  smaller **Solve** and **Download**. Save keeps what is on screen: the live stack
+  while it is shown, else the frame behind the preview (`POST
+  /api/cameras/main_camera/save`, with the facts read as it arrived), named after the
+  last go to or else the object at its solved centre; the caption then says where it
+  went until the image changes. Solve solves the frame on screen and only tells where
+  it points (the status bar); syncing is part of Go and centre. Download is the JPEG on
+  screen (`NOCS_<camera>_<time>.jpg`); sharing waits for HTTPS on the box.
 
 Live view (stage 2.7):
 
