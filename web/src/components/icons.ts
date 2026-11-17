@@ -8,7 +8,7 @@ function circle(cx: number, cy: number, r: number): string {
 export const ICONS = {
   logo: [circle(12, 12, 9), "M12 3v4M12 17v4M3 12h4M17 12h4", circle(12, 12, 0.9)],
   tonight: ["M4 6h13M4 11h13M4 16h6", "M14 17.5l2.5 2.5 4.5-5"],
-  live: [
+  explore: [
     "M4 8.5A1.5 1.5 0 0 1 5.5 7h2.3l1.4-2h5.6l1.4 2h2.3A1.5 1.5 0 0 1 20 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5z",
     circle(12, 13, 3.5),
   ],

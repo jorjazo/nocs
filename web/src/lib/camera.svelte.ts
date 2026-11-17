@@ -1,4 +1,4 @@
-// What the Live view reads from the state besides the camera itself: the job a
+// What Explore reads from the state besides the camera itself: the job a
 // camera is busy with, the focuser and filter wheel, and this device's choices.
 
 import type { Messages } from "./i18n";

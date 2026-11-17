@@ -1,6 +1,6 @@
 <script lang="ts">
   // The focuser: where it is, in and out by a chosen step, go to a position,
-  // stop. Opened from Live view and from Rig.
+  // stop. Opened from Explore and from Rig.
   import { untrack } from "svelte";
   import Banner from "../../components/Banner.svelte";
   import SequenceHold from "../../components/SequenceHold.svelte";

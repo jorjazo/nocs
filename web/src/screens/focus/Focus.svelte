@@ -55,7 +55,7 @@
   const step = $derived(!shown ? 1 : running ? 2 : 3);
 
   function close(): void {
-    router.back({ screen: "live" });
+    router.back({ screen: "explore" });
   }
 
   // -- Settings ---------------------------------------------------------------------

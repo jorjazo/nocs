@@ -110,8 +110,9 @@ left, where the mount points, the weather (and the forecast, if the profile asks
 one: the box fetches it whenever it has internet, so fetch it at home), the dew
 heaters and the camera's cooler, the site and the clocks, and the box itself. Each
 card opens and closes, and says how it stands when closed. Every time is the site's
-local time. **Live** takes
-single frames and loops. **Session** shows what the box is doing. The box runs the
+local time. **Explore**
+shows the latest image edge to edge, with its histogram and status, and takes single
+frames and loops. **Session** shows what the box is doing. The box runs the
 night by itself: you can lock the phone, or close the browser, and come back to it
 later.
 

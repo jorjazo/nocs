@@ -22,7 +22,7 @@ NOCS restarts). Finding the Sun stops PHD2, whose guide camera would see the Sun
 
 ## Finding the Sun or the Moon
 
-Open the mount (Rig → the mount, or the mount button in Live) and, under **Sun and
+Open the mount (Rig → the mount, or the mount button in Explore) and, under **Sun and
 Moon**, tap **Find the Moon** or **Find the Sun**. NOCS then:
 
 1. tracks it at the lunar or solar rate, when the mount offers one (the next go to
@@ -33,7 +33,7 @@ Moon**, tap **Find the Moon** or **Find the Sun**. NOCS then:
 4. centres the disc by its edge (a crescent too), within 2′;
 5. syncs the mount there, so go to works better afterwards.
 
-The frames show in Live as it goes. The finder needs the telescope's focal length in
+The frames show in Explore as it goes. The finder needs the telescope's focal length in
 the profile, and a field of view wider than the disc (about 0.6°).
 
 By day, before a polar alignment, the mount can point several degrees off, and a wide

@@ -13,9 +13,12 @@ from numpy.typing import NDArray
 from nocs.imaging.pipeline import (
     PREVIEW_WIDTH,
     analyze,
+    apply_mtf,
     measure_frame,
     measure_histogram,
     measure_stars,
+    midtone_point,
+    mtf_parameters,
 )
 
 _fits: Any = fits  # untyped library; see nocs.imaging.pipeline
@@ -139,8 +142,23 @@ def test_mono_preview(tmp_path: Path) -> None:
     assert histogram.start < 1000 - 30 < 1000 + 30 < histogram.start + 256 * histogram.step
     assert sum(count > 0 for count in histogram.counts) > 50
     assert histogram.minimum < 1000 < histogram.maximum
+    # The whole 16-bit scale too, in 256 bins of 256 values: the sky is in bin 3.
+    assert len(histogram.full) == 256
+    assert sum(histogram.full) == 600 * 400
+    assert histogram.full[1000 // 256] > 0.9 * 600 * 400
+    assert (result.frame_width, result.frame_height) == (2400, 1600)
     # The stretch puts the background near 25 % grey.
     assert 40 < float(np.median(image)) < 90
+    # Its parameters: black a little below the sky, mid grey above it.
+    (only,) = result.stretch
+    assert 0.9 * 1000 / 65535 < only.shadows < 1000 / 65535 < only.midtones < 1
+
+
+def test_midtone_point_turns_mid_grey() -> None:
+    data = np.array([0.0, 0.01, 0.02, 0.5], dtype=np.float32)
+    shadows, midtones = mtf_parameters(data, 0.25)
+    point = np.array([midtone_point(shadows, midtones)], dtype=np.float32)
+    assert float(apply_mtf(point, shadows, midtones)[0]) == pytest.approx(0.5, abs=1e-4)
 
 
 def test_color_preview_keeps_red_red(tmp_path: Path) -> None:
@@ -159,6 +177,10 @@ def test_color_preview_keeps_red_red(tmp_path: Path) -> None:
     blue, green, red_ = (float(np.median(bgr[170:230, 270:330, c])) for c in range(3))
     assert red_ > green + 100
     assert red_ > blue + 100
+    # A stretch per channel, red first: all three see the same neutral sky.
+    assert len(result.stretch) == 3
+    for channel in result.stretch:
+        assert channel.shadows < 1000 / 65535 < channel.midtones
 
 
 def test_bayer_hint_when_the_header_has_none(tmp_path: Path) -> None:

@@ -59,5 +59,6 @@ that supersedes the old one.
 | [0051](0051-forecast-from-the-profile-s-provider.md) | Tonight's forecast comes from a provider the profile names, fetched by the box | Proposed |
 | [0052](0052-site-time-zone.md) | A site has a time zone, worked out from its position, and the app shows its times in it | Proposed |
 | [0053](0053-tonight-the-night-and-its-state.md) | Tonight is the night and how the rig stands: its checklist connects, focuses and polar aligns | Proposed |
+| [0054](0054-explore-the-sky-tonight.md) | Explore is for trying the sky tonight: the image first, its tools over it, and saving what is on screen | Proposed |
 
 Template: Context → Decision → Consequences.

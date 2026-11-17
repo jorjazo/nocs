@@ -1,7 +1,7 @@
 """Live stacking in nocsd: which frames go to which stack, and the state (ADR 0040).
 
 The capture service offers every light of the main camera that got a preview, from
-Live view and sequences alike, while stacking is on. Frames wait in a slot of one:
+Explore and sequences alike, while stacking is on. Frames wait in a slot of one:
 a newer frame replaces one still waiting (counted as skipped), so stacking never
 holds up a capture or falls behind. One task takes them in turn to the imaging
 worker, which holds the pixels.
@@ -15,7 +15,7 @@ stack too (the mount went elsewhere), as does *New stack*.
 A new stack first gets its calibration: the library's darks (or bias) and flats
 for its setup, built into masters by the worker (once; they are cached).
 
-An unsaved frame (Live view's loop) is hard-linked aside, as the capture service
+An unsaved frame (Explore's loop) is hard-linked aside, as the capture service
 deletes its file when the next frame arrives; the link is deleted once stacked.
 
 State under ``("stack",)``: ``on``, ``status``, the current stack's counts, setup,

@@ -145,7 +145,7 @@ class Shot:
 
 @dataclass(frozen=True, slots=True)
 class KeptFrame:
-    """The main camera's frame behind its preview, kept to solve it (Live view's
+    """The main camera's frame behind its preview, kept to solve it (Explore's
     "Solve this frame") until a newer frame replaces it."""
 
     shot: Shot
@@ -961,6 +961,14 @@ class CaptureService:
             "histogram_step": analysis.histogram.step,
             "minimum": analysis.histogram.minimum,
             "maximum": analysis.histogram.maximum,
+            "histogram_full": list[Json](analysis.histogram.full),
+            "stretch": [
+                {"shadows": round(s.shadows, 6), "midtones": round(s.midtones, 6)}
+                for s in analysis.stretch
+            ],
+            "frame_width": analysis.frame_width,
+            "frame_height": analysis.frame_height,
+            "binning": self._binning(role),
             "exposure": shot.exposure,
             "frame_type": FRAME_TYPE_NAMES[shot.frame_type],
             "time": shot.taken.isoformat(timespec="seconds"),
@@ -968,6 +976,14 @@ class CaptureService:
         }
         self._publish(role)
         return analysis
+
+    def _binning(self, role: Role) -> int | None:
+        """The camera's binning as a preview is published: settings cannot change while
+        a job holds the camera, so it is the frame's."""
+        try:
+            return self.camera(role).binning[0]
+        except (CameraNotReadyError, DeviceError, KeyError):
+            return None
 
     async def _keep(self, role: Role, frame: KeptFrame) -> None:
         """Keep the frame behind the new preview; delete the one it replaces."""

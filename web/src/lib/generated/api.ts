@@ -904,9 +904,18 @@ export interface FrameGuiding {
  * via the `definition` "Preview".
  */
 export interface Preview {
+  /**
+   * The camera's binning for the frame.
+   */
+  binning: number | null;
   color: boolean;
   exposure: number;
+  frame_height: number;
   frame_type: FrameTypeName;
+  /**
+   * The frame's own width in pixels, as binned.
+   */
+  frame_width: number;
   height: number;
   /**
    * Median half-flux radius, unbinned pixels.
@@ -916,6 +925,10 @@ export interface Preview {
    * 256 equal bins of the linear data (sampled), over where most of it is.
    */
   histogram: number[];
+  /**
+   * 256 equal bins of the linear data (sampled) over the whole 16-bit scale, 0..65535 ADU.
+   */
+  histogram_full: number[];
   /**
    * ADU at the lower edge of the first bin.
    */
@@ -938,6 +951,10 @@ export interface Preview {
   seconds: number;
   stars: number;
   /**
+   * How the automatic stretch drew each channel: one for mono; red, green and blue for colour.
+   */
+  stretch: PreviewStretch[];
+  /**
    * UTC, ISO 8601, when the frame arrived.
    */
   time: string;
@@ -946,6 +963,20 @@ export interface Preview {
    */
   url: string;
   width: number;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "PreviewStretch".
+ */
+export interface PreviewStretch {
+  /**
+   * Data that turns mid grey; 0..1 of the 16-bit scale.
+   */
+  midtones: number;
+  /**
+   * Data at or below this turns black; 0..1 of the 16-bit scale.
+   */
+  shadows: number;
 }
 /**
  * Part of the sensor, in unbinned pixels.

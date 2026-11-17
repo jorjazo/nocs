@@ -105,7 +105,7 @@
   }
 
   function close(): void {
-    router.back({ screen: "live" });
+    router.back({ screen: "explore" });
   }
 
   const blocked = $derived.by(() => {

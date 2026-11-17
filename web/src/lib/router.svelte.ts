@@ -3,8 +3,8 @@
 
 import { isRigSection, type RigSection } from "./rigsections";
 
-export type Tab = "tonight" | "live" | "plan" | "session" | "rig";
-export const TABS: readonly Tab[] = ["tonight", "live", "plan", "session", "rig"];
+export type Tab = "tonight" | "explore" | "plan" | "session" | "rig";
+export const TABS: readonly Tab[] = ["tonight", "explore", "plan", "session", "rig"];
 
 // Rig opens one of its sections, scrolled to it, at #/rig/<section> (#/rig/site).
 // The profile editor hangs off Rig: #/rig/profile/<id>, or #/rig/profile/new, and
