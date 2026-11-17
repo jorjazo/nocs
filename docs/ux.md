@@ -200,6 +200,14 @@ it was, and still hold where Explore kept the same piece (viewer, shutter, sheet
 - The browser keeps, per orientation, which panes are open (`nocs.explore.panes`),
   whether the overlays show and the histogram's scale. Lying down they start open,
   upright folded.
+- Tools over the image are cards with rounded corners (`ToolCard`) that fold into
+  their icon, with a dot in the tool's tone; they size to the image (container
+  units). Guiding, at the top left: PHD2's state, RA, Dec and total RMS of its last
+  100 steps (arcseconds, or guide pixels without the scale), Guide or Stop, and the
+  guiding screen. The focuser, under it: its position (which opens its sheet, where
+  the step is set), a speed of half, once or twice that step (`nocs.focusSpeed`), in
+  and out, and Autofocus, which starts at once with the profile's sweep, and "The
+  curve" to its screen.
 
 Live view (stage 2.7):
 

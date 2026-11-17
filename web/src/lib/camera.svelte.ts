@@ -45,6 +45,13 @@ export function holder(jobs: Record<string, JobInfo> | null | undefined, resourc
 // Steps the focuser moves per tap; the choice is kept per device.
 export const FOCUS_STEPS: readonly number[] = [10, 50, 100, 500, 1000];
 
+// Explore's focuser speeds (ADR 0054): half, once or twice the step set.
+export const FOCUS_SPEEDS: readonly number[] = [0.5, 1, 2];
+
+export function speedStep(step: number, speed: number): number {
+  return Math.max(1, Math.round(step * speed));
+}
+
 // Dither before every n-th frame of a series (0 = never), and by how far.
 export const DITHER_EVERY: readonly number[] = [0, 1, 2, 3, 5];
 export const DITHER_PIXELS = 5;
@@ -61,7 +68,7 @@ export function slotLabel(wheel: FilterWheelState, slot: number, t: Messages): s
 
 // -- Capture choices ------------------------------------------------------------
 // Per device, like the theme: the camera shown, whether to save (a choice made
-// before each frame), the focuser's step, and how many frames a capture takes
+// before each frame), the focuser's step and Explore's speed of it, and how many frames a capture takes
 // with how often it dithers (ADR 0024). The exposure time is in the camera's state.
 
 function readNumber(key: string): number | null {
@@ -98,6 +105,7 @@ class CapturePrefs {
   role: CameraRoleName = $state(readRole());
   save: boolean = $state(readNumber("nocs.save") !== 0);
   focusStep: number = $state(FOCUS_STEPS.find((step) => step === readNumber("nocs.focusStep")) ?? 100);
+  focusSpeed: number = $state(FOCUS_SPEEDS.find((speed) => speed === readNumber("nocs.focusSpeed")) ?? 1);
   count: number = $state(clamp(readNumber("nocs.frames") ?? 1, 1, MAX_SERIES));
   ditherEvery: number = $state(DITHER_EVERY.find((n) => n === readNumber("nocs.ditherEvery")) ?? 1);
   ditherPixels: number = $state(clamp(readNumber("nocs.ditherPixels") ?? DITHER_PIXELS, 1, 100));
@@ -115,6 +123,11 @@ class CapturePrefs {
   setFocusStep(step: number): void {
     this.focusStep = step;
     write("nocs.focusStep", String(step));
+  }
+
+  setFocusSpeed(speed: number): void {
+    this.focusSpeed = speed;
+    write("nocs.focusSpeed", String(speed));
   }
 
   setCount(count: number): void {
