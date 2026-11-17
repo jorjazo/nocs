@@ -19,10 +19,11 @@ from fastapi.testclient import TestClient
 from owner import pair_owner
 
 from nocs.api import create_app
-from nocs.api.schemas import SkyPointing
+from nocs.api.schemas import SkyMatch, SkyPointing
 from nocs.config import Settings
 from nocs.devices import Location
 from nocs.mount.coords import jnow_to_j2000
+from nocs.sequence.sky import Place, altitude
 from nocs.sites import HorizonPoint, Site, SiteFile, SiteStore
 from nocs.sky import Target, horizon_altitude, night, tonight, visibility
 from nocs.sky.almanac import TWILIGHTS
@@ -393,3 +394,38 @@ def test_pointing_at_the_moon(client: TestClient) -> None:
     assert (
         client.get("/api/sky/pointing", params={"ra": 1, "dec": 0, "radius": 11}).status_code == 422
     )
+
+
+def test_search_finds_only_what_is_up(client: TestClient) -> None:
+    response = client.get("/api/sky/search", params={"q": "ngc 1", "limit": 50})
+    assert response.status_code == 200, response.text
+    matches = [SkyMatch.model_validate(m) for m in response.json()]
+    assert matches, "some NGC 1xxx object is always above the horizon somewhere in the sky"
+    now = datetime.now(UTC)
+    for match in matches:
+        assert match.object is not None
+        assert match.frame == "j2000"
+        assert match.altitude > 0
+        alt, _ = altitude(Place(DIAGUITAS, None), match.ra, match.dec, now)
+        assert alt == pytest.approx(match.altitude, abs=1.0)  # refraction aside
+    # Everything the catalog matched that is up made it, below the limit.
+    assert len(matches) <= 50
+
+
+def test_search_finds_the_moon_when_it_is_up(client: TestClient) -> None:
+    moon = position(Body.MOON, DIAGUITAS, datetime.now(UTC))
+    found = client.get("/api/sky/search", params={"q": "Luna"}).json()
+    bodies = [m["body"] for m in found if m["body"]]
+    assert bodies == (["moon"] if moon.alt > 0 else [])
+    if bodies:
+        assert found[0]["frame"] == "jnow"
+        assert found[0]["ra"] == pytest.approx(moon.jnow.ra, abs=0.01)
+
+
+def test_search_needs_a_site(config_dir: Path) -> None:
+    site = Site(name="Away", latitude=-30.03, longitude=-70.67)
+    SiteStore(config_dir).save(SiteFile(sites={"away": site}))
+    with TestClient(create_app(Settings(indi_host="127.0.0.1", indi_port=9))) as client:
+        pair_owner(client)
+        assert client.get("/api/sky/search", params={"q": "m 42"}).status_code == 409
+        assert client.get("/api/sky/search", params={"q": ""}).status_code == 422

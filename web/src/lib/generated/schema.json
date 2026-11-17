@@ -10853,6 +10853,76 @@
       "title": "SkyChart",
       "type": "object"
     },
+    "SkyMatch": {
+      "description": "A catalog object, or the Sun or the Moon, that matched a search and is above the\nhorizon now (Explore's go to, ADR 0054).",
+      "properties": {
+        "altitude": {
+          "description": "Degrees above the horizon now (geometric).",
+          "type": "number"
+        },
+        "azimuth": {
+          "description": "Degrees from north through east.",
+          "type": "number"
+        },
+        "body": {
+          "anyOf": [
+            {
+              "enum": [
+                "sun",
+                "moon"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "dec": {
+          "description": "Degrees.",
+          "type": "number"
+        },
+        "frame": {
+          "description": "Of ``ra`` and ``dec``: J2000 for catalog objects, of the date for the Sun and the Moon (where they are now).",
+          "enum": [
+            "j2000",
+            "jnow"
+          ],
+          "type": "string"
+        },
+        "matched": {
+          "description": "The designation or name the query matched.",
+          "type": "string"
+        },
+        "object": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CatalogObject"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "None for the Sun and the Moon."
+        },
+        "ra": {
+          "description": "Hours.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "object",
+        "body",
+        "matched",
+        "frame",
+        "ra",
+        "dec",
+        "altitude",
+        "azimuth"
+      ],
+      "title": "SkyMatch",
+      "type": "object"
+    },
     "SkyPointing": {
       "description": "What lies around a point: what a mount pointing there has in its frame.",
       "properties": {

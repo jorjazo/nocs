@@ -7,12 +7,14 @@ from datetime import UTC, date, datetime
 from typing import Annotated, overload
 
 import anyio.to_thread
+import numpy as np
 from fastapi import APIRouter, HTTPException, Query, Request, status
 
 from nocs.api.auth import identity
 from nocs.api.schemas import (
     Almanac,
     MoonNight,
+    SkyMatch,
     SkyPointing,
     SkyVisibility,
     TargetVisibility,
@@ -34,11 +36,21 @@ from nocs.sky import (
     visibility,
 )
 from nocs.sky.bodies import Body, position, separation
+from nocs.sky.ephemeris import sky
 from nocs.targets import bundled_catalog, loaded_catalog
 from nocs.targets.catalog import separation as catalog_separation
+from nocs.targets.text import fold
 
 MAX_TARGETS = 50
 MAX_POINTED = 5
+SEARCHED = 200
+"""Catalog matches looked at for the ones above the horizon."""
+
+BODY_NAMES: dict[Body, tuple[str, ...]] = {
+    Body.SUN: ("sun", "sol"),
+    Body.MOON: ("moon", "luna"),
+}
+"""What a search finds the Sun and the Moon by, in the app's languages (folded)."""
 
 type Resolver = Callable[[str], Target | None]
 """Finds a target by name (e.g. a catalog id), or None if there is none."""
@@ -115,6 +127,20 @@ def sky_router(
             )
 
         return await anyio.to_thread.run_sync(find)
+
+    @router.get("/search")
+    async def search_up(  # pyright: ignore[reportUnusedFunction]
+        q: Annotated[str, Query(min_length=1, max_length=100)],
+        limit: Annotated[int, Query(ge=1, le=50)] = 10,
+    ) -> list[SkyMatch]:
+        """Objects matching ``q`` that are above the horizon at the active site now, the Sun
+        and the Moon among them, best match first (Explore's go to, ADR 0054)."""
+        where = site()
+        if where is None:
+            raise HTTPException(status.HTTP_409_CONFLICT, "no site is active: choose the site")
+        now = clock().now()
+        location = Location(where.latitude, where.longitude, where.elevation)
+        return await anyio.to_thread.run_sync(lambda: _search_up(q, limit, location, now))
 
     @router.get("/visibility")
     async def target_visibility(  # pyright: ignore[reportUnusedFunction]
@@ -221,6 +247,51 @@ def _interval(i: Interval | None) -> TimeInterval | None:
 
 def _rounded(values: Floats) -> list[float]:
     return [round(v, 1) for v in values.tolist()]
+
+
+def _search_up(query: str, limit: int, site: Location, now: datetime) -> list[SkyMatch]:
+    """``search_up``'s work, off the event loop (the catalog, ERFA)."""
+    found: list[SkyMatch] = []
+    words = fold(query)
+    for body, names in BODY_NAMES.items():
+        if words and any(name.startswith(words) for name in names):
+            seen = position(body, site, now)
+            if seen.alt > 0:
+                found.append(
+                    SkyMatch(
+                        object=None,
+                        body=body.value,
+                        matched=body.value,
+                        frame="jnow",
+                        ra=seen.jnow.ra,
+                        dec=seen.jnow.dec,
+                        altitude=round(seen.alt, 2),
+                        azimuth=round(seen.az, 2),
+                    )
+                )
+    matches = (loaded_catalog() or bundled_catalog()).search(query, SEARCHED)
+    if matches:
+        chart = sky(site, [now.timestamp()])
+        ras = np.array([[m.target.ra] for m in matches])
+        decs = np.array([[m.target.dec] for m in matches])
+        seen = chart.star(ras, decs)
+        for match, alt, az in zip(matches, seen.alt[:, 0], seen.az[:, 0], strict=True):
+            if len(found) >= limit:
+                break
+            if alt > 0:
+                found.append(
+                    SkyMatch(
+                        object=catalog_object(match.target),
+                        body=None,
+                        matched=match.matched,
+                        frame="j2000",
+                        ra=match.target.ra,
+                        dec=match.target.dec,
+                        altitude=round(float(alt), 2),
+                        azimuth=round(float(az), 2),
+                    )
+                )
+    return found[:limit]
 
 
 def _body_at(where: Site, now: datetime, ra: float, dec: float, radius: float) -> Body | None:
