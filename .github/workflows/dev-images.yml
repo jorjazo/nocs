@@ -1,0 +1,62 @@
+name: Dev images
+
+# Builds the INDI simulators' and PHD2's images (dev/compose.yaml) from their PPAs and
+# publishes them on GHCR, tagged latest and with the ISO week. CI pulls them instead of
+# building, so a Launchpad outage cannot fail a pull request (ADR 0050).
+# Each Monday it builds without the cache, to follow the PPAs and ubuntu:26.04; a push to
+# main that changes the images builds with it. A manual run also builds without it, and
+# from any branch it publishes latest as well.
+on:
+  push:
+    branches: [main]
+    paths: [dev/indi/**, dev/phd2/**, dev/compose.yaml, .github/workflows/dev-images.yml]
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+
+# Two runs never push latest at the same time; the later one wins.
+concurrency:
+  group: dev-images
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v5
+      - name: ISO week
+        id: week
+        run: echo "week=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # The Actions cache this writes also serves CI when a pull request changes an image
+      # or cannot pull it.
+      - name: Build and push INDI simulators and PHD2
+        uses: docker/bake-action@v7
+        with:
+          source: ./dev
+          files: compose.yaml
+          targets: indi,phd2
+          push: true
+          pull: true
+          no-cache: ${{ github.event_name != 'push' }}
+          set: |
+            indi.tags=ghcr.io/jorjazo/nocs-dev-indi:latest
+            indi.tags=ghcr.io/jorjazo/nocs-dev-indi:${{ steps.week.outputs.week }}
+            phd2.tags=ghcr.io/jorjazo/nocs-dev-phd2:latest
+            phd2.tags=ghcr.io/jorjazo/nocs-dev-phd2:${{ steps.week.outputs.week }}
+            *.labels.org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            *.labels.org.opencontainers.image.revision=${{ github.sha }}
+            *.labels.org.opencontainers.image.version=${{ steps.week.outputs.week }}
+            indi.cache-from=type=gha,scope=dev-indi
+            indi.cache-to=type=gha,scope=dev-indi,mode=max,ignore-error=true
+            phd2.cache-from=type=gha,scope=dev-phd2
+            phd2.cache-to=type=gha,scope=dev-phd2,mode=max,ignore-error=true
