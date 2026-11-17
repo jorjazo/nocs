@@ -93,9 +93,12 @@ CI runs all of the above (INDI simulators included) on every push to `main`; the
 packages workflow builds and installs the .deb on amd64 and arm64 (on `main` and tags,
 not on pull requests). Pushes that change
 only `docs/` or `*.md` run neither, and a newer push cancels CI's run in progress.
-CI takes the simulators' and PHD2's images from the Actions cache, built again each
-ISO week (`APT_REFRESH`) with the PPAs' current packages or when `dev/indi`/`dev/phd2`
-change: a new INDI shows up in CI at the first run of a week. pytest fails a test
+CI pulls the simulators' and PHD2's images from GHCR (`ghcr.io/jorjazo/nocs-dev-indi`,
+`-phd2`; ADR 0050). The dev-images workflow builds them from the PPAs on Mondays
+without the cache, and on pushes to `main` that change `dev/indi`/`dev/phd2`. A new
+INDI therefore shows up in CI after Monday's build. CI builds an image from the PPAs
+only when a pull request or push changes its directory, or when the pull fails. A
+manual run of dev-images from any branch moves `latest` too. pytest fails a test
 after 10 minutes and CI prints the 30 slowest.
 
 CI runs unit tests (`pytest -m "not indi" -n auto`, no simulators) apart from the

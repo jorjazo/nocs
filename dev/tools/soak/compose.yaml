@@ -10,7 +10,7 @@ services:
     build:
       context: ../../indi
       dockerfile: Containerfile
-    image: nocs-dev-indi
+    image: ghcr.io/jorjazo/nocs-dev-indi
     ports:
       - "127.0.0.1:${SOAK_INDI_PORT:-27624}:7624"
     volumes:
@@ -21,7 +21,7 @@ services:
     build:
       context: ../../phd2
       dockerfile: Containerfile
-    image: nocs-dev-phd2
+    image: ghcr.io/jorjazo/nocs-dev-phd2
     init: true
     environment:
       PHD2_SETTINGS: /run/nocs/phd2.phd

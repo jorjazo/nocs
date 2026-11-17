@@ -1,11 +1,13 @@
 # Development services. Start with:
-#   docker compose -f dev/compose.yaml up -d
+#   docker compose -f dev/compose.yaml up -d --build
+# or take the images CI uses, built from main each week (ADR 0050), instead of building:
+#   docker compose -f dev/compose.yaml pull && docker compose -f dev/compose.yaml up -d --no-build
 services:
   indi:
     build:
       context: indi
       dockerfile: Containerfile
-    image: nocs-dev-indi
+    image: ghcr.io/jorjazo/nocs-dev-indi
     ports:
       - "127.0.0.1:7624:7624"
     volumes:
@@ -19,7 +21,7 @@ services:
     build:
       context: phd2
       dockerfile: Containerfile
-    image: nocs-dev-phd2
+    image: ghcr.io/jorjazo/nocs-dev-phd2
     init: true
     environment:
       # nocsd writes PHD2's settings into dev/.run (ADR 0022), with

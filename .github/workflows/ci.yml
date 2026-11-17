@@ -43,6 +43,10 @@ jobs:
     name: integration (${{ matrix.tests }})
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: read
+      pull-requests: read
     defaults:
       run:
         working-directory: server
@@ -51,26 +55,64 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
-      # The simulators' and PHD2's images come from the Actions cache, built again
-      # each ISO week (APT_REFRESH) to follow the PPAs, or when their files change.
-      - name: ISO week
-        id: week
-        run: echo "week=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
+      # The simulators' and PHD2's images come from GHCR, built from the PPAs by
+      # dev-images.yml (ADR 0050), so a Launchpad outage cannot fail this job. An image
+      # whose files this pull request or push changes, or that cannot be pulled, is
+      # built here instead, from the PPAs and the cache that workflow writes.
+      - name: Pull INDI simulators and PHD2
+        id: images
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ACTOR: ${{ github.actor }}
+          EVENT: ${{ github.event_name }}
+          PR: ${{ github.event.pull_request.number }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          # The files changed here; when they cannot be told, both images are built.
+          if [ "$EVENT" = pull_request ]; then
+            changed=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --paginate --jq '.[].filename') \
+              || changed=$'dev/indi/\ndev/phd2/'
+          else
+            changed=$(git fetch -q --depth=1 origin "$BEFORE" && git diff --name-only "$BEFORE" HEAD) \
+              || changed=$'dev/indi/\ndev/phd2/'
+          fi
+          pull() {
+            for attempt in 1 2 3; do
+              docker pull -q "$1" && return 0
+              sleep $((attempt * 10))
+            done
+            return 1
+          }
+          docker login ghcr.io -u "$ACTOR" --password-stdin <<<"$GH_TOKEN" || true
+          build=()
+          for name in indi phd2; do
+            image=ghcr.io/jorjazo/nocs-dev-$name
+            if grep -q "^dev/$name/" <<<"$changed"; then
+              echo "::notice::dev/$name changes here: building $image"
+              build+=("$name")
+            elif pull "$image"; then
+              docker image inspect "$image" --format \
+                "$image {{index .Config.Labels \"org.opencontainers.image.version\"}}, built from {{index .Config.Labels \"org.opencontainers.image.revision\"}}"
+            else
+              echo "::warning::$image could not be pulled: building it"
+              build+=("$name")
+            fi
+          done
+          echo "build=$(IFS=,; echo "${build[*]}")" >> "$GITHUB_OUTPUT"
       - uses: docker/setup-buildx-action@v4
+        if: steps.images.outputs.build != ''
       - name: Build INDI simulators and PHD2
+        if: steps.images.outputs.build != ''
         uses: docker/bake-action@v7
         with:
           source: ./dev
           files: compose.yaml
-          targets: indi,phd2
+          targets: ${{ steps.images.outputs.build }}
           load: true
-          # Both runners write the same cache; a write that loses the race is harmless.
           set: |
-            *.args.APT_REFRESH=${{ steps.week.outputs.week }}
             indi.cache-from=type=gha,scope=dev-indi
-            indi.cache-to=type=gha,scope=dev-indi,mode=max,ignore-error=true
             phd2.cache-from=type=gha,scope=dev-phd2
-            phd2.cache-to=type=gha,scope=dev-phd2,mode=max,ignore-error=true
       - name: Start INDI simulators and PHD2
         working-directory: .
         run: |
