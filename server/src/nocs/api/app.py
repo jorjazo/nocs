@@ -822,7 +822,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
         except (NothingToSaveError, StorageError) as e:
             raise HTTPException(status.HTTP_409_CONFLICT, str(e)) from e
         # Solved before it was saved: its solution goes with it, for the framing chart.
-        await pointing().keep_saved(saved.id, saved.path, saved.taken)
+        pointing().keep_saved(saved.id, saved.path, saved.taken)
         return FrameSaved(id=saved.id, path=saved.relative, destination=saved.destination)
 
     @app.get("/api/previews/{name}")

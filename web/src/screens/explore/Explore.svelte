@@ -690,7 +690,8 @@
   .portrait .buttons :global(.card),
   .portrait .tools :global(.card) {
     width: 100%;
-  }  .tools,
+  }
+  .tools,
   .buttons {
     display: flex;
     flex-direction: column;
