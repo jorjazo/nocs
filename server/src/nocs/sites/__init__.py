@@ -1,7 +1,15 @@
 """Saved sites and the box's active site (ADR 0038)."""
 
 from nocs.sites.service import NEAR, SiteError, SiteService
-from nocs.sites.store import HorizonPoint, Site, SiteFile, SiteStore, distance
+from nocs.sites.store import (
+    HorizonPoint,
+    Site,
+    SiteFile,
+    SiteStore,
+    distance,
+    known_zones,
+    zone_at,
+)
 
 __all__ = [
     "NEAR",
@@ -12,4 +20,6 @@ __all__ = [
     "SiteService",
     "SiteStore",
     "distance",
+    "known_zones",
+    "zone_at",
 ]

@@ -107,6 +107,8 @@ from nocs.focus.autofocus import AutofocusService
 from nocs.focus.calibration import FocuserCalibrationService, Scale
 from nocs.focus.focusers import FocuserStore
 from nocs.focus.service import FocuserNotReadyError, FocuserService
+from nocs.forecast import PROVIDERS, ForecastProvider
+from nocs.forecast.service import ForecastService
 from nocs.guiding import GuidingService, Settle
 from nocs.imaging import (
     FRAME_TYPES,
@@ -138,7 +140,7 @@ from nocs.services.gps import GpsService, NoFixError
 from nocs.services.indi_bridge import IndiBridge, NotConnectedError
 from nocs.services.system import OperationUnavailableError, SystemService
 from nocs.services.timekeeping import TimeKeeper
-from nocs.sites import SiteService, SiteStore
+from nocs.sites import SiteService, SiteStore, known_zones
 from nocs.sky import Target as SkyTarget
 from nocs.solving import Astap, SolverService
 from nocs.stacking.service import LiveStackService
@@ -181,7 +183,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
     )
     fifo = DriverFifo(settings.indi_fifo) if settings.indi_fifo is not None else None
     auth = AuthStore(settings.config_dir / "auth.json")
-    sockets = Sockets()
+    sockets = Sockets(store)
     # Created in the lifespan: they publish to the store and spawn tasks on its loop.
     services = _Services()
 
@@ -353,6 +355,12 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
         return Scale(
             optics.focal_length * optics.reducer / optics.aperture, float(pixel) * max(1, factor)
         )
+
+    def forecast_provider() -> ForecastProvider | None:
+        """The active profile's, as saved (its summary in the state)."""
+        active = equipment().active
+        value = store.get(("equipment", "profiles", active, "forecast")) if active else None
+        return next((p for p in PROVIDERS if p == value), None)
 
     def solve_exposure() -> float | None:
         """The active profile's, as saved (its summary in the state): no reconnection."""
@@ -531,6 +539,17 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
         time_task = asyncio.create_task(time_keeper.run(), name="timekeeping")
         services.gps = GpsService(store, services.sites, settings.gpsd_host, settings.gpsd_port)
         gps_task = asyncio.create_task(services.gps.run(), name="gpsd")
+        forecast = ForecastService(
+            store,
+            settings.data_dir,
+            services.clock,
+            provider=forecast_provider,
+            site=lambda: sites().active,
+        )
+        forecast_task = asyncio.create_task(forecast.run(), name="forecast")
+        # The zones a site may name come partly from the system's tz files: read them
+        # once now, in a thread, so a site's validation never waits on the card.
+        zones_task = asyncio.create_task(anyio.to_thread.run_sync(known_zones), name="zones")
         preparation_task = asyncio.create_task(services.preparation.run(), name="preparation")
         watchdog_task = asyncio.create_task(watchdog.run(), name="systemd-watchdog")
         recovery_task = asyncio.create_task(
@@ -550,6 +569,8 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
                 recovery_task,
                 watchdog_task,
                 gps_task,
+                forecast_task,
+                zones_task,
                 time_task,
                 system_task,
                 guiding_task,

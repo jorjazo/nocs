@@ -19,11 +19,14 @@ from fastapi.testclient import TestClient
 from owner import pair_owner
 
 from nocs.api import create_app
+from nocs.api.schemas import SkyPointing
 from nocs.config import Settings
 from nocs.devices import Location
+from nocs.mount.coords import jnow_to_j2000
 from nocs.sites import HorizonPoint, Site, SiteFile, SiteStore
 from nocs.sky import Target, horizon_altitude, night, tonight, visibility
 from nocs.sky.almanac import TWILIGHTS
+from nocs.sky.bodies import Body, position
 from nocs.sky.ephemeris import illumination, pressure, refraction, sky
 
 TOLOLO = Location(-(30 + 10 / 60), -(70 + 49 / 60), 0)
@@ -371,3 +374,22 @@ def test_observers_may_read_the_sky(client: TestClient) -> None:
     assert tonight.status_code == 200
     assert tonight.json()["site"] is None  # observers do not see where (ADR 0047)
     assert client.get("/api/profiles").status_code == 401
+
+
+def test_pointing_names_what_a_frame_shows(client: TestClient) -> None:
+    response = client.get("/api/sky/pointing", params={"ra": 5.5881, "dec": -5.3911, "radius": 0.5})
+    assert response.status_code == 200, response.text
+    pointing = SkyPointing.model_validate(response.json())
+    assert pointing.objects[0].label == "M 42"
+    assert len(pointing.objects) <= 5
+
+
+def test_pointing_at_the_moon(client: TestClient) -> None:
+    now = datetime.now(UTC)
+    moon = position(Body.MOON, DIAGUITAS, now)
+    at = jnow_to_j2000(moon.jnow.ra, moon.jnow.dec, now)
+    response = client.get("/api/sky/pointing", params={"ra": at.ra, "dec": at.dec, "radius": 0.2})
+    assert response.json()["body"] == "moon"
+    assert (
+        client.get("/api/sky/pointing", params={"ra": 1, "dec": 0, "radius": 11}).status_code == 422
+    )

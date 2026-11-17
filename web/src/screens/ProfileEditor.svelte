@@ -74,6 +74,7 @@
   let throughImaging = $state(false);
   // Seconds of the frames NOCS solves to point; empty: the server's 2 s.
   let solveExposure = $state<number | null>(null);
+  let forecast = $state(false);
   // Every number field reports whether its text is valid.
   const NUMBERS = [
     ...["imaging", "guiding"].flatMap((train) => ["focal", "aperture", "reducer"].map((field) => `${train}-${field}`)),
@@ -112,6 +113,7 @@
         guiding = opticsDraft(profile.guiding);
         throughImaging = profile.guiding_through_imaging ?? false;
         solveExposure = profile.solving?.exposure ?? null;
+        forecast = profile.forecast?.provider === "open-meteo";
         loaded = true;
       })
       .catch((e: unknown) => (loadError = errorText(e, t)));
@@ -277,6 +279,7 @@
       guiding: optics(guiding, original?.guiding),
       guiding_through_imaging: throughImaging,
       solving: { ...original?.solving, exposure: solveExposure ?? SOLVE_EXPOSURE },
+      forecast: { ...original?.forecast, provider: forecast ? "open-meteo" : null },
     };
   }
 
@@ -506,6 +509,15 @@
         unit="s"
         placeholder={String(SOLVE_EXPOSURE)}
         hint={t.editor.solveExposureHint} />
+    </fieldset>
+
+    <fieldset class="section" disabled={!auth.owner}>
+      <legend class="heading">{t.editor.forecast}</legend>
+      <Toggle
+        label={t.editor.forecastOpenMeteo}
+        hint={t.editor.forecastHint}
+        checked={forecast}
+        onchange={(value) => (forecast = value)} />
     </fieldset>
 
     {#if auth.owner}

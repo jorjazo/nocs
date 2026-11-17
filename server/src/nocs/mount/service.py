@@ -29,6 +29,7 @@ import logging
 from collections.abc import Coroutine
 from datetime import date, datetime, timedelta
 from typing import Any, Literal, Protocol
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import anyio
 
@@ -465,7 +466,8 @@ class MountService:
             raise PointingError("the time is unknown until a client reports its clock")
         mount = self.mount()
         if await self._defined(mount, "TIME_UTC"):
-            await mount.set_time(self._clock.now(), self._clock.utc_offset or 0.0)
+            now = self._clock.now()
+            await mount.set_time(now, self._utc_offset(now))
         else:
             log.info("%s has no clock to set", mount.name)
         self._time_sent = True
@@ -636,6 +638,19 @@ class MountService:
                 f"the target is {away:.0f}° from the Sun, near the Sun: read and acknowledge "
                 "the Sun's warning first"
             )
+
+    def _utc_offset(self, when: datetime) -> float:
+        """Hours the mount's local time is ahead of UTC: the active site's time zone's
+        (ADR 0052), else the client's."""
+        site = self._sites.active
+        if site is not None:
+            try:
+                offset = when.astimezone(ZoneInfo(site.resolved_zone)).utcoffset()
+            except (ZoneInfoNotFoundError, ValueError):
+                offset = None
+            if offset is not None:
+                return offset.total_seconds() / 3600
+        return self._clock.utc_offset or 0.0
 
     def _local_date(self, when: datetime) -> date:
         site = self._site()

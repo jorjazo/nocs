@@ -69,6 +69,7 @@ import type {
   Site,
   SiteCreated,
   SkyChart,
+  SkyPointing,
   SkyVisibility,
   SolvedFrames,
   SolveRequest,
@@ -211,6 +212,11 @@ export function setHostname(name: string): Promise<void> {
 // A new saved site; returns its id.
 export async function addSite(site: Site): Promise<string> {
   return (await request<SiteCreated>("POST", "/api/sites", site)).id;
+}
+
+// The time zones a site may name (ADR 0052).
+export function getSiteZones(): Promise<string[]> {
+  return request("GET", "/api/sites/zones");
 }
 
 // The active site only while no job holds the mount (409).
@@ -644,6 +650,12 @@ export function getTargetSources(): Promise<CatalogSource[]> {
 // The night the server's clock is in, at the active site.
 export function getTonight(): Promise<Almanac> {
   return request("GET", "/api/sky/tonight");
+}
+
+// What a frame around a J2000 point shows: the Sun or the Moon, catalog objects.
+export function getSkyPointing(ra: number, dec: number, radius: number): Promise<SkyPointing> {
+  const params = new URLSearchParams({ ra: String(ra), dec: String(dec), radius: String(radius) });
+  return request("GET", `/api/sky/pointing?${params}`);
 }
 
 // Tonight's altitude curves of targets: catalog ids or "RA,Dec" (J2000 hours, degrees).

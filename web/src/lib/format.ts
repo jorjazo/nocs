@@ -69,12 +69,61 @@ export function formatBytes(bytes: number, locale: string): string {
   }).format(value);
 }
 
+// The time zone the app shows times in: the active site's (ADR 0052), else the
+// browser's. The shell sets it, and draws the screens again when it changes.
+let zone: string | undefined;
+
+export function setTimeZone(value: string | null | undefined): void {
+  zone = undefined;
+  if (!value) return;
+  try {
+    new Intl.DateTimeFormat("en", { timeZone: value });
+    zone = value;
+  } catch {
+    // A zone this browser does not know: its own then.
+  }
+}
+
+export function timeZone(): string | undefined {
+  return zone;
+}
+
 export function formatDateTime(iso: string, locale: string): string {
-  return new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(new Date(iso));
+  return new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short", timeZone: zone }).format(
+    new Date(iso),
+  );
 }
 
 export function formatTime(iso: string, locale: string): string {
-  return new Intl.DateTimeFormat(locale, { timeStyle: "short" }).format(new Date(iso));
+  return new Intl.DateTimeFormat(locale, { timeStyle: "short", timeZone: zone }).format(new Date(iso));
+}
+
+// Times with seconds (a frame's, a solve's).
+export function formatClock(iso: string, locale: string): string {
+  return new Intl.DateTimeFormat(locale, { timeStyle: "medium", timeZone: zone }).format(new Date(iso));
+}
+
+// The hour of the day (0–23) at `time` (ms) in the app's time zone.
+export function hourOf(time: number): number {
+  return clockOf(time).hour;
+}
+
+// The first whole hour of the app's time zone at or after `time` (ms): zones a half
+// or three quarters of an hour off UTC start their hours mid-UTC-hour.
+export function nextWholeHour(time: number): number {
+  const first = Math.ceil(time / 60_000) * 60_000;
+  return first + ((60 - clockOf(first).minute) % 60) * 60_000;
+}
+
+function clockOf(time: number): { hour: number; minute: number } {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    hour: "numeric",
+    minute: "numeric",
+    hourCycle: "h23",
+    timeZone: zone,
+  }).formatToParts(time);
+  const part = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? 0);
+  return { hour: part("hour"), minute: part("minute") };
 }
 
 // Plain numbers in the interface (gain, offset, ranges), without grouping.

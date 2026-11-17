@@ -2,6 +2,7 @@
   // A target's altitude through the night (stage 3.6): twilight shades behind,
   // the site's horizon profile under the target as a filled ground, the minimum
   // altitude dashed, the Moon faint, and a line at now.
+  import { hourOf, nextWholeHour, timeZone } from "../lib/format";
   import { i18n } from "../lib/i18n";
   import { bands } from "../lib/sky/night";
 
@@ -63,11 +64,9 @@
   // Every other whole hour along the bottom.
   const hours = $derived.by(() => {
     const result: { x: number; label: string }[] = [];
-    const first = new Date(start);
-    first.setMinutes(0, 0, 0);
-    const format = new Intl.DateTimeFormat(locale, { hour: "numeric" });
-    for (let t = first.getTime() + 3600_000; t < end; t += 3600_000) {
-      if (new Date(t).getHours() % 2 === 0) result.push({ x: x(t), label: format.format(t) });
+    const format = new Intl.DateTimeFormat(locale, { hour: "numeric", timeZone: timeZone() });
+    for (let t = nextWholeHour(start + 1); t < end; t += 3600_000) {
+      if (hourOf(t) % 2 === 0) result.push({ x: x(t), label: format.format(t) });
     }
     return result;
   });

@@ -197,7 +197,9 @@ async def test_initial_state_lists_profiles(
     fifo: FakeFifo,
 ) -> None:
     make_service(fifo)
-    assert equipment(store, "profiles") == {"rig": {"name": "Test rig", "solve_exposure": 2.0}}
+    assert equipment(store, "profiles") == {
+        "rig": {"name": "Test rig", "solve_exposure": 2.0, "forecast": None}
+    }
     assert equipment(store, "connection") == "disconnected"
     assert equipment(store, "active") is None
 

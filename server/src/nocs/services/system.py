@@ -27,7 +27,7 @@ import anyio.to_thread
 
 from nocs.jobs import JobManager
 from nocs.services import diagnostics
-from nocs.services.health import Health, HealthPaths, read_health, warnings
+from nocs.services.health import Health, HealthPaths, cpu_used, read_health, warnings
 from nocs.state import Json, StateStore
 from nocs.system import client
 from nocs.system.client import HelperUnavailableError
@@ -80,6 +80,7 @@ class SystemService:
         self._error: str | None = None
         self._health: dict[str, Json] | None = None
         self._under_voltage_seen: str | None = None
+        self._cpu_time: tuple[int, int] | None = None
         self._published: dict[str, Json] | None = None
         self._share: Json = None
         self._network: Json = None
@@ -107,11 +108,14 @@ class SystemService:
         health = await anyio.to_thread.run_sync(read_health, self._health_paths)
         if health.under_voltage:
             self._under_voltage_seen = datetime.now(UTC).isoformat(timespec="seconds")
-        self._health = self._rounded(health)
+        used = cpu_used(self._cpu_time, health.cpu_time)
+        self._cpu_time = health.cpu_time
+        self._health = self._rounded(health, used)
         self._publish()
 
-    def _rounded(self, health: Health) -> dict[str, Json]:
-        """As the app shows it: whole degrees and percent, 100 rpm, 100 MB."""
+    def _rounded(self, health: Health, cpu: float | None) -> dict[str, Json]:
+        """As the app shows it: whole degrees and percent, 100 rpm, 100 MB, the CPU's use
+        to 5 %."""
 
         def nearest(value: float | None, step: int) -> int | None:
             return None if value is None else round(value / step) * step
@@ -126,6 +130,7 @@ class SystemService:
                 None if health.memory_used is None else health.memory_used * 100, 1
             ),
             "disk_free": nearest(health.disk_free, 100_000_000),
+            "cpu_used": nearest(None if cpu is None else cpu * 100, 5),
             "warnings": list[Json](warnings(health)),
         }
 

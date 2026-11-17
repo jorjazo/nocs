@@ -16,6 +16,7 @@ from pydantic import (
 )
 
 from nocs.equipment import Role
+from nocs.forecast import ForecastHour, ForecastProvider
 from nocs.sites import Site
 from nocs.stacking.settings import StackLook
 from nocs.state import Patch
@@ -114,6 +115,9 @@ class ProfileSummary(StateModel):
     name: str
     solve_exposure: float = Field(
         description="Seconds of the frames NOCS solves to point, as saved (`solving.exposure`)."
+    )
+    forecast: ForecastProvider | None = Field(
+        description="Where tonight's forecast comes from, as saved (`forecast.provider`)."
     )
 
 
@@ -1118,11 +1122,50 @@ class GpsState(StateModel):
     )
 
 
+class SavedSite(Site):
+    zone: str = Field(
+        description="The time zone the app shows the site's times in: its own, else the one "
+        "at its position (ADR 0052)."
+    )
+
+
 class SitesState(StateModel):
     """The saved sites and the box's active one (ADR 0038)."""
 
     active: str | None = Field(description="The active site's id; None: no site is active.")
-    saved: dict[str, Site] = Field(description="Every saved site, by id.")
+    saved: dict[str, SavedSite] = Field(description="Every saved site, by id.")
+
+
+class ConnectedDevice(StateModel):
+    id: str = Field(description="The paired device's id.")
+    name: str = Field(description="The name it was paired with.")
+    connections: int = Field(description="Pages it has open now (tabs, windows).")
+
+
+class ClientsState(StateModel):
+    """Who is connected now: paired devices, and how many observers (Tonight's Host)."""
+
+    devices: list[ConnectedDevice] = Field(
+        description="Connected paired devices by name; empty for observers (ADR 0047)."
+    )
+    observers: int = Field(description="Pages open without pairing (observer access).")
+
+
+class ForecastState(StateModel):
+    """Tonight's forecast for the active site, from the profile's provider (ADR 0051)."""
+
+    provider: ForecastProvider
+    fetched: str | None = Field(
+        description="When the forecast was fetched, UTC; None: none yet for this site."
+    )
+    attempted: str | None = Field(description="The last attempt since nocsd started, UTC.")
+    error: Literal["offline", "refused", "invalid"] | None = Field(
+        description="Why the last attempt failed: no network or no answer, an HTTP error, or"
+        " an answer that was not a forecast."
+    )
+    hours: list[ForecastHour] = Field(
+        description="From the current hour on, while the forecast is less than 48 h old."
+    )
 
 
 class SystemHealth(StateModel):
@@ -1141,6 +1184,10 @@ class SystemHealth(StateModel):
     )
     memory_used: int | None = Field(description="Percent.")
     disk_free: int | None = Field(description="Bytes free on the system disk, to 100 MB.")
+    cpu_used: int | None = Field(
+        description="Percent of the CPUs' time in use since the last reading (a few seconds"
+        " ago), to 5 %; None at the first."
+    )
     warnings: list[HealthWarningName] = Field(
         description="Most serious first: hot from 80 °C, memory from 90 %, disk under 2 GB."
     )
@@ -1392,6 +1439,10 @@ class AppState(StateModel):
     )
     share: ShareState | None = Field(
         default=None, description="None where NOCS does not share the frames (a PC)."
+    )
+    clients: ClientsState | None = Field(default=None, description="None until nocsd serves.")
+    forecast: ForecastState | None = Field(
+        default=None, description="None while the active profile asks for no forecast."
     )
 
 
@@ -2325,6 +2376,18 @@ class CatalogObject(WireModel):
     aliases: list[str] = Field(description="Other designations, Messier and Caldwell first.")
     names: list[str] = Field(description="Common names in English.")
     names_es: list[str] = Field(description="Common names in Spanish, where they differ.")
+
+
+class SkyPointing(WireModel):
+    """What lies around a point: what a mount pointing there has in its frame."""
+
+    body: Literal["sun", "moon"] | None = Field(
+        description="The Sun or the Moon, when its disc reaches into the circle (the Sun "
+        "first); None also without an active site."
+    )
+    objects: list[CatalogObject] = Field(
+        description="Catalog objects that reach into the circle, nearest centre first (5 at most)."
+    )
 
 
 class CatalogMatch(WireModel):

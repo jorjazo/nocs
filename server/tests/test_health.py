@@ -13,6 +13,7 @@ from nocs.services.health import HealthPaths, read_health, warnings
 from nocs.services.system import SystemService
 from nocs.state import StateStore
 
+STAT = "cpu  {user} 0 0 {idle} 0 0 0 0 0 0\ncpu0 1 0 0 1 0 0 0 0 0 0\n"
 MEMINFO = "MemTotal:        8121344 kB\nMemFree:         4048000 kB\nMemAvailable:    6748000 kB\n"
 
 
@@ -35,7 +36,9 @@ def fake_sys(
     (cpufreq / "scaling_max_freq").write_text(f"{limit}\n")
     meminfo = tmp_path / "meminfo"
     meminfo.write_text(MEMINFO)
-    return HealthPaths(hwmon=hwmon, cpufreq=cpufreq, meminfo=meminfo, root=tmp_path)
+    stat = tmp_path / "stat"
+    stat.write_text(STAT.format(user=1000, idle=9000))
+    return HealthPaths(hwmon=hwmon, cpufreq=cpufreq, meminfo=meminfo, root=tmp_path, stat=stat)
 
 
 # As the lab Pi 5 reported them.
@@ -77,11 +80,15 @@ def test_a_pc_reports_no_under_voltage(tmp_path: Path) -> None:
 
 def test_nothing_readable(tmp_path: Path) -> None:
     paths = HealthPaths(
-        hwmon=tmp_path / "none", cpufreq=tmp_path / "none", meminfo=tmp_path / "none", root=tmp_path
+        hwmon=tmp_path / "none",
+        cpufreq=tmp_path / "none",
+        meminfo=tmp_path / "none",
+        root=tmp_path,
+        stat=tmp_path / "none",
     )
     health = read_health(paths)
     assert (health.cpu_temperature, health.fan, health.under_voltage) == (None, None, None)
-    assert (health.throttled, health.memory_used) == (None, None)
+    assert (health.throttled, health.memory_used, health.cpu_time) == (None, None, None)
 
 
 async def test_service_rounds_and_remembers_under_voltage(tmp_path: Path) -> None:
@@ -114,6 +121,22 @@ async def test_samples_that_round_the_same_change_nothing(tmp_path: Path) -> Non
     (tmp_path / "hwmon" / "hwmon3" / "fan1_input").write_text("2190\n")
     await service.sample()
     assert store.version == version
+
+
+async def test_the_cpu_s_use_between_two_readings(tmp_path: Path) -> None:
+    store = StateStore()
+    paths = fake_sys(tmp_path, PI5)
+    service = SystemService(store, JobManager(store), tmp_path / "missing.sock", paths)
+    await service.sample()
+    health = SystemState.model_validate(store.get(("system",))).health
+    assert health is not None
+    assert health.cpu_used is None  # one reading says nothing yet
+    # 300 busy ticks of 1000 since: 30 %, to 5 %.
+    (tmp_path / "stat").write_text(STAT.format(user=1300, idle=9700))
+    await service.sample()
+    health = SystemState.model_validate(store.get(("system",))).health
+    assert health is not None
+    assert health.cpu_used == 30
 
 
 def test_diagnostics_bundle() -> None:

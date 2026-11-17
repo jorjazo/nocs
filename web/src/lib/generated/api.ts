@@ -208,6 +208,11 @@ export type SolveFailureReason = "unavailable" | "no_database" | "no_stars" | "n
 export type ConnectionName = "disconnected" | "connecting" | "connected" | "disconnecting";
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "ForecastProvider".
+ */
+export type ForecastProvider = "open-meteo";
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "FinderBody".
  */
 export type FinderBody = "sun" | "moon";
@@ -512,6 +517,10 @@ export interface Site {
    */
   longitude: number;
   name?: string;
+  /**
+   * IANA time zone the app shows the site's times in (America/Santiago); None: the one at its position (ADR 0052).
+   */
+  timezone?: string | null;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -563,6 +572,10 @@ export interface AppState {
    * None: never run.
    */
   centering?: CenteringState | null;
+  /**
+   * None until nocsd serves.
+   */
+  clients?: ClientsState | null;
   clock?: ClockState | null;
   equipment?: EquipmentState | null;
   /**
@@ -585,6 +598,10 @@ export interface AppState {
    * None: no focuser is ready.
    */
   focuser?: FocuserState | null;
+  /**
+   * None while the active profile asks for no forecast.
+   */
+  forecast?: ForecastState | null;
   gps?: GpsState | null;
   guiding?: GuidingState | null;
   indi?: IndiState | null;
@@ -1063,6 +1080,40 @@ export interface SkyPosition1 {
   ra: number;
 }
 /**
+ * Who is connected now: paired devices, and how many observers (Tonight's Host).
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "ClientsState".
+ */
+export interface ClientsState {
+  /**
+   * Connected paired devices by name; empty for observers (ADR 0047).
+   */
+  devices: ConnectedDevice[];
+  /**
+   * Pages open without pairing (observer access).
+   */
+  observers: number;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "ConnectedDevice".
+ */
+export interface ConnectedDevice {
+  /**
+   * Pages it has open now (tabs, windows).
+   */
+  connections: number;
+  /**
+   * The paired device's id.
+   */
+  id: string;
+  /**
+   * The name it was paired with.
+   */
+  name: string;
+}
+/**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "ClockState".
  */
@@ -1161,6 +1212,10 @@ export interface RoleState {
  * via the `definition` "ProfileSummary".
  */
 export interface ProfileSummary {
+  /**
+   * Where tonight's forecast comes from, as saved (`forecast.provider`).
+   */
+  forecast: ForecastProvider | null;
   name: string;
   /**
    * Seconds of the frames NOCS solves to point, as saved (`solving.exposure`).
@@ -1588,6 +1643,81 @@ export interface FocuserCalibrationRecord {
    * The optics followed the motor only in part.
    */
   slip: boolean;
+}
+/**
+ * Tonight's forecast for the active site, from the profile's provider (ADR 0051).
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "ForecastState".
+ */
+export interface ForecastState {
+  /**
+   * The last attempt since nocsd started, UTC.
+   */
+  attempted: string | null;
+  /**
+   * Why the last attempt failed: no network or no answer, an HTTP error, or an answer that was not a forecast.
+   */
+  error: ("offline" | "refused" | "invalid") | null;
+  /**
+   * When the forecast was fetched, UTC; None: none yet for this site.
+   */
+  fetched: string | null;
+  /**
+   * From the current hour on, while the forecast is less than 48 h old.
+   */
+  hours: ForecastHour[];
+  provider: ForecastProvider;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "ForecastHour".
+ */
+export interface ForecastHour {
+  /**
+   * % of the sky.
+   */
+  cloud_cover: number | null;
+  /**
+   * % of the sky, high clouds (above 8 km).
+   */
+  cloud_high: number | null;
+  /**
+   * % of the sky, low clouds (up to 3 km).
+   */
+  cloud_low: number | null;
+  /**
+   * % of the sky, mid clouds (3 to 8 km).
+   */
+  cloud_mid: number | null;
+  /**
+   * Relative humidity at 2 m, %.
+   */
+  humidity: number | null;
+  /**
+   * mm in the hour.
+   */
+  precipitation: number | null;
+  /**
+   * %.
+   */
+  precipitation_probability: number | null;
+  /**
+   * °C at 2 m.
+   */
+  temperature: number | null;
+  /**
+   * UTC, the start of the hour.
+   */
+  time: string;
+  /**
+   * km/h at 10 m.
+   */
+  wind_gusts: number | null;
+  /**
+   * km/h at 10 m.
+   */
+  wind_speed: number | null;
 }
 /**
  * A USB GPS through gpsd (ADR 0029); positions to 4 decimals, at most every 10 s.
@@ -2637,8 +2767,39 @@ export interface SitesState {
    * Every saved site, by id.
    */
   saved: {
-    [k: string]: Site;
+    [k: string]: SavedSite;
   };
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "SavedSite".
+ */
+export interface SavedSite {
+  /**
+   * Metres above sea level.
+   */
+  elevation?: number;
+  /**
+   * The local horizon (hills, trees, buildings): straight lines between points, all round the sky. None: a flat horizon at 0°.
+   */
+  horizon?: HorizonPoint[] | null;
+  /**
+   * Degrees, north positive.
+   */
+  latitude: number;
+  /**
+   * Degrees, east positive.
+   */
+  longitude: number;
+  name?: string;
+  /**
+   * IANA time zone the app shows the site's times in (America/Santiago); None: the one at its position (ADR 0052).
+   */
+  timezone?: string | null;
+  /**
+   * The time zone the app shows the site's times in: its own, else the one at its position (ADR 0052).
+   */
+  zone: string;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -3155,6 +3316,10 @@ export interface SystemHealth {
    * °C.
    */
   cpu_temperature: number | null;
+  /**
+   * Percent of the CPUs' time in use since the last reading (a few seconds ago), to 5 %; None at the first.
+   */
+  cpu_used: number | null;
   /**
    * Bytes free on the system disk, to 100 MB.
    */
@@ -5196,6 +5361,7 @@ export interface Profile {
   devices?: {
     [k: string]: DeviceConfig;
   };
+  forecast?: WeatherForecast;
   /**
    * Optics of the guide scope, when the guide camera has its own.
    */
@@ -5210,6 +5376,18 @@ export interface Profile {
   imaging?: Optics | null;
   name: string;
   solving?: Solving;
+}
+/**
+ * Where tonight's forecast comes from (ADR 0051).
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "WeatherForecast".
+ */
+export interface WeatherForecast {
+  /**
+   * None: no forecast. open-meteo: Open-Meteo, free and without a key; the box sends it the active site's position rounded to 0.1° (about 10 km).
+   */
+  provider?: ForecastProvider | null;
 }
 /**
  * How NOCS plate solves to point (go and centre, solve, polar alignment).
@@ -5639,6 +5817,22 @@ export interface SkyChart {
    * More stars matched: only the brightest ones are here.
    */
   truncated: boolean;
+}
+/**
+ * What lies around a point: what a mount pointing there has in its frame.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "SkyPointing".
+ */
+export interface SkyPointing {
+  /**
+   * The Sun or the Moon, when its disc reaches into the circle (the Sun first); None also without an active site.
+   */
+  body: ("sun" | "moon") | null;
+  /**
+   * Catalog objects that reach into the circle, nearest centre first (5 at most).
+   */
+  objects: CatalogObject[];
 }
 /**
  * ``GET /api/sky/visibility``: targets during a night at the active site.

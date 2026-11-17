@@ -1,56 +1,71 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
   import { prefs } from "../lib/prefs.svelte";
-  import type { RigSection } from "../lib/rigsections";
+  import { isRigSection } from "../lib/rigsections";
   import Chip, { type Tone } from "./Chip.svelte";
   import Icon from "./Icon.svelte";
 
-  // One of Rig's sections: its header opens and closes it, and the browser keeps
-  // which are open. Closed, the header still says how it stands: a summary, and a
-  // chip when something needs a look (docs/ux.md §7, "Rig").
+  // A section whose header opens and closes it: one of Rig's rows, or one of
+  // Tonight's cards. Closed, the header still says how it stands: a summary, and a
+  // chip when something needs a look (docs/ux.md §7, "Rig", and §1).
   let {
     id,
     title,
     summary,
     status,
+    scope = "rig",
+    open: given,
+    ontoggle,
     children,
   }: {
-    id: RigSection;
+    id: string;
     title: string;
     // A line under the title while closed ("15 GB free").
     summary?: string | null;
     // Shown open or closed: a problem never hides in a closed section.
     status?: { tone: Tone; text: string } | null;
+    // Rig's rows keep their open state in the browser themselves; Tonight's cards
+    // are given theirs (Tonight decides where its checklist goes and whether it is open).
+    scope?: "rig" | "tonight";
+    open?: boolean;
+    ontoggle?: (open: boolean) => void;
     children: Snippet;
   } = $props();
 
-  const open = $derived(prefs.sectionOpen(id));
+  const open = $derived(given ?? (isRigSection(id) && prefs.sectionOpen(id)));
+  const key = $derived(`${scope}-${id}`);
+
+  function toggle(): void {
+    if (ontoggle) ontoggle(!open);
+    else if (isRigSection(id)) prefs.setSectionOpen(id, !open);
+  }
 </script>
 
-<section class="section" id="rig-{id}" aria-labelledby="rig-{id}-title">
-  <h3 class="head">
-    <button
-      type="button"
-      aria-expanded={open}
-      aria-controls="rig-{id}-body"
-      onclick={() => prefs.setSectionOpen(id, !open)}>
+<section class="section" class:card={scope === "tonight"} id={key} aria-labelledby="{key}-title">
+  <svelte:element this={scope === "tonight" ? "h2" : "h3"} class="head">
+    <button type="button" aria-expanded={open} aria-controls="{key}-body" onclick={toggle}>
       <span class="text">
-        <span class="heading" id="rig-{id}-title">{title}</span>
+        <span class="heading" id="{key}-title">{title}</span>
         {#if summary && !open}<span class="summary">{summary}</span>{/if}
       </span>
       {#if status}<Chip tone={status.tone}>{status.text}</Chip>{/if}
       <span class="chevron" class:open aria-hidden="true"><Icon name="chevronDown" /></span>
     </button>
-  </h3>
+  </svelte:element>
   <!-- Hidden rather than removed: what is typed or running inside survives closing it. -->
-  <div class="body" id="rig-{id}-body" hidden={!open}>
+  <div class="body" id="{key}-body" hidden={!open}>
     {@render children()}
   </div>
 </section>
 
 <style>
-  .section + :global(.section) {
+  .section:not(.card) + :global(.section) {
     border-top: 1px solid var(--line);
+  }
+  /* A card's own padding stands in for the row's. */
+  .card {
+    padding-top: 0;
+    padding-bottom: 0;
   }
   .section {
     /* Room above a section a link scrolled to (#/rig/site): its group's title. */
