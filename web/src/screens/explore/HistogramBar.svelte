@@ -152,13 +152,13 @@
     align-items: center;
     justify-content: space-between;
     gap: var(--space-2);
-    min-height: 32px;
+    min-height: var(--touch);
   }
   .fold {
     display: inline-flex;
     align-items: center;
     gap: var(--space-1);
-    min-height: 32px;
+    min-height: var(--touch);
     padding: 0 var(--space-1) 0 0;
     border: 0;
     background: transparent;

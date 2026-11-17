@@ -57,8 +57,9 @@ the mount's sheet. Facts:
   ("Untitled").
 - **Lying down**, the panel is a column at the image's side and the tools start open;
   **upright**, the panel is a sheet over the image with its actions always showing,
-  and the tools start folded. The browser keeps, per orientation, which panes are
-  open, whether the tools show and the histogram's scale.
+  and the tools start folded, one open at a time. The browser keeps which panes are
+  open per orientation, and whether the tools show and the histogram's scale per
+  device.
 
 ## Consequences
 

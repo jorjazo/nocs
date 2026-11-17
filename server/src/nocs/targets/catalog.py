@@ -187,6 +187,12 @@ class TargetCatalog:
         # A designation that is some object's own id wins over one that is an alias.
         return self.targets[min(entries, key=lambda e: not e[2])[0]]
 
+    def nearest(self, ra: float, dec: float, radius: float) -> Target | None:
+        """The object whose centre is nearest a J2000 point, among those within ``radius``
+        degrees of it (``near``); None if there is none."""
+        found = self.near(ra, dec, radius)
+        return min(found, key=lambda t: separation(ra, dec, t.ra, t.dec)) if found else None
+
     def near(self, ra: float, dec: float, radius: float) -> list[Target]:
         """Objects within `radius` degrees of a J2000 point (RA in hours), counting their
         extent: a large one whose centre is outside may still cover part of the circle."""

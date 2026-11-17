@@ -359,3 +359,12 @@ def test_observers_may_search(client: TestClient) -> None:
     assert client.get("/api/targets/objects/m42").status_code == 200
     assert client.get("/api/targets/sources").status_code == 200
     assert client.put("/api/auth/observer", json={"enabled": False}).status_code == 401
+
+
+def test_nearest_object_to_a_point(catalog: TargetCatalog) -> None:
+    """What names a frame saved from Explore by its solution (ADR 0054)."""
+    found = catalog.nearest(5.5881, -5.3911, 0.4)
+    assert found is not None
+    assert found.label == "M 42"
+    assert catalog.nearest(5.5881, -5.3911, 0.0001) is not None  # its extent reaches
+    assert catalog.nearest(0.0, -89.9, 0.01) is None

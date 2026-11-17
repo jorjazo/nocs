@@ -6,7 +6,8 @@
   import Button from "../../components/Button.svelte";
   import PillSwitch from "../../components/PillSwitch.svelte";
   import { startAutofocus } from "../../lib/api";
-  import { capture, FOCUS_SPEEDS, speedStep } from "../../lib/camera.svelte";
+  import { capture, FOCUS_SPEEDS } from "../../lib/camera.svelte";
+  import { speedStep } from "../../lib/explore";
   import { formatPlain, formatTemperature } from "../../lib/format";
   import { i18n } from "../../lib/i18n";
   import { href } from "../../lib/router.svelte";
@@ -85,7 +86,13 @@
     {/if}
     <a class="link" href={href({ screen: "focus" })}>{t.live.autofocusCurve}</a>
   </div>
-  {#if !running && owner && cameraBusy}<p class="caption muted">{t.live.autofocusBusy}</p>{/if}
+  {#if !owner}
+    <p class="caption muted">{t.live.focusOwner}</p>
+  {:else if locked}
+    <p class="caption muted">{t.focuser.locked}</p>
+  {:else if !running && cameraBusy}
+    <p class="caption muted">{t.live.autofocusBusy}</p>
+  {/if}
 </ToolCard>
 
 <style>

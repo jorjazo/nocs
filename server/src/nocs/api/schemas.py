@@ -277,6 +277,10 @@ class CameraState(StateModel):
     solvable: bool = Field(
         default=False, description="The preview's frame is kept to solve it (main camera)."
     )
+    saved: bool = Field(
+        default=False,
+        description="The frame behind the preview is saved: Explore's Save has nothing to do.",
+    )
     used_by: Literal["phd2"] | None = Field(
         description="Another client drives the camera (PHD2, ADR 0023): NOCS shows its frames"
         " and takes none of its own."

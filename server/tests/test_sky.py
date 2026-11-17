@@ -29,6 +29,7 @@ from nocs.sky import Target, horizon_altitude, night, tonight, visibility
 from nocs.sky.almanac import TWILIGHTS
 from nocs.sky.bodies import Body, position
 from nocs.sky.ephemeris import illumination, pressure, refraction, sky
+from nocs.targets import bundled_catalog
 
 TOLOLO = Location(-(30 + 10 / 60), -(70 + 49 / 60), 0)
 TROMSO = Location(69 + 39 / 60, 18 + 58 / 60, 0)
@@ -408,8 +409,22 @@ def test_search_finds_only_what_is_up(client: TestClient) -> None:
         assert match.altitude > 0
         alt, _ = altitude(Place(DIAGUITAS, None), match.ra, match.dec, now)
         assert alt == pytest.approx(match.altitude, abs=1.0)  # refraction aside
-    # Everything the catalog matched that is up made it, below the limit.
+    # What the catalog matched that is down is left out.
+    up = {m.object.id for m in matches if m.object is not None}
+    for match in bundled_catalog().search("ngc 1", 200):
+        alt, _ = altitude(Place(DIAGUITAS, None), match.target.ra, match.target.dec, now)
+        if alt < -1:
+            assert match.target.id not in up
     assert len(matches) <= 50
+
+
+def test_search_finds_the_sun_by_either_name(client: TestClient) -> None:
+    sun = position(Body.SUN, DIAGUITAS, datetime.now(UTC))
+    for query in ("Sol", "sun"):
+        bodies = [m["body"] for m in client.get("/api/sky/search", params={"q": query}).json()]
+        assert ("sun" in bodies) == (sun.alt > 0)
+    # One letter is not enough: "m" lists Messier objects, not the Moon.
+    assert all(m["body"] is None for m in client.get("/api/sky/search", params={"q": "m"}).json())
 
 
 def test_search_finds_the_moon_when_it_is_up(client: TestClient) -> None:

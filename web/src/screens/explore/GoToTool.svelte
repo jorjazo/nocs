@@ -72,12 +72,15 @@
   let chosen = $state<SkyMatch | null>(null);
   let asked = 0;
 
-  // Asked a moment after typing stops; only the latest answer counts.
+  // Asked a moment after typing stops; only the latest answer counts. A new search
+  // drops the choice, so Go never goes to something no longer listed.
   $effect(() => {
     const text = query.trim();
+    chosen = null;
     if (!text) {
       matches = [];
       searched = "";
+      searchError = "";
       return;
     }
     const id = ++asked;
@@ -101,6 +104,12 @@
   function name(match: SkyMatch): string {
     return match.body ? t.finder.bodies[match.body] : (match.object?.label ?? match.matched);
   }
+  // What names the lights saved there: the catalog's label, or the body in English,
+  // whatever language the device that went there speaks.
+  const BODY_NAMES = { sun: "Sun", moon: "Moon" } as const;
+  function targetName(match: SkyMatch): string {
+    return match.body ? BODY_NAMES[match.body] : (match.object?.label ?? match.matched);
+  }
   function detail(match: SkyMatch): string {
     const parts = [t.live.altitude(formatDecimal(match.altitude, locale, 0))];
     if (match.object && match.matched !== match.object.label) parts.unshift(match.matched);
@@ -113,14 +122,14 @@
   type Go = "goto" | "center";
   let busy = $state<Go | null>(null);
   let error = $state("");
-  let belowHorizon = $state<Go | null>(null);
+  let belowHorizon = $state<{ kind: Go; stopGuiding: boolean } | null>(null);
   let guidingRefused = $state<Go | null>(null);
   let nearSun = $state<(() => void) | null>(null);
 
   async function go(kind: Go, force = false, stopGuiding = false, acknowledged = false): Promise<void> {
     const target = chosen;
     if (!target) return;
-    if (target.body === "sun" && kind === "center" && !mount.sun_acknowledged && !acknowledged) {
+    if (target.body === "sun" && !mount.sun_acknowledged && !acknowledged) {
       nearSun = () => void go(kind, force, stopGuiding, true);
       return;
     }
@@ -134,13 +143,17 @@
       } else if (kind === "center") {
         await centerOn({ ra: target.ra, dec: target.dec, force, stop_guiding: stopGuiding });
       } else {
-        await gotoMount({ frame: target.frame, ra: target.ra, dec: target.dec, force, stop_guiding: stopGuiding });
+        // The Sun and the Moon move: where they are now, not when they were found.
+        const now = target.body
+          ? ((await searchUp(target.body, 5)).find((m) => m.body === target.body) ?? target)
+          : target;
+        await gotoMount({ frame: now.frame, ra: now.ra, dec: now.dec, force, stop_guiding: stopGuiding });
       }
       // The frames saved here are named after it (ADR 0054).
-      await setTarget(name(target));
+      await setTarget(targetName(target));
     } catch (e) {
       const why = e instanceof ApiError ? goRefusal(e.status, e.message) : null;
-      if (why === "horizon") belowHorizon = kind;
+      if (why === "horizon") belowHorizon = { kind, stopGuiding };
       else if (why === "guiding") guidingRefused = kind;
       else if (why === "sun") nearSun = () => void go(kind, force, stopGuiding, true);
       else error = errorText(e, t);
@@ -210,11 +223,11 @@
   {/if}
 
   {#if belowHorizon}
-    {@const kind = belowHorizon}
+    {@const refused = belowHorizon}
     <Banner icon="alert" tone="warning">
       {t.mount.belowHorizon}
       {#snippet action()}
-        <ConfirmButton label={t.mount.goAnyway} confirmLabel={t.mount.goAnywayConfirm} onconfirm={() => void go(kind, true)} />
+        <ConfirmButton label={t.mount.goAnyway} confirmLabel={t.mount.goAnywayConfirm} onconfirm={() => void go(refused.kind, true, refused.stopGuiding)} />
       {/snippet}
     </Banner>
   {/if}

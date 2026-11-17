@@ -161,7 +161,6 @@ from nocs.storage.service import DriveBusyError, EjectUnavailableError
 from nocs.system.client import HelperUnavailableError
 from nocs.system.protocol import HelperError
 from nocs.targets import TargetCatalog, bundled_catalog, loaded_catalog
-from nocs.targets.catalog import separation as catalog_separation
 from nocs.targets.plan import PlanService
 
 log = logging.getLogger(__name__)
@@ -822,7 +821,9 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
             saved = await capture().save_shown(Role(role))
         except (NothingToSaveError, StorageError) as e:
             raise HTTPException(status.HTTP_409_CONFLICT, str(e)) from e
-        return FrameSaved.model_validate(saved)
+        # Solved before it was saved: its solution goes with it, for the framing chart.
+        await pointing().keep_saved(saved.id, saved.path, saved.taken)
+        return FrameSaved(id=saved.id, path=saved.relative, destination=saved.destination)
 
     @app.get("/api/previews/{name}")
     async def preview(name: str) -> FileResponse:  # pyright: ignore[reportUnusedFunction]
@@ -1272,13 +1273,10 @@ def _catalog_target(name: str) -> SkyTarget | None:
 
 
 def _nearest_object(ra: float, dec: float, radius: float) -> str | None:
-    """The catalog object nearest a J2000 point within ``radius`` degrees, by its label
+    """The label of the catalog object nearest a J2000 point within ``radius`` degrees
     (blocking: the first use loads the catalog)."""
-    catalog = loaded_catalog() or bundled_catalog()
-    near = catalog.near(ra, dec, radius)
-    if not near:
-        return None
-    return min(near, key=lambda t: catalog_separation(ra, dec, t.ra, t.dec)).label
+    found = (loaded_catalog() or bundled_catalog()).nearest(ra, dec, radius)
+    return found.label if found is not None else None
 
 
 def _pointing(mount: MountService | None) -> Coordinates | None:

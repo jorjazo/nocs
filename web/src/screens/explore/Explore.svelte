@@ -261,6 +261,7 @@
     if (!owner) return t.live.saveOwner;
     if (stacked?.preview) return stack?.saving ? t.live.saving : null;
     if (!camera?.solvable) return t.live.saveNothing;
+    if (camera.saved) return t.live.savedAlready;
     return null;
   });
 
@@ -300,7 +301,8 @@
 
 <svelte:window
   onkeydown={(event) => {
-    if (event.key === "Escape" && expanded && !editing) expanded = false;
+    // A sheet open over the screen takes its Escape first.
+    if (event.key === "Escape" && expanded && !document.querySelector("dialog[open]")) expanded = false;
   }} />
 
 <h1 class="visually-hidden">{t.live.title}</h1>
@@ -649,7 +651,8 @@
   }
   .overlay :global(button),
   .overlay :global(a),
-  .overlay :global([data-overlay]) {
+  .overlay :global([data-overlay]),
+  .overlay :global(dialog) {
     pointer-events: auto;
   }
   /* Over the whole image, in two columns that scroll when their tools are taller
@@ -850,7 +853,7 @@
     display: inline-flex;
     align-items: center;
     gap: var(--space-1);
-    min-height: 36px;
+    min-height: var(--touch);
     padding: 0 var(--space-3);
     border: 1px solid var(--line);
     border-radius: var(--radius-full);

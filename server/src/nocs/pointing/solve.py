@@ -220,6 +220,17 @@ class PointingService:
 
         return self._jobs.start("solve", [], job)
 
+    async def keep_saved(self, frame_id: int, path: FsPath, taken: datetime) -> None:
+        """A frame solved on screen and saved afterwards (Explore's "Save", ADR 0054): keep
+        its solution with it, when the last solve was of that frame (``taken``, mid-
+        exposure); never raises."""
+        last = self._last
+        if last is None or self._recorder is None:
+            return
+        if abs((last.taken - taken).total_seconds()) > 1.5:
+            return
+        await self._recorder.record(frame_id, path, last.result)
+
     async def solve_kept(self, context: JobContext, role: Role = Role.MAIN_CAMERA) -> FrameSolve:
         """Solve the frame behind ``role``'s preview; raises SolveError or PointingError."""
         kept = self._capture.kept(role)

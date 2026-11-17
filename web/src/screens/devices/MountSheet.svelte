@@ -1,7 +1,7 @@
 <script lang="ts">
   // The mount: where it points, the slew pad, go to (J2000 or the zenith) and go
   // and centre, tracking, park and home, the site and time it was given, and the limits it
-  // keeps. Opened from Rig and from Explore.
+  // keeps. Opened from Rig.
   import Banner from "../../components/Banner.svelte";
   import SequenceHold from "../../components/SequenceHold.svelte";
   import Button from "../../components/Button.svelte";

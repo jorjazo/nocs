@@ -48,10 +48,6 @@ export const FOCUS_STEPS: readonly number[] = [10, 50, 100, 500, 1000];
 // Explore's focuser speeds (ADR 0054): half, once or twice the step set.
 export const FOCUS_SPEEDS: readonly number[] = [0.5, 1, 2];
 
-export function speedStep(step: number, speed: number): number {
-  return Math.max(1, Math.round(step * speed));
-}
-
 // How far "Dither now" dithers, on the guiding screen.
 export const DITHER_PIXELS = 5;
 export const MAX_SERIES = 1000;

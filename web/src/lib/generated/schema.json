@@ -2083,6 +2083,11 @@
           ],
           "description": "Seconds left in the current exposure."
         },
+        "saved": {
+          "default": false,
+          "description": "The frame behind the preview is saved: Explore's Save has nothing to do.",
+          "type": "boolean"
+        },
         "sensor": {
           "$ref": "#/$defs/SensorInfo"
         },

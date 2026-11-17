@@ -56,3 +56,8 @@ export function stretched(value: number, stretch: { shadows: number; midtones: n
   const y = ((m - 1) * x) / ((2 * m - 1) * x - m);
   return Math.min(1, Math.max(0, y));
 }
+
+// Explore's focuser moves the step set on this device times a speed, a step at least.
+export function speedStep(step: number, speed: number): number {
+  return Math.max(1, Math.round(step * speed));
+}

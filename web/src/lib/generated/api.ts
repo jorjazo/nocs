@@ -796,6 +796,10 @@ export interface CameraState {
    * Seconds left in the current exposure.
    */
   remaining: number | null;
+  /**
+   * The frame behind the preview is saved: Explore's Save has nothing to do.
+   */
+  saved?: boolean;
   sensor: SensorInfo;
   /**
    * The preview's frame is kept to solve it (main camera).
