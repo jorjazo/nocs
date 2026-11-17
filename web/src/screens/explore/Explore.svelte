@@ -7,7 +7,7 @@
   // client; how the screen is laid out belongs to this device.
   import Banner from "../../components/Banner.svelte";
   import Button from "../../components/Button.svelte";
-  import Chip, { type Tone } from "../../components/Chip.svelte";
+  import type { Tone } from "../../components/Chip.svelte";
   import EmptyState from "../../components/EmptyState.svelte";
   import Icon from "../../components/Icon.svelte";
   import SegmentedControl from "../../components/SegmentedControl.svelte";
@@ -27,17 +27,18 @@
   } from "../../lib/camera.svelte";
   import SequenceHold from "../../components/SequenceHold.svelte";
   import { errorText } from "../../lib/errors";
-  import { formatDecimal, formatDuration, formatPlain, formatSeconds, formatTemperature } from "../../lib/format";
+  import { formatPlain, formatSeconds, formatTemperature } from "../../lib/format";
   import { i18n } from "../../lib/i18n";
   import { live } from "../../lib/live.svelte";
   import { formatDec, formatRa, mountActivity } from "../../lib/mount.svelte";
   import { href, router } from "../../lib/router.svelte";
   import FilterWheelSheet from "../devices/FilterWheelSheet.svelte";
-  import FocuserNudge from "../devices/FocuserNudge.svelte";
   import FocuserSheet from "../devices/FocuserSheet.svelte";
   import MountPad from "../devices/MountPad.svelte";
   import MountSheet from "../devices/MountSheet.svelte";
+  import FocusTool from "./FocusTool.svelte";
   import FrameStatus from "./FrameStatus.svelte";
+  import GuidingTool from "./GuidingTool.svelte";
   import HistogramBar from "./HistogramBar.svelte";
   import PillSwitch from "../../components/PillSwitch.svelte";
   import { exploreLayout } from "../../lib/explore.svelte";
@@ -266,13 +267,6 @@
     return series ? t.live.captureSeries(count ?? 1) : t.live.capture;
   });
   const ditherLabel = (every: number) => (every === 0 ? t.live.ditherOff : t.live.every(every));
-  const guidingText = $derived.by(() => {
-    if (!guiding?.phd2.connected) return t.guiding.open;
-    const total = guiding.stats?.rms_total;
-    if (guideActive && total != null) return t.guiding.chip(`${formatDecimal(total, locale, 2)}″`);
-    if (guiding.app_state && guiding.app_state !== "Stopped") return t.guiding.chipState(t.guiding.state[guiding.app_state]);
-    return t.guiding.open;
-  });
 </script>
 
 <svelte:window
@@ -308,8 +302,50 @@
             </div>
           {/snippet}
           <div class="overlay top">
-            <div class="tools"></div>
+            <div class="tools">
+              {#if overlays && (cameras.guide_camera || guiding?.phd2.connected)}
+                <GuidingTool
+                  {guiding}
+                  jobs={live.app.jobs}
+                  {owner}
+                  rig={!!cameras.guide_camera && !!mount}
+                  open={exploreLayout.open("guiding")}
+                  ontoggle={() => exploreLayout.toggle("guiding")}
+                  run={act} />
+              {/if}
+              {#if overlays && focuser}
+                <FocusTool
+                  {focuser}
+                  autofocus={live.app.autofocus ?? null}
+                  {owner}
+                  locked={focuserLocked}
+                  cameraBusy={!!jobs.running}
+                  open={exploreLayout.open("focus")}
+                  ontoggle={() => exploreLayout.toggle("focus")}
+                  onsheet={() => (device = "focuser")}
+                  run={act} />
+              {/if}
+            </div>
             <div class="buttons">
+              <div class="row">
+                {#if overlays}<span class="theme"><ThemeButton /></span>{/if}
+                <button
+                  type="button"
+                  class="icon-button"
+                  aria-label={overlays ? t.live.overlaysHide : t.live.overlaysShow}
+                  aria-pressed={!overlays}
+                  onclick={() => exploreLayout.toggleOverlays()}>
+                  <Icon name={overlays ? "eye" : "eyeOff"} />
+                </button>
+                <button
+                  type="button"
+                  class="icon-button"
+                  aria-label={expanded ? t.live.shrink : t.live.expand}
+                  aria-pressed={expanded}
+                  onclick={() => (expanded = !expanded)}>
+                  <Icon name={expanded ? "shrink" : "expand"} />
+                </button>
+              </div>
               {#if overlays && available.length > 1}
                 <PillSwitch
                   label={t.live.camera}
@@ -317,23 +353,6 @@
                   value={role}
                   onchange={(value) => capture.setRole(value)} />
               {/if}
-              {#if overlays}<span class="theme"><ThemeButton /></span>{/if}
-              <button
-                type="button"
-                class="icon-button"
-                aria-label={overlays ? t.live.overlaysHide : t.live.overlaysShow}
-                aria-pressed={!overlays}
-                onclick={() => exploreLayout.toggleOverlays()}>
-                <Icon name={overlays ? "eye" : "eyeOff"} />
-              </button>
-              <button
-                type="button"
-                class="icon-button"
-                aria-label={expanded ? t.live.shrink : t.live.expand}
-                aria-pressed={expanded}
-                onclick={() => (expanded = !expanded)}>
-                <Icon name={expanded ? "shrink" : "expand"} />
-              </button>
             </div>
           </div>
         </Viewer>
@@ -388,27 +407,6 @@
           </div>
         {/if}
 
-        {#if focuser}
-          <div class="focuser">
-            <button type="button" class="readout-button" onclick={() => (device = "focuser")}>
-              <span class="label muted">{t.focuser.title}</span>
-              <span class="value mono">{formatPlain(focuser.position, locale)}</span>
-              <span class="caption muted mono">
-                {focuser.target !== null
-                  ? t.focuser.moving(formatPlain(focuser.target, locale))
-                  : focuser.temperature !== null
-                    ? formatTemperature(focuser.temperature, locale)
-                    : ""}
-              </span>
-            </button>
-            <FocuserNudge {focuser} disabled={!owner || focuserLocked} run={act} />
-          </div>
-          <a class="autofocus" href={href({ screen: "focus" })}>
-            <Icon name="focus" size={20} />
-            {focuserJob?.info.kind === "autofocus" ? t.live.autofocusRunning : t.autofocus.open}
-          </a>
-        {/if}
-
         {#if mount}
           <div class="focuser">
             <button type="button" class="readout-button" onclick={() => (device = "mount")}>
@@ -425,13 +423,6 @@
           <a class="autofocus" href={href({ screen: "polar" })}>
             <Icon name="mount" size={20} />
             {mountJob?.info.kind === "polar_align" ? t.live.polarRunning : t.polar.open}
-          </a>
-        {/if}
-
-        {#if cameras.guide_camera || guiding?.phd2.connected}
-          <a class="autofocus" href={href({ screen: "guiding" })}>
-            <Icon name="guide" size={20} />
-            {guidingText}
           </a>
         {/if}
 
@@ -651,10 +642,12 @@
     min-height: 0;
     flex: 1 1 auto;
   }
+  /* The tools over the image size themselves to it (cqw). */
   .image {
     position: relative;
     flex: 1 1 auto;
     min-height: 0;
+    container-type: size;
   }
   .expanded .stage {
     position: fixed;
@@ -689,9 +682,13 @@
   }
   .buttons {
     display: flex;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-    align-items: center;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: var(--space-2);
+    min-width: 0;
+  }
+  .row {
+    display: flex;
     gap: var(--space-2);
   }
   .icon-button {

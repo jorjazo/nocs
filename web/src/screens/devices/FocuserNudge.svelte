@@ -1,7 +1,7 @@
 <script lang="ts">
-  // In and out by the chosen step, or Stop while the focuser moves: what
-  // focusing by hand needs while a loop runs, in Explore and in the
-  // focuser's sheet.
+  // In and out by the chosen step (or `step`, Explore's at its speed), or Stop
+  // while the focuser moves: what focusing by hand needs while a loop runs, in
+  // Explore and in the focuser's sheet.
   import Icon from "../../components/Icon.svelte";
   import { abortFocuser, moveFocuser } from "../../lib/api";
   import { capture } from "../../lib/camera.svelte";
@@ -11,17 +11,21 @@
 
   let {
     focuser,
+    step: given = null,
     disabled = false,
     run,
   }: {
     focuser: FocuserState;
+    // Steps per tap; the one chosen on this device unless said.
+    step?: number | null;
     disabled?: boolean;
     // Runs an action and reports its failure where the screen shows errors.
     run: (action: () => Promise<unknown>) => Promise<void>;
   } = $props();
 
   const t = $derived(i18n.t);
-  const step = $derived(formatPlain(capture.focusStep, i18n.locale));
+  const steps = $derived(given ?? capture.focusStep);
+  const step = $derived(formatPlain(steps, i18n.locale));
   const max = $derived(focuser.max_position);
 </script>
 
@@ -39,16 +43,16 @@
       type="button"
       class="button"
       aria-label={t.focuser.inward(step)}
-      disabled={disabled || focuser.position - capture.focusStep < 0}
-      onclick={() => void run(() => moveFocuser({ steps: -capture.focusStep }))}>
+      disabled={disabled || focuser.position - steps < 0}
+      onclick={() => void run(() => moveFocuser({ steps: -steps }))}>
       <Icon name="minus" size={20} /><span class="mono">{step}</span>
     </button>
     <button
       type="button"
       class="button"
       aria-label={t.focuser.outward(step)}
-      disabled={disabled || (max !== null && focuser.position + capture.focusStep > max)}
-      onclick={() => void run(() => moveFocuser({ steps: capture.focusStep }))}>
+      disabled={disabled || (max !== null && focuser.position + steps > max)}
+      onclick={() => void run(() => moveFocuser({ steps }))}>
       <Icon name="plus" size={20} /><span class="mono">{step}</span>
     </button>
   {/if}
