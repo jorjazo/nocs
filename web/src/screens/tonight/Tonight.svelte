@@ -262,7 +262,7 @@
         </div>
         <div>
           <span class="label muted">{t.tonight.moon}</span>
-          <span class="readout">{moonPhase ? t.tonight.phases[moonPhase] : "—"}</span>
+          <span class="readout word">{moonPhase ? t.tonight.phases[moonPhase] : "—"}</span>
           <span class="muted">
             {t.tonight.lit(formatDecimal(almanac.moon.fraction * 100, locale, 0))}
             {#if almanac.moon.rise}· {t.tonight.rises(formatTime(almanac.moon.rise, locale))}{/if}
@@ -370,6 +370,11 @@
     font-size: 20px;
     line-height: 26px;
   }
+  /* A word, not a number: in sans, like a tile's words. */
+  .readout.word {
+    font-family: var(--font-sans);
+    font-weight: 600;
+  }
   .left {
     font-weight: 500;
   }
@@ -397,7 +402,6 @@
     place-items: center;
     width: 24px;
     height: 24px;
-    border-radius: var(--radius-full);
     border: 2px solid var(--muted);
     font-size: 13px;
     line-height: 1;

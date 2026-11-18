@@ -71,7 +71,6 @@
     width: min(280px, 100%);
     padding: var(--space-2) var(--space-3) var(--space-3);
     border: 1px solid var(--line);
-    border-radius: var(--radius-card);
     background: color-mix(in srgb, var(--bg) 88%, transparent);
   }
   .card.wide {
@@ -104,7 +103,6 @@
     height: var(--touch);
     margin-left: auto;
     border: 0;
-    border-radius: var(--radius-button);
     background: transparent;
     color: var(--muted);
     cursor: pointer;
@@ -118,7 +116,6 @@
     place-items: center;
     width: 44px;
     height: 44px;
-    border-radius: var(--radius-button);
     border: 1px solid var(--line);
     background: color-mix(in srgb, var(--bg) 72%, transparent);
     color: var(--text);

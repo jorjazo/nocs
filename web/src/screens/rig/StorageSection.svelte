@@ -88,7 +88,6 @@
   }
   .meter {
     height: 8px;
-    border-radius: var(--radius-full);
     background: var(--raised);
     overflow: hidden;
   }
@@ -96,6 +95,5 @@
     display: block;
     height: 100%;
     background: var(--accent);
-    border-radius: inherit;
   }
 </style>

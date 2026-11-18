@@ -590,7 +590,6 @@
     place-items: center;
     width: 48px;
     height: 48px;
-    border-radius: var(--radius-tile);
     background: var(--raised);
   }
   .role-name {
@@ -626,7 +625,6 @@
     min-height: var(--primary-height);
     max-width: 100%;
     padding: 0 var(--space-4);
-    border-radius: var(--radius-button);
     border: 1px solid var(--line);
     background: var(--surface);
     font-size: 17px;

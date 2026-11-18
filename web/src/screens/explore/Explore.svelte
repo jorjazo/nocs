@@ -624,7 +624,6 @@
     min-height: var(--primary-height);
     padding: 0 var(--space-2);
     overflow: hidden;
-    border-radius: var(--radius-button);
     border: 1px solid var(--line);
     background: var(--surface);
     color: var(--text);
@@ -657,7 +656,6 @@
     min-height: var(--touch);
     padding: 0 var(--space-3);
     border: 1px solid var(--line);
-    border-radius: var(--radius-full);
     background: transparent;
     color: var(--accent);
     font-size: 15px;

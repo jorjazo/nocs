@@ -158,7 +158,6 @@
     gap: var(--space-2);
     padding-left: var(--space-3);
     border: 1px solid var(--line);
-    border-radius: var(--radius-tile);
     background: var(--bg);
   }
   li.active {
@@ -206,7 +205,6 @@
     min-height: var(--touch);
     padding: 0 var(--space-3);
     border: 1px solid var(--line);
-    border-radius: var(--radius-full);
     background: var(--raised);
     font-size: 15px;
     font-weight: 600;

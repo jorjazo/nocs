@@ -133,7 +133,6 @@
     display: flex;
     flex-direction: column;
     padding: var(--space-2) var(--space-3);
-    border-radius: var(--radius-tile);
     background: var(--raised);
   }
   .group {

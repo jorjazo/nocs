@@ -84,7 +84,6 @@
     display: flex;
     align-items: center;
     min-height: var(--primary-height);
-    border-radius: var(--radius-button);
     border: 1px solid var(--line);
     background: var(--surface);
   }

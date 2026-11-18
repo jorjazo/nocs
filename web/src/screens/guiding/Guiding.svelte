@@ -365,7 +365,6 @@
     width: var(--touch);
     height: var(--touch);
     border: 1px solid var(--line);
-    border-radius: var(--radius-full);
     background: var(--raised);
     color: var(--text);
     cursor: pointer;
@@ -412,7 +411,6 @@
     flex-direction: column;
     min-width: 0;
     padding: var(--space-2) var(--space-3);
-    border-radius: var(--radius-tile);
     background: var(--raised);
   }
   .readout {

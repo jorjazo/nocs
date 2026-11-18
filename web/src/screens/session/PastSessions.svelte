@@ -57,7 +57,6 @@
     margin: 0;
     padding: 0;
     border: 1px solid var(--line);
-    border-radius: var(--radius-card);
     background: var(--surface);
   }
   li + li {

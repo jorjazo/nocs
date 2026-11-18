@@ -272,7 +272,6 @@
     min-height: var(--touch);
     padding: 0 var(--space-3);
     border: 1px solid var(--line);
-    border-radius: var(--radius-button);
     background: var(--surface);
     color: var(--text);
     font: inherit;
@@ -295,7 +294,6 @@
     min-height: var(--touch);
     padding: var(--space-1) var(--space-2);
     border: 1px solid transparent;
-    border-radius: var(--radius-tile);
     background: transparent;
     color: var(--text);
     text-align: left;

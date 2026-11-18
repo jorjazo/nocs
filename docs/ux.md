@@ -54,25 +54,26 @@ Navigation follows the night, not the device tree.
 
 ## 3. Themes
 
-Two themes, switchable from any screen. **Night** is not a filter over Dusk:
+Two themes, switchable from any screen. **Dusk** is warm black with a brass
+accent; color beyond the accent marks a state. **Night** is not a filter over Dusk:
 it is a separate red-only palette that keeps every element legible while
 preserving dark adaptation.
 
 | Token | Dusk (default) | Night |
 |---|---|---|
-| `bg` | `#0A0D13` | `#000000` |
-| `surface` | `#121722` | `#0E0303` |
-| `raised` | `#1A2130` | `#170505` |
-| `line` | `#263044` | `#3A0B0B` |
-| `text` | `#E7EAF0` | `#FF6A5C` |
-| `muted` | `#98A2B6` | `#E0473B` |
-| `accent` | `#7DB7FF` | `#FF6A5C` |
-| `on-accent` | `#06101C` | `#000000` |
-| `ok` | `#4FD1A5` | `#E0473B` |
-| `warning` | `#F5B04C` | `#FF8A7A` |
-| `error` | `#FF6B5E` | `#FFB0A6` |
-| `guide-ra` | `#7DB7FF` | `#FF6A5C` |
-| `guide-dec` | `#F5A04C` | `#B8382E` (dotted) |
+| `bg` | `#0D0B08` | `#000000` |
+| `surface` | `#16130E` | `#0E0303` |
+| `raised` | `#201B14` | `#170505` |
+| `line` | `#352D21` | `#3A0B0B` |
+| `text` | `#EFE6D6` | `#FF6A5C` |
+| `muted` | `#A8997F` | `#E0473B` |
+| `accent` | `#D9AD62` | `#FF6A5C` |
+| `on-accent` | `#140F07` | `#000000` |
+| `ok` | `#9CC98A` | `#E0473B` |
+| `warning` | `#F3D35C` | `#FF8A7A` |
+| `error` | `#F07A5C` | `#FFB0A6` |
+| `guide-ra` | `#D9AD62` | `#FF6A5C` |
+| `guide-dec` | `#8FB8D8` | `#B8382E` (dotted) |
 | `channel-red` | `#FF7B72` | `#FF6A5C` |
 | `channel-green` | `#56D364` | `#E0473B` (dashed) |
 | `channel-blue` | `#79B8FF` | `#B8382E` (dotted) |
@@ -88,8 +89,8 @@ Rules:
 
 ## 4. Typography
 
-- **IBM Plex Sans** for interface text; **IBM Plex Mono** for every live number
-  so digits do not shift as they update.
+- **Overpass** for interface text; **Overpass Mono** for every live number
+  so digits do not shift as they update. Both are bundled (no internet in the field).
 
 | Style | Size / line | Weight |
 |---|---|---|
@@ -105,7 +106,8 @@ Rules:
 ## 5. Space, shape and touch
 
 - 4 px grid: 4, 8, 12, 16, 24, 32, 48. Phone screen margins 20 px.
-- Radii: tiles 10, buttons 12, cards 16, chips and toggles fully rounded.
+- Square corners everywhere: tiles, buttons, cards, chips, toggles. Only dots,
+  spinners and the shutter stay round.
 - Primary actions 48–52 px tall; no touch target under 44 × 44 px.
 - No hover-only affordances. One primary (accent) button per screen.
 
@@ -143,8 +145,10 @@ Icons: 24 px, 1.8 px stroke, round caps and joins, drawn in-house.
   screen's own controls (status chip, profile picker) on the next. Spanish titles
   and chips do not fit side by side at 375 px. Wide screens use one line and the
   navigation rail carries the theme button.
-- Status chips tint their background with the status color (14 % in Dusk, 6 % in
-  Night, where `ok` equals `muted` and a stronger tint drops below 4.5:1).
+- Status chips are a stripe of the status color at their left and the word in the
+  text's color (muted when neutral). Banners and selected options tint their
+  background with a color (14 % in Dusk, 6 % in Night, where `ok` equals `muted`
+  and a stronger tint drops below 4.5:1).
 - Destructive actions (unpair, revoke) ask for a second tap instead of a browser
   dialog, which would flash white in Night mode.
 - Spanish tab names: Esta noche · En vivo · Plan · Sesión · Equipo.
@@ -204,7 +208,7 @@ it was, and still hold where Explore kept the same piece (viewer, shutter, sheet
 - The browser keeps which panes are open per orientation (`nocs.explore.panes`), and
   whether the overlays show and the histogram's scale per device. Lying down the
   tools start open; upright folded, one open at a time and as wide as the image.
-- Tools over the image are cards with rounded corners (`ToolCard`) that fold into
+- Tools over the image are cards (`ToolCard`) that fold into
   their icon, with a dot in the tool's tone; they size to the image (container
   units). Guiding, at the top left: PHD2's state, RA, Dec and total RMS of its last
   100 steps (arcseconds, or guide pixels without the scale), Guide or Stop, and the

@@ -97,7 +97,6 @@
     gap: 2px;
     min-height: var(--tabbar-height);
     padding: var(--space-2) 2px;
-    border-radius: var(--radius-button);
     color: var(--muted);
     text-decoration: none;
   }
@@ -148,7 +147,6 @@
       padding: 2px 14px;
       width: 52px;
       height: 28px;
-      border-radius: var(--radius-full);
       background: var(--raised);
     }
   }

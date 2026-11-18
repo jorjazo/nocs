@@ -69,7 +69,6 @@
   .bar {
     position: relative;
     height: 28px;
-    border-radius: var(--radius-tile);
     border: 1px solid var(--line);
     background: var(--bg);
     overflow: hidden;
@@ -111,7 +110,6 @@
     position: absolute;
     top: 0;
     bottom: 0;
-    border-radius: var(--radius-full);
     background: var(--muted);
   }
   .marks {

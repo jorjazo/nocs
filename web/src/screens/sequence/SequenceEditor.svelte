@@ -378,7 +378,6 @@
     padding: 0 var(--space-2);
     display: grid;
     place-items: center;
-    border-radius: 8px;
     background: var(--raised);
     font-size: 13px;
     font-weight: 600;
@@ -394,7 +393,6 @@
     display: grid;
     place-items: center;
     border: 1px solid var(--line);
-    border-radius: var(--radius-tile);
     background: var(--surface);
     color: var(--text);
     cursor: pointer;

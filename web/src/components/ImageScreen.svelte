@@ -130,7 +130,6 @@
     max-height: calc(var(--available) * 0.62);
     overflow-y: auto;
     border-top: 1px solid var(--line);
-    border-radius: var(--radius-card) var(--radius-card) 0 0;
     background: var(--bg);
     box-shadow: 0 -8px 24px rgb(0 0 0 / 40%);
   }

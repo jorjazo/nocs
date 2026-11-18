@@ -247,7 +247,6 @@
     width: var(--touch);
     height: var(--touch);
     border: 1px solid var(--line);
-    border-radius: var(--radius-button);
     background: var(--raised);
     color: var(--text);
     cursor: pointer;
@@ -270,7 +269,6 @@
     justify-content: center;
     gap: 0;
     border: 1px solid var(--line);
-    border-radius: var(--radius-button);
     background: var(--raised);
     color: var(--text);
     cursor: pointer;
@@ -311,7 +309,6 @@
     display: grid;
     place-items: center;
     border: 1px dashed var(--line);
-    border-radius: 50%;
     color: var(--muted);
     font-size: 13px;
   }

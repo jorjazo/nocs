@@ -127,7 +127,6 @@
     margin: 0;
     padding: var(--space-2) var(--space-2) 0;
     border: 1px solid var(--line);
-    border-radius: var(--radius-card);
     background: var(--surface);
   }
   svg {

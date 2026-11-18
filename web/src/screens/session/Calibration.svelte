@@ -297,7 +297,6 @@
     padding: 0;
     list-style: none;
     border: 1px solid var(--line);
-    border-radius: var(--radius-tile);
   }
   .groups li {
     display: flex;

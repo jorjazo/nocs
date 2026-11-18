@@ -41,7 +41,6 @@
     gap: 2px;
     padding: var(--space-3);
     border: 1px solid var(--line);
-    border-radius: var(--radius-card);
     background: var(--surface);
     color: var(--text);
     font: inherit;

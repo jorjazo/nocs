@@ -130,7 +130,6 @@
   .dev :global(select) {
     min-height: 44px;
     padding: 0 12px;
-    border-radius: 10px;
     border: 1px solid var(--line);
     background: var(--raised);
   }
@@ -140,7 +139,6 @@
   .device {
     background: var(--surface);
     border: 1px solid var(--line);
-    border-radius: 16px;
     padding: 4px 16px;
   }
   .box {
@@ -178,7 +176,6 @@
     display: block;
     max-width: 100%;
     margin-top: 8px;
-    border-radius: 10px;
   }
   .error {
     color: var(--error);

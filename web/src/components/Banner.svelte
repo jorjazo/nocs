@@ -25,7 +25,6 @@
     gap: var(--space-3);
     min-height: var(--touch);
     padding: var(--space-1) var(--space-4);
-    border-radius: var(--radius-button);
     border: 1px solid color-mix(in srgb, var(--tone) 40%, transparent);
     background: color-mix(in srgb, var(--tone) var(--tint), var(--surface));
     color: var(--tone);

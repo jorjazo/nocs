@@ -419,7 +419,6 @@
   }
   .steps li {
     height: 4px;
-    border-radius: var(--radius-full);
     background: var(--line);
   }
   .steps .done {
@@ -465,7 +464,6 @@
     min-height: var(--primary-height);
     width: 100%;
     padding: 0 var(--space-4);
-    border-radius: var(--radius-button);
     border: 1px solid var(--line);
     background: var(--surface);
     font-size: 17px;

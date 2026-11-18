@@ -153,7 +153,6 @@
   .badge {
     min-width: 44px;
     padding: 0 var(--space-2);
-    border-radius: 8px;
     background: var(--raised);
     font-size: 13px;
     font-weight: 600;
@@ -165,7 +164,6 @@
   }
   .bar {
     height: 4px;
-    border-radius: 2px;
     background: var(--line);
     overflow: hidden;
   }

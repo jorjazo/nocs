@@ -67,7 +67,6 @@
     place-items: center;
     width: 48px;
     height: 48px;
-    border-radius: var(--radius-tile);
     background: var(--raised);
     color: var(--text);
   }

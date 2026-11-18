@@ -34,7 +34,6 @@
     display: inline-flex;
     gap: 2px;
     padding: 2px;
-    border-radius: var(--radius-full);
     background: color-mix(in srgb, var(--surface) 88%, transparent);
     border: 1px solid var(--line);
   }
@@ -42,7 +41,6 @@
     min-height: var(--touch);
     padding: 0 12px;
     border: 0;
-    border-radius: var(--radius-full);
     background: transparent;
     color: var(--muted);
     font-size: 13px;

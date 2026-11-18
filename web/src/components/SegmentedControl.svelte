@@ -51,7 +51,6 @@
     display: flex;
     gap: var(--space-1);
     padding: var(--space-1);
-    border-radius: var(--radius-button);
     background: var(--raised);
     overflow-x: auto;
     scrollbar-width: none;
@@ -62,7 +61,6 @@
     min-height: var(--touch);
     padding: 0 var(--space-3);
     border: 0;
-    border-radius: var(--radius-tile);
     background: transparent;
     color: var(--muted);
     font-size: 15px;
