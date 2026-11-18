@@ -65,7 +65,7 @@
   // What was pasted, read as it changes; a short link waits for the box to expand it,
   // and only the latest one counts.
   let pasted = $state("");
-  type PasteNote = { kind: "hint" | "busy" | "read"; text: string } | { kind: "error"; text: string };
+  type PasteNote = { kind: "busy" | "read" | "error"; text: string };
   let pasteNote = $state<PasteNote | null>(null);
   let pasteToken = 0;
 
