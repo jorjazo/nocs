@@ -257,7 +257,8 @@ def _search_up(query: str, limit: int, site: Location, now: datetime) -> list[Sk
         # Two letters at least: "m" is for Messier, not the Moon.
         if len(words) >= 2 and any(name.startswith(words) for name in names):
             seen = position(body, site, now)
-            if seen.alt > 0:
+            # Judged on the altitude as reported: 0.004° rounds to 0.0, not up.
+            if (altitude := round(seen.alt, 2)) > 0:
                 found.append(
                     SkyMatch(
                         object=None,
@@ -266,7 +267,7 @@ def _search_up(query: str, limit: int, site: Location, now: datetime) -> list[Sk
                         frame="jnow",
                         ra=seen.jnow.ra,
                         dec=seen.jnow.dec,
-                        altitude=round(seen.alt, 2),
+                        altitude=altitude,
                         azimuth=round(seen.az, 2),
                     )
                 )
@@ -279,7 +280,7 @@ def _search_up(query: str, limit: int, site: Location, now: datetime) -> list[Sk
         for match, alt, az in zip(matches, seen.alt[:, 0], seen.az[:, 0], strict=True):
             if len(found) >= limit:
                 break
-            if alt > 0:
+            if (altitude := round(float(alt), 2)) > 0:
                 found.append(
                     SkyMatch(
                         object=catalog_object(match.target),
@@ -288,7 +289,7 @@ def _search_up(query: str, limit: int, site: Location, now: datetime) -> list[Sk
                         frame="j2000",
                         ra=match.target.ra,
                         dec=match.target.dec,
-                        altitude=round(float(alt), 2),
+                        altitude=altitude,
                         azimuth=round(float(az), 2),
                     )
                 )
