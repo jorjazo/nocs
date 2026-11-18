@@ -1,4 +1,4 @@
-"""Sequences: their definitions, and starting, pausing and stopping one (ADR 0031)."""
+"""Sequences: their definitions, and starting, pausing and stopping one."""
 
 from __future__ import annotations
 
@@ -68,7 +68,6 @@ def sequences_router(sequences: Callable[[], SequenceService]) -> APIRouter:
             integration=found.integration,
             duration=found.duration,
             bytes=found.bytes,
-            window=found.window,
             starts=_iso(found.starts),
             ends=_iso(found.ends),
         )
@@ -97,6 +96,7 @@ def sequences_router(sequences: Callable[[], SequenceService]) -> APIRouter:
 
     @router.post("/sequence/resume", status_code=status.HTTP_204_NO_CONTENT)
     async def resume() -> Response:  # pyright: ignore[reportUnusedFunction]
+        """Go on after a pause, or after a prompt: the rig is ready for the next frames."""
         with _errors():
             sequences().resume()
         return Response(status_code=status.HTTP_204_NO_CONTENT)

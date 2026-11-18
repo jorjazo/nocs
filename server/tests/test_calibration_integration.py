@@ -40,6 +40,16 @@ def finished(job_id: str) -> Callable[[dict[str, Any]], bool]:
     return lambda s: s["jobs"][job_id]["state"] != "running"
 
 
+def asked(kind: str) -> Callable[[dict[str, Any]], bool]:
+    """The sequence waits on a prompt for ``kind`` frames."""
+
+    def condition(s: dict[str, Any]) -> bool:
+        run: dict[str, Any] | None = (s.get("sequence") or {}).get("run")
+        return run is not None and run["prompt"] == kind and run["state"] == "paused"
+
+    return condition
+
+
 def sequence_finished(s: dict[str, Any]) -> bool:
     run: dict[str, Any] | None = (s.get("sequence") or {}).get("run")
     return run is not None and run["state"] == "finished"
@@ -125,6 +135,9 @@ def test_darks_and_bias_for_a_night(api: TestClient) -> None:
 
     response = api.post("/api/sequences/calibration/start")
     assert response.status_code == 202, response.text
+    # It asks first for the camera to be covered.
+    wait(api, asked("dark"), timeout=60)
+    assert api.post("/api/sequence/resume").status_code == 204
     wait(api, sequence_finished, timeout=300)
     run = state(api)["sequence"]["run"]
     assert run["outcome"] == "completed", run
@@ -137,7 +150,11 @@ def test_darks_and_bias_for_a_night(api: TestClient) -> None:
     assert group["bias"]["frames"] == 3
     assert [n["kind"] for n in report["needs"]] == ["flat"]
     types = {g["frame_type"] for g in api.get("/api/nights").json()[0]["groups"]}
-    assert types == {"light", "dark", "bias"}
+    # Each group's master too.
+    assert types == {"light", "dark", "bias", "master_dark", "master_bias"}
+    master = state(api)["sequence"]["master"]
+    assert master["kind"] == "dark"
+    assert master["frames"] == 2
 
 
 @pytest.mark.slow

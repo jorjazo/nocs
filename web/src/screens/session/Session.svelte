@@ -1,7 +1,9 @@
 <script lang="ts">
-  // The Session tab: the sequence's monitor (stage 5.14) above the night's saved
-  // frames and their downloads, which only the owner's devices may list (ADR 0014).
+  // The Session tab: the night's saved frames and their downloads, which only the
+  // owner's devices may list, and the past sessions. A running sequence is followed
+  // in Sequences.
   // On a PC the page is wide (docs/ux.md §5): the past sessions sit beside the frames.
+  import Banner from "../../components/Banner.svelte";
   import Button from "../../components/Button.svelte";
   import EmptyState from "../../components/EmptyState.svelte";
   import RigStatus from "../../components/RigStatus.svelte";
@@ -10,31 +12,28 @@
   import { i18n } from "../../lib/i18n";
   import { live } from "../../lib/live.svelte";
   import { router } from "../../lib/router.svelte";
-  import Monitor from "./Monitor.svelte";
+  import { isActive } from "../../lib/sequence";
   import NightFrames from "./NightFrames.svelte";
   import PastSessions from "./PastSessions.svelte";
 
   const t = $derived(i18n.t);
   const run = $derived(live.app.sequence?.run ?? null);
+  const active = $derived(isActive(run));
 </script>
 
 <ScreenHeader title={t.tabs.session}>
   {#snippet trailing()}<RigStatus />{/snippet}
 </ScreenHeader>
 
-{#if run}
-  <Monitor {run} />
-  {#if run.state === "finished" && auth.owner}
-    <div class="again">
-      <Button variant="text" onclick={() => router.go({ screen: "sequence" })}>{t.session.newSequence}</Button>
-    </div>
-  {/if}
-{:else if auth.owner}
-  <EmptyState icon="session" title={t.session.noSession} body={t.session.noSessionBody}>
-    {#snippet action()}
-      <Button onclick={() => router.go({ screen: "sequence" })}>{t.session.openBuilder}</Button>
-    {/snippet}
-  </EmptyState>
+{#if active}
+  <div class="again">
+    <Banner icon="sequence">
+      {t.session.running}
+      {#snippet action()}
+        <Button variant="text" onclick={() => router.go({ screen: "sequence" })}>{t.session.openSequences}</Button>
+      {/snippet}
+    </Banner>
+  </div>
 {/if}
 
 {#if auth.owner}
@@ -42,7 +41,7 @@
     <div class="past"><PastSessions /></div>
     <div class="frames"><NightFrames /></div>
   </div>
-{:else if !run}
+{:else}
   <EmptyState icon="session" title={t.nights.ownerOnly} body={t.nights.ownerOnlyBody} />
 {/if}
 

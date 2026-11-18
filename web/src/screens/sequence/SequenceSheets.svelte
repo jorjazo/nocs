@@ -3,8 +3,9 @@
 </script>
 
 <script lang="ts">
-  // The builder's behaviours, one sheet each: when to focus, the night's window,
-  // cooling, and what happens when the session ends. Edits apply as they are made.
+  // What a sequence does around its groups, one sheet each: when to focus, centring,
+  // dithering, the night's window, cooling, and what happens when it ends. Edits apply
+  // as they are made (and are saved a moment later).
   import { untrack } from "svelte";
   import Button from "../../components/Button.svelte";
   import NumberField from "../../components/NumberField.svelte";
@@ -45,7 +46,7 @@
   let hfr: number | null = $state(initial.focus?.hfr_increase != null ? initial.focus.hfr_increase * 100 : null);
   let minutes: number | null = $state(initial.focus?.minutes ?? null);
   let altitude: number | null = $state(initial.min_altitude ?? null);
-  let cooling: number | null = $state(initial.cooling ?? -10);
+  let cooling: number | null = $state(initial.temperature ?? -10);
   let ramp: number | null = $state(initial.cooling_ramp ?? null);
   let every: number | null = $state(initial.dither_every ?? 3);
   let checkEvery: number | null = $state(initial.recenter_every ?? 10);
@@ -76,8 +77,12 @@
   $effect(() => {
     if (kind !== "cooling") return;
     template.cooling_ramp = ramp;
-    if (template.cooling != null && cooling !== null) template.cooling = cooling;
+    if (template.cooling === "global" && cooling !== null) template.temperature = cooling;
   });
+  function setCooling(mode: "off" | "global" | "group"): void {
+    template.cooling = mode;
+    if (mode === "global") template.temperature = cooling ?? -10;
+  }
 
   const end = $derived(template.end ?? { park: true, warm: true, outputs: [] });
   function setEnd(change: Partial<NonNullable<Template["end"]>>): void {
@@ -134,6 +139,7 @@
         <NumberField label={s.ditherSheet.pixels} bind:value={pixels} min={0.5} max={50} unit="px" hint={s.ditherSheet.pixelsHint} />
       {/if}
     {:else if kind === "night"}
+      <p class="muted">{s.nightSheet.lightsOnly}</p>
       <Toggle
         label={s.nightSheet.startAtDusk}
         hint={s.nightSheet.startAtDuskHint}
@@ -159,13 +165,25 @@
       <NumberField label={s.nightSheet.minAltitude} bind:value={altitude} min={0} max={90} unit="°" hint={s.nightSheet.minAltitudeHint} />
     {:else if kind === "cooling"}
       {#if !canCool}<p class="muted">{s.coolingSheet.cannot}</p>{/if}
-      <Toggle
-        label={s.coolingSheet.on}
-        checked={template.cooling != null}
-        disabled={!canCool && template.cooling == null}
-        onchange={(on) => (template.cooling = on ? (cooling ?? -10) : null)} />
-      {#if template.cooling != null}
+      <div class="group">
+        <span class="label muted">{s.coolingSheet.mode}</span>
+        <SegmentedControl
+          label={s.coolingSheet.mode}
+          options={[
+            { value: "off" as const, label: s.coolingSheet.off },
+            { value: "global" as const, label: s.coolingSheet.global },
+            { value: "group" as const, label: s.coolingSheet.group },
+          ]}
+          value={template.cooling ?? "off"}
+          disabled={!canCool && (template.cooling ?? "off") === "off"}
+          onchange={setCooling} />
+      </div>
+      {#if template.cooling === "global"}
         <NumberField label={s.coolingSheet.temperature} bind:value={cooling} min={-60} max={40} unit="°C" />
+      {:else if template.cooling === "group"}
+        <p class="muted">{s.coolingSheet.groupHint}</p>
+      {/if}
+      {#if (template.cooling ?? "off") !== "off"}
         <NumberField label={s.coolingSheet.ramp} bind:value={ramp} min={0} max={60} unit="°C/min" hint={s.coolingSheet.rampHint} />
       {/if}
     {:else}

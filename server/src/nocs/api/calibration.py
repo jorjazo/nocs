@@ -1,4 +1,4 @@
-"""Calibration frames: the library for a night or a planned sequence (ADR 0036)."""
+"""Calibration frames: the library for a night or a planned sequence."""
 
 from __future__ import annotations
 
@@ -29,6 +29,7 @@ from nocs.calibration.library import DarkGroup, Match, Need, Report, Setup, Want
 from nocs.calibration.service import CalibrationError, CalibrationService
 from nocs.imaging import CameraNotReadyError
 from nocs.jobs import ResourceBusyError
+from nocs.sequence.model import Group
 from nocs.storage import StorageError
 
 type Count = Annotated[int, Query(ge=0, le=500)]
@@ -89,6 +90,20 @@ def calibration_router(
             assert sequence is not None
             found = await anyio.to_thread.run_sync(service.for_sequence, sequence, wanted)
             return wire(found, None)
+
+    @router.get("/calibration/missing")
+    async def missing(  # pyright: ignore[reportUnusedFunction]
+        sequence: str,
+        darks: Count = 20,
+        bias: Count = 50,
+        flats: Count = 20,
+    ) -> list[Group]:
+        """Groups for the flats, bias and darks a saved sequence's lights still lack."""
+        service = calibration()
+        with _errors():
+            return await anyio.to_thread.run_sync(
+                service.missing, sequence, Wanted(darks, bias, flats)
+            )
 
     @router.post("/calibration/plan")
     async def plan(request: CalibrationSequenceRequest) -> CalibrationPlan:  # pyright: ignore[reportUnusedFunction]

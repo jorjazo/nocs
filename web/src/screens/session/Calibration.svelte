@@ -174,7 +174,8 @@
       await startSequence(made.id);
       sheet = false;
       error = "";
-      scrollTo({ top: 0, behavior: "smooth" });
+      // It asks to cover the telescope first; Sequences follows it.
+      router.go({ screen: "sequence" });
     } catch (e) {
       sheetError = errorText(e, t);
     } finally {

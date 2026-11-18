@@ -153,6 +153,8 @@ export type {
   Sequence,
   SequenceEstimate,
   SequenceEvent,
+  Group,
+  GroupMasterState,
   SequencePauseRequest,
   SequencePlan,
   SequenceRun,

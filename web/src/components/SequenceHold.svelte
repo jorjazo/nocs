@@ -48,7 +48,7 @@
 
 {#if shown}
   <Banner icon="session" tone={shown === "paused" ? "neutral" : "warning"}>
-    <a href={href({ screen: "session" })}>
+    <a href={href({ screen: "sequence" })}>
       {shown === "paused" ? t.session.hold.paused : shown === "pausing" ? t.session.hold.pausing : t.session.hold.using}
     </a>
     {#if error}<br />{error}{/if}

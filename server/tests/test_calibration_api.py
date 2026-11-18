@@ -9,12 +9,18 @@ import zipfile
 from dataclasses import replace
 from datetime import UTC, date, datetime
 from pathlib import Path, PurePosixPath
+from typing import cast
 
 from fastapi.testclient import TestClient
 from owner import pair_owner
 
 from nocs.api.app import create_app
+from nocs.calibration.library import Wanted
+from nocs.calibration.service import CalibrationService, CameraFacts
 from nocs.config import Settings
+from nocs.sequence.model import Group, Template
+from nocs.sequence.template import expand
+from nocs.storage import FrameRow, StorageService
 from nocs.storage.catalog import Catalog, NewFrame
 from nocs.storage.volumes import Volumes
 
@@ -147,3 +153,43 @@ def test_the_library_of_a_night(tmp_path: Path) -> None:
         assert response.status_code == 409, response.text
         twice = {"night": night["id"], "groups": [dark_group["key"]] * 2}
         assert client.post("/api/calibration/plan", json=twice).status_code == 422
+        response = client.get("/api/calibration/missing", params={"sequence": "none"})
+        assert response.status_code == 409, response.text  # no camera to plan with
+
+
+def test_what_a_sequence_still_lacks_comes_as_groups() -> None:
+    template = Template(
+        name="M 42",
+        cooling="global",
+        temperature=-10,
+        groups=[
+            Group(filter="L", exposure=120, count=30),
+            Group(filter="R", exposure=120, count=10, gain=200),
+            # Planned already: the R flats count, and part of the darks.
+            Group(frame_type="flat", filter="R", count=30, gain=200),
+            Group(frame_type="dark", exposure=120, count=4, gain=100, temperature=-10),
+        ],
+    )
+
+    class Storage:
+        def calibration_frames(self, cameras: list[str]) -> list[FrameRow]:
+            return []
+
+    service = CalibrationService(
+        lambda: cast(StorageService, Storage()),
+        lambda sequence_id: expand(template) if sequence_id == "m42" else None,
+        lambda sequence_id, sequence: None,
+        lambda: CameraFacts("CCD Simulator", 6248, 4176, 1, 100, 10),
+        lambda: datetime(2026, 11, 2, 3, tzinfo=UTC),
+        lambda: -70.0,
+    )
+    groups = service.missing("m42", Wanted(darks=10, bias=20, flats=15))
+    found = [(g.frame_type, g.filter, g.exposure, g.count, g.gain, g.temperature) for g in groups]
+    # Flats first (a panel, right after the lights), then the bias and the darks.
+    assert found == [
+        ("flat", "L", None, 15, 100, None),
+        ("bias", None, None, 20, 100, -10),
+        ("bias", None, None, 20, 200, -10),
+        ("dark", None, 120, 6, 100, -10),
+        ("dark", None, 120, 10, 200, -10),
+    ]

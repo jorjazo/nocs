@@ -14,6 +14,11 @@ export const ICONS = {
   ],
   plan: [circle(12, 12, 6.5), "M12 2.5v4M12 17.5v4M2.5 12h4M17.5 12h4", circle(12, 12, 0.9)],
   session: ["M3 12h4l2.5-6.5 5 13 2.5-6.5h4"],
+  // Frames in a row, one after another: Sequences.
+  sequence: ["M3.5 6.5h11", "M3.5 12h11", "M3.5 17.5h7", "M16.5 14.5l4.5 3-4.5 3z"],
+  play: ["M8 5.5l11 6.5-11 6.5z"],
+  pause: ["M8.5 5.5v13", "M15.5 5.5v13"],
+  stop: ["M6.5 6.5h11v11h-11z"],
   rig: ["M4 8h16M4 16h16M15 5v6M9 13v6"],
   camera: [
     "M4 8.5A1.5 1.5 0 0 1 5.5 7h2.3l1.4-2h5.6l1.4 2h2.3A1.5 1.5 0 0 1 20 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5z",

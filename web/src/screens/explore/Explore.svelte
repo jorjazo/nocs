@@ -11,7 +11,6 @@
   import EmptyState from "../../components/EmptyState.svelte";
   import Icon from "../../components/Icon.svelte";
   import SegmentedControl from "../../components/SegmentedControl.svelte";
-  import ThemeButton from "../../components/ThemeButton.svelte";
   import Tile from "../../components/Tile.svelte";
   import { cancelJob, expose, loop, saveShown, saveStack, selectFilter, setCameraSettings, solve } from "../../lib/api";
   import { auth } from "../../lib/auth.svelte";
@@ -38,6 +37,8 @@
   import FrameStatus from "./FrameStatus.svelte";
   import GuidingTool from "./GuidingTool.svelte";
   import HistogramBar from "./HistogramBar.svelte";
+  import ImageOverlay from "./ImageOverlay.svelte";
+  import ImageScreen from "../../components/ImageScreen.svelte";
   import PillSwitch from "../../components/PillSwitch.svelte";
   import { exploreLayout } from "../../lib/explore.svelte";
   import { solvedShown } from "../../lib/explore";
@@ -316,81 +317,76 @@
     </EmptyState>
   </div>
 {:else}
-  <div class="explore" class:portrait class:landscape={!portrait} class:expanded>
-    <section class="stage" aria-label={t.live.preview}>
-      <div class="image">
-        <Viewer
-          url={shown?.url ?? null}
-          width={shown?.width ?? 0}
-          height={shown?.height ?? 0}
-          label={stacked?.preview ? t.stack.previewLabel(camera.device) : t.live.previewLabel(camera.device)}
-          reticle={framing}
-          ontap={() => exploreLayout.toggleOverlays()}>
-          {#snippet empty()}
-            <div class="nopreview">
-              <p class="heading">{t.live.noPreview}</p>
-              <p class="muted">{t.live.noPreviewBody}</p>
-            </div>
-          {/snippet}
-          <div class="overlay top" class:goto={exploreLayout.open("goto")}>
-            <div class="tools">
-              {#if overlays && (cameras.guide_camera || guiding?.phd2.connected)}
-                <GuidingTool
-                  {guiding}
-                  jobs={live.app.jobs}
-                  {owner}
-                  rig={!!cameras.guide_camera && !!mount}
-                  open={exploreLayout.open("guiding")}
-                  ontoggle={() => exploreLayout.toggle("guiding")}
-                  run={act} />
-              {/if}
-              {#if overlays && focuser}
-                <FocusTool
-                  {focuser}
-                  autofocus={live.app.autofocus ?? null}
-                  {owner}
-                  locked={focuserLocked}
-                  cameraBusy={!!jobs.running}
-                  open={exploreLayout.open("focus")}
-                  ontoggle={() => exploreLayout.toggle("focus")}
-                  onsheet={() => (device = "focuser")}
-                  run={act} />
-              {/if}
-            </div>
-            <div class="buttons">
-              <div class="row">
-                {#if overlays}<span class="theme"><ThemeButton /></span>{/if}
-                <button
-                  type="button"
-                  class="icon-button"
-                  aria-label={overlays ? t.live.overlaysHide : t.live.overlaysShow}
-                  aria-pressed={!overlays}
-                  onclick={() => exploreLayout.toggleOverlays()}>
-                  <Icon name={overlays ? "eye" : "eyeOff"} />
-                </button>
-                <button
-                  type="button"
-                  class="icon-button"
-                  aria-label={expanded ? t.live.shrink : t.live.expand}
-                  aria-pressed={expanded}
-                  onclick={() => (expanded = !expanded)}>
-                  <Icon name={expanded ? "shrink" : "expand"} />
-                </button>
-              </div>
-              {#if overlays && available.length > 1}
-                <PillSwitch
-                  label={t.live.camera}
-                  options={available.map((value) => ({ value, label: t.roles[value] }))}
-                  value={role}
-                  onchange={(value) => capture.setRole(value)} />
-              {/if}
-              {#if overlays && mount}
-                <GoToTool {mount} {owner} open={exploreLayout.open("goto")} ontoggle={() => exploreLayout.toggle("goto")} />
-              {/if}
-            </div>
+  <ImageScreen
+    {portrait}
+    {expanded}
+    {sheetOpen}
+    stageLabel={t.live.preview}
+    panelLabel={t.live.controls}
+    openLabel={t.live.panelOpen}
+    closeLabel={t.live.panelClose}
+    ontogglesheet={() => exploreLayout.toggle("panel")}>
+    {#snippet image()}
+      <Viewer
+        url={shown?.url ?? null}
+        width={shown?.width ?? 0}
+        height={shown?.height ?? 0}
+        label={stacked?.preview ? t.stack.previewLabel(camera.device) : t.live.previewLabel(camera.device)}
+        reticle={framing}
+        ontap={() => exploreLayout.toggleOverlays()}>
+        {#snippet empty()}
+          <div class="nopreview">
+            <p class="heading">{t.live.noPreview}</p>
+            <p class="muted">{t.live.noPreviewBody}</p>
           </div>
-        </Viewer>
-      </div>
+        {/snippet}
+        <ImageOverlay
+          {portrait}
+          {overlays}
+          {expanded}
+          wide={exploreLayout.open("goto")}
+          ontoggleoverlays={() => exploreLayout.toggleOverlays()}
+          ontoggleexpanded={() => (expanded = !expanded)}>
+          {#snippet tools()}
+            {#if cameras.guide_camera || guiding?.phd2.connected}
+              <GuidingTool
+                {guiding}
+                jobs={live.app.jobs}
+                {owner}
+                rig={!!cameras.guide_camera && !!mount}
+                open={exploreLayout.open("guiding")}
+                ontoggle={() => exploreLayout.toggle("guiding")}
+                run={act} />
+            {/if}
+            {#if focuser}
+              <FocusTool
+                {focuser}
+                autofocus={live.app.autofocus ?? null}
+                {owner}
+                locked={focuserLocked}
+                cameraBusy={!!jobs.running}
+                open={exploreLayout.open("focus")}
+                ontoggle={() => exploreLayout.toggle("focus")}
+                onsheet={() => (device = "focuser")}
+                run={act} />
+            {/if}
+          {/snippet}
+          {#snippet side()}
+            {#if available.length > 1}
+              <PillSwitch
+                label={t.live.camera}
+                options={available.map((value) => ({ value, label: t.roles[value] }))}
+                value={role}
+                onchange={(value) => capture.setRole(value)} />
+            {/if}
+            {#if mount}
+              <GoToTool {mount} {owner} open={exploreLayout.open("goto")} ontoggle={() => exploreLayout.toggle("goto")} />
+            {/if}
+          {/snippet}
+        </ImageOverlay>
+      </Viewer>
+    {/snippet}
+    {#snippet under()}
       {#if overlays}
         <HistogramBar
           preview={stacked?.preview ? null : preview}
@@ -408,189 +404,173 @@
         {solved}
         {mount}
         {longitude} />
-    </section>
+    {/snippet}
+    {#snippet body()}
+      {#if main && stack}
+        <StackCard {stack} {owner} run={act} />
+      {/if}
 
-    <section class="panel" class:open={sheetOpen} aria-label={t.live.controls}>
-      <div class="body">
-        {#if main && stack}
-          <StackCard {stack} {owner} run={act} />
-        {/if}
-
-        {#if wheel}
-          <div class="filters">
-            {#if !wheel.confirmed && wheel.key && owner}
-              <Banner icon="filter" tone="warning">
-                {t.rig.wheelNew}
-                {#snippet action()}
-                  <Button variant="text" onclick={() => (device = "filter_wheel")}>{t.live.setFilters}</Button>
-                {/snippet}
-              </Banner>
-            {/if}
-            <SegmentedControl
-              label={t.live.filter}
-              options={Array.from({ length: wheel.slots }, (_, i) => ({
-                value: String(i + 1),
-                label: slotLabel(wheel, i + 1, t),
-              }))}
-              value={String(wheel.slot ?? "")}
-              disabled={!owner || wheelLocked || wheel.moving}
-              onchange={pickFilter} />
-            {#if wheel.moving || wheelJob?.info.kind === "filter"}
-              <p class="caption muted" role="status">{t.live.filterMoving}</p>
-            {/if}
-          </div>
-        {/if}
-
-        {#if inUse}<Banner icon="guide">{t.live.guideInUse}</Banner>{/if}
-
-        {#if main}
-          <Stepper
-            label={t.live.frames}
-            bind:value={count}
-            min={1}
-            max={MAX_SERIES}
-            hint={t.live.framesHint}
-            disabled={!owner || !!running} />
-        {/if}
-
-        <div class="tiles">
-          <Tile
-            label={t.live.exposure}
-            value={formatSeconds(camera.exposure, locale)}
-            disabled={!owner || !!running || inUse}
-            onclick={() => (editing = "exposure")} />
-          <Tile
-            label={t.live.gain}
-            value={camera.gain === null ? "—" : formatPlain(camera.gain, locale)}
-            disabled={!owner || !!running || inUse || !camera.gain_range}
-            onclick={() => (editing = "gain")} />
-          <Tile
-            label={t.live.offset}
-            value={camera.offset === null ? "—" : formatPlain(camera.offset, locale)}
-            disabled={!owner || !!running || inUse || !camera.offset_range}
-            onclick={() => (editing = "offset")} />
-          <Tile
-            label={t.live.binning}
-            value="{camera.binning[0]}×{camera.binning[1]}"
-            disabled={!owner || !!running || inUse || camera.max_binning <= 1}
-            onclick={() => (editing = "binning")} />
-          <Tile
-            label={t.live.cooler}
-            value={!camera.can_cool
-              ? t.live.coolerNone
-              : !coolerOn
-                ? t.live.coolerOff
-                : camera.target !== null
-                  ? formatTemperature(camera.target, locale, 0)
-                  : t.live.coolerOn}
-            word={!camera.can_cool || !coolerOn || camera.target === null}
-            detail={camera.temperature === null ? undefined : formatTemperature(camera.temperature, locale)}
-            disabled={!owner || !camera.can_cool}
-            onclick={() => (editing = "cooling")} />
+      {#if wheel}
+        <div class="filters">
+          {#if !wheel.confirmed && wheel.key && owner}
+            <Banner icon="filter" tone="warning">
+              {t.rig.wheelNew}
+              {#snippet action()}
+                <Button variant="text" onclick={() => (device = "filter_wheel")}>{t.live.setFilters}</Button>
+              {/snippet}
+            </Banner>
+          {/if}
+          <SegmentedControl
+            label={t.live.filter}
+            options={Array.from({ length: wheel.slots }, (_, i) => ({
+              value: String(i + 1),
+              label: slotLabel(wheel, i + 1, t),
+            }))}
+            value={String(wheel.slot ?? "")}
+            disabled={!owner || wheelLocked || wheel.moving}
+            onchange={pickFilter} />
+          {#if wheel.moving || wheelJob?.info.kind === "filter"}
+            <p class="caption muted" role="status">{t.live.filterMoving}</p>
+          {/if}
         </div>
+      {/if}
 
-        {#if subframe && region}
-          <div class="region">
-            <span class="mono">{t.live.region(region.width, region.height)}</span>
-            <Button
-              variant="text"
-              disabled={!owner || !!running}
-              onclick={() => void act(() => setCameraSettings(role, { region: "full" }))}>
-              {t.live.fullFrame}
-            </Button>
-          </div>
-        {/if}
-        {#if running && owner}<p class="caption muted">{t.live.locked}</p>{/if}
+      {#if inUse}<Banner icon="guide">{t.live.guideInUse}</Banner>{/if}
+
+      {#if main}
+        <Stepper
+          label={t.live.frames}
+          bind:value={count}
+          min={1}
+          max={MAX_SERIES}
+          hint={t.live.framesHint}
+          disabled={!owner || !!running} />
+      {/if}
+
+      <div class="tiles">
+        <Tile
+          label={t.live.exposure}
+          value={formatSeconds(camera.exposure, locale)}
+          disabled={!owner || !!running || inUse}
+          onclick={() => (editing = "exposure")} />
+        <Tile
+          label={t.live.gain}
+          value={camera.gain === null ? "—" : formatPlain(camera.gain, locale)}
+          disabled={!owner || !!running || inUse || !camera.gain_range}
+          onclick={() => (editing = "gain")} />
+        <Tile
+          label={t.live.offset}
+          value={camera.offset === null ? "—" : formatPlain(camera.offset, locale)}
+          disabled={!owner || !!running || inUse || !camera.offset_range}
+          onclick={() => (editing = "offset")} />
+        <Tile
+          label={t.live.binning}
+          value="{camera.binning[0]}×{camera.binning[1]}"
+          disabled={!owner || !!running || inUse || camera.max_binning <= 1}
+          onclick={() => (editing = "binning")} />
+        <Tile
+          label={t.live.cooler}
+          value={!camera.can_cool
+            ? t.live.coolerNone
+            : !coolerOn
+              ? t.live.coolerOff
+              : camera.target !== null
+                ? formatTemperature(camera.target, locale, 0)
+                : t.live.coolerOn}
+          word={!camera.can_cool || !coolerOn || camera.target === null}
+          detail={camera.temperature === null ? undefined : formatTemperature(camera.temperature, locale)}
+          disabled={!owner || !camera.can_cool}
+          onclick={() => (editing = "cooling")} />
       </div>
 
-      <!-- The actions stay in reach while the panel scrolls, or while its sheet is
-           folded on an upright screen: the primary action and what went wrong. -->
-      <div class="dock">
-        {#if portrait}
-          <button
-            type="button"
-            class="handle"
-            aria-expanded={sheetOpen}
-            onclick={() => exploreLayout.toggle("panel")}>
-            <Icon name={sheetOpen ? "chevronDown" : "up"} size={18} />
-            {sheetOpen ? t.live.panelClose : t.live.panelOpen}
-          </button>
-        {/if}
-        <SequenceHold resources={[role, "filter_wheel", "focuser"]} />
-        {#if actionError}
-          <Banner icon="alert" tone="error">
-            {actionError}
-            {#snippet action()}
-              <Button variant="text" onclick={() => (actionError = "")}>{t.live.dismiss}</Button>
-            {/snippet}
-          </Banner>
-        {/if}
-        {#if failed}
-          <Banner icon="alert" tone="error">
-            {failure}
-            {#snippet action()}
-              <Button variant="text" onclick={() => (dismissed = failed.id)}>{t.live.dismiss}</Button>
-            {/snippet}
-          </Banner>
-        {/if}
-        <div class="actions">
+      {#if subframe && region}
+        <div class="region">
+          <span class="mono">{t.live.region(region.width, region.height)}</span>
+          <Button
+            variant="text"
+            disabled={!owner || !!running}
+            onclick={() => void act(() => setCameraSettings(role, { region: "full" }))}>
+            {t.live.fullFrame}
+          </Button>
+        </div>
+      {/if}
+      {#if running && owner}<p class="caption muted">{t.live.locked}</p>{/if}
+    {/snippet}
+    {#snippet dock()}
+      <SequenceHold resources={[role, "filter_wheel", "focuser"]} />
+      {#if actionError}
+        <Banner icon="alert" tone="error">
+          {actionError}
+          {#snippet action()}
+            <Button variant="text" onclick={() => (actionError = "")}>{t.live.dismiss}</Button>
+          {/snippet}
+        </Banner>
+      {/if}
+      {#if failed}
+        <Banner icon="alert" tone="error">
+          {failure}
+          {#snippet action()}
+            <Button variant="text" onclick={() => (dismissed = failed.id)}>{t.live.dismiss}</Button>
+          {/snippet}
+        </Banner>
+      {/if}
+      <div class="actions">
+        <button
+          type="button"
+          class="action"
+          class:on={looping}
+          aria-pressed={looping}
+          disabled={!owner || busy || inUse || (!!running && !looping)}
+          onclick={toggleLoop}>
+          <Icon name="loop" />
+          {t.live.loop}
+        </button>
+        <Shutter
+          running={!!running}
+          {progress}
+          label={running ? t.live.stop : shutterLabel}
+          disabled={!owner || busy || inUse}
+          onclick={shoot} />
+        {#if main}
           <button
             type="button"
             class="action"
-            class:on={looping}
-            aria-pressed={looping}
-            disabled={!owner || busy || inUse || (!!running && !looping)}
-            onclick={toggleLoop}>
-            <Icon name="loop" />
-            {t.live.loop}
+            disabled={busy || saveReason !== null || savedPath !== null}
+            onclick={saveOnScreen}>
+            <Icon name="save" />
+            {t.live.save}
           </button>
-          <Shutter
-            running={!!running}
-            {progress}
-            label={running ? t.live.stop : shutterLabel}
-            disabled={!owner || busy || inUse}
-            onclick={shoot} />
-          {#if main}
-            <button
-              type="button"
-              class="action"
-              disabled={busy || saveReason !== null || savedPath !== null}
-              onclick={saveOnScreen}>
-              <Icon name="save" />
-              {t.live.save}
-            </button>
-          {:else}
-            <span class="action placeholder" aria-hidden="true"></span>
-          {/if}
-        </div>
-        <div class="more">
-          {#if main && solver}
-            <button
-              type="button"
-              class="small"
-              disabled={!owner || busy || solving || solveReason !== null}
-              onclick={() => void act(() => solve({ frame: "last" }))}>
-              <Icon name="plan" size={18} />
-              {solving ? t.live.status.solving : t.solve.solve}
-            </button>
-          {/if}
-          {#if download}
-            <a class="small" href={download.url} download={download.name}>
-              <Icon name="download" size={18} />
-              {t.live.download}
-            </a>
-          {/if}
-        </div>
-        <p class="caption muted outcome" aria-live="polite">
-          {#if savedPath}
-            {t.live.saved(savedPath)}
-          {:else if main}
-            {saveReason ?? (owner && solver && solveReason ? solveReason : t.live.saveHint)}
-          {/if}
-        </p>
+        {:else}
+          <span class="action placeholder" aria-hidden="true"></span>
+        {/if}
       </div>
-    </section>
-  </div>
+      <div class="more">
+        {#if main && solver}
+          <button
+            type="button"
+            class="small"
+            disabled={!owner || busy || solving || solveReason !== null}
+            onclick={() => void act(() => solve({ frame: "last" }))}>
+            <Icon name="plan" size={18} />
+            {solving ? t.live.status.solving : t.solve.solve}
+          </button>
+        {/if}
+        {#if download}
+          <a class="small" href={download.url} download={download.name}>
+            <Icon name="download" size={18} />
+            {t.live.download}
+          </a>
+        {/if}
+      </div>
+      <p class="caption muted outcome" aria-live="polite">
+        {#if savedPath}
+          {t.live.saved(savedPath)}
+        {:else if main}
+          {saveReason ?? (owner && solver && solveReason ? solveReason : t.live.saveHint)}
+        {/if}
+      </p>
+    {/snippet}
+  </ImageScreen>
 
   {#if editing}
     <SettingSheet setting={editing} {role} {camera} onclose={() => (editing = null)} />
@@ -606,182 +586,10 @@
   .padded {
     padding: 0 var(--margin);
   }
-  /* The screen's height without the tab bar (phones) or the rail (from 768 px). */
-  .explore {
-    --available: calc(100dvh - var(--tabbar-height) - env(safe-area-inset-bottom));
-    display: flex;
-    flex-direction: column;
-    height: var(--available);
-  }
-  @media (min-width: 768px) {
-    .explore {
-      --available: 100dvh;
-    }
-  }
-  .landscape {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) clamp(300px, 32vw, 400px);
-  }
-  .stage {
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-    min-height: 0;
-    flex: 1 1 auto;
-  }
-  .image {
-    position: relative;
-    flex: 1 1 auto;
-    min-height: 0;
-  }
-  .expanded .stage {
-    position: fixed;
-    inset: 0;
-    z-index: 20;
-    background: #000;
-  }
-  .overlay {
-    position: absolute;
-    left: 0;
-    right: 0;
-    display: flex;
-    gap: var(--space-2);
-    padding: var(--space-3);
-    pointer-events: none;
-  }
-  .overlay :global(button),
-  .overlay :global(a),
-  .overlay :global([data-overlay]),
-  .overlay :global(dialog) {
-    pointer-events: auto;
-  }
-  /* Over the whole image, in two columns that scroll when their tools are taller
-     than it: each tool takes at most its column's width. (No container query: it
-     would make the image the containing block of the sheets the tools open.) */
-  .top {
-    top: env(safe-area-inset-top);
-    bottom: 0;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    grid-template-rows: minmax(0, 1fr);
-  }
-  /* Upright, one column: the buttons (and go to) first, then the tools on the left;
-     one tool is open at a time, as wide as the image. */
-  .portrait .top {
-    display: flex;
-    flex-direction: column;
-  }
-  /* The side holding the open tool gives way when the image is short. */
-  .portrait .buttons {
-    order: -1;
-    flex: 0 0 auto;
-  }
-  .portrait .tools {
-    flex: 0 1 auto;
-    flex-direction: row;
-    flex-wrap: wrap;
-  }
-  .portrait .goto .buttons {
-    flex-shrink: 1;
-  }
-  .portrait .goto .tools {
-    flex-shrink: 0;
-  }
-  .portrait .buttons :global(.card),
-  .portrait .tools :global(.card) {
-    width: 100%;
-  }
-  .tools,
-  .buttons {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    min-width: 0;
-    min-height: 0;
-    overflow-y: auto;
-    scrollbar-width: none;
-  }
-  .buttons {
-    align-items: flex-end;
-  }
-  .tools {
-    align-items: flex-start;
-  }
-  .row {
-    display: flex;
-    gap: var(--space-2);
-  }
-  .icon-button {
-    display: grid;
-    place-items: center;
-    width: 44px;
-    height: 44px;
-    border-radius: var(--radius-button);
-    border: 1px solid var(--line);
-    background: color-mix(in srgb, var(--bg) 72%, transparent);
-    color: var(--text);
-    cursor: pointer;
-  }
   .nopreview {
     display: flex;
     flex-direction: column;
     gap: var(--space-1);
-  }
-
-  /* The panel: a column at the image's side, scrolling, with its actions at the foot. */
-  .panel {
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-    min-height: 0;
-    background: var(--bg);
-  }
-  .landscape .panel {
-    border-left: 1px solid var(--line);
-  }
-  .body {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-    padding: var(--space-4) var(--space-4) var(--space-3);
-  }
-  .landscape .body {
-    flex: 1 1 auto;
-    min-height: 0;
-    overflow-y: auto;
-  }
-  /* Upright: the actions under the image, the rest in a sheet that opens over it. */
-  .portrait .panel {
-    position: relative;
-    flex: none;
-  }
-  .portrait .body {
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 100%;
-    z-index: 4;
-    max-height: calc(var(--available) * 0.62);
-    overflow-y: auto;
-    border-top: 1px solid var(--line);
-    border-radius: var(--radius-card) var(--radius-card) 0 0;
-    background: var(--bg);
-    box-shadow: 0 -8px 24px rgb(0 0 0 / 40%);
-  }
-  .portrait .panel:not(.open) .body {
-    display: none;
-  }
-  .handle {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: var(--space-1);
-    min-height: 32px;
-    border: 0;
-    background: transparent;
-    color: var(--muted);
-    font-size: 14px;
-    cursor: pointer;
   }
 
   .filters {
@@ -800,14 +608,6 @@
     justify-content: space-between;
     gap: var(--space-3);
     margin-top: calc(-1 * var(--space-2));
-  }
-  .dock {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    padding: var(--space-2) var(--space-4) var(--space-3);
-    border-top: 1px solid var(--line);
-    background: var(--bg);
   }
   .actions {
     display: grid;
@@ -876,10 +676,4 @@
     overflow-wrap: anywhere;
   }
 
-  /* The navigation rail carries the theme button on wide screens. */
-  @media (min-width: 768px) {
-    .theme {
-      display: none;
-    }
-  }
 </style>

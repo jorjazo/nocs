@@ -8,15 +8,16 @@ test("the Session and Rig tabs get the wide page", () => {
   assert.equal(pageWidth({ screen: "rig", section: "site" }), "wide");
 });
 
-test("Explore is edge to edge", () => {
+test("Explore and Sequences are edge to edge", () => {
   assert.equal(pageWidth({ screen: "explore" }), "full");
+  assert.equal(pageWidth({ screen: "sequence" }), "full");
 });
 
 test("every other screen keeps one readable column", () => {
   for (const route of [
     { screen: "tonight" },
     { screen: "plan" },
-    { screen: "sequence" },
+    { screen: "sequence-edit" },
     { screen: "report", id: 3 },
     { screen: "target", id: "M42" },
     { screen: "profile", id: null },

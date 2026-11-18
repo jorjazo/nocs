@@ -113,7 +113,13 @@ card opens and closes, and says how it stands when closed. Every time is the sit
 local time. **Explore**
 shows the latest image edge to edge, with its histogram and status, and the guiding,
 focuser and go to tools over it; take frames or loop, stack a few, and **Save** what
-is on screen (or **Download** its picture): nothing is saved until you do. **Session** shows what the box is doing. The box runs the
+is on screen (or **Download** its picture): nothing is saved until you do.
+**Sequences** takes the night's frames of what Explore left framed: groups of lights
+through each filter, then darks, bias and flats if you want them (**Configure** them,
+or **Add missing calibration**). It flips at the meridian, focuses and guides as you
+set, keeps each group's stack (lights) or master (darks, bias, flats), and stops to ask
+you to cover the telescope or put the flat panel on when the kind of frames changes.
+While it runs, Explore waits; **Session** keeps the night's frames. The box runs the
 night by itself: you can lock the phone, or close the browser, and come back to it
 later.
 

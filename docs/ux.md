@@ -15,8 +15,9 @@ Navigation follows the night, not the device tree.
 |---|---|---|
 | **Tonight** | Home: the night and how the rig stands now. A "get ready" checklist that leads to each setup flow, the night window, where the mount points, the weather, the actuators, the location and time, the host (ADR 0053) | Tonight · Polar alignment · Autofocus (full-screen flows) |
 | **Explore** | Try the sky tonight: the image, its histogram and status, the tools over it (guiding, focus, go to), loop, capture, save what is on screen (ADR 0054) | Explore |
-| **Plan** | Choose a target and build what to do with it | Target (search + framing) · Sequence |
-| **Session** | Watch and control what the server is running | Session monitor |
+| **Sequences** | Run groups of frames of what the camera has framed (lights per filter, darks, bias, flats), with the meridian flip and the night's rules; the same base as Explore, with the sequence's widget instead of go to. Explore and Sequences exclude each other | Sequences · Configure the sequence |
+| **Plan** | Choose a target | Target (search + framing) |
+| **Session** | The night's frames, their calibration and downloads, past sessions and their reports | Session · report |
 | **Rig** | Equipment profile, optical trains, devices, the site, the box, settings | Rig · device details |
 
 - Phone: bottom tab bar. Tablet / desktop: left navigation rail.
@@ -29,8 +30,12 @@ Navigation follows the night, not the device tree.
   done that can run. A step that cannot run yet shows what blocks it (the site, the
   plate solver, a device not ready, a parked mount, PHD2) with a link to where it is
   fixed, and has no button (ADR 0041).
-- A running session is always reachable in one tap from any screen (the
-  Session tab; a persistent status indicator to be designed).
+- A running sequence is always reachable in one tap from any screen (the
+  Sequences tab, with a dot), and its prompts to ready the rig show on any screen.
+- Explore and Sequences exclude each other: while Explore loops or takes frames, or
+  while a sequence is active (running, paused, or waiting on the user), the other's
+  tab is dimmed and going to it leads to the one that works. The server refuses
+  Explore's frames during a sequence and a sequence during Explore's frames.
 
 ## 2. Key screens (Phase 1 canvas)
 
@@ -43,10 +48,9 @@ Navigation follows the night, not the device tree.
 | Autofocus | Live V-curve with fit, best position / HFR / stars / temperature, cancel restores the previous position. |
 | Framing | Target search, sky view with camera frame and rotation, altitude tonight, "Go and center". |
 | Explore | The image edge to edge with a status bar and a folding histogram under it, guiding, focus and go to over it, and a panel of actions at its side (a sheet when upright): stack, filter, exposure, loop / capture, save / solve / download what is on screen (ADR 0054). |
-| Sequence | Template: target, exposures per filter, behaviors during the night, end-of-session actions, time and disk estimates. |
-| Session | Progress, current exposure countdown, HFR / guiding / sensor, guiding graph, event timeline, pause / stop. |
-| Session (tablet) | Same content in two columns, with the latest frame large and a filmstrip of recent frames. |
-| Session (PC) | The page takes the screen's width: the frame large, the status beside it, the lists under it or in a third column. |
+| Sequences | Explore's base (image, histogram, status bar, guiding and focus over it) with the sequence's widget at the right (state, groups and their frames, the frame in progress, recent events, the way to configure it), a panel with what it does around its groups, last frame or group stack, start / pause / resume / stop. |
+| Configure the sequence | The saved sequences, the name, the groups in order (kind, filter, exposure, frames, settings), the calibration still missing, where the run will ask to ready the rig, estimates, the steps. |
+| Session | The night's frames and their calibration, the past sessions; a banner leads to a running sequence. |
 
 ## 3. Themes
 
@@ -569,80 +573,55 @@ Tonight and Plan (stage 3.6):
   SkyView too slow for this view", "cannot be reached. No internet on this
   device?", "this device is offline"). In Night mode it is drawn in red only.
 
-Sequence builder (stage 5.13):
+Sequences:
 
-- Plan has two halves, Target and Sequence, as a segmented control on top
-  (`#/plan` and `#/plan/sequence`). The builder edits the sequence of tonight's
-  target (one per target, saved under an id from its name); without one it leads
-  to the search. Changing tonight's target opens that target's sequence.
-- Top to bottom, as on the Phase 1 artboard: the target and its night ("From
-  astronomical dusk · until dawn · above 30°", Change goes to the search); the
-  exposures, one row per filter with frames × exposure, the time it takes and − +
-  for the count (a row opens a sheet: filter, exposure, frames, gain, offset,
-  binning, Remove; Add filter takes the first filter of the wheel no row uses);
-  During the night: Autofocus (a sheet: at the start, on filter change, every so
-  many °C, when stars grow, every so many minutes), Guiding (with a guide camera),
-  Centring (go only, or centre by plate solving and check the pointing every so many
-  frames, centring again past a drift in arcminutes; on by default with a solver),
-  Meridian flip (on by default: so many minutes past the meridian, set under
-  Advanced; frames are never cut), Dither (while guiding: every so many frames, up
-  to so many main camera pixels),
-  Rotate filters (in turns of 5, or each filter to its end), Night (dusk, the
-  twilight, dawn, the minimum altitude), Cooling (with a cooled camera) and When
-  finished (park, warm, power outputs off).
-- Two estimate tiles: imaging time with when it starts and ends tonight, and the
-  frames with their size against the free space of the drive frames go to; a
-  warning when tonight's window is shorter than the plan, or the target is not up
-  in the dark at all. Edits apply at once; Save and the primary Start sequence
-  (which saves first and opens the Session tab). While a sequence runs, a banner
-  leads to it and Start is off.
-- Advanced: frames per turn, and the steps the template makes, read only (start,
-  targets, end, with each container's conditions and triggers). The draft lives
-  while the page is open; a reload goes back to what was saved.
-
-Session monitor (stage 5.14):
-
-- The Session tab shows the sequence's run in progress, or the last one, above
-  the night's frames: the target and when it started, the run's name and a chip
-  with its state (Running, Pausing, Paused, Stopping, Ending, then Completed,
-  Stopped or Failed); frames done of all, the time left and when it would end, and
-  a bar.
-- The frame in progress: a thumbnail of the latest frame, "Exposing R · frame 12
-  of 15", a countdown and its bar; between frames, what the run is doing (a slew,
-  autofocus, waiting for dusk). Tiles for the latest HFR, the guiding RMS and the
-  sensor's temperature; the guiding graph while PHD2 guides; each filter's frames
-  with a bar (each exposure's when no row has a filter: the filter is left out of
-  the text, never shown as a dash); the events, newest first (six, then all of them), in this language.
-- Pause waits for the frame in progress, and while it waits offers Pause now;
-  Resume takes the rig back or says what holds it. Stop… asks how: after this
-  frame or now, each either then parking and warming or leaving the rig as it is.
-  On a phone Pause and Stop stay docked above the tab bar; on a tablet they sit in
-  the header.
-- Tablet (from 1000 px): two columns, the latest frame large with its exposure, HFR
-  and stars on the left, and under it a strip of the recent frames (filter, number
-  and HFR: the server keeps no thumbnail of each frame); everything else on the
-  right.
-- PC (from 1200 px, a wide page): the frame large on the left, at most as tall as
-  the window leaves room for; the status beside it (frames done, the frame in
-  progress, HFR / guiding RMS / sensor, the guiding graph, errors), which stays in
-  view while the page scrolls when the window is at least 800 px tall (shorter, its
-  bottom would be out of reach); the per-filter rows and the events under the frame.
-  From 1600 px they get a third column of their own, so the frame, the status and
-  the lists all fit in the first screenful. Below the monitor, the past sessions
-  sit beside the night's frames. The reading and keyboard order stays frame →
-  status → lists on every width.
-- A running or paused sequence puts a dot on the Session tab (accent, or amber
-  while paused), from any screen.
-- "Pause the sequence and do it" (design §6): Live view, the mount, focuser and
-  filter wheel sheets and the Focus screen say when the sequence holds their
-  device, with Pause the sequence (at once: the frame in progress is taken again
-  later); while it is paused they say so, with Resume. A paused sequence's job
-  lends its devices (`suspended` in the jobs' state), so their controls work.
+- Same layout as Explore (the shared `ImageScreen` and `ImageOverlay`): guiding and
+  focus at the top left, the sequence's widget at the right where Explore has go
+  to; they fold and keep Explore's per-device choices.
+- A sequence is groups of frames of what the camera has framed: each group a kind
+  (Light, Dark, Bias, Flat), a filter (lights and flats), an exposure (bias take the
+  camera's shortest; flats find theirs from the last frame's level, or take a fixed
+  one), frames, gain, offset, binning, and a temperature when cooling is per group.
+  Light groups in a row take turns ("Rotate filters"). When the run starts it
+  solves what is framed (or takes where the mount points) and names it after the
+  last go to or the catalog object nearest it: the target of the flip, the centring
+  and the altitude.
+- Whenever the kind of frames changes between lights, darks and bias (covered) and
+  flats (a panel), and before the first group when it is not lights, the run stops
+  and asks: a dialog on any screen of the owner's devices ("Cover the telescope",
+  "Put the flat panel on", "Uncover the telescope") with a vibration and a short
+  tone where allowed, Ready (go on) and Stop; "Later" folds it and the view's dock
+  keeps asking. Guiding stops before darks and flats. The rig is lent back while it
+  asks, as in a pause.
+- The panel: Last frame · Group stack (a group of lights' live stack, held on during
+  a sequence whatever the Stack switch; a group of darks, bias or flats' master once
+  the group ends), and what it does around its groups, as Explore's old builder:
+  Autofocus, Centring, Guiding, Meridian flip, Dither, Rotate filters, Night (lights
+  only: dusk, dawn, minimum altitude), Cooling (off, one temperature for all, or per
+  group), When finished. Read only while it runs. Changes are saved a moment after
+  they are made; a line says the time, the frames and their size.
+- The dock: Start sequence (off while Explore takes frames, saying so), then Pause
+  (Pause now while pausing), Resume (or Ready while it asks) and Stop… (after this
+  frame or now, each with the end or leaving the rig as it is).
+- The widget: the state (Ready, Running, Waiting for you, Paused…, Completed), what
+  is framed, each group with its frames done and a bar (the current one marked),
+  the frame in progress with its countdown or what the run is doing, the time left
+  and when it ends, the three latest events, and Configure the sequence.
+- Configure the sequence (`#/sequence/edit`): the saved sequences when there are
+  several (the one shown is the running one, else the one chosen last on this
+  device), New sequence, the name, the groups (a sheet each; up and down to reorder),
+  *Add missing calibration* (flats per filter, then the bias and darks its lights
+  lack in the library and the sequence does not plan), the prompts the run will
+  make, the estimates; Advanced: frames per turn, minutes past the meridian, the
+  steps, delete.
+- Each group of lights keeps its live stacks (`<night>/Stack/…`); each group of
+  darks, bias or flats its master (`<night>/Master/`, flats by filter): the median in
+  the sensor's own pixels, 16 bits, flats not bias-subtracted.
 
 Session report (stage 5.15):
 
-- The Session tab lists the past sessions under the monitor, newest first, each
-  with its date and how it ended; one opens its report (`#/session/<id>`).
+- The Session tab lists the past sessions, newest first, each with its date and
+  how it ended; one opens its report (`#/session/<id>`).
 - The report: the name, date and profile; the window (start → end, length) and how
   it ended, with the error; totals (integration, frames, frames under clouds,
   failures and how many were recovered); a table per filter (frames, with those
@@ -666,9 +645,9 @@ Calibration frames (ADR 0036):
   lights) and lights taken warm off by default with the reason; darks per
   exposure, bias, warm at the end; the frames and the time the choice takes,
   updated as it changes. Start asks a second tap ("It is covered: start"), builds
-  the `calibration` sequence and starts it, so the Session monitor shows it like
-  any sequence. Sets it cannot take (another camera, a region of the sensor) are
-  named in a banner.
+  the `calibration` sequence (groups that can be edited in Sequences) and starts it
+  in Sequences, which asks first to cover the telescope. Sets it cannot take
+  (another camera, a region of the sensor) are named in a banner.
 - *Take flats…* opens the flats wizard (`#/flats/<night>`, full screen): Panel or
   Twilight sky with what each does; for the sky, the next dusk and dawn windows;
   the night's filters, each with its focuser position and a count (on for those
@@ -687,8 +666,8 @@ Live stacking (ADR 0040, after v1.0):
 - On, a *Stack · Frame* choice (kept per device) says what the viewer shows; the
   stack replaces the frame and its histogram (but not while framing with the mount's
   pad: the newest frame shows where the mount points), and the bottom pills say *Stack*, its
-  frames and its total exposure. The Session monitor offers the same choice above
-  its latest frame.
+  frames and its total exposure. Sequences offers the same choice (Last frame ·
+  Group stack).
 - Below: frames, total time, frames left out and frames that arrived while the
   worker was busy, in words; a chip with what calibrates the frames (darks and
   flats, darks, flats, hot pixels removed); the latest frame's outcome (how far it

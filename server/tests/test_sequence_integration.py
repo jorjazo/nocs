@@ -181,8 +181,13 @@ def test_a_two_filter_sequence_focuses_takes_its_frames_and_parks(api: TestClien
     assert current["autofocus"]["state"] == "succeeded"
 
     saved = api.get("/api/frames", params={"target": "Orion field"}).json()
-    assert len(saved) == 3
-    assert {f["filter"] for f in saved} == set(names)
+    lights = [f for f in saved if f["frame_type"] == "light"]
+    assert len(lights) == 3
+    assert {f["filter"] for f in lights} == set(names)
+    # The group of lights keeps its stacks: the first filter's two frames (one frame
+    # alone is no stack).
+    stacks = [f for f in saved if f["frame_type"] == "stack"]
+    assert [f["filter"] for f in stacks] == [names[0]]
 
 
 def set_property(api: TestClient, device: str, name: str, values: dict[str, Any]) -> None:

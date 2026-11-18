@@ -63,6 +63,19 @@
       "title": "ActiveSiteRequest",
       "type": "object"
     },
+    "Aim": {
+      "additionalProperties": false,
+      "description": "Take what the camera has framed as the target of the containers that name none:\nwhere the frame was solved (or the mount points), named after the last go to or the\ncatalog object nearest it. Once per run: a run resumed after a restart keeps it.",
+      "properties": {
+        "kind": {
+          "const": "aim",
+          "default": "aim",
+          "type": "string"
+        }
+      },
+      "title": "Aim",
+      "type": "object"
+    },
     "Almanac": {
       "description": "``GET /api/sky/tonight``: the night at the active site.",
       "properties": {
@@ -4409,6 +4422,74 @@
       "title": "FlatWindows",
       "type": "object"
     },
+    "Flats": {
+      "additionalProperties": false,
+      "description": "Flats of one filter on a panel, each exposure found from the last frame's level.",
+      "properties": {
+        "binning": {
+          "anyOf": [
+            {
+              "maximum": 8,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "count": {
+          "maximum": 200,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "filter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Name"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "None: whatever the wheel holds."
+        },
+        "gain": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "kind": {
+          "const": "flats",
+          "default": "flats",
+          "type": "string"
+        },
+        "offset": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "count"
+      ],
+      "title": "Flats",
+      "type": "object"
+    },
     "FlatsState": {
       "additionalProperties": false,
       "description": "The flats wizard's run in progress or the last one (ADR 0036).",
@@ -4883,7 +4964,7 @@
     },
     "FocusPlan": {
       "additionalProperties": false,
-      "description": "When a template's sequence focuses: at the start, and on these reasons.",
+      "description": "When a template's sequence focuses: at the start of its lights, and on these reasons.",
       "properties": {
         "at_start": {
           "default": true,
@@ -5917,6 +5998,174 @@
         "site"
       ],
       "title": "GpsState",
+      "type": "object"
+    },
+    "Group": {
+      "additionalProperties": false,
+      "description": "Frames of one kind taken alike: what the Sequences view lists.",
+      "properties": {
+        "binning": {
+          "anyOf": [
+            {
+              "maximum": 8,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "count": {
+          "maximum": 10000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "exposure": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "maximum": 7200.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Seconds. Bias: always the camera's shortest; flats: None finds it."
+        },
+        "filter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Name"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "None: whatever the wheel holds; darks and bias take none."
+        },
+        "frame_type": {
+          "$ref": "#/$defs/FrameKind",
+          "default": "light"
+        },
+        "gain": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "offset": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "temperature": {
+          "anyOf": [
+            {
+              "maximum": 40,
+              "minimum": -60,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Sensor \u00b0C while this group is taken, when cooling is per group."
+        }
+      },
+      "required": [
+        "count"
+      ],
+      "title": "Group",
+      "type": "object"
+    },
+    "GroupMasterPreview": {
+      "additionalProperties": false,
+      "properties": {
+        "height": {
+          "type": "integer"
+        },
+        "url": {
+          "description": "JPEG of the master, at most 1920 px wide; immutable.",
+          "type": "string"
+        },
+        "width": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "url",
+        "width",
+        "height"
+      ],
+      "title": "GroupMasterPreview",
+      "type": "object"
+    },
+    "GroupMasterState": {
+      "additionalProperties": false,
+      "properties": {
+        "filter": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "frame_id": {
+          "type": "integer"
+        },
+        "frames": {
+          "type": "integer"
+        },
+        "kind": {
+          "enum": [
+            "dark",
+            "bias",
+            "flat"
+          ],
+          "type": "string"
+        },
+        "path": {
+          "description": "Below NOCS/ on its destination.",
+          "type": "string"
+        },
+        "preview": {
+          "$ref": "#/$defs/GroupMasterPreview"
+        },
+        "time": {
+          "description": "UTC, ISO 8601, when it was saved.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "frames",
+        "filter",
+        "path",
+        "frame_id",
+        "preview",
+        "time"
+      ],
+      "title": "GroupMasterState",
       "type": "object"
     },
     "Guide": {
@@ -7886,6 +8135,15 @@
           "$ref": "#/$defs/Outputs"
         },
         {
+          "$ref": "#/$defs/Aim"
+        },
+        {
+          "$ref": "#/$defs/Flats"
+        },
+        {
+          "$ref": "#/$defs/Prompt"
+        },
+        {
           "$ref": "#/$defs/Wait"
         },
         {
@@ -8379,10 +8637,18 @@
           "type": "integer"
         },
         "exposure": {
-          "description": "Seconds.",
-          "exclusiveMinimum": 0,
-          "maximum": 7200.0,
-          "type": "number"
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "maximum": 7200.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Seconds; None only for bias: the camera's shortest."
         },
         "filter": {
           "anyOf": [
@@ -8420,7 +8686,6 @@
         }
       },
       "required": [
-        "exposure",
         "count"
       ],
       "title": "PlanRow",
@@ -9524,6 +9789,25 @@
       "title": "ProfileSummary",
       "type": "object"
     },
+    "Prompt": {
+      "additionalProperties": false,
+      "description": "Stop until the user says the rig is ready for these frames (the telescope\ncovered for darks, the panel on for flats, uncovered for lights); the rig is lent\nback meanwhile, as in a pause.",
+      "properties": {
+        "frame_type": {
+          "$ref": "#/$defs/FrameKind"
+        },
+        "kind": {
+          "const": "prompt",
+          "default": "prompt",
+          "type": "string"
+        }
+      },
+      "required": [
+        "frame_type"
+      ],
+      "title": "Prompt",
+      "type": "object"
+    },
     "PropertyStateName": {
       "enum": [
         "Idle",
@@ -9900,7 +10184,10 @@
         "dark",
         "bias",
         "flat",
-        "stack"
+        "stack",
+        "master_dark",
+        "master_bias",
+        "master_flat"
       ],
       "type": "string"
     },
@@ -10065,7 +10352,7 @@
       "type": "object"
     },
     "SequenceEstimate": {
-      "description": "What a template's plan costs, and how much of tonight it has (phase 5.10).",
+      "description": "What a template's groups cost.",
       "properties": {
         "bytes": {
           "anyOf": [
@@ -10079,7 +10366,7 @@
           "description": "On disk; None while the camera is unknown."
         },
         "duration": {
-          "description": "Seconds the frames take, without focusing or slewing.",
+          "description": "Seconds the frames take, without focusing, cooling or waiting for the user.",
           "type": "number"
         },
         "ends": {
@@ -10091,7 +10378,7 @@
               "type": "null"
             }
           ],
-          "description": "UTC, ISO 8601: when the plan would be done, or the window close if that comes first."
+          "description": "UTC, ISO 8601: when its frames would be done."
         },
         "frames": {
           "type": "integer"
@@ -10109,18 +10396,7 @@
               "type": "null"
             }
           ],
-          "description": "UTC, ISO 8601: when imaging would start tonight (now, or when the target's window opens); None without the site or a window left tonight."
-        },
-        "window": {
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "description": "Seconds tonight's dark window keeps the target above the minimum altitude and the horizon; None while the site is unknown."
+          "description": "UTC, ISO 8601: now, or tonight's dusk when the first group is lights that wait for it."
         }
       },
       "required": [
@@ -10128,7 +10404,6 @@
         "integration",
         "duration",
         "bytes",
-        "window",
         "starts",
         "ends"
       ],
@@ -10149,6 +10424,7 @@
             "resumed_after_restart",
             "action",
             "frame",
+            "prompt",
             "trigger",
             "condition",
             "paused",
@@ -10205,6 +10481,15 @@
     "SequencePlan": {
       "additionalProperties": false,
       "properties": {
+        "frame_type": {
+          "enum": [
+            "light",
+            "dark",
+            "flat",
+            "bias"
+          ],
+          "type": "string"
+        },
         "rows": {
           "items": {
             "$ref": "#/$defs/SequencePlanRow"
@@ -10219,11 +10504,13 @@
             {
               "type": "null"
             }
-          ]
+          ],
+          "description": "What the frames are named after, once known."
         }
       },
       "required": [
         "target",
+        "frame_type",
         "rows"
       ],
       "title": "SequencePlan",
@@ -10236,11 +10523,19 @@
           "type": "integer"
         },
         "done": {
-          "description": "Frames taken.",
+          "description": "Frames taken; flats whose exposure is found count only once done (`flats` has them as they come).",
           "type": "integer"
         },
         "exposure": {
-          "type": "number"
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Seconds; None: a bias (the camera's shortest) or flats whose exposure is found."
         },
         "filter": {
           "anyOf": [
@@ -10309,14 +10604,34 @@
           "additionalProperties": {
             "$ref": "#/$defs/SequencePlan"
           },
-          "description": "Exposure plans by place in the tree.",
+          "description": "Exposure plans (and flats whose exposure is found) by place in the tree, in its order.",
           "type": "object"
+        },
+        "prompt": {
+          "anyOf": [
+            {
+              "enum": [
+                "light",
+                "dark",
+                "flat"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The run waits (paused) until the user readies the rig for these frames: uncovered, covered (darks and bias), on a panel."
         },
         "restarts": {
           "description": "Times it was resumed after nocsd restarted.",
           "type": "integer"
         },
         "run": {
+          "type": "string"
+        },
+        "sequence": {
+          "description": "Id of the saved sequence it runs.",
           "type": "string"
         },
         "started": {
@@ -10350,6 +10665,7 @@
       },
       "required": [
         "run",
+        "sequence",
         "name",
         "state",
         "started",
@@ -10357,7 +10673,8 @@
         "current",
         "plans",
         "outcome",
-        "error"
+        "error",
+        "prompt"
       ],
       "title": "SequenceRun",
       "type": "object"
@@ -10371,6 +10688,18 @@
             "$ref": "#/$defs/SequenceEvent"
           },
           "type": "array"
+        },
+        "master": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GroupMasterState"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The run's latest master of a group of darks, bias or flats."
         },
         "run": {
           "anyOf": [
@@ -12641,7 +12970,7 @@
     },
     "Template": {
       "additionalProperties": false,
-      "description": "This target, these filters, tonight: what the builder edits (phase 5.10).",
+      "description": "What the Sequences view edits: groups of frames of what the camera has framed,\nand what happens around them.",
       "properties": {
         "batch": {
           "default": 5,
@@ -12651,22 +12980,18 @@
         },
         "center": {
           "default": false,
-          "description": "Centre the target by plate solving instead of only going.",
+          "description": "Centre the target by plate solving before its lights.",
           "type": "boolean"
         },
         "cooling": {
-          "anyOf": [
-            {
-              "maximum": 40,
-              "minimum": -60,
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
+          "default": "off",
+          "description": "global: `temperature` for the whole sequence; group: each group's own.",
+          "enum": [
+            "off",
+            "global",
+            "group"
           ],
-          "default": null,
-          "description": "Sensor \u00b0C."
+          "type": "string"
         },
         "cooling_ramp": {
           "anyOf": [
@@ -12711,7 +13036,7 @@
         },
         "flip": {
           "default": true,
-          "description": "Flip the mount at the meridian (ADR 0033).",
+          "description": "Flip the mount at the meridian.",
           "type": "boolean"
         },
         "flip_after": {
@@ -12731,6 +13056,13 @@
             }
           ]
         },
+        "groups": {
+          "items": {
+            "$ref": "#/$defs/Group"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
         "guide": {
           "default": false,
           "type": "boolean"
@@ -12747,13 +13079,14 @@
             }
           ],
           "default": 30,
-          "description": "Image the target only above this (and the horizon)."
+          "description": "Lights only while the target is this high."
         },
         "name": {
           "$ref": "#/$defs/Name"
         },
         "order": {
           "default": "batches",
+          "description": "Light groups in a row: up to `batch` frames of each in turn, or each to its end.",
           "enum": [
             "batches",
             "in_turn"
@@ -12790,30 +13123,34 @@
           },
           "type": "object"
         },
-        "rows": {
-          "items": {
-            "$ref": "#/$defs/PlanRow"
-          },
-          "minItems": 1,
-          "type": "array"
-        },
         "start_at_dusk": {
           "default": true,
-          "description": "Wait until dark first; otherwise start at once.",
+          "description": "Lights wait until dark; darks, bias and flats do not.",
           "type": "boolean"
         },
-        "target": {
-          "$ref": "#/$defs/Target"
+        "temperature": {
+          "anyOf": [
+            {
+              "maximum": 40,
+              "minimum": -60,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Sensor \u00b0C when cooling is global."
         },
         "until_dawn": {
           "default": true,
+          "description": "Lights end at dawn; the rest goes on.",
           "type": "boolean"
         }
       },
       "required": [
         "name",
-        "target",
-        "rows"
+        "groups"
       ],
       "title": "Template",
       "type": "object"

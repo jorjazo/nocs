@@ -3,15 +3,14 @@
 
 import { isRigSection, type RigSection } from "./rigsections";
 
-export type Tab = "tonight" | "explore" | "plan" | "session" | "rig";
-export const TABS: readonly Tab[] = ["tonight", "explore", "plan", "session", "rig"];
+export type Tab = "tonight" | "explore" | "sequence" | "plan" | "session" | "rig";
+export const TABS: readonly Tab[] = ["tonight", "explore", "sequence", "plan", "session", "rig"];
 
 // Rig opens one of its sections, scrolled to it, at #/rig/<section> (#/rig/site).
 // The profile editor hangs off Rig: #/rig/profile/<id>, or #/rig/profile/new, and
 // so does a site's: #/rig/site/<id>, or #/rig/site/new; a
-// target's page off Plan: #/plan/<catalog id>, and the sequence builder:
-// #/plan/sequence (no catalog id is "sequence"); a session's report off Session:
-// #/session/<id>.
+// target's page off Plan: #/plan/<catalog id>; the sequence's groups off Sequences:
+// #/sequence/edit; a session's report off Session: #/session/<id>.
 // Autofocus (#/focus) and the focuser's calibration (#/focus/calibrate), guiding
 // (#/guiding), polar alignment (#/polar) and flats
 // (#/flats, or #/flats/<night> for that night's lights) are full-screen flows
@@ -23,7 +22,7 @@ export type Route =
   | { screen: "focus" }
   | { screen: "focus-calibration" }
   | { screen: "guiding" }
-  | { screen: "sequence" }
+  | { screen: "sequence-edit" }
   | { screen: "report"; id: number }
   | { screen: "polar" }
   | { screen: "flats"; night: number | null }
@@ -41,7 +40,7 @@ function parse(hash: string): Route {
   if (first === "guiding") return { screen: "guiding" };
   if (first === "polar") return { screen: "polar" };
   if (first === "flats") return { screen: "flats", night: second && /^\d+$/.test(second) ? Number(second) : null };
-  if (first === "plan" && second === "sequence") return { screen: "sequence" };
+  if (first === "sequence" && second === "edit") return { screen: "sequence-edit" };
   if (first === "session" && second && /^\d+$/.test(second)) return { screen: "report", id: Number(second) };
   if (first === "plan" && second) return { screen: "target", id: decodeURIComponent(second) };
   if (first === "rig" && second === "profile" && third) {
@@ -59,7 +58,7 @@ export function href(route: Route): string {
   if (route.screen === "profile") return `#/rig/profile/${route.id === null ? "new" : encodeURIComponent(route.id)}`;
   if (route.screen === "site") return `#/rig/site/${route.id === null ? "new" : encodeURIComponent(route.id)}`;
   if (route.screen === "target") return `#/plan/${encodeURIComponent(route.id)}`;
-  if (route.screen === "sequence") return "#/plan/sequence";
+  if (route.screen === "sequence-edit") return "#/sequence/edit";
   if (route.screen === "focus-calibration") return "#/focus/calibrate";
   if (route.screen === "report") return `#/session/${route.id}`;
   if (route.screen === "rig" && route.section) return `#/rig/${route.section}`;

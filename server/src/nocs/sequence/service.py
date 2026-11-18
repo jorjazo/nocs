@@ -1,9 +1,14 @@
-"""Sequences for the API: their definitions, and the one that runs (ADR 0031, 0032).
+"""Sequences for the API: their definitions, and the one that runs.
 
 State under ``("sequence",)``::
 
     run:    the run in progress or the last one (``Runner.status``), or None
     events: its most recent events, oldest first: {time, kind, message, path, data}
+    master: the run's latest master of a calibration group (``nocs.calibration.groups``)
+
+While a run is active (anything but finished) Explore takes no frames, and a run does
+not start while Explore takes them: the two views exclude each other. A run holds the
+live stack on, so that each group of lights keeps its stack.
 
 A run is a job of kind ``sequence`` that holds the main camera, the filter
 wheel, the focuser and the mount until it ends. Pausing lends them back
@@ -46,6 +51,8 @@ RESOURCES = (
     Role.FOCUSER.value,
     Role.MOUNT.value,
 )
+EXPLORE_KINDS = ("loop", "expose")
+"""Jobs of Explore's that keep a sequence from starting."""
 KEEP_EVENTS = 50
 MAX_RESTARTS = 3
 """Restarts of nocsd in one run after which it only runs *end* (ADR 0032)."""
@@ -98,7 +105,7 @@ class SequenceService:
         """Id of the sequence the run belongs to."""
         self._events: list[Json] = []
         self._record: MemoryObjectSendStream[Event] | None = None
-        store.set(ROOT, {"run": None, "events": []})
+        store.set(ROOT, {"run": None, "events": [], "master": None})
 
     # -- definitions ----------------------------------------------------------------
 
@@ -133,11 +140,18 @@ class SequenceService:
 
     # -- running --------------------------------------------------------------------
 
+    @property
+    def active(self) -> bool:
+        """A run holds the rig, or waits paused or on a prompt: Explore takes no frames."""
+        return self._job is not None
+
     def start(self, sequence_id: str) -> str:
         """Run a sequence as a job; returns the job id."""
         sequence = self._definitions.get(sequence_id)
         if sequence is None:
             raise KeyError(sequence_id)
+        if any(kind in EXPLORE_KINDS for kind in self._jobs.active()):
+            raise SequenceBusyError("Explore is taking frames: stop it before a sequence starts")
         if needs_site(sequence) and self._place() is None:
             raise ValueError("this sequence asks about the sky: choose the site")
         self._parts().capture.camera(Role.MAIN_CAMERA)  # refused now, not in the job
@@ -253,6 +267,10 @@ class SequenceService:
         )
         runner.checkpoint.sequence = sequence_id
         self._runner = runner
+        if parts.masters is not None:
+            parts.masters.forget()
+        if parts.stacking is not None:
+            await parts.stacking.hold(True)
         send, receive = anyio.create_memory_object_stream[Event](math.inf)
         self._record = send
         outcome = Outcome.FAILED
@@ -268,6 +286,11 @@ class SequenceService:
         finally:
             if parts.guiding is not None:
                 parts.guiding.guide_under(None)
+            if parts.stacking is not None:
+                try:
+                    await parts.stacking.hold(False)
+                except Exception:
+                    log.exception("the live stack could not be let go")
             self._publish()
             self._runner = None
             self._job = None

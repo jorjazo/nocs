@@ -1,77 +1,104 @@
 # Starlette's TestClient is typed against `httpx2`; see test_api.py.
 # pyright: reportUnknownMemberType=false, reportUnknownVariableType=false, reportUnknownArgumentType=false
-"""Templates: this target, these filters, tonight (phase 5.10)."""
+"""Templates: groups of frames of what the camera has framed."""
 
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import anyio
 import pytest
 from fastapi.testclient import TestClient
 from owner import pair_owner
-from test_sequence import DIAGUITAS, NGC_253, Rig, frames
+from test_sequence import DIAGUITAS, M42, Rig, frames
 
 from nocs.api.app import create_app
 from nocs.config import Settings
-from nocs.sequence import Container, Event, ExposurePlan, Outcome, PlanRow, Runner
+from nocs.sequence import (
+    Container,
+    Event,
+    EventKind,
+    ExposurePlan,
+    Outcome,
+    Runner,
+    RunState,
+    SequenceStore,
+)
 from nocs.sequence import sky as night_sky
 from nocs.sequence.model import (
+    Aim,
     Autofocus,
     AutofocusTrigger,
     Center,
     Cool,
     DitherTrigger,
+    Flats,
     FlipTrigger,
     FocusPlan,
+    Group,
     Guide,
+    Prompt,
     RecenterTrigger,
-    Slew,
     Template,
-    Unpark,
     UntilDawn,
     Wait,
     WhileAbove,
 )
-from nocs.sequence.template import estimate, expand
+from nocs.sequence.template import estimate, expand, segments
 
 LRGB = [
-    PlanRow(filter="L", exposure=120, count=40),
-    PlanRow(filter="R", exposure=180, count=10),
-    PlanRow(filter="G", exposure=180, count=10),
-    PlanRow(filter="B", exposure=180, count=10),
+    Group(filter="L", exposure=120, count=40),
+    Group(filter="R", exposure=180, count=10),
+    Group(filter="G", exposure=180, count=10),
+    Group(filter="B", exposure=180, count=10),
 ]
 
 
-def ngc253(**fields: object) -> Template:
-    return Template.model_validate(
-        {"name": "NGC 253 LRGB", "target": NGC_253, "rows": LRGB, **fields}
-    )
+def lrgb(*extra: Group, **fields: object) -> Template:
+    return Template.model_validate({"name": "LRGB", "groups": [*LRGB, *extra], **fields})
 
 
-def test_a_template_makes_the_night_s_tree() -> None:
-    sequence = expand(ngc253())
-    assert sequence.template == ngc253()
-    assert [c.kind for c in sequence.start.children] == ["unpark", "wait"]
-    assert sequence.start.children[1] == Wait(dusk="astronomical")
-    [target] = sequence.targets.children
-    assert isinstance(target, Container)
-    assert target.target == NGC_253
-    assert target.conditions == [UntilDawn()]
-    wait, imaging = target.children
-    assert wait == Wait(altitude=30)
+def lights_of(template: Template, index: int = 0) -> Container:
+    segment = expand(template).targets.children[index]
+    assert isinstance(segment, Container)
+    return segment
+
+
+def imaging_of(template: Template, index: int = 0) -> Container:
+    imaging = lights_of(template, index).children[-1]
+    assert isinstance(imaging, Container)
+    return imaging
+
+
+def test_lights_in_a_row_take_turns_in_one_plan() -> None:
+    sequence = expand(lrgb())
+    assert sequence.template == lrgb()
+    assert sequence.start.children == []
+    [lights] = sequence.targets.children
+    assert isinstance(lights, Container)
+    assert lights.conditions == [UntilDawn()]
+    dusk, aim, high, imaging = lights.children
+    assert (dusk, aim, high) == (Wait(dusk="astronomical"), Aim(), Wait(altitude=30))
     assert isinstance(imaging, Container)
     assert imaging.conditions == [WhileAbove(altitude=30)]
     assert imaging.triggers == [AutofocusTrigger(temperature_change=1.0), FlipTrigger()]
-    slew, focus, plan = imaging.children
-    assert (slew, focus) == (Slew(), Autofocus())
+    focus, plan = imaging.children
+    assert focus == Autofocus()
     assert isinstance(plan, ExposurePlan)
-    assert (plan.rows, plan.batch) == (LRGB, 5)
+    assert [(r.filter, r.exposure, r.count) for r in plan.rows] == [
+        ("L", 120, 40),
+        ("R", 180, 10),
+        ("G", 180, 10),
+        ("B", 180, 10),
+    ]
+    assert (plan.order, plan.batch, plan.frame_type) == ("batches", 5, "light")
     assert [c.kind for c in sequence.end.children] == ["park", "warm"]
 
 
 def test_options_change_the_tree() -> None:
     sequence = expand(
-        ngc253(
-            cooling=-10,
+        lrgb(
+            cooling="global",
+            temperature=-10,
             cooling_ramp=3,
             guide=True,
             start_at_dusk=False,
@@ -81,60 +108,178 @@ def test_options_change_the_tree() -> None:
             end={"park": False, "outputs": ["dc:1", "dew:1"]},
         )
     )
-    assert sequence.start.children == [Cool(temperature=-10, ramp=3), Unpark()]
-    [target] = sequence.targets.children
-    assert isinstance(target, Container)
-    assert target.conditions == []
-    [imaging] = target.children
+    assert sequence.start.children == [Cool(temperature=-10, ramp=3)]
+    [lights] = sequence.targets.children
+    assert isinstance(lights, Container)
+    assert lights.conditions == []
+    aim, imaging = lights.children
+    assert aim == Aim()
     assert isinstance(imaging, Container)
     assert imaging.conditions == []
     assert imaging.triggers[0] == AutofocusTrigger(filter_change=True, temperature_change=None)
-    # The filter trigger focuses before the first frame: no autofocus of its own.
-    assert [c.kind for c in imaging.children] == ["slew", "guide", "expose"]
-    assert sequence.end.children[0] == Guide(on=False)
+    # The filter trigger focuses before the first frame anyway: no autofocus of its own.
+    assert [c.kind for c in imaging.children] == ["guide", "expose"]
     assert [c.kind for c in sequence.end.children] == ["guide", "warm", "outputs"]
-    assert expand(ngc253(focus=None)).targets != sequence.targets
+    assert sequence.end.children[0] == Guide(on=False)
 
 
 def test_a_guided_template_dithers_every_n_frames() -> None:
     def triggers(template: Template) -> list[str]:
-        [target] = expand(template).targets.children
-        assert isinstance(target, Container)
-        imaging = target.children[-1]
-        assert isinstance(imaging, Container)
-        return [t.kind for t in imaging.triggers]
+        return [t.kind for t in imaging_of(template).triggers]
 
-    assert triggers(ngc253(guide=True, dither_every=3)) == ["autofocus", "flip", "dither"]
+    assert triggers(lrgb(guide=True, dither_every=3)) == ["autofocus", "flip", "dither"]
     # Without guiding there is nothing to dither.
-    assert triggers(ngc253(dither_every=3, flip=False)) == ["autofocus"]
-    [target] = expand(ngc253(guide=True, dither_every=3, dither_pixels=8)).targets.children
-    assert isinstance(target, Container)
-    imaging = target.children[-1]
-    assert isinstance(imaging, Container)
-    dither = imaging.triggers[-1]
+    assert triggers(lrgb(dither_every=3, flip=False)) == ["autofocus"]
+    dither = imaging_of(lrgb(guide=True, dither_every=3, dither_pixels=8)).triggers[-1]
     assert isinstance(dither, DitherTrigger)
     assert (dither.every, dither.dither.pixels) == (3, 8)
+
+
+def test_a_template_centres_and_checks_the_pointing() -> None:
+    imaging = imaging_of(lrgb(center=True, recenter_every=10, recenter_drift=3))
+    assert imaging.children[0] == Center()
+    recenter = imaging.triggers[-1]
+    assert isinstance(recenter, RecenterTrigger)
+    assert (recenter.every, recenter.recenter.drift) == (10, 3)
+    flip = imaging.triggers[-2]
+    assert isinstance(flip, FlipTrigger)
+    assert flip.flip.center == Center()  # a flip centres again
+    # Checking the pointing needs centring.
+    assert [t.kind for t in imaging_of(lrgb(recenter_every=10)).triggers] == [
+        "autofocus",
+        "flip",
+    ]
+
+
+def test_each_kind_of_frames_asks_for_the_rig_and_guiding_stops_for_it() -> None:
+    template = lrgb(
+        Group(frame_type="flat", filter="L", count=20),
+        Group(frame_type="flat", filter="R", exposure=0.5, count=20),
+        Group(frame_type="bias", filter="L", exposure=3, count=50),
+        Group(frame_type="dark", exposure=120, count=20),
+        guide=True,
+    )
+    assert [s.frame_class for s in segments(template)] == ["light", "flat", "flat", "dark", "dark"]
+    sequence = expand(template)
+    steps = [
+        [n.kind for n in c.children] for c in sequence.targets.children if isinstance(c, Container)
+    ]
+    assert steps == [
+        ["wait", "aim", "wait", "container"],
+        ["guide", "prompt", "flats"],
+        ["expose"],
+        ["prompt", "expose"],
+        ["expose"],
+    ]
+    flats, fixed, bias, dark = sequence.targets.children[1:]
+    assert isinstance(flats, Container)
+    assert flats.children[0] == Guide(on=False)
+    assert flats.children[1] == Prompt(frame_type="flat")
+    assert flats.children[2] == Flats(filter="L", count=20)
+    assert isinstance(fixed, Container)
+    [plan] = fixed.children
+    assert isinstance(plan, ExposurePlan)
+    assert (plan.frame_type, plan.rows[0].exposure) == ("flat", 0.5)
+    # Bias take the camera's shortest exposure and no filter; darks no filter.
+    assert isinstance(bias, Container)
+    plan = bias.children[1]
+    assert isinstance(plan, ExposurePlan)
+    assert (plan.frame_type, plan.rows[0].filter, plan.rows[0].exposure) == ("bias", None, None)
+    assert isinstance(dark, Container)
+    # Lights after darks ask to uncover the telescope.
+    again = expand(
+        Template(
+            name="x",
+            groups=[Group(frame_type="dark", exposure=60, count=5), LRGB[0]],
+        )
+    )
+    first, lights = again.targets.children
+    assert isinstance(first, Container)
+    assert isinstance(lights, Container)
+    assert first.children[0] == Prompt(frame_type="dark")
+    assert lights.children[0] == Prompt(frame_type="light")
+
+
+def test_cooling_per_group_cools_before_each_and_splits_lights() -> None:
+    template = Template(
+        name="x",
+        cooling="group",
+        groups=[
+            Group(filter="L", exposure=60, count=5, temperature=-10),
+            Group(filter="R", exposure=60, count=5, temperature=-10),
+            Group(filter="B", exposure=60, count=5, temperature=-5),
+            Group(frame_type="dark", exposure=60, count=5),
+        ],
+    )
+    assert [len(s.groups) for s in segments(template)] == [2, 1, 1]
+    sequence = expand(template)
+    first, second, dark = sequence.targets.children
+    assert isinstance(first, Container)
+    assert isinstance(second, Container)
+    assert isinstance(dark, Container)
+    assert first.children[0] == Cool(temperature=-10)
+    assert second.children[0] == Cool(temperature=-5)
+    assert [c.kind for c in dark.children] == ["prompt", "expose"]  # no temperature: as is
+    with pytest.raises(ValueError, match="global cooling needs a temperature"):
+        Template(name="x", cooling="global", groups=LRGB)
+
+
+def test_groups_fit_their_kind() -> None:
+    with pytest.raises(ValueError, match="light frames need an exposure"):
+        Group(count=1)
+    with pytest.raises(ValueError, match="dark frames need an exposure"):
+        Group(frame_type="dark", count=1)
+    assert Group(frame_type="dark", filter="L", exposure=60, count=1).filter is None
+    flat = Group(frame_type="flat", filter="L", count=10)
+    assert (flat.filter, flat.exposure) == ("L", None)
 
 
 async def test_a_night_from_a_template_on_a_fake_rig() -> None:
     rig = Rig()
     begin = datetime(2026, 10, 31, 20, 0, tzinfo=UTC)  # 17:00 at the site: daylight
     rig.time = begin
+    rig.aim = {"name": "M 42", "ra": M42.ra, "dec": M42.dec}
     events: list[Event] = []
+    template = Template(
+        name="M 42",
+        groups=[
+            Group(filter="L", exposure=120, count=10),
+            Group(frame_type="dark", exposure=120, count=3),
+        ],
+        min_altitude=None,
+    )
     runner = Runner(
-        expand(ngc253()),
+        expand(template),
         rig,
         now=rig.now,
         sleep=rig.sleep,
         place=lambda: DIAGUITAS,
         on_event=events.append,
     )
-    assert await runner.run() is Outcome.COMPLETED
-    taken = frames(rig)
-    assert len(taken) == 70  # 2.8 h: the plan ends before NGC 253 sets
-    assert taken[:5] == ["L 120"] * 5
-    assert rig.calls[:3] == ["unpark", "slew NGC 253", "autofocus"]
+    async with anyio.create_task_group() as group:
+
+        async def answer() -> None:
+            # Polled: the runner has no event to wait on.
+            for _ in range(1000):
+                if runner.state is RunState.PAUSED:
+                    break
+                await anyio.sleep(0.01)
+            assert runner.status()["prompt"] == "dark"
+            runner.resume()
+
+        group.start_soon(answer)
+        assert await runner.run() is Outcome.COMPLETED
+    assert frames(rig) == ["L 120"] * 10 + ["- 120"] * 3
+    assert rig.calls[:2] == ["aim", "autofocus"]
+    assert "paused" in rig.calls  # the rig is lent back while the user covers it
     assert rig.calls[-2:] == ["park", "warm"]
+    assert [kind for kind, _ in rig.ended] == ["light", "dark"]
+    assert rig.ended[1][1] == [11, 12, 13]  # the darks' frames, for their master
+    assert [e.kind for e in events].count(EventKind.PROMPT) == 1
+    status = runner.status()
+    assert [p["frame_type"] for p in status["plans"].values()] == ["light", "dark"]  # type: ignore[index]
+    assert runner.checkpoint.aimed is not None
+    assert runner.checkpoint.aimed.name == "M 42"
     # It waited for the dark, within a look at the sky (30 s) of astronomical dusk.
     [dusk] = [e for e in events if e.message == "wait"][:1]
     waited = dusk.data["waited"]
@@ -144,32 +289,37 @@ async def test_a_night_from_a_template_on_a_fake_rig() -> None:
     assert not night_sky.dark(DIAGUITAS, dark - timedelta(seconds=35), "astronomical")
 
 
-def test_an_estimate_of_the_plan() -> None:
-    template = ngc253()
-    found = estimate(
-        template, sensor=(6248, 4176), place=DIAGUITAS, now=datetime(2026, 11, 1, 1, tzinfo=UTC)
-    )
-    assert found.frames == 70
-    assert found.integration == 40 * 120 + 30 * 180
-    assert found.duration == found.integration + 70 * 3
+async def test_an_aim_without_coordinates_skips_the_altitude() -> None:
+    rig = Rig()
+    rig.time = datetime(2026, 11, 1, 3, 0, tzinfo=UTC)  # night at the site
+    rig.aim = {"name": None, "ra": None, "dec": None}
+    template = Template(name="x", groups=[Group(exposure=60, count=2)], flip=False)
+    runner = Runner(expand(template), rig, now=rig.now, sleep=rig.sleep, place=lambda: DIAGUITAS)
+    assert await runner.run() is Outcome.COMPLETED
+    assert frames(rig) == ["- 60"] * 2
+    assert runner.checkpoint.aimed is not None
+    assert runner.checkpoint.aimed.name == "Untitled"
+
+
+def test_an_estimate_of_the_groups() -> None:
+    template = lrgb(Group(frame_type="bias", count=50), Group(frame_type="flat", count=20))
+    now = datetime(2026, 11, 1, 1, tzinfo=UTC)  # 22:00 at the site: dark
+    found = estimate(template, sensor=(6248, 4176), place=DIAGUITAS, now=now)
+    assert found.frames == 140
+    assert found.integration == pytest.approx(40 * 120 + 30 * 180 + 50 * 0.001 + 20 * 2)
+    assert found.duration == pytest.approx(found.integration + 140 * 3)
     assert found.bytes is not None
-    assert 3.6e9 < found.bytes < 3.7e9  # 70 frames of 52 MB
-    assert found.window is not None
-    assert 3 * 3600 < found.window < 7 * 3600
-    # At 22:00 local NGC 253 is up in the dark: imaging starts now and the plan (2.9 h)
-    # ends before the window closes.
-    assert found.starts == datetime(2026, 11, 1, 1, tzinfo=UTC)
-    assert found.ends == datetime(2026, 11, 1, 1, tzinfo=UTC) + timedelta(seconds=found.duration)
-    # In the afternoon it starts when the window opens, and a long plan ends when it closes.
+    assert 7.2e9 < found.bytes < 7.4e9  # 140 frames of 52 MB
+    assert found.starts == now
+    assert found.ends == now + timedelta(seconds=found.duration)
+    # In the afternoon lights wait for dusk; darks first start at once.
     afternoon = datetime(2026, 11, 1, 18, tzinfo=UTC)
-    long = template.model_copy(update={"rows": [PlanRow(exposure=300, count=200)]})
-    later = estimate(long, place=DIAGUITAS, now=afternoon)
+    later = estimate(template, place=DIAGUITAS, now=afternoon)
     assert later.starts is not None
-    assert later.ends is not None
     assert later.starts > afternoon
-    assert (later.ends - later.starts).total_seconds() == pytest.approx(later.window, abs=1)
-    blind = estimate(template)
-    assert (blind.bytes, blind.window, blind.starts, blind.ends) == (None, None, None, None)
+    darks = Template(name="d", groups=[Group(frame_type="dark", exposure=60, count=5)])
+    assert estimate(darks, place=DIAGUITAS, now=afternoon).starts == afternoon
+    assert estimate(template).bytes is None
 
 
 def test_the_api_builds_a_sequence_from_a_template(tmp_path: Path) -> None:
@@ -181,38 +331,28 @@ def test_the_api_builds_a_sequence_from_a_template(tmp_path: Path) -> None:
     )
     with TestClient(create_app(settings)) as client:
         pair_owner(client)
-        body = ngc253().model_dump(mode="json")
-        assert client.put("/api/sequences/ngc253/template", json=body).status_code == 204
-        stored = client.get("/api/sequences/ngc253").json()
+        body = lrgb().model_dump(mode="json")
+        assert client.put("/api/sequences/lrgb/template", json=body).status_code == 204
+        stored = client.get("/api/sequences/lrgb").json()
         assert stored["template"] == body
-        assert stored["targets"]["children"][0]["target"]["name"] == "NGC 253"
+        assert stored["targets"]["children"][0]["children"][1] == {"kind": "aim"}
         response = client.post("/api/sequences/estimate", json=body)
         assert response.status_code == 200, response.text
-        assert response.json() == {
-            "frames": 70,
-            "integration": 10200.0,
-            "duration": 10410.0,
-            "bytes": None,
-            "window": None,
-            "starts": None,
-            "ends": None,
-        }
+        found = response.json()
+        assert (found["frames"], found["integration"], found["duration"]) == (70, 10200.0, 10410.0)
+        assert found["bytes"] is None
         expanded = client.post("/api/sequences/expand", json=body)
         assert expanded.status_code == 200, expanded.text
         assert expanded.json()["end"]["children"][0] == {"kind": "park"}
-        bad = {**body, "target": {"name": "somewhere"}}
+        bad = {**body, "groups": [{"frame_type": "light", "count": 3}]}
         assert client.put("/api/sequences/x/template", json=bad).status_code == 422
 
 
-def test_a_template_centres_and_checks_the_pointing() -> None:
-    [target] = expand(ngc253(center=True, recenter_every=10, recenter_drift=3)).targets.children
-    assert isinstance(target, Container)
-    imaging = target.children[-1]
-    assert isinstance(imaging, Container)
-    assert imaging.children[0] == Center()
-    recenter = imaging.triggers[-1]
-    assert isinstance(recenter, RecenterTrigger)
-    assert (recenter.every, recenter.recenter.drift) == (10, 3)
-    flip = imaging.triggers[-2]
-    assert isinstance(flip, FlipTrigger)
-    assert flip.flip.center == Center()  # a flip centres again
+def test_a_template_s_offs_survive_the_store(tmp_path: Path) -> None:
+    template = lrgb(focus=None, min_altitude=None)
+    store = SequenceStore(tmp_path)
+    store.put("lrgb", expand(template))
+    stored = store.get("lrgb")
+    assert stored is not None
+    assert stored.template == template
+    assert stored.digest() == expand(template).digest()

@@ -6,9 +6,10 @@ from pathlib import PurePosixPath
 
 import pytest
 
-from nocs.calibration.darks import darks_sequence, duration, frames
+from nocs.calibration.darks import darks_template, duration, frames
 from nocs.calibration.library import Light, Setup, Wanted, lights_of, report
 from nocs.sequence.model import Container
+from nocs.sequence.template import expand
 from nocs.storage import FrameRow
 
 SETUP = Setup("ZWO CCD ASI2600MC Duo", 6248, 4176, 1, 100.0, 50.0)
@@ -143,7 +144,7 @@ def test_unknown_values_match_only_unknown_ones() -> None:
     assert replace(group.setup, gain=1).gain == 1
 
 
-def test_darks_sequence_cools_takes_bias_then_darks_and_warms() -> None:
+def test_darks_template_cools_takes_bias_then_darks_and_warms() -> None:
     lights = lights_of(
         [row("light", filter="L", exposure=e) for e in (300, 60)]
         + [row("light", filter="L", exposure=120, temperature=0.0)]
@@ -152,50 +153,36 @@ def test_darks_sequence_cools_takes_bias_then_darks_and_warms() -> None:
     needs = report(lights, [], Wanted(darks=10, bias=30)).needs
     other = replace(needs[0], setup=replace(SETUP, camera="Other"))
     region = replace(needs[0], setup=replace(SETUP, width=1000))
-    sequence, left = darks_sequence(
+    template, left = darks_template(
         [*needs, other, region],
         camera=SETUP.camera,
         sensor=(6248, 4176),
-        bias_exposure=0.0001,
         warm=True,
         name="Darks",
     )
     assert left == [other, region]
-    plan = [
-        (
-            c.name,
-            [
-                (
-                    n.kind,
-                    getattr(n, "frame_type", None),
-                    [(r.exposure, r.count) for r in getattr(n, "rows", [])],
-                )
-                for n in c.children
-            ],
-        )
-        for c in sequence.targets.children
-        if isinstance(c, Container)
+    assert template is not None
+    assert template.cooling == "group"
+    assert [(g.frame_type, g.exposure, g.count, g.temperature) for g in template.groups] == [
+        ("bias", None, 30, -10),
+        ("dark", 60, 10, -10),
+        ("dark", 300, 10, -10),
+        ("bias", None, 30, 0),
+        ("dark", 120, 10, 0),
     ]
-    assert plan == [
-        (
-            "-10 °C",
-            [
-                ("cool", None, []),
-                ("expose", "bias", [(0.0001, 30)]),
-                ("expose", "dark", [(60, 10), (300, 10)]),
-            ],
-        ),
-        (
-            "0 °C",
-            [
-                ("cool", None, []),
-                ("expose", "bias", [(0.0001, 30)]),
-                ("expose", "dark", [(120, 10)]),
-            ],
-        ),
+    sequence = expand(template)
+    # Covered once, at the start; cooled for each temperature; warmed at the end.
+    steps = [
+        [n.kind for n in c.children] for c in sequence.targets.children if isinstance(c, Container)
     ]
+    assert steps[0] == ["prompt", "cool", "expose"]
+    assert steps[1:] == [["cool", "expose"]] * 4
     assert [n.kind for n in sequence.end.children] == ["warm"]
-    assert frames(sequence) == 30 + 20 + 30 + 10
+    assert frames(template) == 30 + 20 + 30 + 10
+    assert (
+        darks_template([other], camera=SETUP.camera, sensor=(6248, 4176), warm=True, name="x")[0]
+        is None
+    )
 
 
 def test_dark_groups_leave_out_test_frames_and_warm_lights() -> None:
@@ -224,16 +211,11 @@ def test_dark_groups_leave_out_test_frames_and_warm_lights() -> None:
         ("dark", 20, 120, -10.0),
         ("flat", 20, None, None),
     ]
-    sequence, _ = darks_sequence(
-        needs,
-        camera=SETUP.camera,
-        sensor=(6248, 4176),
-        bias_exposure=0.001,
-        warm=True,
-        name="Darks",
+    template, _ = darks_template(
+        needs, camera=SETUP.camera, sensor=(6248, 4176), warm=True, name="Darks"
     )
-    assert frames(sequence) == 70
-    assert duration(sequence) == pytest.approx(50 * 3.001 + 20 * 123)
+    assert frames(template) == 70
+    assert duration(template) == pytest.approx(50 * 3.001 + 20 * 123)
 
     # All of them: what it built for rc2's night, bias at both temperatures.
     every = found.chosen_needs([g.key for g in found.dark_groups])

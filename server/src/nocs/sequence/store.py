@@ -53,7 +53,8 @@ class SequenceStore:
             return None
 
     def put(self, sequence_id: str, sequence: Sequence) -> None:
-        data = json.dumps(sequence.model_dump(mode="json", exclude_none=True), indent=2) + "\n"
+        # Nones kept: a template's None often means "off" where its default is on.
+        data = json.dumps(sequence.model_dump(mode="json"), indent=2) + "\n"
         write_atomic(self._path(sequence_id), data)
 
     def delete(self, sequence_id: str) -> bool:
