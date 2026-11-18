@@ -1119,7 +1119,7 @@ export const es: Messages = {
     surveyAsking: (service) => `Pidiendo la imagen del survey a ${service}…`,
     surveyOffline: "Sin imagen del survey: este dispositivo no tiene conexión",
     surveyFailed: (misses) => {
-      const all = misses.map((m) => m.service).join(" y ");
+      const all = new Intl.ListFormat("es", { type: "conjunction" }).format(misses.map((m) => m.service));
       const [first] = misses;
       if (first && misses.length > 1 && misses.every((m) => m.miss === first.miss)) {
         const together = {

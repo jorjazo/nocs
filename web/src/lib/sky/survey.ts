@@ -27,14 +27,17 @@ export const ORIGIN: Record<Source, string> = {
   skyview: "https://skyview.gsfc.nasa.gov",
 };
 
-// A tile takes a second or two when the mirror is up. SkyView makes its image
-// from the DSS plates, slower the wider the field (measured in ADR 0020).
-export const TILE_TIMEOUT = 10_000;
+// A tile takes 0.3–2 s when the mirror is up (both mirrors speak HTTP/2, so a
+// view's tiles do not queue for connections): three silent mirrors cost 15 s
+// before SkyView is asked. SkyView makes its image from the DSS plates, slower
+// the wider the field.
+export const TILE_TIMEOUT = 5_000;
 export const SKYVIEW_TIMEOUT = 30_000;
-// A mirror that failed a tile is not asked again for this long.
+// A mirror that failed a tile is not asked again for this long, by any chart of
+// this browser (kept across reloads); then the tiles wanted are asked again.
 export const DOWN_MS = 5 * 60_000;
-// Tiles kept in memory: a few views' worth (a view needs 4–40).
-export const KEPT_TILES = 160;
+// Tiles kept in memory: a few views' worth (a view needs 4–60).
+export const KEPT_TILES = 200;
 
 // Asked after a miss, to tell a service that answers from one that does not.
 export const PROBE_TIMEOUT = 5_000;
@@ -140,28 +143,65 @@ export type Loader<I> = {
 
 // -- Tiles ----------------------------------------------------------------------
 
-// The tiles of the views asked for, from the first mirror that answers. A mirror
+const DOWN_KEY = "nocs.surveyDown";
+
+type Down = { until: number; miss: Miss | null };
+
+export type TileOptions = {
+  store?: KeyValueStore | null;
+  now?: () => number;
+  // Runs `run` after `ms`: the retry once a mirror's down time is over.
+  later?: (run: () => void, ms: number) => void;
+};
+
+// The tiles of the view asked for, from the first mirror that answers. A mirror
 // that fails a tile is skipped for DOWN_MS, its tiles asked of the next one;
-// when every mirror is down the chart falls back to SkyView. `changed` is called
-// whenever a tile arrives or a mirror goes down or is told apart by its probe.
+// when every mirror is down the chart falls back to SkyView. One per page: the
+// tiles and which mirrors are down serve every chart, and the latter survive a
+// reload. Listeners hear whenever a tile arrives, a mirror goes down or comes
+// back, or a probe tells why.
 export class SurveyTiles<I> {
   #memory: SourceMemory;
   #loader: Loader<I>;
-  #changed: () => void;
+  #store: KeyValueStore | null;
   #now: () => number;
+  #later: (run: () => void, ms: number) => void;
+  #listeners = new Set<() => void>();
   // Loaded tiles by key, least recently wanted first.
   #images = new Map<string, I>();
   #pending = new Map<string, AbortController>();
-  #down = new Map<Mirror, { until: number; miss: Miss | null }>();
+  #down = new Map<Mirror, Down>();
+  #wanted: Tile[] = [];
   #stopped = new AbortController();
-  // The mirror the last tile came from, for the credit.
-  last: Mirror | null = null;
+  #last: Mirror | null = null;
 
-  constructor(memory: SourceMemory, loader: Loader<I>, changed: () => void, now: () => number = Date.now) {
+  constructor(memory: SourceMemory, loader: Loader<I>, options: TileOptions = {}) {
     this.#memory = memory;
     this.#loader = loader;
-    this.#changed = changed;
-    this.#now = now;
+    this.#store = options.store === undefined ? defaultStore() : options.store;
+    this.#now = options.now ?? Date.now;
+    this.#later = options.later ?? ((run, ms) => void setTimeout(run, ms));
+    try {
+      const saved: unknown = JSON.parse(this.#store?.getItem(DOWN_KEY) ?? "null");
+      if (typeof saved === "object" && saved !== null) {
+        for (const mirror of MIRRORS) {
+          const entry = (saved as Record<string, unknown>)[mirror];
+          if (isDown(entry) && entry.until > this.#now()) this.#markDown(mirror, entry);
+        }
+      }
+    } catch {
+      // Unreadable: every mirror may be asked.
+    }
+  }
+
+  subscribe(listener: () => void): () => void {
+    this.#listeners.add(listener);
+    return () => this.#listeners.delete(listener);
+  }
+
+  // The mirror the last tile came from, for the credit.
+  get last(): Mirror | null {
+    return this.#last;
   }
 
   image(tile: Tile): I | undefined {
@@ -195,9 +235,10 @@ export class SurveyTiles<I> {
     return misses;
   }
 
-  // The tiles a view needs: asked for when missing, and those on their way for
+  // The tiles the view needs: asked for when missing, and those on their way for
   // an earlier view and no longer needed are dropped.
   want(tiles: Tile[]): void {
+    this.#wanted = tiles;
     const keys = new Set(tiles.map(tileKey));
     for (const [key, controller] of this.#pending) {
       if (keys.has(key)) continue;
@@ -221,12 +262,19 @@ export class SurveyTiles<I> {
   // Back online: every mirror may be asked again.
   reset(): void {
     this.#down.clear();
+    this.#save();
+    this.want(this.#wanted);
+    this.#changed();
   }
 
   stop(): void {
     this.#stopped.abort();
     for (const controller of this.#pending.values()) controller.abort();
     this.#pending.clear();
+  }
+
+  #changed(): void {
+    for (const listener of this.#listeners) listener();
   }
 
   async #load(tile: Tile, key: string): Promise<void> {
@@ -237,17 +285,17 @@ export class SurveyTiles<I> {
       if (!mirror) break;
       try {
         const image = await this.#loader.image(`${HIPS[mirror]}/${tilePath(tile)}`, TILE_TIMEOUT, controller.signal);
-        if (controller.signal.aborted) return;
-        this.#pending.delete(key);
+        if (this.#pending.get(key) === controller) this.#pending.delete(key);
+        // Kept even when no longer wanted: it came, and the next view may need it.
         this.#images.set(key, image);
         while (this.#images.size > KEPT_TILES) {
           const oldest = this.#images.keys().next().value;
           if (oldest === undefined) break;
           this.#images.delete(oldest);
         }
-        this.#down.delete(mirror);
+        if (this.#down.delete(mirror)) this.#save();
         this.#memory.worked(mirror);
-        this.last = mirror;
+        this.#last = mirror;
         this.#changed();
         return;
       } catch (outcome) {
@@ -260,21 +308,51 @@ export class SurveyTiles<I> {
   }
 
   #fail(mirror: Mirror, outcome: "error" | "timeout"): void {
-    const now = this.#now();
-    if ((this.#down.get(mirror)?.until ?? 0) > now) return; // another tile told already
-    const entry: { until: number; miss: Miss | null } = { until: now + DOWN_MS, miss: null };
-    this.#down.set(mirror, entry);
+    if ((this.#down.get(mirror)?.until ?? 0) > this.#now()) return; // another tile told already
+    const entry = this.#markDown(mirror, { until: this.#now() + DOWN_MS, miss: null });
+    this.#save();
     this.#changed();
     void this.#loader.probe(ORIGIN[mirror], this.#stopped.signal).then((probe) => {
       entry.miss = classify(outcome, probe);
+      this.#save();
       this.#changed();
     });
   }
+
+  // Down until `until`, then the tiles wanted by then are asked again.
+  #markDown(mirror: Mirror, entry: Down): Down {
+    this.#down.set(mirror, entry);
+    this.#later(
+      () => {
+        if (this.#down.get(mirror) !== entry || this.#stopped.signal.aborted) return;
+        this.want(this.#wanted);
+        this.#changed();
+      },
+      Math.max(0, entry.until - this.#now()) + 1,
+    );
+    return entry;
+  }
+
+  #save(): void {
+    try {
+      this.#store?.setItem(DOWN_KEY, JSON.stringify(Object.fromEntries(this.#down)));
+    } catch {
+      // Not persisted; this page still knows.
+    }
+  }
+}
+
+const MISSES: readonly Miss[] = ["unreachable", "silent", "slow", "error"];
+
+function isDown(value: unknown): value is Down {
+  if (typeof value !== "object" || value === null) return false;
+  const { until, miss } = value as { until?: unknown; miss?: unknown };
+  return typeof until === "number" && (miss === null || MISSES.some((m) => m === miss));
 }
 
 // -- SkyView, when no mirror answers ---------------------------------------------
 
-// SkyView's time grows with the field's area, hardly with its pixels (ADR 0020):
+// SkyView's time grows with the field's area, hardly with its pixels:
 // a view wider than this gets an image of its middle, where the frame is.
 export const MAX_FIELD = 5;
 // The longer side's pixels; a phone's, capped (the services are free, be kind).
@@ -402,3 +480,4 @@ export const SERVICE: Record<Source, string> = { irsa: "IRSA", esa: "ESA", cds: 
 
 // One per page, shared by every chart.
 export const surveyMemory = new SourceMemory();
+export const surveyTiles = new SurveyTiles(surveyMemory, browserLoader);

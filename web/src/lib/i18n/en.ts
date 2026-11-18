@@ -1142,7 +1142,7 @@ export const en = {
     surveyOffline: "No survey image: this device is offline",
     // Why each service gave none, in the order asked (lib/sky/survey.ts).
     surveyFailed: (misses: { service: string; miss: Miss }[]) => {
-      const all = misses.map((m) => m.service).join(" and ");
+      const all = new Intl.ListFormat("en", { type: "conjunction" }).format(misses.map((m) => m.service));
       const [first] = misses;
       if (first && misses.length > 1 && misses.every((m) => m.miss === first.miss)) {
         const together: Record<Miss, string> = {

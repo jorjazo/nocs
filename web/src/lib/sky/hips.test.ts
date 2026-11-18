@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { parent, skyToTile, tileIndex, tileKey, tileOrder, tilePath, tileToSky, tilesInDisc, tilesInView } from "./hips.ts";
+import { children, coverView, parent, skyToTile, tileIndex, tileKey, tileOrder, tilePath, tileToSky, tilesInDisc, tilesInView } from "./hips.ts";
 import { project, separation, unproject } from "./projection.ts";
 
 const RAD = Math.PI / 180;
@@ -121,4 +121,41 @@ test("a tile drawn by its corners lands where its sky is", () => {
   const ys = corners.map((c) => c?.y ?? 0);
   assert.ok(middle.x > Math.min(...xs) && middle.x < Math.max(...xs));
   assert.ok(middle.y > Math.min(...ys) && middle.y < Math.max(...ys));
+});
+
+test("a tile's children split it in four", () => {
+  const tile = skyToTile(5, { ra: 3, dec: -40 });
+  const kids = children(tile);
+  assert.equal(new Set(kids.map(tileKey)).size, 4);
+  for (const kid of kids) assert.deepEqual(parent(kid), tile);
+});
+
+test("a view's cover is kept while the view stays inside its margin", () => {
+  const v = view(5.6, -69, 2);
+  const order = tileOrder(v, 1, 9);
+  const cover = coverView(v, order, null);
+  // A short pan: the same tiles, not walked down again.
+  const panned = { ...v, center: { ra: 5.61, dec: -69.05 } };
+  assert.equal(coverView(panned, order, cover), cover);
+  // Past the margin, or at another order: a new one, which covers the view.
+  const far = { ...v, center: { ra: 5.9, dec: -69.5 } };
+  const moved = coverView(far, order, cover);
+  assert.ok(moved !== cover);
+  assert.ok(coverView(v, order + 1, cover) !== cover);
+  const keys = new Set(moved.tiles.map(tileKey));
+  for (let x = 0; x <= far.width; x += far.width / 10) {
+    for (let y = 0; y <= far.height; y += far.height / 10) {
+      assert.ok(keys.has(tileKey(skyToTile(order, unproject(far, { x, y })))));
+    }
+  }
+  // Whatever kept cover a view passes, it still covers that view.
+  for (const pan of [0, 0.02, 0.05, 0.1]) {
+    const p = { ...v, center: { ra: 5.6 + pan, dec: -69 } };
+    const kept = new Set(coverView(p, order, cover).tiles.map(tileKey));
+    for (let x = 0; x <= p.width; x += p.width / 10) {
+      for (let y = 0; y <= p.height; y += p.height / 10) {
+        assert.ok(kept.has(tileKey(skyToTile(order, unproject(p, { x, y })))), `pan ${pan} at ${x},${y}`);
+      }
+    }
+  }
 });

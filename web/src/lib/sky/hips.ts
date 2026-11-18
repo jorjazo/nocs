@@ -4,7 +4,7 @@
 // browser fetches the tiles itself and draws them here, so any field costs about
 // the view's pixels, whatever its size (docs/spikes/survey-sources.md).
 
-import { project, type Point, type Sky, type View, viewRadius } from "./projection.ts";
+import { project, type Point, separation, type Sky, type View, viewRadius } from "./projection.ts";
 
 const RAD = Math.PI / 180;
 const HOUR = 15 * RAD;
@@ -97,6 +97,16 @@ export function parent(tile: Tile): Tile | null {
   return { order: tile.order - 1, face: tile.face, ix: Math.floor(tile.ix / 2), iy: Math.floor(tile.iy / 2) };
 }
 
+export function children(tile: Tile): Tile[] {
+  const { order, face, ix, iy } = tile;
+  return [
+    { order: order + 1, face, ix: 2 * ix, iy: 2 * iy },
+    { order: order + 1, face, ix: 2 * ix + 1, iy: 2 * iy },
+    { order: order + 1, face, ix: 2 * ix, iy: 2 * iy + 1 },
+    { order: order + 1, face, ix: 2 * ix + 1, iy: 2 * iy + 1 },
+  ];
+}
+
 // Degrees from a tile's centre to its farthest corner or edge, with a margin for
 // the edges' curve.
 function tileRadius(tile: Tile, center: Sky): number {
@@ -111,17 +121,9 @@ function tileRadius(tile: Tile, center: Sky): number {
     [1, 0.5],
     [0.5, 1],
   ] as const) {
-    r = Math.max(r, separationDeg(center, tileToSky(tile, u, v)));
+    r = Math.max(r, separation(center, tileToSky(tile, u, v)));
   }
   return r * 1.1;
-}
-
-function separationDeg(a: Sky, b: Sky): number {
-  const d1 = a.dec * RAD;
-  const d2 = b.dec * RAD;
-  const dra = (b.ra - a.ra) * HOUR;
-  const h = Math.sin((d2 - d1) / 2) ** 2 + Math.cos(d1) * Math.cos(d2) * Math.sin(dra / 2) ** 2;
-  return (2 * Math.asin(Math.min(1, Math.sqrt(h)))) / RAD;
 }
 
 // The tiles of an order within `radius` degrees of a point: down from the 12
@@ -132,15 +134,10 @@ export function tilesInDisc(order: number, center: Sky, radius: number): Tile[] 
   for (let o = 0; ; o++) {
     level = level.filter((tile) => {
       const middle = tileToSky(tile, 0.5, 0.5);
-      return separationDeg(middle, center) < radius + tileRadius(tile, middle);
+      return separation(middle, center) < radius + tileRadius(tile, middle);
     });
     if (o >= order) return level;
-    level = level.flatMap((t) => [
-      { order: o + 1, face: t.face, ix: 2 * t.ix, iy: 2 * t.iy },
-      { order: o + 1, face: t.face, ix: 2 * t.ix + 1, iy: 2 * t.iy },
-      { order: o + 1, face: t.face, ix: 2 * t.ix, iy: 2 * t.iy + 1 },
-      { order: o + 1, face: t.face, ix: 2 * t.ix + 1, iy: 2 * t.iy + 1 },
-    ]);
+    level = level.flatMap(children);
   }
 }
 
@@ -159,6 +156,22 @@ export function tileOrder(view: View, pixelRatio: number, deepest: number): numb
 
 export function tilesInView(view: View, order: number): Tile[] {
   return tilesInDisc(order, view.center, viewRadius(view));
+}
+
+// The tiles around a view, with a margin: kept while the view pans and zooms
+// within it at the same order, so a drag does not walk the tiles down from the
+// 12 faces at every step (and the tiles just past the edge come early).
+export type Cover = { order: number; center: Sky; radius: number; tiles: Tile[] };
+
+export const COVER_MARGIN = 1.3;
+
+export function coverView(view: View, order: number, previous: Cover | null): Cover {
+  const radius = viewRadius(view);
+  if (previous && previous.order === order && separation(previous.center, view.center) + radius <= previous.radius) {
+    return previous;
+  }
+  const wide = radius * COVER_MARGIN;
+  return { order, center: { ...view.center }, radius: wide, tiles: tilesInDisc(order, view.center, wide) };
 }
 
 // -- Drawing ----------------------------------------------------------------------
@@ -186,7 +199,8 @@ export function tileGrid(view: View, tile: Tile): (Point | null)[][] {
 // along ix: its top-left pixel is the tile's south corner. Each cell is one
 // affine map from three of its corners, with no clipping (a clip's antialiased
 // edge shows as a seam); its source rectangle, grown by a pixel, covers the
-// cracks between cells.
+// cracks between cells, and at the tile's edge (where there is no pixel beyond)
+// its last pixel is stretched one further, over the crack to the next tile.
 export function drawTile(context: CanvasRenderingContext2D, view: View, tile: Tile, image: CanvasImageSource & { width: number; height: number }): void {
   const grid = tileGrid(view, tile);
   const n = grid.length - 1;
@@ -212,7 +226,11 @@ export function drawTile(context: CanvasRenderingContext2D, view: View, tile: Ti
       const sy = Math.max(0, i * ch - 1);
       const sw = Math.min(w, (j + 1) * cw + 1) - sx;
       const sh = Math.min(h, (i + 1) * ch + 1) - sy;
-      context.drawImage(image, sx, sy, sw, sh, sx - j * cw, sy - i * ch, sw, sh);
+      const left = j === 0 ? 1 : 0;
+      const top = i === 0 ? 1 : 0;
+      const right = j === n - 1 ? 1 : 0;
+      const bottom = i === n - 1 ? 1 : 0;
+      context.drawImage(image, sx, sy, sw, sh, sx - j * cw - left, sy - i * ch - top, sw + left + right, sh + top + bottom);
       context.restore();
     }
   }

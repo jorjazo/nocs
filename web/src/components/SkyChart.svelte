@@ -32,7 +32,7 @@
     viewRadius,
     viewSpan,
   } from "../lib/sky/projection";
-  import { drawTile, parent, type Tile, tileKey, tileOrder, tilesInView } from "../lib/sky/hips";
+  import { children, type Cover, coverView, drawTile, parent, type Tile, tileKey, tileOrder } from "../lib/sky/hips";
   import {
     browserLoader,
     DEEPEST,
@@ -43,7 +43,7 @@
     surveyMemory,
     type SurveyRequest,
     surveyRequest,
-    SurveyTiles,
+    surveyTiles as tiles,
   } from "../lib/sky/survey";
   import type { CameraField, CatalogObject, SkyChart } from "../lib/types";
 
@@ -143,23 +143,28 @@
 
   // DSS2 colour drawn from HiPS tiles, asked of the mirror that worked last in this
   // browser first; NASA SkyView's DSS2 red when no mirror answers (lib/sky/survey.ts).
+  // The tiles and which mirrors are down are the page's, shared by every chart.
   let tilesChanged = $state(0);
-  const tiles = new SurveyTiles(surveyMemory, browserLoader, () => (tilesChanged += 1));
-  // The tiles the view needs, at the order its pixels need.
+  $effect(() => tiles.subscribe(() => (tilesChanged += 1)));
+  // The tiles around the view, at the order its pixels need.
+  let cover: Cover | null = null;
   let wantedTiles: Tile[] = $state.raw([]);
   // Bumped when the device goes on or offline.
   let online = $state(0);
 
   $effect(() => {
     void online;
-    const wanted =
+    cover =
       !survey || width === 0 || height === 0
-        ? []
-        : tilesInView(view, tileOrder(view, window.devicePixelRatio || 1, DEEPEST));
+        ? null
+        : coverView(view, tileOrder(view, window.devicePixelRatio || 1, DEEPEST), cover);
+    const wanted = cover?.tiles ?? [];
+    if (untrack(() => wantedTiles) === wanted) return;
     wantedTiles = wanted;
     // Asked at once, while the view moves too.
     untrack(() => tiles.want(wanted));
   });
+  $effect(() => () => tiles.want([]));
 
   // SkyView gives a gnomonic image, north up, east left, like the chart.
   type SkyViewImage = { image: HTMLImageElement; ra: number; dec: number; fov: number; width: number };
@@ -179,6 +184,10 @@
       untrack(stopSkyView);
       skyViewMissed = null;
       if (untrack(() => skyViewStatus.kind) !== "idle") skyViewStatus = { kind: "idle" };
+      // The mirrors are back and their tiles cover the view: SkyView's image goes.
+      if (untrack(() => skyViewImage) && wantedTiles.length && wantedTiles.every((tile) => tiles.image(tile))) {
+        skyViewImage = null;
+      }
       return;
     }
     const wanted = surveyRequest(view, window.devicePixelRatio || 1);
@@ -196,13 +205,12 @@
   $effect(() => () => {
     clearTimeout(skyViewTimer);
     stopSkyView();
-    tiles.stop();
   });
   $effect(() => {
     const retry = () => {
-      tiles.reset();
       skyViewMissed = null;
       online += 1;
+      tiles.reset();
     };
     const offline = () => (online += 1);
     window.addEventListener("online", retry);
@@ -237,14 +245,26 @@
     }
   }
 
-  // A wanted tile's image, or failing that its nearest loaded ancestor's (a coarser
-  // image while zooming in), with the tile it is of.
-  function tileImage(tile: Tile): [Tile, HTMLImageElement] | null {
+  // What stands in for a wanted tile: its image, or else its nearest loaded
+  // ancestor's (coarser, zooming in), or else its loaded children's or
+  // grandchildren's (finer, zooming out).
+  function standIns(tile: Tile): [Tile, HTMLImageElement][] {
     for (let at: Tile | null = tile; at && at.order >= tile.order - 4; at = parent(at)) {
       const image = tiles.image(at);
-      if (image) return [at, image];
+      if (image) return [[at, image]];
     }
-    return null;
+    const found: [Tile, HTMLImageElement][] = [];
+    for (const child of children(tile)) {
+      const image = tiles.image(child);
+      if (image) found.push([child, image]);
+      else {
+        for (const grandchild of children(child)) {
+          const deeper = tiles.image(grandchild);
+          if (deeper) found.push([grandchild, deeper]);
+        }
+      }
+    }
+    return found;
   }
 
   const surveyFailed = $derived.by(() => {
@@ -258,7 +278,7 @@
     if (!survey) return "";
     const offline = !browserLoader.online();
     if (!tiles.allDown()) {
-      if (wantedTiles.some((tile) => tileImage(tile))) {
+      if (wantedTiles.some((tile) => standIns(tile).length)) {
         return t.chart.surveyCredit.tiles(SERVICE[tiles.last ?? "irsa"]);
       }
       if (offline) return t.chart.surveyOffline;
@@ -340,8 +360,7 @@
     context.fillStyle = colors.bg;
     context.fillRect(0, 0, width, height);
     const v = view;
-    if (survey && skyViewImage) drawSkyView(context, v, skyViewImage);
-    if (survey) drawTiles(context, v, ratio);
+    if (survey) drawSurvey(context, v, ratio);
     drawOwnFrames(context, v);
     if (chart) {
       drawObjects(context, v, chart.objects, colors);
@@ -352,44 +371,42 @@
     drawCrosshair(context, colors);
   }
 
+  // SkyView's image and the tiles are drawn opaque into a layer of their own, then
+  // painted at once: tiles cover the SkyView image under them instead of letting
+  // it show through, and cells that overlap by a pixel show no darker seams.
+  let layer: HTMLCanvasElement | null = null;
+
+  function drawSurvey(context: CanvasRenderingContext2D, v: View, ratio: number): void {
+    const shown = new Map<string, [Tile, HTMLImageElement]>();
+    for (const tile of wantedTiles) {
+      for (const found of standIns(tile)) shown.set(tileKey(found[0]), found);
+    }
+    if (!shown.size && !skyViewImage) return;
+    layer ??= document.createElement("canvas");
+    if (layer.width !== canvas.width || layer.height !== canvas.height) {
+      layer.width = canvas.width;
+      layer.height = canvas.height;
+    }
+    const layerContext = layer.getContext("2d");
+    if (!layerContext) return;
+    layerContext.setTransform(1, 0, 0, 1, 0, 0);
+    layerContext.clearRect(0, 0, layer.width, layer.height);
+    layerContext.setTransform(ratio, 0, 0, ratio, 0, 0);
+    if (skyViewImage) drawSkyView(layerContext, v, skyViewImage);
+    // Coarser first, so a finer tile lies over its stand-in.
+    for (const [tile, image] of [...shown.values()].sort(([a], [b]) => a.order - b.order)) {
+      drawTile(layerContext, v, tile, image);
+    }
+    paintImage(context, layer, v.width, v.height, 0.85);
+  }
+
   function drawSkyView(context: CanvasRenderingContext2D, v: View, shown: SkyViewImage): void {
     const at = project(v, shown);
     if (!at) return;
     // The image's tangent plane at its own centre, scaled to the chart's.
     const w = shown.fov * RAD * v.scale;
     const h = (w * shown.image.naturalHeight) / shown.image.naturalWidth;
-    context.save();
-    context.translate(at.x - w / 2, at.y - h / 2);
-    paintImage(context, shown.image, w, h, 0.85);
-    context.restore();
-  }
-
-  // The tiles are drawn opaque into a layer of their own, then painted at once:
-  // cells overlap by a pixel, which would show through a translucent draw.
-  let layer: HTMLCanvasElement | null = null;
-
-  function drawTiles(context: CanvasRenderingContext2D, v: View, ratio: number): void {
-    const shown = new Map<string, [Tile, HTMLImageElement]>();
-    for (const tile of wantedTiles) {
-      const found = tileImage(tile);
-      if (found) shown.set(tileKey(found[0]), found);
-    }
-    if (!shown.size) return;
-    layer ??= document.createElement("canvas");
-    if (layer.width !== canvas.width || layer.height !== canvas.height) {
-      layer.width = canvas.width;
-      layer.height = canvas.height;
-    }
-    const tileContext = layer.getContext("2d");
-    if (!tileContext) return;
-    tileContext.setTransform(1, 0, 0, 1, 0, 0);
-    tileContext.clearRect(0, 0, layer.width, layer.height);
-    tileContext.setTransform(ratio, 0, 0, ratio, 0, 0);
-    // Coarser first, so a tile that came lies over its ancestor's stand-in.
-    for (const [tile, image] of [...shown.values()].sort(([a], [b]) => a.order - b.order)) {
-      drawTile(tileContext, v, tile, image);
-    }
-    paintImage(context, layer, v.width, v.height, 0.85);
+    context.drawImage(shown.image, at.x - w / 2, at.y - h / 2, w, h);
   }
 
   // Oldest first, so the newest lies on top.
