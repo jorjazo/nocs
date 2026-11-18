@@ -516,7 +516,8 @@ async def test_service_applies_settings_by_restarting_phd2(phd2: FakePhd2, tmp_p
     equipment = Equipment(DUO)
     async with running(phd2, equipment, settings_file) as (service, store):
         await until(lambda: guiding(store, "phd2", "connected"))
-        assert guiding(store, "phd2", "version") == "2.6.14"
+        # The version comes in PHD2's first event, which may arrive after the connection.
+        await until(lambda: guiding(store, "phd2", "version") == "2.6.14")
         await until(lambda: guiding(store, "profile") == "My own profile")
         assert guiding(store, "settings") == "none"  # nothing connected yet
         assert guiding(store, "managed")
