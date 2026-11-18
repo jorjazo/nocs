@@ -1,12 +1,15 @@
 # Architecture Decision Records
 
-Each ADR records one significant decision: its context, the decision, and its
-consequences. ADRs are immutable once accepted; a change of mind is a new ADR
-that supersedes the old one.
+**Frozen archive, no longer maintained (2026-11-17).** These notes were written
+in the project's first weeks. They explain why some code is the way it is, but
+they do not bind anything: the code, [design.md](../design.md) and
+[ux.md](../ux.md) say how NOCS works today, and where an ADR disagrees with
+them, the ADR is out of date. No new ADRs are written while NOCS has a single
+maintainer; a more formal process may come back when other people join.
 
 | # | Title | Status |
 |---|---|---|
-| [0001](0001-record-architecture-decisions.md) | Record architecture decisions | Accepted |
+| [0001](0001-record-architecture-decisions.md) | Record architecture decisions | Abandoned |
 | [0002](0002-indi-as-device-backplane.md) | INDI as the device backplane | Accepted |
 | [0003](0003-python-for-the-server.md) | Python for the server | Accepted |
 | [0004](0004-web-pwa-client.md) | Single web PWA client (Svelte + TypeScript) | Accepted |

@@ -71,5 +71,5 @@ note why: that is a finding, and the release waits for its fix.
 
 - [ ] The frames on the drive open on a PC, with their FITS headers.
 - [ ] The session report and the diagnostics bundle saved for the record.
-- [ ] Findings written into [phase 6](phase-6.md). If none blocks: accept ADRs
-      0025–0030 and 0035, tag `v0.1.0`, publish, announce.
+- [ ] Findings written into [phase 6](phase-6.md). If none blocks: tag `v0.1.0`,
+      publish, announce.

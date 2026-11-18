@@ -3,8 +3,8 @@
 Status: draft · Last updated: 2026-10-27
 
 This document describes what NOCS is, who it is for, and how it is built.
-Individual decisions are recorded with their rationale in [ADRs](adr/); this
-document is the big picture that ties them together.
+It is kept up to date with the code: when behaviour changes, this document
+changes with it. (The early [ADRs](adr/) are a frozen archive, not maintained.)
 
 ---
 

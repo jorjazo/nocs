@@ -1,23 +1,64 @@
 # NOCS — notes for Claude
 
 NOCS is a web-first control system for astrophotography rigs on top of INDI.
-Read [docs/design.md](docs/design.md), [docs/roadmap/](docs/roadmap/) and the
-[ADRs](docs/adr/) before planning work; [docs/ux.md](docs/ux.md) for UI work;
-[docs/spikes/](docs/spikes/) for measured facts (PHD2 headless, Pi 5 performance, a
-whole night on the Pi).
+[docs/design.md](docs/design.md) says how it works, [docs/ux.md](docs/ux.md) how the
+UI looks and behaves, [docs/roadmap/](docs/roadmap/) what is still to do, and
+[docs/spikes/](docs/spikes/) holds measured facts (PHD2 headless, Pi 5 performance,
+a whole night on the Pi). Read what the task needs. These documents describe the
+product; they do not bind the maintainer.
 
-## Working with the maintainer
+## How the maintainer wants to work
+
+NOCS has just started: the maintainer is its only developer and its only user.
+Until they say otherwise, the priority is to move fast, without bureaucracy,
+towards a product attractive enough to catch someone's attention. More formal
+ways of working (decision records, staged plans, approvals, stability) come when
+other people join; the maintainer will say when.
 
 - Talk in **Spanish**. Code, comments, docs and commit messages in **English**.
-- One maintainer, 5–10 h/week: keep phases small and every step testable.
-- **Commit and push only when asked.** Commits are signed off (`git commit -s`,
-  DCO) and end with the Co-Authored-By line. After a push, check that CI passes
-  **without blocking on it**: watch the run in the background
-  (`gh run watch <id> --exit-status` as a background command), keep working on
-  the next step meanwhile, and fix a failure when the notification arrives.
-  The same goes for long local test runs.
-- Propose a plan in stages before large changes; record significant decisions as
-  a new ADR rather than editing an accepted one.
+- **What the maintainer asks for is the requirement.** Nothing in the repo
+  (design.md, ux.md, the roadmap, old ADRs, comments) is a reason to refuse,
+  shrink or postpone it. If a request conflicts with how things work today, say
+  in a sentence or two what concretely changes or breaks (behaviour, code, data)
+  so they can decide; then do what they decide, and update the docs that
+  describe the old behaviour as part of the same work.
+- **Answer from the code and the docs yourself.** Never reply "that is defined in
+  X": give the answer, and the file only if it helps.
+- **Two ways of working, and nothing in between:**
+  1. **Talking a requirement through.** The maintainer explains what they want;
+     you raise only what is genuinely open: ambiguities, conflicts with what
+     exists, risks, choices that are really theirs. Be brief and concrete. Do
+     not propose plans, phases, stages, PR splits or timelines they did not ask
+     for, and do not ask about things with a sensible default: pick it and say so.
+  2. **Autonomous.** Once you agree and they say go (`/autonomo`, "dale",
+     "hazlo", …), work to the end without coming back: implement, test, commit,
+     push, open the PR, get CI green and address review, leaving it ready to
+     merge. **The maintainer merges by default**; merge yourself (squash) only
+     when they explicitly say so for that work. No pauses between steps, no
+     approval gates, no "one PR per phase": how many PRs, and in what order, is
+     your call (stack them on each other's branches when they depend on one
+     another). Decide what you reasonably can, note it, and
+     keep going. Stop only for what is irreversible or risky outside the repo
+     (deleting data, release tags, publishing packages, paid services, moving
+     the real rig) or for a contradiction in the agreement that changes the
+     result. Finish with a short report: what was done, problems found and how
+     you got past them, decisions you took (and the alternative), and what the
+     maintainer may want to adjust.
+- Outside autonomous work, **commit and push only when asked.** Commits are
+  signed off (`git commit -s`, DCO) and end with the Co-Authored-By line. After
+  a push, check that CI passes **without blocking on it**: watch the run in the
+  background (`gh run watch <id> --exit-status` as a background command), keep
+  working on the next step meanwhile, and fix a failure when the notification
+  arrives. The same goes for long local test runs.
+- **No process documents.** Do not write ADRs, phase plans or stage plans unless
+  asked. When behaviour changes, update design.md, ux.md, the user docs or the
+  roadmap in the same change where they describe it; that is not a separate step.
+- **The ADRs in `docs/adr/` are a frozen archive** from the project's first weeks:
+  background on why some code is the way it is, nothing more. Do not write new
+  ones, do not keep them up to date, do not cite them to the maintainer (as a
+  source or as a constraint), and do not add ADR references to code or docs.
+  Where an ADR disagrees with the code or with the maintainer, the ADR is simply
+  out of date.
 - **Backward compatibility does not matter before v1.0.0.** While the maintainer
   is the only user, profiles, settings, state, the API, files on disk and
   rollbacks may change freely: no migrations, shims, fallbacks or deprecation
@@ -35,14 +76,14 @@ server/   Python package `nocs` (nocsd): indi/ (protocol + async client, driver
           guiding/ (PHD2: service, settings it imports, JSON-RPC client,
           guide steps and RMS),
           solving/ (ASTAP, fields of view), pointing/ (solve and sync, centre),
-          align/ (polar alignment: axis from three solves, knobs; ADR 0034),
-          finder/ (the Sun and the Moon found and centred by brightness; ADR 0049),
+          align/ (polar alignment: axis from three solves, knobs),
+          finder/ (the Sun and the Moon found and centred by brightness),
           sky/ (a night's almanac at the site, targets' visibility),
-          sites/ (the saved sites and the box's active one, ADR 0038),
-          preparation/ (what blocks each step of Tonight's checklist, ADR 0041),
-          targets/ (bundled OpenNGC catalog and its search, ADR 0019; Tycho-2
-          stars for the framing chart, ADR 0020; tonight's target, `plan`),
-          system/ (nocs-system, the root helper: stdlib + anyio only, ADR 0027),
+          sites/ (the saved sites and the box's active one),
+          preparation/ (what blocks each step of Tonight's checklist),
+          targets/ (bundled OpenNGC catalog and its search; Tycho-2
+          stars for the framing chart; tonight's target, `plan`),
+          system/ (nocs-system, the root helper: stdlib + anyio only),
           state/ (versioned store), services/ (indi_bridge), api/ (FastAPI
           REST + WebSocket, schemas, schema export)
 web/      Svelte 5 + TypeScript PWA: styles/ (tokens), lib/ (api, live state,
@@ -53,9 +94,9 @@ dev/      compose.yaml (INDI simulators + GSC catalog + driver FIFO in dev/.run,
           catalog/ (builds the bundled target catalog),
           tools/ (indi_record, phd2_record, fake_ppba; soak/: a long simulated night),
           bench/, spikes/, pi/ (lab Pi flashing and setup)
-packaging/ deb/ (the nocs .deb: build.sh, test.sh), image/ (the Pi 5 image, arm64 only; ADR 0025, 0026)
+packaging/ deb/ (the nocs .deb: build.sh, test.sh), image/ (the Pi 5 image, arm64 only)
 docs/     design, ux, roadmap/ (v0.1.md with its phase plans in v0.1/; v1.0.md),
-          adr/, spikes/, user/
+          adr/ (frozen archive, see above), spikes/, user/
 ```
 
 ## Commands
@@ -64,7 +105,7 @@ docs/     design, ux, roadmap/ (v0.1.md with its phase plans in v0.1/; v1.0.md),
 docker compose -f dev/compose.yaml up -d --build  # INDI simulators :7624, PHD2 :4400
 cd server && uv sync
 uv run ruff check . && uv run ruff format --check . && uv run pyright   # strict
-dev/astap/install.sh  # ASTAP + D05 in dev/.astap (slow download; ADR 0018)
+dev/astap/install.sh  # ASTAP + D05 in dev/.astap (slow download)
 NOCS_TEST_INDI=localhost:7624 NOCS_TEST_INDI_FIFO=../dev/.run/fifo \
   NOCS_TEST_INDI_CONTAINER=dev-indi-1 NOCS_TEST_INDI_UPLOADS=../dev/.run/uploads NOCS_TEST_ASTAP=../dev/.astap/astap_cli \
   NOCS_TEST_PHD2=localhost:4400 NOCS_TEST_PHD2_SETTINGS=../dev/.run/phd2.phd uv run pytest
@@ -77,8 +118,8 @@ NOCS_WEB_DIR=web/dist NOCS_INDI_FIFO=dev/.run/fifo NOCS_INDI_DRIVERS_DIR=dev/.ru
   NOCS_PHD2_SETTINGS=dev/.run/phd2.phd NOCS_PHD2_INDI_HOST=indi \
   uv run --project server nocsd               # http://127.0.0.1:8000
 # profiles live in ~/.config/nocs/profiles/ (NOCS_CONFIG_DIR); dev/profiles/ has the simulators,
-# and dev/sites.json an example site (copy it to ~/.config/nocs/sites.json; ADR 0038)
-# the first visit sets the owner passphrase and pairs that browser (ADR 0014);
+# and dev/sites.json an example site (copy it to ~/.config/nocs/sites.json)
+# the first visit sets the owner passphrase and pairs that browser;
 # rm ~/.config/nocs/auth.json and restart nocsd to start over. From a shell:
 curl -c jar -H 'Content-Type: application/json' -d '{"passphrase": "…", "name": "curl"}' \
   localhost:8000/api/auth/pair && curl -b jar localhost:8000/api/state
@@ -94,7 +135,7 @@ packages workflow builds and installs the .deb on amd64 and arm64 (on `main` and
 not on pull requests). Pushes that change
 only `docs/` or `*.md` run neither, and a newer push cancels CI's run in progress.
 CI pulls the simulators' and PHD2's images from GHCR (`ghcr.io/jorjazo/nocs-dev-indi`,
-`-phd2`; ADR 0050). The dev-images workflow builds them from the PPAs on Mondays
+`-phd2`). The dev-images workflow builds them from the PPAs on Mondays
 without the cache, and on pushes to `main` that change `dev/indi`/`dev/phd2`. A new
 INDI therefore shows up in CI after Monday's build. CI builds an image from the PPAs
 only when a pull request or push changes its directory, or when the pull fails. A
@@ -115,9 +156,9 @@ minutes: mark a new integration test `slow` when CI's durations show it past tha
   epoch. Document new state in `api/schemas.py` (tests validate the live state
   against it) and regenerate the TS types.
 - **Every `/api` endpoint needs the paired owner** unless it is listed as public
-  or for observers in `api/auth.py` (ADR 0014); never put secrets in the state,
+  or for observers in `api/auth.py`; never put secrets in the state,
   which observers see. A new state field that tells where the box is or a network
-  name needs a rule in `api/observers.py` (ADR 0047). API tests pair their client
+  name needs a rule in `api/observers.py`. API tests pair their client
   with `pair_owner(client)` (`tests/owner.py`).
 - **Device code goes through `nocs.devices` facades**, not raw INDI properties.
   Commands complete on the driver's `Ok` and fail on `Alert`.
@@ -130,13 +171,13 @@ minutes: mark a new integration test `slow` when CI's durations show it past tha
   Frames arrive by `UPLOAD_LOCAL` when indiserver shares the filesystem (a BLOB
   costs ~0.3 s of the Pi's CPU per 26 MP frame; the client parses large ones in a
   thread, but under the GIL), are analysed in one spawned worker process, and
-  OpenCV calls an RGGB sensor "BG" (ADR 0012).
+  OpenCV calls an RGGB sensor "BG".
 - **Nothing that can wait on the microSD runs on the event loop**: file operations
   go to a thread, and log records are written by one (`nocs.logs`). uvicorn raises
   SIGTERM again after its shutdown; nocsd's own handler makes that a normal exit,
   so the log thread and multiprocessing's exit handlers still run.
 - **The state's INDI mirror** (`indi.devices`) is for people: a property's
-  updates reach it at most once a second (ADR 0037). Services use the device
+  updates reach it at most once a second. Services use the device
   facades; a test reading the mirror right after an action must wait for it.
 - **Python runtime:** nocsd should run on a uv-managed Python (3.12/3.13), not
   the system interpreter: scientific deps lack arm64 wheels for Ubuntu 26.04's
@@ -191,7 +232,7 @@ minutes: mark a new integration test `slow` when CI's durations show it past tha
 ## PHD2 gotchas
 
 - `phd2 -l` replaces every PHD2 profile, calibration included: import only when the
-  settings change, with `AutoLoadCalibration` on (ADR 0022).
+  settings change, with `AutoLoadCalibration` on.
 - `stop_capture` answers at once; PHD2 refuses `set_connected false` until
   `LoopingExposuresStopped` (or `GuidingStopped`) arrives.
 - AppState `Selected` means looping with a star selected (capture active), not

@@ -1,6 +1,6 @@
 # 0001. Record architecture decisions
 
-Date: 2026-10-27 · Status: Accepted
+Date: 2026-10-27 · Status: Abandoned on 2026-11-17 (see [README](README.md))
 
 ## Context
 

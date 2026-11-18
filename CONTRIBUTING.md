@@ -22,7 +22,9 @@ Signed-off-by: Your Name <your.email@example.com>
 
 `git commit -s` adds this line automatically.
 
-## Architecture decisions
+## Design documents
 
-Significant technical decisions are recorded as ADRs in [docs/adr](docs/adr/).
-If your change alters one of them, add a new ADR that supersedes it.
+[docs/design.md](docs/design.md) and [docs/ux.md](docs/ux.md) describe how NOCS
+works; if your change alters that, update them in the same change. The ADRs in
+[docs/adr](docs/adr/) are a frozen archive from the project's first weeks and are
+no longer written or maintained.
