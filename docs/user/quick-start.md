@@ -65,7 +65,8 @@ If you gave Imager your home Wi-Fi, join that network instead and open
       have more than one.
    4. **Site** (optional): where the rig stands, by name, latitude, longitude and
       elevation. A rough position is enough: a few kilometres off changes nothing,
-      so the nearest town's coordinates from a map will do. Tonight's sky, go to
+      so the nearest town's coordinates from a map will do. **Paste a location**
+      takes a Google Maps link or the coordinates Maps copies. Tonight's sky, go to
       and polar alignment need it; you may also leave it for later, in Rig.
    5. **Check and apply**: what the box will do. When you apply, it saves the site
       and makes it the active one, restarts its Wi-Fi with the new password (or
@@ -91,7 +92,10 @@ On **Rig**:
    off changes nothing. **From the mount** fills it in from the site the connected
    mount already has (one set with its hand controller or its own app, say), and
    **From the GPS** from a USB GPS's fix; you can still edit the values before
-   saving.
+   saving. Or paste a location: a Google Maps link (one shared from the phone too,
+   if the box has the internet; for a place by its name, drop a pin and share
+   that), or coordinates in decimal degrees or degrees, minutes and seconds
+   (`33°26'14"S 70°39'02"W`). The latitude and longitude fields take either form.
 3. **Connect**. Every device should end up ready; a device that fails says why, and
    the others carry on.
 

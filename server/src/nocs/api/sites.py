@@ -8,9 +8,10 @@ from collections.abc import Callable, Generator
 import anyio.to_thread
 from fastapi import APIRouter, HTTPException, Response, status
 
-from nocs.api.schemas import ActiveSiteRequest, SiteCreated
+from nocs.api.schemas import ActiveSiteRequest, MapsLink, MapsLinkRequest, SiteCreated
 from nocs.jobs import ResourceBusyError
 from nocs.sites import Site, SiteError, SiteService, known_zones
+from nocs.sites.links import LinkError, LinkUnreachableError, expand, is_short_link
 
 
 def sites_router(sites: Callable[[], SiteService]) -> APIRouter:
@@ -20,6 +21,22 @@ def sites_router(sites: Callable[[], SiteService]) -> APIRouter:
     async def zones() -> list[str]:  # pyright: ignore[reportUnusedFunction]
         """The time zones a site may name, sorted (the system's list reads files)."""
         return sorted(await anyio.to_thread.run_sync(known_zones))
+
+    @router.post("/maps-link")
+    async def maps_link(request: MapsLinkRequest) -> MapsLink:  # pyright: ignore[reportUnusedFunction]
+        """Expand a Google Maps short link, which the browser cannot follow itself.
+
+        400 for anything but a short link; 422 when it leads nowhere (a dead link);
+        502 when Google cannot be reached (no internet).
+        """
+        if not is_short_link(request.url):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "not a Google Maps short link")
+        try:
+            return MapsLink(url=await expand(request.url))
+        except LinkUnreachableError as e:
+            raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(e)) from e
+        except LinkError as e:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e)) from e
 
     @router.post("", status_code=status.HTTP_201_CREATED)
     async def add(site: Site) -> SiteCreated:  # pyright: ignore[reportUnusedFunction]

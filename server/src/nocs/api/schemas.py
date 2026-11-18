@@ -1906,6 +1906,16 @@ class ActiveSiteRequest(BaseModel):
     id: str | None = Field(description="A saved site's id; None: no site is active.")
 
 
+class MapsLinkRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    url: str = Field(max_length=2048, description="A Google Maps short link.")
+
+
+class MapsLink(WireModel):
+    url: str = Field(description="The long link the short one leads to.")
+
+
 class GpsSiteRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

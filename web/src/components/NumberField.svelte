@@ -4,6 +4,7 @@
 
   // A number typed by hand that may be left empty (null). `valid` is false
   // while the text is not a number within range, so the form can refuse to save.
+  // `parse` reads other forms of it (an angle in degrees, minutes and seconds).
   let {
     label,
     value = $bindable(),
@@ -13,6 +14,8 @@
     unit,
     hint,
     placeholder,
+    parse = parseNumber,
+    inputmode = "decimal",
   }: {
     label: string;
     value: number | null;
@@ -22,12 +25,14 @@
     unit?: string;
     hint?: string;
     placeholder?: string;
+    parse?: (text: string) => number | null;
+    inputmode?: "decimal" | "text";
   } = $props();
 
   const id = $props.id();
   const t = $derived(i18n.t);
   let text = $state(value === null ? "" : formatPlain(value, i18n.locale, 6));
-  const parsed = $derived(parseNumber(text));
+  const parsed = $derived(parse(text));
   const error = $derived(
     text.trim() === ""
       ? ""
@@ -50,7 +55,7 @@
     <input
       {id}
       type="text"
-      inputmode="decimal"
+      {inputmode}
       autocomplete="off"
       {placeholder}
       bind:value={text}

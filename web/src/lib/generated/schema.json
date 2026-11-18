@@ -7360,6 +7360,34 @@
       "title": "LoopRequest",
       "type": "object"
     },
+    "MapsLink": {
+      "properties": {
+        "url": {
+          "description": "The long link the short one leads to.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url"
+      ],
+      "title": "MapsLink",
+      "type": "object"
+    },
+    "MapsLinkRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "url": {
+          "description": "A Google Maps short link.",
+          "maxLength": 2048,
+          "type": "string"
+        }
+      },
+      "required": [
+        "url"
+      ],
+      "title": "MapsLinkRequest",
+      "type": "object"
+    },
     "MeridianLimits": {
       "additionalProperties": false,
       "properties": {
