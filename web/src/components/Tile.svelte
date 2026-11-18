@@ -35,7 +35,6 @@
     min-height: 68px;
     padding: var(--space-2) var(--space-3);
     border: 1px solid var(--line);
-    border-radius: var(--radius-tile);
     background: var(--surface);
     text-align: left;
     cursor: pointer;

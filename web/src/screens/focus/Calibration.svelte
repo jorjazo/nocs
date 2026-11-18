@@ -352,7 +352,6 @@
     width: var(--touch);
     height: var(--touch);
     border: 1px solid var(--line);
-    border-radius: var(--radius-full);
     background: var(--raised);
     color: var(--text);
     cursor: pointer;
@@ -370,7 +369,6 @@
   }
   .steps li {
     height: 4px;
-    border-radius: var(--radius-full);
     background: var(--line);
   }
   .steps .done {
@@ -409,7 +407,6 @@
     flex-direction: column;
     min-width: 0;
     padding: var(--space-2) var(--space-3);
-    border-radius: var(--radius-tile);
     background: var(--raised);
   }
   .readout {
@@ -431,7 +428,6 @@
   .bar {
     height: 8px;
     overflow: hidden;
-    border-radius: var(--radius-full);
     background: var(--raised);
   }
   .bar span {

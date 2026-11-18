@@ -97,7 +97,6 @@
     gap: 2px;
     min-height: var(--tabbar-height);
     padding: var(--space-2) 2px;
-    border-radius: var(--radius-button);
     color: var(--muted);
     text-decoration: none;
   }
@@ -115,11 +114,16 @@
     background: var(--accent);
     box-shadow: 0 0 0 2px var(--surface);
   }
+  /* Brass and the warning's yellow are close: the shape tells them apart too
+     (a circle running or worth a look, a square paused or warning, a diamond a problem). */
   .badge.paused,
   .badge.warning {
+    border-radius: 0;
     background: var(--warning);
   }
   .badge.problem {
+    border-radius: 0;
+    transform: rotate(45deg);
     background: var(--error);
   }
   .name {
@@ -128,10 +132,11 @@
     font-weight: 500;
     text-align: center;
   }
-  /* The current tab differs in weight and in a filled pill, not only in color. */
   a.blocked {
     opacity: 0.45;
   }
+  /* The current tab differs in weight and, on phones, in a filled block behind its
+     icon, not only in color. */
   a[aria-current="page"] {
     color: var(--accent);
   }
@@ -148,7 +153,6 @@
       padding: 2px 14px;
       width: 52px;
       height: 28px;
-      border-radius: var(--radius-full);
       background: var(--raised);
     }
   }

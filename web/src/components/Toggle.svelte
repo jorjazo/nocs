@@ -56,7 +56,6 @@
     position: relative;
     width: 56px;
     height: 32px;
-    border-radius: var(--radius-full);
     background: var(--raised);
     border: 1px solid var(--line);
     transition: background 150ms;
@@ -67,7 +66,6 @@
     left: 3px;
     width: 24px;
     height: 24px;
-    border-radius: 50%;
     background: var(--muted);
     transition: transform 150ms;
   }

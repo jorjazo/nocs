@@ -13,7 +13,7 @@ export const THEMES: readonly Theme[] = ["dusk", "night"];
 export const LOCALES: readonly Locale[] = ["en", "es"];
 
 // The browser's top bar follows the theme (Android Chrome, Safari).
-const THEME_COLOR: Record<Theme, string> = { dusk: "#0A0D13", night: "#000000" };
+const THEME_COLOR: Record<Theme, string> = { dusk: "#0D0B08", night: "#000000" };
 
 function read<T extends string>(key: string, allowed: readonly T[]): T | null {
   try {

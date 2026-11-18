@@ -272,7 +272,6 @@
     width: var(--touch);
     height: var(--touch);
     border: 1px solid var(--line);
-    border-radius: var(--radius-full);
     background: var(--raised);
     color: var(--text);
     cursor: pointer;
@@ -302,7 +301,6 @@
     gap: var(--space-1);
     padding: var(--space-3);
     border: 1px solid var(--line);
-    border-radius: var(--radius-tile);
   }
   .state {
     display: flex;
@@ -333,7 +331,6 @@
   }
   .bar {
     height: 4px;
-    border-radius: var(--radius-full);
     background: var(--line);
     overflow: hidden;
   }

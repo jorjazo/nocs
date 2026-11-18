@@ -34,7 +34,6 @@
     width: 72px;
     height: 72px;
     margin-bottom: var(--space-2);
-    border-radius: 50%;
     background: var(--surface);
     border: 1px solid var(--line);
     color: var(--accent);

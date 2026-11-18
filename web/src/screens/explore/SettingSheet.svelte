@@ -163,7 +163,6 @@
   .preset {
     min-height: var(--touch);
     border: 1px solid var(--line);
-    border-radius: var(--radius-tile);
     background: var(--raised);
     font-family: var(--font-mono);
     font-size: 15px;
@@ -182,7 +181,6 @@
     display: flex;
     flex-direction: column;
     padding: var(--space-2) var(--space-3);
-    border-radius: var(--radius-tile);
     background: var(--raised);
   }
 </style>

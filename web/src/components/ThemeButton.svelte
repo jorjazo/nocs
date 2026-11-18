@@ -21,7 +21,6 @@
     place-items: center;
     width: 48px;
     height: 48px;
-    border-radius: var(--radius-button);
     border: 1px solid var(--line);
     background: var(--surface);
     color: var(--text);

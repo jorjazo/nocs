@@ -194,7 +194,6 @@
     min-height: var(--touch);
     padding: 0 var(--space-3);
     border: 1px solid var(--line);
-    border-radius: var(--radius-full);
     background: var(--surface);
     color: var(--text);
     font: inherit;
@@ -204,7 +203,6 @@
     margin: 0;
     padding: 0;
     border: 1px solid var(--line);
-    border-radius: var(--radius-card);
     background: var(--surface);
   }
   .results li + li {

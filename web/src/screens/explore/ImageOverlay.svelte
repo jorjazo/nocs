@@ -132,7 +132,6 @@
     place-items: center;
     width: 44px;
     height: 44px;
-    border-radius: var(--radius-button);
     border: 1px solid var(--line);
     background: color-mix(in srgb, var(--bg) 72%, transparent);
     color: var(--text);

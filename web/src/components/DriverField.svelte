@@ -285,17 +285,12 @@
     gap: var(--space-2);
     min-height: var(--primary-height);
     padding-left: var(--space-4);
-    border-radius: var(--radius-button);
     border: 1px solid var(--line);
     background: var(--surface);
     color: var(--muted);
   }
   .control:focus-within {
     border-color: var(--accent);
-  }
-  .control.open {
-    border-bottom-left-radius: 0;
-    border-bottom-right-radius: 0;
   }
   input {
     flex: 1;
@@ -336,7 +331,6 @@
     overscroll-behavior: contain;
     border: 1px solid var(--accent);
     border-top-color: var(--line);
-    border-radius: 0 0 var(--radius-button) var(--radius-button);
     background: var(--surface);
   }
   .list[hidden] {

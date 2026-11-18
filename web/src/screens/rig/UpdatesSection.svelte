@@ -333,7 +333,6 @@
   .log {
     margin: 0;
     padding: var(--space-2) var(--space-3);
-    border-radius: var(--radius-button);
     background: var(--raised);
     font-family: var(--font-mono);
     font-size: 12px;

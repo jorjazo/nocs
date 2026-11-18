@@ -4,9 +4,8 @@
   import type { IconName } from "../../components/icons";
   import { i18n } from "../../lib/i18n";
 
-  // A tool over Explore's image (ADR 0054): a card with rounded corners that folds
-  // into its icon, which keeps a dot in the tool's tone so a glance still tells how
-  // it stands.
+  // A tool over Explore's image: a card that folds into its icon, which keeps a dot
+  // in the tool's tone so a glance still tells how it stands.
   let {
     icon,
     title,
@@ -71,7 +70,6 @@
     width: min(280px, 100%);
     padding: var(--space-2) var(--space-3) var(--space-3);
     border: 1px solid var(--line);
-    border-radius: var(--radius-card);
     background: color-mix(in srgb, var(--bg) 88%, transparent);
   }
   .card.wide {
@@ -104,7 +102,6 @@
     height: var(--touch);
     margin-left: auto;
     border: 0;
-    border-radius: var(--radius-button);
     background: transparent;
     color: var(--muted);
     cursor: pointer;
@@ -118,7 +115,6 @@
     place-items: center;
     width: 44px;
     height: 44px;
-    border-radius: var(--radius-button);
     border: 1px solid var(--line);
     background: color-mix(in srgb, var(--bg) 72%, transparent);
     color: var(--text);
@@ -138,10 +134,14 @@
   .accent {
     background: var(--accent);
   }
+  /* Shaped as well as colored: brass and the warning's yellow are close. */
   .warning {
+    border-radius: 0;
     background: var(--warning);
   }
   .error {
+    border-radius: 0;
+    transform: rotate(45deg);
     background: var(--error);
   }
 </style>

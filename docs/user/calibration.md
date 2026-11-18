@@ -8,7 +8,7 @@ rotation) and takes the missing ones.
 Open **Session**, choose the night, and look at **Calibration** below its frames:
 one row per group of lights (filter, exposure, sensor temperature, gain), with its
 darks, its flats and the bias the flats need. Green: complete (20 darks, 20 flats,
-50 bias). Amber: short, or missing.
+50 bias). Yellow: short, or missing.
 
 ## Darks and bias
 

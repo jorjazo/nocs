@@ -52,7 +52,6 @@
     min-height: var(--touch);
     min-width: var(--touch);
     padding: 0 var(--space-4);
-    border-radius: var(--radius-button);
     border: 1px solid transparent;
     font-size: 15px;
     line-height: 20px;

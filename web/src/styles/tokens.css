@@ -1,27 +1,30 @@
 /* Design tokens from docs/ux.md. Dusk is the default; Night is a separate
-   red-only palette, not a filter over Dusk. */
+   red-only palette, not a filter over Dusk. Corners are square: no radius tokens
+   (only dots, spinners and the shutter are round, with literal values). */
 :root {
-  --bg: #0a0d13;
-  --surface: #121722;
-  --raised: #1a2130;
-  --line: #263044;
-  --text: #e7eaf0;
-  --muted: #98a2b6;
-  --accent: #7db7ff;
-  --on-accent: #06101c;
-  --ok: #4fd1a5;
-  --warning: #f5b04c;
-  --error: #ff6b5e;
-  --guide-ra: #7db7ff;
-  --guide-dec: #f5a04c;
+  /* Dusk: warm black and brass. */
+  --bg: #0d0b08;
+  --surface: #16130e;
+  --raised: #201b14;
+  --line: #352d21;
+  --text: #efe6d6;
+  --muted: #a8997f;
+  --accent: #d9ad62;
+  --on-accent: #140f07;
+  --ok: #9cc98a;
+  --warning: #f3d35c;
+  --error: #f07a5c;
+  --guide-ra: #d9ad62;
+  --guide-dec: #8fb8d8;
   --channel-red: #ff7b72;
   --channel-green: #56d364;
   --channel-blue: #79b8ff;
-  /* How much of a status color tints its chip; chip text stays above 4.5:1. */
+  /* How much a color tints a background (banners, danger buttons, selected or
+     pressed options); text on it stays above 4.5:1. */
   --tint: 14%;
 
-  --font-sans: "IBM Plex Sans", system-ui, sans-serif;
-  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+  --font-sans: "Overpass", system-ui, sans-serif;
+  --font-mono: "Overpass Mono", ui-monospace, monospace;
 
   /* 4 px grid */
   --space-1: 4px;
@@ -32,11 +35,6 @@
   --space-8: 32px;
   --space-12: 48px;
   --margin: 20px;
-
-  --radius-tile: 10px;
-  --radius-button: 12px;
-  --radius-card: 16px;
-  --radius-full: 999px;
 
   --touch: 44px;
   --primary-height: 52px;

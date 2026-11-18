@@ -359,7 +359,6 @@
     min-height: 48px;
     max-width: 60vw;
     padding: 0 44px 0 var(--space-4);
-    border-radius: var(--radius-button);
     border: 1px solid var(--line);
     background: var(--surface);
     font-size: 17px;

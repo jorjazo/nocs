@@ -73,7 +73,6 @@
     min-height: var(--touch);
     padding: 0 var(--space-3);
     border: 1px solid var(--line);
-    border-radius: var(--radius-button);
     background: var(--raised);
     color: var(--text);
     font-size: 15px;

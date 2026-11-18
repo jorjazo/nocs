@@ -281,7 +281,6 @@
     min-height: 48px;
     max-width: 70vw;
     padding: 0 44px 0 var(--space-4);
-    border-radius: var(--radius-button);
     border: 1px solid var(--line);
     background: var(--surface);
     font-size: 17px;
@@ -301,7 +300,6 @@
     gap: var(--space-2);
     min-height: var(--primary-height);
     padding: 0 var(--space-4);
-    border-radius: var(--radius-button);
     font-size: 17px;
     font-weight: 600;
     text-decoration: none;
@@ -322,7 +320,6 @@
     padding: 0;
     list-style: none;
     border: 1px solid var(--line);
-    border-radius: var(--radius-tile);
   }
   li {
     display: grid;

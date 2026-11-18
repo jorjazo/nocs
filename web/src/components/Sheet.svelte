@@ -53,7 +53,6 @@
     padding: 0;
     border: 1px solid var(--line);
     border-bottom: 0;
-    border-radius: var(--radius-card) var(--radius-card) 0 0;
     background: var(--surface);
     color: var(--text);
   }
@@ -79,7 +78,6 @@
     height: var(--touch);
     margin-right: calc(-1 * var(--space-3));
     border: 0;
-    border-radius: var(--radius-button);
     background: transparent;
     color: var(--muted);
     cursor: pointer;
@@ -101,7 +99,6 @@
       width: 420px;
       margin: auto;
       border-bottom: 1px solid var(--line);
-      border-radius: var(--radius-card);
     }
     .sheet {
       padding: var(--space-4) var(--space-6) var(--space-6);
