@@ -1,13 +1,18 @@
 <script lang="ts">
   // A site's position (ADR 0038, 0042): latitude, longitude and elevation typed by
-  // hand, or filled from the connected mount's own site or a USB GPS's fix and then
-  // edited at will. A source that has nothing to give says why, or is left out
+  // hand (decimal degrees or degrees, minutes and seconds), pasted (a Google Maps link
+  // or a pair of coordinates, `lib/position`), or filled from the connected mount's own
+  // site or a USB GPS's fix, and then edited at will. A source that has nothing to give says why, or is left out
   // (`available`, for the box's first run, where neither is usually connected).
+  import { untrack } from "svelte";
   import Button from "./Button.svelte";
   import NumberField from "./NumberField.svelte";
+  import TextField from "./TextField.svelte";
+  import { ApiError, expandMapsLink } from "../lib/api";
   import { formatDecimal, formatPlain } from "../lib/format";
   import { i18n } from "../lib/i18n";
   import { live } from "../lib/live.svelte";
+  import { parseAngle, readPasted, type LatLon } from "../lib/position";
   import { gpsSource, mountSource, type Source, type SourceProblem } from "../lib/sites";
 
   let {
@@ -57,6 +62,65 @@
     fills += 1;
   }
 
+  // What was pasted, read as it changes; a short link waits for the box to expand it,
+  // and only the latest one counts.
+  let pasted = $state("");
+  type PasteNote = { kind: "busy" | "read" | "error"; text: string };
+  let pasteNote = $state<PasteNote | null>(null);
+  let pasteToken = 0;
+
+  function fillPasted(position: LatLon): void {
+    [latitude, longitude] = [position.latitude, position.longitude];
+    fills += 1;
+    pasteNote = {
+      kind: "read",
+      text: t.sites.pasteRead(`${formatDecimal(position.latitude, locale, 6)}°`, `${formatDecimal(position.longitude, locale, 6)}°`),
+    };
+  }
+
+  $effect(() => {
+    const text = pasted;
+    return untrack(() => readPaste(text));
+  });
+
+  function readPaste(text: string): (() => void) | undefined {
+    const token = ++pasteToken;
+    if (text.trim() === "") {
+      pasteNote = null;
+      return;
+    }
+    const reading = readPasted(text);
+    if ("position" in reading) {
+      fillPasted(reading.position);
+      return;
+    }
+    // Typing is not done yet: say what is wrong only once it pauses.
+    pasteNote = null;
+    const timer = setTimeout(() => {
+      if (token !== pasteToken) return;
+      if ("problem" in reading) {
+        pasteNote = { kind: "error", text: t.sites.pasteProblem[reading.problem] };
+        return;
+      }
+      pasteNote = { kind: "busy", text: t.sites.pasteExpanding };
+      expandMapsLink(reading.short).then(
+        (url) => {
+          if (token !== pasteToken) return;
+          const long = readPasted(url);
+          if ("position" in long) fillPasted(long.position);
+          else pasteNote = { kind: "error", text: t.sites.pasteProblem.noPosition };
+        },
+        (e: unknown) => {
+          if (token !== pasteToken) return;
+          const status = e instanceof ApiError ? e.status : 0;
+          const text = status === 502 ? t.sites.pasteOffline : status === 422 ? t.sites.pasteDead : t.sites.pasteFailed;
+          pasteNote = { kind: "error", text };
+        },
+      );
+    }, 400);
+    return () => clearTimeout(timer);
+  }
+
   function problemText(problem: SourceProblem): string {
     return t.sites.sourceProblem[problem];
   }
@@ -86,6 +150,13 @@
     {/each}
   </div>
 {/if}
+<TextField
+  label={t.sites.paste}
+  bind:value={pasted}
+  autocomplete="off"
+  placeholder={t.sites.pastePlaceholder}
+  error={pasteNote?.kind === "error" ? pasteNote.text : undefined}
+  hint={pasteNote && pasteNote.kind !== "error" ? pasteNote.text : t.sites.pasteHint} />
 {#key fills}
   <div class="grid">
     <NumberField
@@ -94,6 +165,8 @@
       bind:valid={validity.latitude}
       min={-90}
       max={90}
+      parse={(text) => parseAngle(text, "latitude")}
+      inputmode="text"
       unit="°"
       hint={t.sites.latitudeHint} />
     <NumberField
@@ -102,6 +175,8 @@
       bind:valid={validity.longitude}
       min={-180}
       max={180}
+      parse={(text) => parseAngle(text, "longitude")}
+      inputmode="text"
       unit="°"
       hint={t.sites.longitudeHint} />
     <NumberField

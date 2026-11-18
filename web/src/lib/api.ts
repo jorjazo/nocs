@@ -42,6 +42,8 @@ import type {
   MountMoveRequest,
   HostnameRequest,
   JobStarted,
+  MapsLink,
+  MapsLinkRequest,
   LoopRequest,
   MountSiteRequest,
   NetworkForgetRequest,
@@ -219,6 +221,12 @@ export async function addSite(site: Site): Promise<string> {
 // The time zones a site may name (ADR 0052).
 export function getSiteZones(): Promise<string[]> {
   return request("GET", "/api/sites/zones");
+}
+
+// The long link a Google Maps short link leads to, which only the box can follow:
+// 422 for a dead link, 502 when Google cannot be reached (no internet).
+export async function expandMapsLink(url: string): Promise<string> {
+  return (await request<MapsLink>("POST", "/api/sites/maps-link", { url } satisfies MapsLinkRequest)).url;
 }
 
 // The active site only while no job holds the mount (409).

@@ -340,10 +340,24 @@ Focuser, filter wheel and profile editor (stage 2.8):
   latitude, longitude and elevation, filled with "From the mount" from the
   connected mount's own site or "From the GPS" from a USB GPS's fix, each disabled
   with its reason when it has nothing to give and naming the saved site within
-  500 m when there is one (ADR 0042); delete) or adds one (`#/rig/site/new`), made
+  500 m when there is one (ADR 0042), or from "Paste a location"; delete) or adds one (`#/rig/site/new`), made
   active as it is saved unless the owner turns that off. A GPS with a 3D fix offers, under the list, the saved site
   within 500 m when it is not the active one, or else to save its position as a
   new site. The server refuses another active site while a job holds the mount.
+- "Paste a location" (the site editor and the first run's site) reads, as it is
+  pasted or typed, a Google Maps link (the place's pin, `!3d…!4d…`, before the
+  view's centre, `@lat,lon`), coordinates as Maps copies them (`-33.4372,
+  -70.6506`, a `;` between them when the decimals use commas) or degrees, minutes
+  and seconds with hemispheres (N/S, E/W, O for west), in either order when the
+  letters say which is which or only one order is in range; from what Maps' Share
+  gives (the place's name, then the link) it takes the link; it fills the latitude and longitude and says what it
+  read, or why it could not. A short link (`maps.app.goo.gl`, `goo.gl/maps`) holds no
+  position: the box expands it (`POST /api/sites/maps-link`, Google's short-link
+  hosts only, no redirect followed beyond them), which needs the internet; without
+  it, or for a link to a place by its name only, the note says to copy the
+  coordinates or share a dropped pin. The latitude and longitude fields take
+  degrees, minutes and seconds too. Elevation stays typed or taken from the mount
+  or the GPS: no link carries it.
 
 Guiding (stage 4.6):
 

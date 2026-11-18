@@ -109,6 +109,8 @@ export type {
   MountLimits,
   MountMotion,
   MountMoveRequest,
+  MapsLink,
+  MapsLinkRequest,
   MountSiteRequest,
   MountState,
   MoonNight,

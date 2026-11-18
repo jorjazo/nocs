@@ -5212,6 +5212,26 @@ export interface LoopRequest {
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "MapsLink".
+ */
+export interface MapsLink {
+  /**
+   * The long link the short one leads to.
+   */
+  url: string;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "MapsLinkRequest".
+ */
+export interface MapsLinkRequest {
+  /**
+   * A Google Maps short link.
+   */
+  url: string;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "MountMotion".
  */
 export interface MountMotion1 {
