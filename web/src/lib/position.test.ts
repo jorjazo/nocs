@@ -58,12 +58,16 @@ test("pasted coordinates, as Maps copies them or typed with hemispheres", () => 
   at(`33°26'14.2"S 70°39'02.1"W`, -(33 + 26 / 60 + 14.2 / 3600), -(70 + 39 / 60 + 2.1 / 3600));
   at(`33°26'14.2"S, 70°39'02.1"W`, -(33 + 26 / 60 + 14.2 / 3600), -(70 + 39 / 60 + 2.1 / 3600));
   at("S 33 26 14 O 70 39 2", -(33 + 26 / 60 + 14 / 3600), -(70 + 39 / 60 + 2 / 3600));
-  // Longitude first is fine when the hemispheres say so.
+  // Longitude first is fine when the hemispheres say so, or when only that order fits.
   at("70°39'W 33°26'S", -(33 + 26 / 60), -(70 + 39 / 60));
+  at("-122.0632, 37.0004", 37.0004, -122.0632);
+  // Both orders fit: latitude first.
+  at("-33.4372, -70.6506", -33.4372, -70.6506);
+  at("10, 20", 10, 20);
 });
 
 test("pasted text that is not a position, or reads two ways", () => {
-  for (const text of ["", "Santiago", "-33.43", "33°S 20°N", "100, 20", "1 2 3 4 5 6 7"]) {
+  for (const text of ["", "Santiago", "-33.43", "33°S 20°N", "100, 100", "200, 20", "1 2 3 4 5 6 7"]) {
     assert.deepEqual(readPasted(text), { problem: "unreadable" }, text);
   }
 });
@@ -84,12 +88,27 @@ test("Google Maps links, the pin before the view", () => {
   at("https://maps.google.com/?q=-33.4372,-70.6506", -33.4372, -70.6506);
   at("https://www.google.com/maps?q=loc:-33.4372,-70.6506&z=15", -33.4372, -70.6506);
   at("google.com/maps/@-33.4372,-70.6506,15z", -33.4372, -70.6506);
+  // The view's longitude keeps counting past the antimeridian.
+  at("https://www.google.com/maps/@-41.2,-185.3,10z", -41.2, 174.7);
+  at("https://www.google.com/maps/@-41.2,534.7,10z", -41.2, 174.7);
+  // A link with a latitude out of range has no position.
+  assert.deepEqual(readPasted("https://www.google.com/maps/@95.2,-70.6,10z"), { problem: "noPosition" });
   assert.deepEqual(readPasted("https://www.google.com/maps/place/Mamalluca/data=!4m2!3m1!1s0x0:0x1"), {
     problem: "noPosition",
   });
   assert.deepEqual(readPasted("https://www.google.com/maps?q=Observatorio+Mamalluca&ftid=0x0:0x1"), {
     problem: "noPosition",
   });
+});
+
+test("the link in what Maps' Share gives, after the place's name", () => {
+  assert.deepEqual(readPasted("Observatorio Mamalluca\nhttps://maps.app.goo.gl/AbC123xyz"), {
+    short: "https://maps.app.goo.gl/AbC123xyz",
+  });
+  assert.deepEqual(readPasted("Dropped pin https://maps.app.goo.gl/AbC123xyz?g_st=ic"), {
+    short: "https://maps.app.goo.gl/AbC123xyz?g_st=ic",
+  });
+  at("Dropped pin\nNear Vicuña\nhttps://www.google.com/maps/search/-30.0277,+-70.6733", -30.0277, -70.6733);
 });
 
 test("short links go to the box, only Google Maps ones", () => {

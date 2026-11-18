@@ -349,7 +349,8 @@ Focuser, filter wheel and profile editor (stage 2.8):
   view's centre, `@lat,lon`), coordinates as Maps copies them (`-33.4372,
   -70.6506`, a `;` between them when the decimals use commas) or degrees, minutes
   and seconds with hemispheres (N/S, E/W, O for west), in either order when the
-  letters say which is which; it fills the latitude and longitude and says what it
+  letters say which is which or only one order is in range; from what Maps' Share
+  gives (the place's name, then the link) it takes the link; it fills the latitude and longitude and says what it
   read, or why it could not. A short link (`maps.app.goo.gl`, `goo.gl/maps`) holds no
   position: the box expands it (`POST /api/sites/maps-link`, Google's short-link
   hosts only, no redirect followed beyond them), which needs the internet; without

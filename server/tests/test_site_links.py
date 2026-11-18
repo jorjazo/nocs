@@ -36,6 +36,8 @@ def redirects(table: Mapping[str, str | None]) -> links.Fetch:
         ("https://maps.app.goo.gl/", False),
         ("https://goo.gl/AbC123", False),
         ("https://maps.app.goo.gl:8080/AbC123", False),
+        ("https://maps.app.goo.gl:99999/AbC123", False),
+        ("https://maps.app.goo.gl:abc/AbC123", False),
         ("https://user@maps.app.goo.gl/AbC123", False),
         ("https://maps.app.goo.gl.example.com/AbC123", False),
         ("https://example.com/maps.app.goo.gl/AbC123", False),
@@ -102,8 +104,9 @@ def test_maps_link_api(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> N
     monkeypatch.setattr(links, "_location", redirects({"https://maps.app.goo.gl/AbC": LONG}))
     response = client.post("/api/sites/maps-link", json={"url": "https://maps.app.goo.gl/AbC"})
     assert (response.status_code, response.json()) == (200, {"url": LONG})
-    response = client.post("/api/sites/maps-link", json={"url": "http://192.168.1.1/admin"})
-    assert response.status_code == 400
+    for url in ("http://192.168.1.1/admin", "https://maps.app.goo.gl:99999/AbC"):
+        response = client.post("/api/sites/maps-link", json={"url": url})
+        assert response.status_code == 400, url
     response = client.post("/api/sites/maps-link", json={"url": "https://maps.app.goo.gl/Nope"})
     assert response.status_code == 422
 

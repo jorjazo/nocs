@@ -37,12 +37,13 @@ class LinkUnreachableError(LinkError):
 def is_short_link(url: str) -> bool:
     try:
         parts = urlsplit(url)
+        port = parts.port  # raises for a port that is not a number or out of range
     except ValueError:
         return False
     if parts.scheme not in ("http", "https") or parts.username or parts.password:
         return False
     host = (parts.hostname or "").lower()
-    if parts.port not in (None, 80, 443):
+    if port not in (None, 80, 443):
         return False
     if host == "maps.app.goo.gl":
         return len(parts.path) > 1

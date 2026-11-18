@@ -83,13 +83,24 @@ export function parseAngle(text: string, axis: Axis): number | null {
 }
 
 // A latitude and a longitude from two angles, in either order when their hemisphere
-// letters say which is which.
+// letters say which is which, or when only one order is in range (a longitude beyond
+// ±90° first, as GeoJSON and some GPS apps write them).
 function pair(first: Angle, second: Angle): LatLon | null {
   let [latitude, longitude] = [first, second];
   if (first.axis === "longitude" || second.axis === "latitude") [latitude, longitude] = [second, first];
   if (latitude.axis === "longitude" || longitude.axis === "latitude") return null;
-  if (!within(latitude.value, "latitude") || !within(longitude.value, "longitude")) return null;
-  return { latitude: latitude.value, longitude: longitude.value };
+  const fits = (lat: Angle, lon: Angle) => within(lat.value, "latitude") && within(lon.value, "longitude");
+  if (fits(latitude, longitude)) return { latitude: latitude.value, longitude: longitude.value };
+  if (first.axis === null && second.axis === null && fits(second, first)) {
+    return { latitude: second.value, longitude: first.value };
+  }
+  return null;
+}
+
+// A longitude in [-180°, 180°): Maps' view keeps counting past the antimeridian.
+function wrapped(longitude: number): number {
+  if (within(longitude, "longitude")) return longitude;
+  return ((((longitude + 180) % 360) + 360) % 360) - 180;
 }
 
 // Two angles in plain text: split where both halves read as angles, at a ";", a
@@ -116,7 +127,7 @@ function splits(text: string): string[][] {
   return result;
 }
 
-const DECIMAL = String.raw`([+-]?\d{1,3}(?:\.\d+)?)`;
+const DECIMAL = String.raw`([+-]?\d{1,4}(?:\.\d+)?)`;
 // Where a Google Maps link keeps a position, most precise first: the place's own pin
 // (`!3d…!4d…`), a query or search (`?q=`, `/search/`, `/place/`, `/dir/`), and last
 // the centre of the view (`/@lat,lon,zoom`).
@@ -150,8 +161,10 @@ function fromLink(decoded: string): LatLon | null {
   for (const pattern of LINK_PATTERNS) {
     const match = pattern.exec(decoded);
     if (!match) continue;
-    const position = pair({ value: Number(match[1]), axis: null }, { value: Number(match[2]), axis: null });
-    if (position) return position;
+    // A link is always latitude first.
+    const latitude = Number(match[1]);
+    const longitude = wrapped(Number(match[2]));
+    if (within(latitude, "latitude")) return { latitude, longitude };
   }
   return null;
 }
@@ -181,8 +194,10 @@ export type Pasted =
   | { problem: "unreadable" };
 
 // What was pasted: a position, a short link to expand, or why it is neither.
-export function readPasted(text: string): Pasted {
-  if (text.trim() === "") return { problem: "unreadable" };
+export function readPasted(pastedText: string): Pasted {
+  if (pastedText.trim() === "") return { problem: "unreadable" };
+  // Maps' Share gives the place's name (or "Dropped pin") and then the link.
+  const text = /https?:\/\/\S+/i.exec(pastedText)?.[0] ?? pastedText;
   const short = shortLink(text);
   if (short !== null) return { short };
   const decoded = link(text);
