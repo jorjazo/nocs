@@ -370,7 +370,8 @@
     font-size: 20px;
     line-height: 26px;
   }
-  /* A word, not a number: in sans, like a tile's words. */
+  /* A word, not a number: in sans like a tile's words, a step heavier to hold its
+     own beside the mono readouts. */
   .readout.word {
     font-family: var(--font-sans);
     font-weight: 600;

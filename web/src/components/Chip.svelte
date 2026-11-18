@@ -4,8 +4,9 @@
 
 <script lang="ts">
   import type { Snippet } from "svelte";
-  // A status: a stripe of the tone's color at its left, and a word that says it.
-  // The word is in the text's color (muted when neutral), so status is never color alone.
+  // A status: a stripe of the tone's color at its left and a word that says it, so
+  // status is never color alone. The word stays in the text's color (muted when
+  // neutral); the tone's color is only the stripe.
   let { tone = "neutral", children }: { tone?: Tone; children: Snippet } = $props();
 </script>
 

@@ -1,6 +1,6 @@
 /* Design tokens from docs/ux.md. Dusk is the default; Night is a separate
-   red-only palette, not a filter over Dusk. Corners are square everywhere: no
-   radius tokens. */
+   red-only palette, not a filter over Dusk. Corners are square: no radius tokens
+   (only dots, spinners and the shutter are round, with literal values). */
 :root {
   /* Dusk: warm black and brass. */
   --bg: #0d0b08;
@@ -19,8 +19,8 @@
   --channel-red: #ff7b72;
   --channel-green: #56d364;
   --channel-blue: #79b8ff;
-  /* How much a color tints a background (banners, selected options); text on it
-     stays above 4.5:1. */
+  /* How much a color tints a background (banners, danger buttons, selected or
+     pressed options); text on it stays above 4.5:1. */
   --tint: 14%;
 
   --font-sans: "Overpass", system-ui, sans-serif;

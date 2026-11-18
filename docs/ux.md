@@ -55,7 +55,7 @@ Navigation follows the night, not the device tree.
 ## 3. Themes
 
 Two themes, switchable from any screen. **Dusk** is warm black with a brass
-accent; color beyond the accent marks a state. **Night** is not a filter over Dusk:
+accent; color beyond the accent marks a state or a chart series. **Night** is not a filter over Dusk:
 it is a separate red-only palette that keeps every element legible while
 preserving dark adaptation.
 
@@ -82,7 +82,8 @@ Rules:
 
 - Text and muted text meet 4.5:1 on `surface` in both themes.
 - Status is never color alone: chips always carry a word, and status dots differ
-  in shape (circle / square / diamond) where it matters.
+  in shape: a circle when running or worth a look, a square when paused or a
+  warning, a diamond for a problem. Brass and the warning's yellow are close.
 - Series in charts differ in lightness and line style, not only hue (RA solid,
   Dec dotted).
 - Night mode must also dim the image previews (red-mapped, never white stars).
@@ -146,9 +147,9 @@ Icons: 24 px, 1.8 px stroke, round caps and joins, drawn in-house.
   and chips do not fit side by side at 375 px. Wide screens use one line and the
   navigation rail carries the theme button.
 - Status chips are a stripe of the status color at their left and the word in the
-  text's color (muted when neutral). Banners and selected options tint their
-  background with a color (14 % in Dusk, 6 % in Night, where `ok` equals `muted`
-  and a stronger tint drops below 4.5:1).
+  text's color (muted when neutral). Banners, danger buttons and selected or
+  pressed options tint their background with a color (14 % in Dusk, 6 % in Night,
+  where muted text on a stronger tint drops below 4.5:1).
 - Destructive actions (unpair, revoke) ask for a second tap instead of a browser
   dialog, which would flash white in Night mode.
 - Spanish tab names: Esta noche · En vivo · Plan · Sesión · Equipo.
@@ -176,8 +177,8 @@ Rig (2026-11-14):
   running inside survives.
 - `#/rig/<section>` opens that section and scrolls to it: Tonight's "choose a site"
   leads to `#/rig/site`, and the site editor goes back there.
-- The Rig tab carries a dot when something on Rig needs a look (red for a problem,
-  amber for a warning: no active site among them) or, for the owner, when updates are
+- The Rig tab carries a dot when something on Rig needs a look (a red diamond for a problem,
+  a yellow square for a warning: no active site among them) or, for the owner, when updates are
   worth installing: a new NOCS, security fixes or a restart still due, each with its
   chip on Updates. Plain system updates come every few days and do not light it, nor
   does a failed join of a network: nocs-system keeps the last one until the next, so
@@ -204,7 +205,7 @@ it was, and still hold where Explore kept the same piece (viewer, shutter, sheet
   (one `text` mark for mono).
 - A single tap on the image (after the double tap's 320 ms) shows or hides
   everything over it; the eye button does the same and stays visible. The camera
-  switch is a pill over the image.
+  switch sits over the image.
 - The browser keeps which panes are open per orientation (`nocs.explore.panes`), and
   whether the overlays show and the histogram's scale per device. Lying down the
   tools start open; upright folded, one open at a time and as wide as the image.
@@ -661,8 +662,8 @@ Calibration frames (ADR 0036):
 - Under a night's groups, the Session tab shows its calibration: one row per group
   of lights (filter, exposure, sensor temperature, gain, binning) with chips for
   its darks, its flats and the bias the flats need: green with the count and the
-  newest night when the set is complete (20 darks, 20 flats, 50 bias), amber with
-  "2/20" when short, amber "Missing" when there is none. Matches come from any
+  newest night when the set is complete (20 darks, 20 flats, 50 bias), yellow with
+  "2/20" when short, yellow "Missing" when there is none. Matches come from any
   night (darks and bias for 180 days; flats the same night, or the same rotation).
 - *Take darks and bias…* opens a sheet: a warning to cover the telescope or the
   camera; the lights to calibrate, one switch per group that shares its darks
@@ -691,7 +692,7 @@ Live stacking (ADR 0040, after v1.0):
   sequences too. Off, it explains what it does in one line.
 - On, a *Stack · Frame* choice (kept per device) says what the viewer shows; the
   stack replaces the frame and its histogram (but not while framing with the mount's
-  pad: the newest frame shows where the mount points), and the bottom pills say *Stack*, its
+  pad: the newest frame shows where the mount points), and the status bar says *Stack*, its
   frames and its total exposure. Sequences offers the same choice (Last frame ·
   Group stack).
 - Below: frames, total time, frames left out and frames that arrived while the

@@ -292,10 +292,6 @@
   .control:focus-within {
     border-color: var(--accent);
   }
-  .control.open {
-    border-bottom-left-radius: 0;
-    border-bottom-right-radius: 0;
-  }
   input {
     flex: 1;
     min-width: 0;
