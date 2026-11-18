@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Survey image sources</title>
+<style>
+  :root { color-scheme: dark; font: 14px system-ui, sans-serif; }
+  body { margin: 16px; background: #111; color: #ddd; }
+  form { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin-bottom: 12px; }
+  #panels { display: grid; grid-template-columns: repeat(auto-fill, minmax(400px, 1fr)); gap: 12px; }
+  figure { margin: 0; background: #000; border: 1px solid #333; }
+  figcaption { padding: 6px 8px; font-size: 12px; line-height: 1.4; }
+  figcaption b { color: #fff; }
+  .ok { color: #7c7; } .bad { color: #e77; } .wait { color: #cc7; }
+  canvas { display: block; width: 100%; height: auto; }
+  label { white-space: nowrap; }
+</style>
+</head>
+<body>
+<form id="form">
+  <label>Target <select id="target"></select></label>
+  <label>RA° <input id="ra" size="8"></label>
+  <label>Dec° <input id="dec" size="8"></label>
+  <label>Field° <select id="fov">
+    <option>0.15</option><option>0.5</option><option selected>1</option><option>2</option>
+    <option>5</option><option>15</option><option>40</option></select></label>
+  <label><input type="checkbox" id="cross"> crosshair + N/E</label>
+  <button>Draw</button>
+</form>
+<div id="panels"></div>
+<script type="module" src="poc.js"></script>
+</body>
+</html>

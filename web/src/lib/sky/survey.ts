@@ -1,33 +1,52 @@
-// The framing chart's survey image (ADR 0020): which service to ask, how much
-// to ask for, and how to say why there is none. The browser fetches it itself,
-// so this is per device; nothing here touches nocsd.
+// The framing chart's survey image: DSS2 in colour, drawn from the HiPS tiles the
+// browser fetches from one of the survey's mirrors (IRSA, ESA, CDS), or a DSS2
+// red image from NASA SkyView when no mirror answers. The browser fetches them
+// itself, so this is per device; nothing here touches nocsd.
 
+import { type Tile, tileKey, tilePath } from "./hips.ts";
 import type { View } from "./projection.ts";
 
-export type Source = "cds" | "skyview";
-// CDS first by default: its image is in colour.
-const DEFAULT: Source = "cds";
-export const SOURCES: readonly Source[] = [DEFAULT, "skyview"];
+// The mirrors of CDS's DSS2 colour HiPS (the same tiles, byte for byte), in the
+// order tried by default; all allow CORS.
+export type Mirror = "irsa" | "esa" | "cds";
+export type Source = Mirror | "skyview";
+const DEFAULT: Mirror = "irsa";
+export const MIRRORS: readonly Mirror[] = [DEFAULT, "esa", "cds"];
+export const HIPS: Record<Mirror, string> = {
+  irsa: "https://irsa.ipac.caltech.edu/data/hips/CDS/DSS2/color",
+  esa: "https://skies.esac.esa.int/DSSColor",
+  cds: "https://alasky.cds.unistra.fr/DSS/DSSColor",
+};
+// The survey's deepest order: ~1″ per pixel.
+export const DEEPEST = 9;
 
-// CDS answers in a second or two when it is up; SkyView makes the image from the
-// DSS plates, slower the wider the field (measured in ADR 0020).
-export const TIMEOUT: Record<Source, number> = { cds: 12_000, skyview: 30_000 };
-
-// Asked after a miss, to tell a service that answers from one that does not.
-export const PROBE_TIMEOUT = 5_000;
 export const ORIGIN: Record<Source, string> = {
+  irsa: "https://irsa.ipac.caltech.edu",
+  esa: "https://skies.esac.esa.int",
   cds: "https://alasky.cds.unistra.fr",
   skyview: "https://skyview.gsfc.nasa.gov",
 };
+
+// A tile takes a second or two when the mirror is up. SkyView makes its image
+// from the DSS plates, slower the wider the field (measured in ADR 0020).
+export const TILE_TIMEOUT = 10_000;
+export const SKYVIEW_TIMEOUT = 30_000;
+// A mirror that failed a tile is not asked again for this long.
+export const DOWN_MS = 5 * 60_000;
+// Tiles kept in memory: a few views' worth (a view needs 4–40).
+export const KEPT_TILES = 160;
+
+// Asked after a miss, to tell a service that answers from one that does not.
+export const PROBE_TIMEOUT = 5_000;
 
 // Why a service gave no image:
 // - unreachable: a probe of its host fails at once (no internet, DNS, refused);
 // - silent: a probe gets no answer in time either;
 // - slow: no image in time, but the service answers a probe;
 // - error: it answered the image with an error (an HTTP error, or not an image).
-// An <img> says neither the HTTP status nor why it failed, and the services do
-// not all allow CORS (SkyView does not), so the probe is a no-cors fetch: it
-// resolves on any answer and rejects when nothing reached the host.
+// An <img> says neither the HTTP status nor why it failed, and SkyView allows no
+// CORS, so the probe is a no-cors fetch: it resolves on any answer and rejects
+// when nothing reached the host.
 export type Miss = "unreachable" | "silent" | "slow" | "error";
 export type Probe = "answered" | "failed" | "timeout";
 
@@ -37,11 +56,11 @@ export function classify(outcome: "error" | "timeout", probe: Probe): Miss {
   return probe === "timeout" ? "silent" : "unreachable";
 }
 
-// -- Which service first ----------------------------------------------------------
+// -- Which mirror first -----------------------------------------------------------
 
-const KEY = "nocs.surveySource";
-// A preference for the fallback lasts this long from its first success: the next
-// night tries CDS (colour) first again.
+const KEY = "nocs.surveyMirror";
+// A preference for another mirror lasts this long from its first success: the
+// next night tries the default first again.
 export const FALLBACK_KEPT_MS = 20 * 3600 * 1000;
 
 export type KeyValueStore = { getItem(key: string): string | null; setItem(key: string, value: string): void };
@@ -54,12 +73,12 @@ function defaultStore(): KeyValueStore | null {
   }
 }
 
-// The service that worked last in this browser, tried first next time, across
-// charts and reloads. A later success of the other one moves it.
+// The mirror that worked last in this browser, tried first next time, across
+// charts and reloads. A later success of another one moves it.
 export class SourceMemory {
   #store: KeyValueStore | null;
   #now: () => number;
-  #last: { source: Source; at: number } | null = null;
+  #last: { source: Mirror; at: number } | null = null;
 
   constructor(store: KeyValueStore | null = defaultStore(), now: () => number = Date.now) {
     this.#store = store;
@@ -72,16 +91,16 @@ export class SourceMemory {
     }
   }
 
-  // The services in the order to try them.
-  order(): Source[] {
+  // The mirrors in the order to try them.
+  order(): Mirror[] {
     const first = this.#preferred() ?? DEFAULT;
-    return [first, ...SOURCES.filter((source) => source !== first)];
+    return [first, ...MIRRORS.filter((mirror) => mirror !== first)];
   }
 
-  // The time is that of the first success in a row, so a preference for the
-  // fallback runs out the next day even when it kept working all night; a
-  // success after it ran out (CDS still failing) starts a new one.
-  worked(source: Source): void {
+  // The time is that of the first success in a row, so a preference for another
+  // mirror runs out the next day even when it kept working all night; a success
+  // after it ran out (the default still failing) starts a new one.
+  worked(source: Mirror): void {
     if (this.#preferred() === source) return;
     this.#last = { source, at: this.#now() };
     try {
@@ -91,8 +110,8 @@ export class SourceMemory {
     }
   }
 
-  // The remembered service, while its preference holds.
-  #preferred(): Source | null {
+  // The remembered mirror, while its preference holds.
+  #preferred(): Mirror | null {
     const last = this.#last;
     if (!last) return null;
     // A time ahead of the clock (the device's clock was wrong) has run out too.
@@ -101,13 +120,159 @@ export class SourceMemory {
   }
 }
 
-function isSaved(value: unknown): value is { source: Source; at: number } {
+function isSaved(value: unknown): value is { source: Mirror; at: number } {
   if (typeof value !== "object" || value === null) return false;
   const { source, at } = value as { source?: unknown; at?: unknown };
-  return SOURCES.some((s) => s === source) && typeof at === "number";
+  return MIRRORS.some((m) => m === source) && typeof at === "number";
 }
 
-// -- How much to ask for ----------------------------------------------------------
+// -- The browser's side ------------------------------------------------------------
+
+export type Missed = { source: Source; miss: Miss };
+
+// Apart so the order and the wording can be tested without a browser.
+export type Loader<I> = {
+  // Rejects with "error" or "timeout" (or "abort" when the signal aborts).
+  image(url: string, timeout: number, signal: AbortSignal): Promise<I>;
+  probe(origin: string, signal: AbortSignal): Promise<Probe>;
+  online(): boolean;
+};
+
+// -- Tiles ----------------------------------------------------------------------
+
+// The tiles of the views asked for, from the first mirror that answers. A mirror
+// that fails a tile is skipped for DOWN_MS, its tiles asked of the next one;
+// when every mirror is down the chart falls back to SkyView. `changed` is called
+// whenever a tile arrives or a mirror goes down or is told apart by its probe.
+export class SurveyTiles<I> {
+  #memory: SourceMemory;
+  #loader: Loader<I>;
+  #changed: () => void;
+  #now: () => number;
+  // Loaded tiles by key, least recently wanted first.
+  #images = new Map<string, I>();
+  #pending = new Map<string, AbortController>();
+  #down = new Map<Mirror, { until: number; miss: Miss | null }>();
+  #stopped = new AbortController();
+  // The mirror the last tile came from, for the credit.
+  last: Mirror | null = null;
+
+  constructor(memory: SourceMemory, loader: Loader<I>, changed: () => void, now: () => number = Date.now) {
+    this.#memory = memory;
+    this.#loader = loader;
+    this.#changed = changed;
+    this.#now = now;
+  }
+
+  image(tile: Tile): I | undefined {
+    return this.#images.get(tileKey(tile));
+  }
+
+  // The mirrors to ask now, in order.
+  mirrors(): Mirror[] {
+    const now = this.#now();
+    return this.#memory.order().filter((m) => (this.#down.get(m)?.until ?? 0) <= now);
+  }
+
+  allDown(): boolean {
+    return this.mirrors().length === 0;
+  }
+
+  // The mirror being asked for tiles, while any is on its way.
+  asking(): Mirror | null {
+    return this.#pending.size ? (this.mirrors()[0] ?? null) : null;
+  }
+
+  // Why each mirror is down, in the order they are tried; null while a probe
+  // has not answered yet.
+  misses(): Missed[] | null {
+    const misses: Missed[] = [];
+    for (const source of this.#memory.order()) {
+      const miss = this.#down.get(source)?.miss;
+      if (!miss) return null;
+      misses.push({ source, miss });
+    }
+    return misses;
+  }
+
+  // The tiles a view needs: asked for when missing, and those on their way for
+  // an earlier view and no longer needed are dropped.
+  want(tiles: Tile[]): void {
+    const keys = new Set(tiles.map(tileKey));
+    for (const [key, controller] of this.#pending) {
+      if (keys.has(key)) continue;
+      controller.abort();
+      this.#pending.delete(key);
+    }
+    if (!this.#loader.online()) return;
+    for (const tile of tiles) {
+      const key = tileKey(tile);
+      const image = this.#images.get(key);
+      if (image !== undefined) {
+        // Wanted again: the last to be dropped.
+        this.#images.delete(key);
+        this.#images.set(key, image);
+      } else if (!this.#pending.has(key) && !this.allDown()) {
+        void this.#load(tile, key);
+      }
+    }
+  }
+
+  // Back online: every mirror may be asked again.
+  reset(): void {
+    this.#down.clear();
+  }
+
+  stop(): void {
+    this.#stopped.abort();
+    for (const controller of this.#pending.values()) controller.abort();
+    this.#pending.clear();
+  }
+
+  async #load(tile: Tile, key: string): Promise<void> {
+    const controller = new AbortController();
+    this.#pending.set(key, controller);
+    for (;;) {
+      const mirror = this.mirrors()[0];
+      if (!mirror) break;
+      try {
+        const image = await this.#loader.image(`${HIPS[mirror]}/${tilePath(tile)}`, TILE_TIMEOUT, controller.signal);
+        if (controller.signal.aborted) return;
+        this.#pending.delete(key);
+        this.#images.set(key, image);
+        while (this.#images.size > KEPT_TILES) {
+          const oldest = this.#images.keys().next().value;
+          if (oldest === undefined) break;
+          this.#images.delete(oldest);
+        }
+        this.#down.delete(mirror);
+        this.#memory.worked(mirror);
+        this.last = mirror;
+        this.#changed();
+        return;
+      } catch (outcome) {
+        if (controller.signal.aborted) return;
+        this.#fail(mirror, outcome === "timeout" ? "timeout" : "error");
+      }
+    }
+    if (this.#pending.get(key) === controller) this.#pending.delete(key);
+    this.#changed();
+  }
+
+  #fail(mirror: Mirror, outcome: "error" | "timeout"): void {
+    const now = this.#now();
+    if ((this.#down.get(mirror)?.until ?? 0) > now) return; // another tile told already
+    const entry: { until: number; miss: Miss | null } = { until: now + DOWN_MS, miss: null };
+    this.#down.set(mirror, entry);
+    this.#changed();
+    void this.#loader.probe(ORIGIN[mirror], this.#stopped.signal).then((probe) => {
+      entry.miss = classify(outcome, probe);
+      this.#changed();
+    });
+  }
+}
+
+// -- SkyView, when no mirror answers ---------------------------------------------
 
 // SkyView's time grows with the field's area, hardly with its pixels (ADR 0020):
 // a view wider than this gets an image of its middle, where the frame is.
@@ -154,26 +319,10 @@ export function serves(
   return separation < wanted.fov * 0.25 && Math.abs(image.fov / wanted.fov - 1) < 0.3 && sharp;
 }
 
-export function surveyUrl(source: Source, r: SurveyRequest): string {
-  const ra = (r.ra * 15).toFixed(5);
-  const dec = r.dec.toFixed(5);
-  if (source === "cds") {
-    const params = new URLSearchParams({
-      hips: "CDS/P/DSS2/color",
-      width: String(r.width),
-      height: String(r.height),
-      fov: r.fov.toFixed(4),
-      projection: "TAN",
-      coordsys: "icrs",
-      ra,
-      dec,
-      format: "jpg",
-    });
-    return `${ORIGIN.cds}/hips-image-services/hips2fits?${params}`;
-  }
+export function skyViewUrl(r: SurveyRequest): string {
   const params = new URLSearchParams({
     Survey: "DSS2 Red",
-    Position: `${ra},${dec}`,
+    Position: `${(r.ra * 15).toFixed(5)},${r.dec.toFixed(5)}`,
     Size: `${r.fov.toFixed(4)},${((r.fov * r.height) / r.width).toFixed(4)}`,
     Pixels: `${r.width},${r.height}`,
     Projection: "Tan",
@@ -183,48 +332,21 @@ export function surveyUrl(source: Source, r: SurveyRequest): string {
   return `${ORIGIN.skyview}/current/cgi/runquery.pl?${params}`;
 }
 
-// -- Fetching ---------------------------------------------------------------------
-
-export type Missed = { source: Source; miss: Miss };
-export type SurveyResult<I> = { image: I; source: Source } | { offline: boolean; misses: Missed[] };
-
-// The browser's side, apart so the order and the wording can be tested without one.
-export type Loader<I> = {
-  // Rejects with "error" or "timeout".
-  image(url: string, timeout: number, signal: AbortSignal): Promise<I>;
-  probe(origin: string, signal: AbortSignal): Promise<Probe>;
-  online(): boolean;
-};
-
-// Tries the services in the remembered order; null when aborted. A miss's probe
-// runs while the next service is asked, so it costs time only when all fail.
-export async function fetchSurvey<I>(
+// SkyView's image, or why there is none; null when aborted.
+export async function fetchSkyView<I>(
   request: SurveyRequest,
-  memory: SourceMemory,
   loader: Loader<I>,
   signal: AbortSignal,
-  asking: (source: Source) => void = () => {},
-): Promise<SurveyResult<I> | null> {
-  if (!loader.online()) return { offline: true, misses: [] };
-  const probes: Promise<Missed>[] = [];
-  for (const source of memory.order()) {
+): Promise<{ image: I } | { miss: Miss } | null> {
+  try {
+    const image = await loader.image(skyViewUrl(request), SKYVIEW_TIMEOUT, signal);
+    return signal.aborted ? null : { image };
+  } catch (outcome) {
     if (signal.aborted) return null;
-    asking(source);
-    try {
-      const image = await loader.image(surveyUrl(source, request), TIMEOUT[source], signal);
-      if (signal.aborted) return null;
-      memory.worked(source);
-      return { image, source };
-    } catch (outcome) {
-      if (signal.aborted) return null;
-      const kind = outcome === "timeout" ? "timeout" : "error";
-      probes.push(loader.probe(ORIGIN[source], signal).then((probe) => ({ source, miss: classify(kind, probe) })));
-    }
+    const probe = await loader.probe(ORIGIN.skyview, signal);
+    if (signal.aborted) return null;
+    return { miss: classify(outcome === "timeout" ? "timeout" : "error", probe) };
   }
-  const misses = await Promise.all(probes);
-  if (signal.aborted) return null;
-  // Offline by now, or every host failed at once: most likely no internet here.
-  return { offline: !loader.online(), misses };
 }
 
 function onAbort(signal: AbortSignal, run: () => void): () => void {
@@ -236,6 +358,8 @@ export const browserLoader: Loader<HTMLImageElement> = {
   image(url, timeout, signal) {
     return new Promise((resolve, reject) => {
       const image = new Image();
+      // The mirrors allow CORS; asking with it keeps the chart's canvas clean.
+      if (!url.startsWith(ORIGIN.skyview)) image.crossOrigin = "anonymous";
       const done = (result: "load" | "error" | "timeout" | "abort"): void => {
         clearTimeout(timer);
         stop();
@@ -274,7 +398,7 @@ export const browserLoader: Loader<HTMLImageElement> = {
 };
 
 // The services' names as the chart says them.
-export const SERVICE: Record<Source, string> = { cds: "CDS", skyview: "SkyView" };
+export const SERVICE: Record<Source, string> = { irsa: "IRSA", esa: "ESA", cds: "CDS", skyview: "SkyView" };
 
 // One per page, shared by every chart.
 export const surveyMemory = new SourceMemory();
