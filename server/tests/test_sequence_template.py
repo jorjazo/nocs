@@ -14,6 +14,7 @@ from test_sequence import DIAGUITAS, M42, Rig, frames
 from nocs.api.app import create_app
 from nocs.config import Settings
 from nocs.sequence import (
+    Checkpoint,
     Container,
     Event,
     EventKind,
@@ -21,6 +22,7 @@ from nocs.sequence import (
     Outcome,
     Runner,
     RunState,
+    Sequence,
     SequenceStore,
 )
 from nocs.sequence import sky as night_sky
@@ -38,7 +40,9 @@ from nocs.sequence.model import (
     Guide,
     Prompt,
     RecenterTrigger,
+    Slew,
     Template,
+    Unpark,
     UntilDawn,
     Wait,
     WhileAbove,
@@ -72,7 +76,7 @@ def imaging_of(template: Template, index: int = 0) -> Container:
 def test_lights_in_a_row_take_turns_in_one_plan() -> None:
     sequence = expand(lrgb())
     assert sequence.template == lrgb()
-    assert sequence.start.children == []
+    assert sequence.start.children == [Unpark()]
     [lights] = sequence.targets.children
     assert isinstance(lights, Container)
     assert lights.conditions == [UntilDawn()]
@@ -108,7 +112,7 @@ def test_options_change_the_tree() -> None:
             end={"park": False, "outputs": ["dc:1", "dew:1"]},
         )
     )
-    assert sequence.start.children == [Cool(temperature=-10, ramp=3)]
+    assert sequence.start.children == [Cool(temperature=-10, ramp=3), Unpark()]
     [lights] = sequence.targets.children
     assert isinstance(lights, Container)
     assert lights.conditions == []
@@ -270,7 +274,7 @@ async def test_a_night_from_a_template_on_a_fake_rig() -> None:
         group.start_soon(answer)
         assert await runner.run() is Outcome.COMPLETED
     assert frames(rig) == ["L 120"] * 10 + ["- 120"] * 3
-    assert rig.calls[:2] == ["aim", "autofocus"]
+    assert rig.calls[:3] == ["unpark", "aim", "autofocus"]
     assert "paused" in rig.calls  # the rig is lent back while the user covers it
     assert rig.calls[-2:] == ["park", "warm"]
     assert [kind for kind, _ in rig.ended] == ["light", "dark"]
@@ -356,3 +360,78 @@ def test_a_template_s_offs_survive_the_store(tmp_path: Path) -> None:
     assert stored is not None
     assert stored.template == template
     assert stored.digest() == expand(template).digest()
+
+
+def test_lights_after_other_frames_go_back_to_what_was_framed() -> None:
+    template = Template(
+        name="x",
+        groups=[LRGB[0], Group(frame_type="flat", filter="L", count=5), LRGB[1]],
+        start_at_dusk=False,
+        min_altitude=None,
+    )
+    first, _, again = expand(template).targets.children
+    assert isinstance(first, Container)
+    assert isinstance(again, Container)
+    assert Slew() not in first.children
+    assert again.children[:3] == [Prompt(frame_type="light"), Aim(), Slew()]
+    # Centring goes back by itself.
+    centred = expand(template.model_copy(update={"center": True})).targets.children[2]
+    assert isinstance(centred, Container)
+    assert Slew() not in centred.children
+
+
+async def test_a_plan_done_before_a_restart_is_not_kept_again() -> None:
+    rig = Rig()
+    rig.time = datetime(2026, 11, 1, 3, 0, tzinfo=UTC)
+    template = Template(
+        name="x",
+        groups=[Group(frame_type="dark", exposure=60, count=2), Group(frame_type="bias", count=2)],
+    )
+    sequence = expand(template)
+    saved: list[Checkpoint] = []
+
+    async def save(checkpoint: Checkpoint) -> None:
+        saved.append(checkpoint.model_copy(deep=True))
+
+    runner = Runner(sequence, rig, now=rig.now, sleep=rig.sleep, save=save)
+    async with anyio.create_task_group() as group:
+
+        async def answer() -> None:
+            for _ in range(1000):
+                if runner.state is RunState.PAUSED:
+                    runner.resume()
+                    return
+                await anyio.sleep(0.01)
+
+        group.start_soon(answer)
+        assert await runner.run() is Outcome.COMPLETED
+    assert [kind for kind, _ in rig.ended] == ["dark", "bias"]
+    # Resumed from a checkpoint taken after the darks' plan was done, but before its
+    # container was marked finished: the darks' master is not made again.
+    after = next(
+        c for c in saved if c.plans.get("targets.0.1") and c.plans["targets.0.1"].done == [2]
+    )
+    assert "targets.0" not in after.finished
+    rig.ended.clear()
+    rig.calls.clear()
+    resumed = Runner(sequence, rig, now=rig.now, sleep=rig.sleep, checkpoint=after)
+    async with anyio.create_task_group() as group:
+
+        async def answer_again() -> None:
+            for _ in range(1000):
+                if resumed.state is RunState.PAUSED:
+                    resumed.resume()
+                    return
+                await anyio.sleep(0.01)
+
+        group.start_soon(answer_again)
+        assert await resumed.run() is Outcome.COMPLETED
+    assert [kind for kind, _ in rig.ended] == ["bias"]
+    assert resumed.status()["prompt"] is None
+
+
+def test_a_prompt_for_bias_asks_for_the_dark() -> None:
+    sequence = Sequence(name="x", targets=Container(children=[Prompt(frame_type="bias")]))
+    runner = Runner(sequence, Rig(), now=Rig().now)
+    runner._prompt = Prompt(frame_type="bias")  # pyright: ignore[reportPrivateUsage]
+    assert runner.status()["prompt"] == "dark"

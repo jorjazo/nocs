@@ -162,6 +162,7 @@ from nocs.storage.service import DriveBusyError, EjectUnavailableError
 from nocs.system.client import HelperUnavailableError
 from nocs.system.protocol import HelperError
 from nocs.targets import TargetCatalog, bundled_catalog, loaded_catalog
+from nocs.targets.catalog import separation
 from nocs.targets.plan import PlanService
 
 log = logging.getLogger(__name__)
@@ -304,6 +305,10 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
 
         def nearest(self, ra: float, dec: float, radius: float) -> str | None:
             return _nearest_object(ra, dec, radius)
+
+        def within(self, name: str, ra: float, dec: float, radius: float) -> bool:
+            found = (loaded_catalog() or bundled_catalog()).get(name)
+            return found is not None and separation(ra, dec, found.ra, found.dec) <= radius
 
         def position(self) -> Coordinates | None:
             return _pointing(services.mount)

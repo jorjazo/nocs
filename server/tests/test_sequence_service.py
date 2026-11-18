@@ -295,6 +295,9 @@ class Extras:
     def position(self) -> Coordinates | None:
         return Coordinates(M42.ra or 0, M42.dec or 0)
 
+    def within(self, name: str, ra: float, dec: float, radius: float) -> bool:
+        return name == "M 42" and abs(dec - (M42.dec or 0)) < radius
+
 
 def lrgb(**end: object) -> Sequence:
     plan = ExposurePlan(rows=[PlanRow(filter="L", exposure=1, count=2)])
@@ -866,6 +869,7 @@ async def test_groups_run_on_the_rig_with_their_stacks_and_masters(setup: Any) -
         await jobs.wait(job)
     assert rig.calls == [
         "stacking held True",
+        "unpark",
         "solve (sync False)",  # the aim: where the frame is
         "filter L",
         "frame M 42 1",
@@ -907,3 +911,24 @@ async def test_explore_and_a_sequence_exclude_each_other(setup: Any) -> None:
     rig.gate.set()
     await jobs.wait(job)
     assert not service.active
+
+
+async def test_an_aim_names_what_is_framed_not_a_stale_go_to(setup: Any) -> None:
+    service, rig, store, jobs, _ = setup
+    rig.drifts = [0.0]
+    rig.extras.goto = "M 1"  # gone to earlier, framed M 42 by hand since
+    template = Template(
+        name="x",
+        groups=[Group(filter="L", exposure=1, count=1)],
+        start_at_dusk=False,
+        until_dawn=False,
+        min_altitude=None,
+        focus=None,
+        flip=False,
+        end=EndPlan(park=False, warm=False),
+    )
+    service.put("x", expand(template))
+    await jobs.wait(service.start("x"))
+    assert "frame NGC 1976 1" in rig.calls
+    [plan] = store.get(("sequence", "run", "plans")).values()
+    assert plan["target"] == "NGC 1976"

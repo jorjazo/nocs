@@ -267,14 +267,14 @@ class SequenceService:
         )
         runner.checkpoint.sequence = sequence_id
         self._runner = runner
-        if parts.masters is not None:
-            parts.masters.forget()
-        if parts.stacking is not None:
-            await parts.stacking.hold(True)
         send, receive = anyio.create_memory_object_stream[Event](math.inf)
         self._record = send
         outcome = Outcome.FAILED
         try:
+            if parts.masters is not None:
+                parts.masters.forget()
+            if parts.stacking is not None:
+                await parts.stacking.hold(True)
             async with anyio.create_task_group() as group:
                 group.start_soon(self._write, receive, sequence_id, sequence, runner)
                 try:

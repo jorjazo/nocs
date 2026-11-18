@@ -65,6 +65,7 @@ from nocs.sequence.model import (
     UntilTime,
     Wait,
     WhileAbove,
+    frame_class,
     key,
 )
 from nocs.state import Json
@@ -587,6 +588,8 @@ class Runner:
     async def _plan(self, plan: ExposurePlan, path: tuple[str, ...], target: Target | None) -> None:
         here = key(path)
         progress = self._checkpoint.plans.setdefault(here, PlanProgress(done=[0] * len(plan.rows)))
+        if next_row(plan, progress) is None:
+            return  # done before a restart: its stack or master is kept already
         try:
             await self._frames(plan, path, target, progress)
         except Exception:
@@ -1066,7 +1069,7 @@ class Runner:
             "plans": rows,
             "outcome": self._outcome.value if self._outcome is not None else None,
             "error": self._error,
-            "prompt": self._prompt.frame_type if self._prompt is not None else None,
+            "prompt": frame_class(self._prompt.frame_type) if self._prompt is not None else None,
         }
 
     def _describe(self, path: PathKey | None) -> dict[str, Json] | None:

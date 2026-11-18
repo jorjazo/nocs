@@ -240,9 +240,7 @@
 
 <h1 class="visually-hidden">{s.title}</h1>
 
-{#if !owner}
-  <div class="padded"><EmptyState icon="sequence" title={s.ownerOnly} body="" /></div>
-{:else if !camera}
+{#if !camera}
   <div class="padded">
     <EmptyState icon="sequence" title={t.live.noCamera} body={t.live.noCameraBody}>
       {#snippet action()}
@@ -342,7 +340,10 @@
         <p class="caption muted">{plan && plan.frame_type !== "light" ? s.masterLater : s.stackLater}</p>
       {/if}
 
-      {#if !draft}
+      {#if !owner}
+        <!-- Observers follow the run in the widget; the settings are the owner's. -->
+        <p class="caption muted">{s.ownerOnly}</p>
+      {:else if !draft}
         {#if sequences.loaded}
           <EmptyState icon="sequence" title={s.none} body={s.noneBody}>
             {#snippet action()}
@@ -469,7 +470,7 @@
           {/snippet}
         </Banner>
       {/if}
-      <div class="actions">
+      <div class="actions" class:hidden={!owner}>
         {#if !going}
           <Button
             variant="primary"
@@ -599,6 +600,9 @@
   .actions {
     display: flex;
     gap: var(--space-2);
+  }
+  .hidden {
+    display: none;
   }
   .outcome {
     text-align: center;

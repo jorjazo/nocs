@@ -226,6 +226,7 @@ class LiveStackService:
             return
         if on:
             await self._end_all()
+            self._ended = []
             self._held = True
             self._status, self._message, self._error = "idle", None, None
         else:
@@ -238,7 +239,6 @@ class LiveStackService:
         """End every stack once the frames offered so far are in, saving those worth
         keeping; what was saved (a sequence's group of lights ended)."""
         await self.idle()
-        self._ended = []
         await self._end_all()
         ended, self._ended = self._ended, []
         self._publish()

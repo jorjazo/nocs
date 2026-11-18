@@ -123,7 +123,8 @@ class Sequences {
     this.saving = true;
     try {
       await saveTemplate(id, body);
-      this.saved = text;
+      // Another sequence may be shown by now: its own draft stays as it is.
+      if (this.id === id) this.saved = text;
       this.all = { ...this.all, [id]: { ...(this.all[id] ?? {}), name: body.name, template: body } as Sequence };
       this.error = "";
     } catch (e) {

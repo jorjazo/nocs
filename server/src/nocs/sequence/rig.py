@@ -217,6 +217,11 @@ class Framing(Protocol):
         """The catalog object nearest a J2000 point within ``radius`` degrees (blocks)."""
         ...
 
+    def within(self, name: str, ra: float, dec: float, radius: float) -> bool:
+        """Whether the catalog object ``name`` lies within ``radius`` degrees of a J2000
+        point; False for a name the catalog does not know (blocks)."""
+        ...
+
     def position(self) -> Coordinates | None:
         """Where the mount points, J2000."""
         ...
@@ -366,6 +371,8 @@ class RigExecutor:
                     log.info("not parking: %s; switching tracking off", e)
                     await mount.set_tracking(False, job=context.id)
             case Slew():
+                if target is not None and target.ra is None:
+                    return {"skipped": "where the framing is, is unknown"}
                 ra, dec = _aim(target)
                 await self._stop_guiding()
                 await self._mount().slew(context, ra, dec)
@@ -608,6 +615,7 @@ class RigExecutor:
         parts = self._parts
         ra = dec = None
         radius = 0.5
+        solved_here = False
         if parts.pointing is not None:
             try:
                 solved = await parts.pointing.solve_frame(self._context, SolveOptions(sync=False))
@@ -616,14 +624,26 @@ class RigExecutor:
             else:
                 solution = solved.result.solution
                 ra, dec = solution.ra, solution.dec
+                solved_here = True
                 field = min(solution.width, solution.height) * solution.scale / 3600
                 radius = max(field / 2, 0.05)
         framing = parts.framing
         if ra is None and framing is not None and (at := framing.position()) is not None:
             ra, dec = at.ra, at.dec
-        name = framing.last_goto() if framing is not None else None
-        if not name and framing is not None and ra is not None and dec is not None:
-            name = await anyio.to_thread.run_sync(framing.nearest, ra, dec, radius)
+        # The last go to, unless a solved frame shows the camera framed something else
+        # since (by hand); then the catalog object nearest what is framed.
+        name = None
+        if framing is not None:
+            goto = framing.last_goto()
+            if ra is not None and dec is not None:
+                here = False
+                if goto and solved_here:
+                    here = await anyio.to_thread.run_sync(framing.within, goto, ra, dec, radius)
+                if goto and (here or not solved_here):
+                    name = goto
+                else:
+                    name = await anyio.to_thread.run_sync(framing.nearest, ra, dec, radius)
+            name = name or goto
         return {"name": name or UNTITLED, "ra": ra, "dec": dec}
 
     async def _flats(self, action: Flats) -> dict[str, Json]:

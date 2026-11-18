@@ -54,8 +54,10 @@ from nocs.sequence.model import (
     Recenter,
     RecenterTrigger,
     Sequence,
+    Slew,
     Template,
     Trigger,
+    Unpark,
     UntilDawn,
     Wait,
     Warm,
@@ -119,6 +121,8 @@ def expand(template: Template) -> Sequence:
     start: list[Node] = []
     if template.cooling == "global" and template.temperature is not None:
         start.append(Cool(temperature=template.temperature, ramp=template.cooling_ramp))
+    if template.lights:
+        start.append(Unpark())
 
     children: list[Node] = []
     previous: FrameClass = "light"
@@ -132,7 +136,9 @@ def expand(template: Template) -> Sequence:
         if template.cooling == "group" and segment.temperature is not None:
             steps.append(Cool(temperature=segment.temperature, ramp=template.cooling_ramp))
         if kind == "light":
-            steps.extend(_lights(template, segment))
+            # After darks or flats the mount may have moved (to the panel): back to
+            # what was framed, unless centring does it.
+            steps.extend(_lights(template, segment, back=i > 0 and not template.center))
             conditions: list[Condition] = []
             if template.until_dawn:
                 conditions.append(UntilDawn(darkness=template.darkness))
@@ -162,11 +168,13 @@ def expand(template: Template) -> Sequence:
     )
 
 
-def _lights(template: Template, segment: Segment) -> list[Node]:
+def _lights(template: Template, segment: Segment, *, back: bool) -> list[Node]:
     steps: list[Node] = []
     if template.start_at_dusk:
         steps.append(Wait(dusk=template.darkness))
     steps.append(Aim())
+    if back:
+        steps.append(Slew())
     if template.min_altitude is not None:
         steps.append(Wait(altitude=template.min_altitude))
 
