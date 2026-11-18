@@ -6,7 +6,6 @@
   import Button from "../../components/Button.svelte";
   import ConfirmButton from "../../components/ConfirmButton.svelte";
   import Icon from "../../components/Icon.svelte";
-  import PlanSwitch from "./PlanSwitch.svelte";
   import RigStatus from "../../components/RigStatus.svelte";
   import ScreenHeader from "../../components/ScreenHeader.svelte";
   import TextField from "../../components/TextField.svelte";
@@ -92,7 +91,6 @@
 </ScreenHeader>
 
 <div class="screen">
-  <PlanSwitch value="target" />
   {#if planned}
     <section class="card current" aria-labelledby="planned-title">
       <span class="label muted">{t.plan.tonightsTarget}</span>

@@ -53,6 +53,7 @@ from nocs.sequence.model import (
 )
 from nocs.sequence.runner import PlanProgress, count_frame, next_row
 from nocs.sequence.sky import Place
+from nocs.state import Json
 
 START = datetime(2026, 11, 1, 0, 0, tzinfo=UTC)
 M42 = Target(name="M 42", ra=5.588, dec=-5.39)
@@ -76,6 +77,9 @@ class Rig:
         self.errors: dict[str, list[StepError]] = {}
         """Failures to raise, in turn, for an action kind or ``frame``."""
         self.slept = 0.0
+        self.ended: list[tuple[str, list[int]]] = []
+        """Exposure plans that ended: their frame type and frames."""
+        self.aim: dict[str, Json] = {"name": "M 42", "ra": M42.ra, "dec": M42.dec}
 
     async def sleep(self, seconds: float) -> None:
         self.slept += seconds
@@ -89,7 +93,7 @@ class Rig:
     def now(self) -> datetime:
         return self.time
 
-    async def action(self, action: Action, target: Target | None) -> None:
+    async def action(self, action: Action, target: Target | None) -> dict[str, Json] | None:
         name = action.kind
         if action.kind == "filter":
             name = f"filter {action.filter}"
@@ -102,6 +106,9 @@ class Rig:
         self._raise(action.kind)
         if action.kind == "autofocus":
             self.time += timedelta(minutes=3)
+        if action.kind == "aim":
+            return dict(self.aim)
+        return None
 
     async def frame(self, plan: ExposurePlan, row: PlanRow, target: Target | None) -> FrameResult:
         if self.gate is not None:
@@ -111,8 +118,8 @@ class Rig:
             raise RuntimeError("the camera timed out")
         self._raise("frame")
         self.frames += 1
-        self.time += timedelta(seconds=row.exposure)
-        self.calls.append(f"{row.filter or '-'} {row.exposure:g}")
+        self.time += timedelta(seconds=row.exposure or 0)
+        self.calls.append(f"{row.filter or '-'} {row.exposure or 0:g}")
         hfr = self.hfr(self.frames)
         self.on_frame(self.frames)
         return FrameResult(stars=self.stars(self.frames), hfr=hfr, frame=self.frames)
@@ -135,6 +142,10 @@ class Rig:
             return None
         self.calls.append(f"recover {error.role} {attempt}")
         return f"recovered {error.role}"
+
+    async def plan_ended(self, plan: ExposurePlan, frames: list[int]) -> dict[str, Json] | None:
+        self.ended.append((plan.frame_type, frames))
+        return None
 
 
 def target(*rows: PlanRow, batch: int = 5, **container: object) -> Container:
@@ -279,6 +290,7 @@ async def test_a_night_runs_start_targets_and_end_in_order() -> None:
     assert status["plans"] == {
         "targets.0.1": {
             "target": "M 42",
+            "frame_type": "light",
             "rows": [
                 {"filter": "L", "exposure": 60, "count": 2, "done": 2},
                 {"filter": "R", "exposure": 60, "count": 1, "done": 1},

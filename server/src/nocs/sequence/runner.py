@@ -1,4 +1,4 @@
-"""Runs a sequence step by step: conditions, triggers, pausing, stopping (ADR 0031).
+"""Runs a sequence step by step: conditions, triggers, pausing, stopping, prompts.
 
 The runner knows the tree, not the devices: an ``Executor`` carries out each
 action and takes each frame. Between steps come the **safe points**, where a
@@ -7,6 +7,11 @@ container are checked; before each frame, the triggers too. After each step the
 progress goes to a ``Checkpoint``, from which a run can be resumed after a
 restart: *start* runs again, finished containers are skipped, plans go on from
 their counts, and the actions of unfinished containers run again.
+
+A **prompt** stops the run as a pause does, until the user says the rig is ready
+for the next kind of frames; a run resumed after a restart asks again. An **aim**
+takes what the camera has framed as the target of containers that name none, once
+per run.
 
 *End* always runs, once *targets* is done, stopped with ``run_end`` or failed.
 Cancelling the task that runs the sequence stops it at once, without *end*.
@@ -32,6 +37,7 @@ from nocs.equipment.profiles import write_atomic
 from nocs.sequence import sky
 from nocs.sequence.model import (
     Action,
+    Aim,
     Autofocus,
     Center,
     Condition,
@@ -39,6 +45,7 @@ from nocs.sequence.model import (
     DitherTrigger,
     ExposurePlan,
     FailureKind,
+    Flats,
     Flip,
     FlipTrigger,
     FocusMemory,
@@ -46,6 +53,7 @@ from nocs.sequence.model import (
     Node,
     PathKey,
     PlanRow,
+    Prompt,
     RecenterTrigger,
     SelectFilter,
     Sequence,
@@ -57,8 +65,8 @@ from nocs.sequence.model import (
     UntilTime,
     Wait,
     WhileAbove,
+    frame_class,
     key,
-    plans,
 )
 from nocs.state import Json
 
@@ -132,6 +140,12 @@ class Executor(Protocol):
         and the retry goes on."""
         ...
 
+    async def plan_ended(self, plan: ExposurePlan, frames: list[int]) -> dict[str, Json] | None:
+        """An exposure plan ended (done, or cut short): keep what its frames make, its
+        lights' stack or its master; ``frames`` are the catalog ids it saved this run.
+        What came of it goes to the session's events; raising is reported, never fatal."""
+        ...
+
 
 # -- checkpoint ---------------------------------------------------------------------
 
@@ -142,6 +156,8 @@ class PlanProgress(SequenceModel):
     row: int | None = None
     """The row of the batch in progress."""
     in_batch: int = 0
+    frames: list[int] = Field(default_factory=list[int])
+    """Catalog ids of the frames saved, for the plan's master or stack."""
 
 
 class Checkpoint(SequenceModel):
@@ -169,6 +185,8 @@ class Checkpoint(SequenceModel):
     meridian, it flips once the target crosses (ADR 0033)."""
     pointed: Target | None = None
     """That target."""
+    aimed: Target | None = None
+    """What an ``aim`` found the camera framed: the target of containers naming none."""
     ending: bool = False
     """*End* has begun: a resumed run goes straight to it."""
     ended: AwareDatetime | None = None
@@ -245,6 +263,8 @@ class EventKind(StrEnum):
     RESUMED_AFTER_RESTART = "resumed_after_restart"
     ACTION = "action"
     FRAME = "frame"
+    PROMPT = "prompt"
+    """The run waits for the user to ready the rig for another kind of frames."""
     TRIGGER = "trigger"
     CONDITION = "condition"
     PAUSED = "paused"
@@ -365,6 +385,8 @@ class Runner:
         self._waiting_meridian = False
         self._guarded = False
         """The guard stopped tracking (once per pointing)."""
+        self._prompt: Prompt | None = None
+        """The prompt the run waits on."""
 
     # -- control --------------------------------------------------------------------
 
@@ -462,6 +484,8 @@ class Runner:
                     await self._plan(child, path, end.target)
                 elif isinstance(child, Wait):
                     await self._wait_for(child, path, end.target)
+                elif isinstance(child, Prompt):
+                    continue  # nobody may be there to answer: the end never asks
                 else:
                     await self._action(child, path, end.target)
             except Exception as e:
@@ -476,7 +500,7 @@ class Runner:
         checkpoint = self._checkpoint
         if here in checkpoint.finished:
             return
-        scope = _Scope(here, container, container.target or target)
+        scope = _Scope(here, container, container.target or target or checkpoint.aimed)
         self._scopes.append(scope)
         try:
             iteration = checkpoint.iterations.get(here, 0)
@@ -490,6 +514,8 @@ class Runner:
                         await self._plan(child, child_path, scope.target)
                     elif isinstance(child, Wait):
                         await self._wait_for(child, child_path, scope.target)
+                    elif isinstance(child, Prompt):
+                        await self._ask(child, child_path)
                     else:
                         await self._action(child, child_path, scope.target)
                 iteration += 1
@@ -529,6 +555,9 @@ class Runner:
     async def _action(self, action: Action, path: tuple[str, ...], target: Target | None) -> bool:
         """Carry out an action; ``False`` when a policy gave it up."""
         here = key(path)
+        if isinstance(action, Aim) and self._checkpoint.aimed is not None:
+            # Once per run: after a restart (or between groups) the framing stays.
+            return True
         step = functools.partial(self._executor.action, action, target)
         try:
             while (done := await self._attempt(here, step)) is None:
@@ -547,7 +576,9 @@ class Runner:
             self._focused()
         elif isinstance(action, Guide):
             data["on"] = action.on
-        if isinstance(action, Center | Slew | Flip):
+        elif isinstance(action, Aim):
+            target = self._aimed(data)
+        if isinstance(action, Center | Slew | Flip | Aim):
             self._checkpoint.since_recenter = 0  # pointed afresh
             self._pointed_at(target)
         self._event(EventKind.ACTION, action.kind, here, data)
@@ -557,6 +588,33 @@ class Runner:
     async def _plan(self, plan: ExposurePlan, path: tuple[str, ...], target: Target | None) -> None:
         here = key(path)
         progress = self._checkpoint.plans.setdefault(here, PlanProgress(done=[0] * len(plan.rows)))
+        if next_row(plan, progress) is None:
+            return  # done before a restart: its stack or master is kept already
+        try:
+            await self._frames(plan, path, target, progress)
+        except Exception:
+            await self._plan_ended(plan, here, progress)
+            raise
+        await self._plan_ended(plan, here, progress)
+
+    async def _plan_ended(self, plan: ExposurePlan, path: PathKey, progress: PlanProgress) -> None:
+        try:
+            data = await self._executor.plan_ended(plan, list(progress.frames))
+        except Exception as e:
+            log.warning("sequence %s: after plan %s: %s", self._sequence.name, path, e)
+            self._event(EventKind.FAILED, f"after the frames: {e}", path, {"kind": "storage"})
+            return
+        if data:
+            self._event(EventKind.ACTION, "kept", path, data)
+
+    async def _frames(
+        self,
+        plan: ExposurePlan,
+        path: tuple[str, ...],
+        target: Target | None,
+        progress: PlanProgress,
+    ) -> None:
+        here = key(path)
         while (index := next_row(plan, progress)) is not None:
             row = plan.rows[index]
             await self._safe_point()
@@ -578,6 +636,8 @@ class Runner:
                 continue  # dropped by a pause or a stop
             result = done.value
             count_frame(plan, progress, index)
+            if result.frame is not None:
+                progress.frames.append(result.frame)
             focus = self._checkpoint.focus
             focus.frames += 1
             self._checkpoint.since_dither += 1
@@ -585,13 +645,15 @@ class Runner:
             if result.hfr is not None:
                 focus.add_hfr(row.filter, result.hfr)
             done_count = progress.done[index]
-            label = f"{row.exposure:g} s {done_count}/{row.count}"
+            exposure = f"{row.exposure:g} s" if row.exposure is not None else plan.frame_type
+            label = f"{exposure} {done_count}/{row.count}"
             self._event(
                 EventKind.FRAME,
                 f"{row.filter} {label}" if row.filter else label,
                 here,
                 {
                     "row": index,
+                    "frame_type": plan.frame_type,
                     "filter": row.filter,
                     "exposure": row.exposure,
                     "done": done_count,
@@ -726,7 +788,7 @@ class Runner:
         ha = self._minutes_past(target)
         if ha is None:
             return False
-        frame = (row.exposure + FRAME_OVERHEAD) / 60
+        frame = ((row.exposure or 0) + FRAME_OVERHEAD) / 60
         if ha + frame <= trigger.after:
             self._waiting_meridian = False
             return False
@@ -871,6 +933,8 @@ class Runner:
 
     def _above(self, target: Target | None, minimum: float, now: datetime) -> bool:
         if target is None or target.ra is None or target.dec is None:
+            if self._checkpoint.aimed is not None:
+                return True  # framed where nothing says where: the altitude is unknown
             raise ValueError("an altitude needs a target with coordinates")
         altitude, horizon = sky.altitude(self._where(), target.ra, target.dec, now)
         return altitude >= max(minimum, horizon)
@@ -903,6 +967,38 @@ class Runner:
         self._event(EventKind.ACTION, "wait", here, {"waited": round(waited)})
         await self._save()
 
+    async def _ask(self, prompt: Prompt, path: tuple[str, ...]) -> None:
+        """Stop, as a pause does, until the user says the rig is ready."""
+        here = key(path)
+        self._current = here
+        self._prompt = prompt
+        self._event(EventKind.PROMPT, prompt.frame_type, here, {"frame_type": prompt.frame_type})
+        self._pause_asked = True
+        self._resume = anyio.Event()
+        self._set_state(RunState.PAUSING)
+        try:
+            await self._safe_point()
+        finally:
+            self._prompt = None
+            self._on_change()
+        self._event(EventKind.ACTION, "prompt", here, {"frame_type": prompt.frame_type})
+        await self._save()
+
+    def _aimed(self, found: dict[str, Json]) -> Target:
+        """The target an aim found, for every container that names none."""
+        ra, dec, name = found.get("ra"), found.get("dec"), found.get("name")
+        coordinates = isinstance(ra, int | float) and isinstance(dec, int | float)
+        aimed = Target(
+            name=name if isinstance(name, str) and name else "Untitled",
+            ra=float(ra) if coordinates and isinstance(ra, int | float) else None,
+            dec=float(dec) if coordinates and isinstance(dec, int | float) else None,
+        )
+        self._checkpoint.aimed = aimed
+        for scope in self._scopes:
+            if scope.container.target is None:
+                scope.target = aimed
+        return aimed
+
     async def _pause(self) -> None:
         self._pause_asked = False
         await self._save()
@@ -925,13 +1021,32 @@ class Runner:
         """The run as the state shows it."""
         checkpoint = self._checkpoint
         rows: dict[str, Json] = {}
-        for path, plan, target in plans(self._sequence):
+        for path, node, target in _work(self._sequence):
+            finished = path in checkpoint.finished or _inside_finished(path, checkpoint.finished)
+            name = target.name if target is not None else None
+            if name is None and checkpoint.aimed is not None:
+                name = checkpoint.aimed.name
+            if isinstance(node, Flats):
+                rows[path] = {
+                    "target": name,
+                    "frame_type": "flat",
+                    "rows": [
+                        {
+                            "filter": node.filter,
+                            "exposure": None,
+                            "count": node.count,
+                            "done": node.count if finished else 0,
+                        }
+                    ],
+                }
+                continue
             progress = checkpoint.plans.get(path)
-            done = progress.done if progress is not None else [0] * len(plan.rows)
-            if path in checkpoint.finished or _inside_finished(path, checkpoint.finished):
-                done = [row.count for row in plan.rows]
+            done = progress.done if progress is not None else [0] * len(node.rows)
+            if finished:
+                done = [row.count for row in node.rows]
             rows[path] = {
-                "target": target.name if target is not None else None,
+                "target": name,
+                "frame_type": node.frame_type,
                 "rows": [
                     {
                         "filter": row.filter,
@@ -939,11 +1054,12 @@ class Runner:
                         "count": row.count,
                         "done": done[i],
                     }
-                    for i, row in enumerate(plan.rows)
+                    for i, row in enumerate(node.rows)
                 ],
             }
         return {
             "run": checkpoint.run,
+            "sequence": checkpoint.sequence,
             "name": self._sequence.name,
             "state": self._state.value,
             "started": checkpoint.started.isoformat(timespec="seconds"),
@@ -953,6 +1069,7 @@ class Runner:
             "plans": rows,
             "outcome": self._outcome.value if self._outcome is not None else None,
             "error": self._error,
+            "prompt": frame_class(self._prompt.frame_type) if self._prompt is not None else None,
         }
 
     def _describe(self, path: PathKey | None) -> dict[str, Json] | None:
@@ -997,6 +1114,24 @@ class Runner:
 
 def _ignore(_: Event) -> None:
     pass
+
+
+def _work(sequence: Sequence) -> list[tuple[PathKey, ExposurePlan | Flats, Target | None]]:
+    """Every exposure plan and flats step, with its place and target, in the tree's order."""
+    found: list[tuple[PathKey, ExposurePlan | Flats, Target | None]] = []
+
+    def walk(container: Container, path: tuple[str, ...], target: Target | None) -> None:
+        target = container.target or target
+        for i, child in enumerate(container.children):
+            child_path = (*path, str(i))
+            if isinstance(child, Container):
+                walk(child, child_path, target)
+            elif isinstance(child, ExposurePlan | Flats):
+                found.append((key(child_path), child, target))
+
+    for part in ("start", "targets", "end"):
+        walk(getattr(sequence, part), (part,), None)
+    return found
 
 
 def _inside_finished(path: PathKey, finished: list[PathKey]) -> bool:

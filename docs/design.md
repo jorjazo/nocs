@@ -277,8 +277,14 @@ of **containers** and **instructions**, with **conditions** and **triggers**.
 - Recovery policies: lost guide star → pause and retry; clouds (no stars) →
   wait and retry; solve failure → retry, then skip target.
 
-The UI exposes this power through simple templates first ("image this target
-with these filters tonight"), with the full tree editor as an advanced view.
+The UI exposes this power through simple templates first: the Sequences view's
+groups of frames of what the camera has framed (lights per filter, darks, bias,
+flats), which stop and ask the user to ready the rig when the kind of frames
+changes; a Plan of targets will build on the same model. The full tree editor is
+an advanced view for later.
+
+Explore and Sequences exclude each other: Explore takes no frames while a
+sequence is active, and a sequence does not start while Explore takes frames.
 
 ### 9.6 Safety (foundation for observatories)
 

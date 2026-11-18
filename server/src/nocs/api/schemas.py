@@ -152,7 +152,9 @@ class EquipmentState(StateModel):
 
 
 type FrameTypeName = Literal["light", "dark", "bias", "flat"]
-type SavedFrameTypeName = Literal["light", "dark", "bias", "flat", "stack"]
+type SavedFrameTypeName = Literal[
+    "light", "dark", "bias", "flat", "stack", "master_dark", "master_bias", "master_flat"
+]
 """What a saved frame can be: a camera's frame types, and live stacks (ADR 0039)."""
 type JobStateName = Literal["running", "succeeded", "failed", "cancelled"]
 
@@ -1230,13 +1232,20 @@ class SystemState(StateModel):
 
 class SequencePlanRow(StateModel):
     filter: str | None
-    exposure: float
+    exposure: float | None = Field(
+        description="Seconds; None: a bias (the camera's shortest) or flats whose exposure "
+        "is found."
+    )
     count: int
-    done: int = Field(description="Frames taken.")
+    done: int = Field(
+        description="Frames taken; flats whose exposure is found count only once done "
+        "(`flats` has them as they come)."
+    )
 
 
 class SequencePlan(StateModel):
-    target: str | None
+    target: str | None = Field(description="What the frames are named after, once known.")
+    frame_type: Literal["light", "dark", "flat", "bias"]
     rows: list[SequencePlanRow]
 
 
@@ -1244,6 +1253,7 @@ class SequenceRun(StateModel):
     """A sequence's run in progress, or the last one (ADR 0031)."""
 
     run: str
+    sequence: str = Field(description="Id of the saved sequence it runs.")
     name: str
     state: Literal["running", "pausing", "paused", "stopping", "ending", "finished"]
     started: str = Field(description="UTC, ISO 8601.")
@@ -1254,9 +1264,16 @@ class SequenceRun(StateModel):
         description="The instruction at `current` as stored (an exposure plan only as its kind "
         "and frame_type); None at a container or between steps.",
     )
-    plans: dict[str, SequencePlan] = Field(description="Exposure plans by place in the tree.")
+    plans: dict[str, SequencePlan] = Field(
+        description="Exposure plans (and flats whose exposure is found) by place in the tree, "
+        "in its order."
+    )
     outcome: Literal["completed", "stopped", "failed"] | None
     error: str | None
+    prompt: Literal["light", "dark", "flat"] | None = Field(
+        description="The run waits (paused) until the user readies the rig for these frames: "
+        "uncovered, covered (darks and bias), on a panel."
+    )
 
 
 class SequenceEvent(StateModel):
@@ -1266,6 +1283,7 @@ class SequenceEvent(StateModel):
         "resumed_after_restart",
         "action",
         "frame",
+        "prompt",
         "trigger",
         "condition",
         "paused",
@@ -1285,9 +1303,29 @@ class SequenceEvent(StateModel):
     )
 
 
+class GroupMasterPreview(StateModel):
+    url: str = Field(description="JPEG of the master, at most 1920 px wide; immutable.")
+    width: int
+    height: int
+
+
+class GroupMasterState(StateModel):
+    kind: Literal["dark", "bias", "flat"]
+    frames: int
+    filter: str | None
+    path: str = Field(description="Below NOCS/ on its destination.")
+    frame_id: int
+    preview: GroupMasterPreview
+    time: str = Field(description="UTC, ISO 8601, when it was saved.")
+
+
 class SequenceState(StateModel):
     run: SequenceRun | None
     events: list[SequenceEvent] = Field(description="The run's most recent events, oldest first.")
+    master: GroupMasterState | None = Field(
+        default=None,
+        description="The run's latest master of a group of darks, bias or flats.",
+    )
 
 
 class FlatFilterState(StateModel):
@@ -2350,24 +2388,19 @@ class JobStarted(WireModel):
 
 
 class SequenceEstimate(WireModel):
-    """What a template's plan costs, and how much of tonight it has (phase 5.10)."""
+    """What a template's groups cost."""
 
     frames: int
     integration: float = Field(description="Seconds of exposure.")
-    duration: float = Field(description="Seconds the frames take, without focusing or slewing.")
+    duration: float = Field(
+        description="Seconds the frames take, without focusing, cooling or waiting for the user."
+    )
     bytes: int | None = Field(description="On disk; None while the camera is unknown.")
-    window: float | None = Field(
-        description="Seconds tonight's dark window keeps the target above the minimum altitude"
-        " and the horizon; None while the site is unknown."
-    )
     starts: str | None = Field(
-        description="UTC, ISO 8601: when imaging would start tonight (now, or when the "
-        "target's window opens); None without the site or a window left tonight."
+        description="UTC, ISO 8601: now, or tonight's dusk when the first group is lights "
+        "that wait for it."
     )
-    ends: str | None = Field(
-        description="UTC, ISO 8601: when the plan would be done, or the window close if that "
-        "comes first."
-    )
+    ends: str | None = Field(description="UTC, ISO 8601: when its frames would be done.")
 
 
 class Driver(WireModel):

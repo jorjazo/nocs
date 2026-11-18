@@ -14,8 +14,10 @@ darks, its flats and the bias the flats need. Green: complete (20 darks, 20 flat
 
 **Take darks and bias…** takes them as a sequence you can leave running, for example
 the morning after, with the telescope or the camera covered: no light may reach the
-sensor. It cools the camera to each temperature, takes the bias, then the darks, and
-warms the camera at the end if you ask.
+sensor. It asks you to cover it first, cools the camera to each temperature, takes
+the bias, then the darks, keeps a master of each group, and warms the camera at the
+end if you ask. A sequence can also take them itself after its lights: in
+**Sequences → Configure**, **Add missing calibration** adds what its lights lack.
 
 The sheet lists the **lights to calibrate**: one switch per group of lights that
 share their darks (exposure, temperature, gain, offset, binning; any filter). Each
@@ -32,7 +34,7 @@ reason under them:
 
 Turn a group on or off and the sheet says again how many frames that is and about
 how long it takes (cooling not included). Start asks a second tap, "It is covered:
-start", and the Session tab shows it like any other sequence.
+start", and Sequences follows it like any other sequence.
 
 ## Flats
 

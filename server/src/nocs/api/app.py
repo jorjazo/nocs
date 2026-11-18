@@ -84,6 +84,7 @@ from nocs.api.system import system_router
 from nocs.api.targets import targets_router
 from nocs.auth import AuthStore
 from nocs.calibration.flats import FlatsService
+from nocs.calibration.groups import GroupMasterService
 from nocs.calibration.service import CalibrationService, camera_facts
 from nocs.clock import Clock
 from nocs.config import Settings
@@ -161,6 +162,7 @@ from nocs.storage.service import DriveBusyError, EjectUnavailableError
 from nocs.system.client import HelperUnavailableError
 from nocs.system.protocol import HelperError
 from nocs.targets import TargetCatalog, bundled_catalog, loaded_catalog
+from nocs.targets.catalog import separation
 from nocs.targets.plan import PlanService
 
 log = logging.getLogger(__name__)
@@ -295,6 +297,22 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
         async def power_cycle(self, role: Role, *, job: str | None = None) -> None:
             await power().power_cycle(role, job=job)
 
+    class Framing:
+        """What names and places what the camera has framed, for a sequence's aim."""
+
+        def last_goto(self) -> str | None:
+            return storage().target
+
+        def nearest(self, ra: float, dec: float, radius: float) -> str | None:
+            return _nearest_object(ra, dec, radius)
+
+        def within(self, name: str, ra: float, dec: float, radius: float) -> bool:
+            found = (loaded_catalog() or bundled_catalog()).get(name)
+            return found is not None and separation(ra, dec, found.ra, found.dec) <= radius
+
+        def position(self) -> Coordinates | None:
+            return _pointing(services.mount)
+
     def sequence_parts() -> Parts:
         return Parts(
             capture=capture(),
@@ -306,6 +324,10 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
             recovery=RigRecovery(),
             centering=centering(),
             pointing=pointing(),
+            flats=services.flats,
+            stacking=services.stacking,
+            masters=services.masters,
+            framing=Framing(),
         )
 
     def sequence_place() -> Place | None:
@@ -506,6 +528,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
         )
         await services.stacking.start()
         services.capture.use_stacker(services.stacking)
+        services.masters = GroupMasterService(store, services.worker, storage, settings.data_dir)
         services.flats = FlatsService(
             store,
             services.jobs,
@@ -785,10 +808,20 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
             await capture().set_cooling(Role(role), request.on, request.target, request.ramp)
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
+    def explore_allowed() -> None:
+        """Explore and Sequences exclude each other: no frames of Explore's while a
+        sequence holds the rig, waits paused or asks the user something."""
+        if services.sequences is not None and services.sequences.active:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "a sequence is running: Explore takes no frames until it ends",
+            )
+
     @app.post("/api/cameras/{role}/expose", status_code=status.HTTP_202_ACCEPTED)
     async def camera_expose(  # pyright: ignore[reportUnusedFunction]
         role: CameraRoleName, request: ExposeRequest
     ) -> JobStarted:
+        explore_allowed()
         frame_type = FRAME_TYPES[request.frame_type] if request.frame_type else None
         dither = None
         if request.dither is not None:
@@ -809,6 +842,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
     async def camera_loop(  # pyright: ignore[reportUnusedFunction]
         role: CameraRoleName, request: LoopRequest
     ) -> JobStarted:
+        explore_allowed()
         frame_type = FRAME_TYPES[request.frame_type] if request.frame_type else None
         with _camera_errors():
             job_id = capture().loop(Role(role), request.exposure, frame_type)
@@ -1060,6 +1094,7 @@ class _Services:
     gps: GpsService | None = None
     sites: SiteService | None = None
     stacking: LiveStackService | None = None
+    masters: GroupMasterService | None = None
 
 
 def _iso(time: datetime) -> str:

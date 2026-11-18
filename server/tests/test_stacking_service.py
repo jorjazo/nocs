@@ -680,3 +680,38 @@ async def test_frames_skipped_before_their_stack_exists_still_count(
     state = rig.state()
     assert state.current is not None
     assert state.current.skipped == 2
+
+
+async def test_a_sequence_holds_stacking_on_and_keeps_each_group(tmp_path: Path) -> None:
+    rig = Rig(tmp_path)
+    await rig.service.start()
+    task = asyncio.create_task(rig.service.run())
+    try:
+        assert not rig.service.on
+        await rig.service.hold(True)
+        assert rig.service.on
+        assert rig.state().on is True
+        for _ in range(3):
+            await offer(rig, rig.frame())
+        saved = await rig.service.finish()  # the group of lights ended
+        assert [s.id for s in saved] == [1001]
+        assert rig.state().current is None
+        assert await rig.service.finish() == []  # nothing new since
+        await offer(rig, rig.frame())
+        await rig.service.hold(False)  # back to the setting: off, the stack ends
+        assert not rig.service.on
+        assert rig.state().status == "off"
+    finally:
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+
+async def test_switching_off_while_a_sequence_holds_it_keeps_stacking(rig: Rig) -> None:
+    await rig.service.hold(True)
+    await offer(rig, rig.frame())
+    await rig.service.set_on(False)
+    assert rig.service.on
+    assert rig.state().current is not None
+    await rig.service.hold(False)
+    assert rig.state().current is None

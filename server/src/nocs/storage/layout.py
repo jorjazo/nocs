@@ -17,7 +17,18 @@ TYPE_FOLDERS = {
     "flat": "Flat",
     "bias": "Bias",
     "stack": "Stack",  # live stacks (ADR 0039), by target and filter as lights
+    # A sequence group's master (``nocs.calibration.groups``); flats' by filter.
+    "master_dark": "Master",
+    "master_bias": "Master",
+    "master_flat": "Master",
 }
+TYPE_NAMES = {
+    **TYPE_FOLDERS,
+    "master_dark": "MasterDark",
+    "master_bias": "MasterBias",
+    "master_flat": "MasterFlat",
+}
+"""The ``{type}`` of a file name."""
 
 DEFAULT_TEMPLATE = "{datetime}_{type}_{filter}_{exposure}s_{temperature}C_{seq}"
 FIELDS = frozenset(
@@ -71,11 +82,16 @@ def clean(name: str) -> str:
 
 def folder(frame_type: str, night: date, target: str | None, filter: str | None) -> PurePosixPath:
     """``<night>/Light/<target>/<filter>``, ``<night>/Flat/<filter>``, ``<night>/Dark``…
-    (``<night>/Stack/<target>/<filter>`` for live stacks)."""
+    (``<night>/Stack/<target>/<filter>`` for live stacks, ``<night>/Master`` for masters,
+    ``<night>/Master/<filter>`` for flats')."""
     path = PurePosixPath(night.isoformat(), TYPE_FOLDERS[frame_type])
     if frame_type in ("light", "stack"):
         path /= clean(target or "") or UNTITLED
-    if frame_type in ("light", "flat", "stack") and filter and (name := clean(filter)):
+    if (
+        frame_type in ("light", "flat", "stack", "master_flat")
+        and filter
+        and (name := clean(filter))
+    ):
         path /= name
     return path
 
@@ -127,7 +143,7 @@ def file_stem(template: str, fields: NameFields) -> str:
     values = {
         "target": clean(fields.target or ""),
         "night": fields.night.isoformat(),
-        "type": TYPE_FOLDERS[fields.frame_type],
+        "type": TYPE_NAMES[fields.frame_type],
         "filter": clean(fields.filter or ""),
         "exposure": _number(fields.exposure),
         "gain": _number(fields.gain),

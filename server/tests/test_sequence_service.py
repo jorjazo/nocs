@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import functools
 from collections.abc import Callable
 from pathlib import Path
 from types import SimpleNamespace
@@ -17,10 +18,12 @@ from fastapi.testclient import TestClient
 from owner import pair_owner
 
 from nocs.api.app import create_app
+from nocs.calibration.flats import FlatPlan
+from nocs.calibration.master import MasterKind
 from nocs.clock import Clock
 from nocs.config import Settings
 from nocs.devices import Coordinates, DeviceError, FrameType
-from nocs.devices.camera import SensorInfo
+from nocs.devices.camera import Range, SensorInfo
 from nocs.equipment import Role
 from nocs.focus.autofocus import AutofocusOptions
 from nocs.guiding import Settle
@@ -34,7 +37,9 @@ from nocs.sequence.model import (
     Cool,
     Dither,
     DitherTrigger,
+    EndPlan,
     Flip,
+    Group,
     Guide,
     Outputs,
     Park,
@@ -42,14 +47,16 @@ from nocs.sequence.model import (
     RecenterTrigger,
     Slew,
     Target,
+    Template,
     Unpark,
     UntilDawn,
     Warm,
 )
 from nocs.sequence.rig import Parts
 from nocs.sequence.service import SequenceBusyError, SequenceService
+from nocs.sequence.template import expand
 from nocs.state import Json, StateStore
-from nocs.storage import Session, SessionEvent
+from nocs.storage import SavedFrame, Session, SessionEvent
 
 M42 = Target(name="M 42", ra=5.588, dec=-5.39)
 
@@ -60,6 +67,7 @@ class Camera:
     gain: float | None = 100
     offset: float | None = 10
     binning = (1, 1)
+    exposure_range: Range | None = Range(0.000032, 2000)
 
     def __init__(self) -> None:
         self.temperature: float | None = 20.0
@@ -120,7 +128,7 @@ class Rig:
         await anyio.lowlevel.checkpoint()
         self.calls.append(f"frame {target} {seconds:g}")
         guiding = self.frame_guiding.pop(0) if self.frame_guiding else None
-        return Captured({"guiding": guiding}, 40, 2.1)
+        return Captured({"guiding": guiding, "id": self.taken}, 40, 2.1)
 
     # filters
     async def select_in(self, context: JobContext, filter: int | str) -> Json:
@@ -215,7 +223,9 @@ class Rig:
         drift = self.drifts.pop(0)
         self.calls.append(f"solve (sync {options.sync})")
         # Only what the sequence reads of a solve: where the frame's centre is.
-        solution = SimpleNamespace(ra=M42.ra, dec=(M42.dec or 0) + drift / 60)
+        solution = SimpleNamespace(
+            ra=M42.ra, dec=(M42.dec or 0) + drift / 60, width=6248, height=4176, scale=0.6
+        )
         return cast(FrameSolve, SimpleNamespace(result=SimpleNamespace(solution=solution)))
 
     def parts(self) -> Parts:
@@ -229,7 +239,64 @@ class Rig:
             recovery=self,
             centering=self,
             pointing=self,
+            flats=self.extras,
+            stacking=self.extras,
+            masters=self.extras,
+            framing=self.extras,
         )
+
+    @property
+    def extras(self) -> Extras:
+        if not hasattr(self, "_extras"):
+            self._extras = Extras(self.calls)
+        return self._extras
+
+
+class Extras:
+    """The flats wizard, the live stack, the groups' masters and what names the framing."""
+
+    def __init__(self, calls: list[str]) -> None:
+        self.calls = calls
+        self.goto: str | None = "M 42"
+        self.stacking: list[str] = []
+        """The live stack's calls (in ``calls`` too when ``loud``)."""
+        self.loud = False
+
+    async def run(self, context: JobContext, plan: FlatPlan) -> dict[str, Json]:
+        [wanted] = plan.filters
+        self.calls.append(f"flats {wanted.filter} x{wanted.count}")
+        return {"filters": [{"exposure": 0.8}], "frames": [101, 102]}
+
+    async def hold(self, on: bool) -> None:
+        self._stacking(f"stacking held {on}")
+
+    async def finish(self) -> list[SavedFrame]:
+        self._stacking("stacks kept")
+        return []
+
+    def _stacking(self, call: str) -> None:
+        self.stacking.append(call)
+        if self.loud:
+            self.calls.append(call)
+
+    def forget(self) -> None:
+        pass
+
+    async def keep(self, kind: MasterKind, frame_ids: list[int]) -> dict[str, Json] | None:
+        self.calls.append(f"{kind} master of {frame_ids}")
+        return {"master": kind}
+
+    def last_goto(self) -> str | None:
+        return self.goto
+
+    def nearest(self, ra: float, dec: float, radius: float) -> str | None:
+        return "NGC 1976"
+
+    def position(self) -> Coordinates | None:
+        return Coordinates(M42.ra or 0, M42.dec or 0)
+
+    def within(self, name: str, ra: float, dec: float, radius: float) -> bool:
+        return name == "M 42" and abs(dec - (M42.dec or 0)) < radius
 
 
 def lrgb(**end: object) -> Sequence:
@@ -543,7 +610,7 @@ def test_the_api_keeps_and_starts_sequences(tmp_path: Path) -> None:
         assert client.post("/api/sequences/nope/start").status_code == 404
         assert client.post("/api/sequence/pause", json={}).status_code == 409
         state = client.get("/api/state").json()["state"]
-        assert state["sequence"] == {"run": None, "events": []}
+        assert state["sequence"] == {"run": None, "events": [], "master": None}
         assert client.delete("/api/sequences/m42").status_code == 204
         assert client.delete("/api/sequences/m42").status_code == 404
 
@@ -764,3 +831,104 @@ async def test_a_step_that_fails_while_a_device_is_unresponsive_blames_it(setup:
     assert (failed.value.kind, failed.value.role) == ("device", "main_camera")
     assert str(failed.value) == "no solution (the main_camera is not answering)"
     assert await executor.recover(failed.value, 1) == "restarted the main_camera's driver"
+
+
+async def test_groups_run_on_the_rig_with_their_stacks_and_masters(setup: Any) -> None:
+    service, rig, store, jobs, _ = setup
+    rig.drifts = [0.0]
+    rig.extras.loud = True
+    template = Template(
+        name="M 42 and calibration",
+        groups=[
+            Group(filter="L", exposure=1, count=2),
+            Group(frame_type="flat", filter="L", count=2),
+            Group(frame_type="bias", count=2),
+        ],
+        start_at_dusk=False,
+        until_dawn=False,
+        min_altitude=None,
+        focus=None,
+        flip=False,
+        end=EndPlan(park=False, warm=False),
+    )
+    service.put("cal", expand(template))
+    job = service.start("cal")
+
+    def prompted(times: int) -> bool:
+        return sum(e["kind"] == "prompt" for e in store.get(("sequence", "events"))) == times
+
+    async def answer() -> None:
+        for asked, kind in ((1, "flat"), (2, "dark")):
+            await until(functools.partial(prompted, asked))
+            await until(lambda: store.get(("sequence", "run", "state")) == "paused")
+            assert store.get(("sequence", "run", "prompt")) == kind
+            service.resume()
+
+    async with anyio.create_task_group() as group:
+        group.start_soon(answer)
+        await jobs.wait(job)
+    assert rig.calls == [
+        "stacking held True",
+        "unpark",
+        "solve (sync False)",  # the aim: where the frame is
+        "filter L",
+        "frame M 42 1",
+        "frame M 42 1",
+        "stacks kept",  # the lights' group ended
+        "flats L x2",  # after the prompt for a panel
+        "flat master of [101, 102]",
+        "frame None 3.2e-05",  # bias: the camera's shortest, after the prompt to cover it
+        "frame None 3.2e-05",
+        "bias master of [3, 4]",
+        "stacking held False",
+    ]
+    run = store.get(("sequence", "run"))
+    assert run["outcome"] == "completed"
+    assert [p["frame_type"] for p in run["plans"].values()] == ["light", "flat", "bias"]
+    assert [p["target"] for p in run["plans"].values()] == ["M 42"] * 3
+    asked = [e for e in store.get(("sequence", "events")) if e["kind"] == "prompt"]
+    assert [e["message"] for e in asked] == ["flat", "dark"]
+
+
+async def test_explore_and_a_sequence_exclude_each_other(setup: Any) -> None:
+    service, rig, _, jobs, _ = setup
+    service.put("m42", lrgb())
+    looping = anyio.Event()
+
+    async def loop(context: JobContext) -> Json:
+        await looping.wait()
+        return None
+
+    explore = jobs.start("loop", ["guide_camera"], loop)
+    with pytest.raises(SequenceBusyError, match="Explore is taking frames"):
+        service.start("m42")
+    looping.set()
+    await jobs.wait(explore)
+    assert not service.active
+    rig.gate = anyio.Event()
+    job = service.start("m42")
+    assert service.active
+    rig.gate.set()
+    await jobs.wait(job)
+    assert not service.active
+
+
+async def test_an_aim_names_what_is_framed_not_a_stale_go_to(setup: Any) -> None:
+    service, rig, store, jobs, _ = setup
+    rig.drifts = [0.0]
+    rig.extras.goto = "M 1"  # gone to earlier, framed M 42 by hand since
+    template = Template(
+        name="x",
+        groups=[Group(filter="L", exposure=1, count=1)],
+        start_at_dusk=False,
+        until_dawn=False,
+        min_altitude=None,
+        focus=None,
+        flip=False,
+        end=EndPlan(park=False, warm=False),
+    )
+    service.put("x", expand(template))
+    await jobs.wait(service.start("x"))
+    assert "frame NGC 1976 1" in rig.calls
+    [plan] = store.get(("sequence", "run", "plans")).values()
+    assert plan["target"] == "NGC 1976"

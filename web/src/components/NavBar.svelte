@@ -5,6 +5,7 @@
   import { live } from "../lib/live.svelte";
   import { rigAttention } from "../lib/rigsections";
   import { href, router, TABS, type Tab } from "../lib/router.svelte";
+  import { workingView } from "../lib/sequence";
   import Icon from "./Icon.svelte";
   import ThemeButton from "./ThemeButton.svelte";
 
@@ -13,7 +14,8 @@
   const current = $derived.by<Tab>(() => {
     const screen = router.route.screen;
     if (screen === "dev" || screen === "profile" || screen === "site") return "rig";
-    if (screen === "target" || screen === "sequence") return "plan";
+    if (screen === "target") return "plan";
+    if (screen === "sequence-edit") return "sequence";
     if (screen === "report" || screen === "flats") return "session";
     if (screen === "focus" || screen === "focus-calibration" || screen === "guiding" || screen === "polar") {
       return "tonight";
@@ -21,10 +23,16 @@
     return screen;
   });
 
-  // A sequence that runs (or waits paused) is one tap away from any screen: a dot
-  // on the Session tab, which says how it stands to screen readers too.
+  // A sequence that runs (or waits paused, or on you) is one tap away from any screen:
+  // a dot on the Sequences tab, which says how it stands to screen readers too.
   const run = $derived(live.app.sequence?.run ?? null);
   const session = $derived(run && run.state !== "finished" ? run.state : null);
+  // Explore and Sequences exclude each other: while one works, the other's tab is
+  // dimmed and leads to the one that works.
+  const working = $derived(workingView(run, live.app.jobs));
+  function blocked(tab: Tab): boolean {
+    return (tab === "explore" || tab === "sequence") && working !== null && working !== tab;
+  }
   // Something on Rig needs a look, or the owner has updates worth installing: a dot
   // on the Rig tab, since the section that says so may be closed.
   const rig = $derived(live.synced ? rigAttention(live.app, auth.owner) : null);
@@ -35,10 +43,14 @@
   <ul>
     {#each TABS as tab (tab)}
       <li>
-        <a href={href({ screen: tab })} aria-current={tab === current ? "page" : undefined}>
+        <a
+          href={href({ screen: blocked(tab) && working ? working : tab })}
+          aria-current={tab === current ? "page" : undefined}
+          class:blocked={blocked(tab)}
+          title={blocked(tab) && working ? i18n.t.tabs.busy(i18n.t.tabs[working]) : undefined}>
           <span class="icon">
             <Icon name={tab} />
-            {#if tab === "session" && session}
+            {#if tab === "sequence" && session}
               <span class="badge" class:paused={session === "paused" || session === "pausing"}></span>
             {/if}
             {#if tab === "rig" && rig}
@@ -46,7 +58,8 @@
             {/if}
           </span>
           <span class="name">{i18n.t.tabs[tab]}</span>
-          {#if tab === "session" && session}<span class="visually-hidden">{i18n.t.session.states[session]}</span>{/if}
+          {#if tab === "sequence" && session}<span class="visually-hidden">{i18n.t.session.states[session]}</span>{/if}
+          {#if blocked(tab) && working}<span class="visually-hidden">{i18n.t.tabs.busy(i18n.t.tabs[working])}</span>{/if}
           {#if tab === "rig" && rig}<span class="visually-hidden">{i18n.t.rig.tabAttention[rig]}</span>{/if}
         </a>
       </li>
@@ -116,6 +129,9 @@
     text-align: center;
   }
   /* The current tab differs in weight and in a filled pill, not only in color. */
+  a.blocked {
+    opacity: 0.45;
+  }
   a[aria-current="page"] {
     color: var(--accent);
   }

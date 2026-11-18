@@ -15,6 +15,7 @@
     tone = null,
     toneText = "",
     side = "left",
+    wide = false,
     status,
     children,
   }: {
@@ -27,6 +28,8 @@
     toneText?: string;
     // Which edge of the image it sits on: it folds towards it.
     side?: "left" | "right";
+    // Room for more than a few figures (the sequence's groups).
+    wide?: boolean;
     // Beside the title while open.
     status?: Snippet;
     children: Snippet;
@@ -36,7 +39,7 @@
 </script>
 
 {#if open}
-  <section class="card" data-overlay aria-label={title}>
+  <section class="card" class:wide data-overlay aria-label={title}>
     <div class="header">
       <Icon name={icon} size={20} />
       <span class="title">{title}</span>
@@ -71,6 +74,9 @@
     border-radius: var(--radius-card);
     background: color-mix(in srgb, var(--bg) 88%, transparent);
   }
+  .card.wide {
+    width: min(340px, 100%);
+  }
   .header {
     display: flex;
     align-items: center;
@@ -78,6 +84,10 @@
     min-height: var(--touch);
   }
   .title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     font-weight: 600;
   }
   .status {

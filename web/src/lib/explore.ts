@@ -6,14 +6,15 @@ import { hourAngle } from "./polar.ts";
 import { parseOpen, type OpenSections } from "./rigsections.ts";
 
 // Panes that open and close: the histogram over the status bar, the guiding and
-// focus widgets on the image, the go to panel at its side, and the panel of actions,
-// which is a sheet over the image when the screen stands upright.
-export const PANES = ["histogram", "guiding", "focus", "goto", "panel"] as const;
+// focus widgets on the image, the go to panel (Explore) or the sequence's (Sequences)
+// at its side, and the panel of actions, which is a sheet over the image when the
+// screen stands upright. Sequences shares Explore's choices.
+export const PANES = ["histogram", "guiding", "focus", "goto", "sequence", "panel"] as const;
 export type Pane = (typeof PANES)[number];
 export type Orientation = "portrait" | "landscape";
 
 // The tools over the image.
-export const TOOLS: readonly Pane[] = ["guiding", "focus", "goto"];
+export const TOOLS: readonly Pane[] = ["guiding", "focus", "goto", "sequence"];
 
 // Lying down there is room for everything; upright the image comes first, and the
 // panes start folded into their icons.

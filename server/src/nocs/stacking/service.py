@@ -18,6 +18,9 @@ for its setup, built into masters by the worker (once; they are cached).
 An unsaved frame (Explore's loop) is hard-linked aside, as the capture service
 deletes its file when the next frame arrives; the link is deleted once stacked.
 
+A running sequence **holds** stacking on, whatever the setting, and ends its stacks
+(saving those worth keeping) when each group of lights ends: every group gets its own.
+
 State under ``("stack",)``: ``on``, ``status``, the current stack's counts, setup,
 calibration, the last frame's outcome and the preview's URL, and the look.
 Settings (``on`` and the look) persist in ``<config dir>/stacking.json``.
@@ -200,6 +203,10 @@ class LiveStackService:
         self._tasks: set[asyncio.Task[None]] = set()
         self._early_skips: dict[Key, int] = {}
         """Frames skipped while the stack of their setup was still being started."""
+        self._held = False
+        """A sequence runs: stacking is on whatever the setting."""
+        self._ended: list[SavedFrame] = []
+        """Stacks saved as they ended since ``finish`` last asked."""
         self._publish()
 
     async def start(self) -> None:
@@ -211,7 +218,31 @@ class LiveStackService:
 
     @property
     def on(self) -> bool:
-        return self.settings.on
+        return self.settings.on or self._held
+
+    async def hold(self, on: bool) -> None:
+        """A sequence starts (stacking on, from a new stack) or ends (back to the setting)."""
+        if on == self._held:
+            return
+        if on:
+            await self._end_all()
+            self._ended = []
+            self._held = True
+            self._status, self._message, self._error = "idle", None, None
+        else:
+            self._held = False
+            if not self.settings.on:
+                await self._end_all()
+        self._publish()
+
+    async def finish(self) -> list[SavedFrame]:
+        """End every stack once the frames offered so far are in, saving those worth
+        keeping; what was saved (a sequence's group of lights ended)."""
+        await self.idle()
+        await self._end_all()
+        ended, self._ended = self._ended, []
+        self._publish()
+        return ended
 
     async def set_on(self, on: bool) -> None:
         settings = self.settings.model_copy(update={"on": on})
@@ -219,7 +250,7 @@ class LiveStackService:
         self.settings = settings
         if on:
             self._status, self._message, self._error = "idle", None, None
-        else:
+        elif not self._held:
             await self._end_all()
         self._publish()
 
@@ -607,7 +638,9 @@ class LiveStackService:
         """Save a stack worth keeping, then forget it (and free the worker's memory)."""
         if stack.created:
             try:
-                await self._save(stack, only_new=True)
+                saved = await self._save(stack, only_new=True)
+                if saved is not None and self._held:
+                    self._ended.append(saved)
             except Exception as e:  # a full or missing drive: the stack is lost, not the night
                 log.warning("live stack: could not save it: %s", e)
                 self._save_error = f"the stack could not be saved: {e}"

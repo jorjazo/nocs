@@ -1,4 +1,4 @@
-"""What a sequence is: containers, instructions, conditions and triggers (ADR 0031).
+"""What a sequence is: containers, instructions, conditions and triggers.
 
 A sequence has three containers: *start*, *targets* and *end*. A container runs
 its children in order, ``repeat`` times, while its conditions hold; triggers
@@ -157,6 +157,25 @@ class Outputs(SequenceModel):
     on: bool
 
 
+class Aim(SequenceModel):
+    """Take what the camera has framed as the target of the containers that name none:
+    where the frame was solved (or the mount points), named after the last go to or the
+    catalog object nearest it. Once per run: a run resumed after a restart keeps it."""
+
+    kind: Literal["aim"] = "aim"
+
+
+class Flats(SequenceModel):
+    """Flats of one filter on a panel, each exposure found from the last frame's level."""
+
+    kind: Literal["flats"] = "flats"
+    filter: Name | None = Field(default=None, description="None: whatever the wheel holds.")
+    count: int = Field(ge=1, le=200)
+    gain: float | None = None
+    offset: float | None = None
+    binning: int | None = Field(default=None, ge=1, le=8)
+
+
 type Action = Annotated[
     Cool
     | Warm
@@ -170,7 +189,9 @@ type Action = Annotated[
     | Autofocus
     | Guide
     | Dither
-    | Outputs,
+    | Outputs
+    | Aim
+    | Flats,
     Field(discriminator="kind"),
 ]
 
@@ -183,7 +204,12 @@ type Darkness = Literal["civil", "nautical", "astronomical"]
 
 class PlanRow(SequenceModel):
     filter: Name | None = Field(default=None, description="None: whatever the wheel holds.")
-    exposure: float = Field(gt=0, le=MAX_EXPOSURE, description="Seconds.")
+    exposure: float | None = Field(
+        default=None,
+        gt=0,
+        le=MAX_EXPOSURE,
+        description="Seconds; None only for bias: the camera's shortest.",
+    )
     count: int = Field(ge=1, le=10000)
     gain: float | None = None
     offset: float | None = None
@@ -200,6 +226,21 @@ class ExposurePlan(SequenceModel):
     )
     batch: int = Field(default=5, ge=1, le=1000)
     frame_type: FrameKind = "light"
+
+    @model_validator(mode="after")
+    def _exposures(self) -> Self:
+        if self.frame_type != "bias" and any(row.exposure is None for row in self.rows):
+            raise ValueError(f"{self.frame_type} frames need an exposure")
+        return self
+
+
+class Prompt(SequenceModel):
+    """Stop until the user says the rig is ready for these frames (the telescope
+    covered for darks, the panel on for flats, uncovered for lights); the rig is lent
+    back meanwhile, as in a pause."""
+
+    kind: Literal["prompt"] = "prompt"
+    frame_type: FrameKind
 
 
 class Wait(SequenceModel):
@@ -241,6 +282,9 @@ type Instruction = Annotated[
     | Guide
     | Dither
     | Outputs
+    | Aim
+    | Flats
+    | Prompt
     | Wait
     | ExposurePlan,
     Field(discriminator="kind"),
@@ -438,6 +482,9 @@ type Node = Annotated[
     | Guide
     | Dither
     | Outputs
+    | Aim
+    | Flats
+    | Prompt
     | Wait
     | ExposurePlan
     | Container,
@@ -498,11 +545,11 @@ def needs_site(sequence: Sequence) -> bool:
     return any(asks(part) for part in (sequence.start, sequence.targets, sequence.end))
 
 
-# -- templates (phase 5.10) ---------------------------------------------------------
+# -- templates ----------------------------------------------------------------------
 
 
 class FocusPlan(SequenceModel):
-    """When a template's sequence focuses: at the start, and on these reasons."""
+    """When a template's sequence focuses: at the start of its lights, and on these reasons."""
 
     at_start: bool = True
     filter_change: bool = False
@@ -519,25 +566,80 @@ class EndPlan(SequenceModel):
     )
 
 
+class Group(SequenceModel):
+    """Frames of one kind taken alike: what the Sequences view lists."""
+
+    frame_type: FrameKind = "light"
+    filter: Name | None = Field(
+        default=None, description="None: whatever the wheel holds; darks and bias take none."
+    )
+    exposure: float | None = Field(
+        default=None,
+        gt=0,
+        le=MAX_EXPOSURE,
+        description="Seconds. Bias: always the camera's shortest; flats: None finds it.",
+    )
+    count: int = Field(ge=1, le=10000)
+    gain: float | None = None
+    offset: float | None = None
+    binning: int | None = Field(default=None, ge=1, le=8)
+    temperature: float | None = Field(
+        default=None,
+        ge=-60,
+        le=40,
+        description="Sensor °C while this group is taken, when cooling is per group.",
+    )
+
+    @model_validator(mode="after")
+    def _fits_its_kind(self) -> Self:
+        if self.frame_type in ("light", "dark") and self.exposure is None:
+            raise ValueError(f"{self.frame_type} frames need an exposure")
+        if self.frame_type in ("dark", "bias"):
+            self.filter = None
+        if self.frame_type == "bias":
+            self.exposure = None
+        if self.frame_type == "flat" and self.exposure is None and self.count > 200:
+            raise ValueError("at most 200 flats whose exposure is found")
+        return self
+
+
+type FrameClass = Literal["light", "dark", "flat"]
+"""What the rig must be ready for: open, covered (darks and bias), on a panel."""
+
+
+def frame_class(frame_type: FrameKind) -> FrameClass:
+    return "dark" if frame_type == "bias" else frame_type
+
+
 class Template(SequenceModel):
-    """This target, these filters, tonight: what the builder edits (phase 5.10)."""
+    """What the Sequences view edits: groups of frames of what the camera has framed,
+    and what happens around them."""
 
     name: Name
-    target: Target
-    rows: list[PlanRow] = Field(min_length=1)
-    order: Literal["batches", "in_turn"] = "batches"
+    groups: list[Group] = Field(min_length=1)
+    order: Literal["batches", "in_turn"] = Field(
+        default="batches",
+        description="Light groups in a row: up to `batch` frames of each in turn, or each "
+        "to its end.",
+    )
     batch: int = Field(default=5, ge=1, le=1000)
     start_at_dusk: bool = Field(
-        default=True, description="Wait until dark first; otherwise start at once."
+        default=True, description="Lights wait until dark; darks, bias and flats do not."
     )
     darkness: Darkness = Field(
         default="astronomical", description="The twilight that starts and ends the night."
     )
-    until_dawn: bool = True
+    until_dawn: bool = Field(default=True, description="Lights end at dawn; the rest goes on.")
     min_altitude: float | None = Field(
-        default=30, ge=0, le=90, description="Image the target only above this (and the horizon)."
+        default=30, ge=0, le=90, description="Lights only while the target is this high."
     )
-    cooling: float | None = Field(default=None, ge=-60, le=40, description="Sensor °C.")
+    cooling: Literal["off", "global", "group"] = Field(
+        default="off",
+        description="global: `temperature` for the whole sequence; group: each group's own.",
+    )
+    temperature: float | None = Field(
+        default=None, ge=-60, le=40, description="Sensor °C when cooling is global."
+    )
     cooling_ramp: float | None = Field(default=None, ge=0)
     focus: FocusPlan | None = Field(default_factory=FocusPlan)
     guide: bool = False
@@ -546,22 +648,26 @@ class Template(SequenceModel):
     )
     dither_pixels: float = Field(default=5, gt=0, le=50, description="Main camera pixels.")
     center: bool = Field(
-        default=False, description="Centre the target by plate solving instead of only going."
+        default=False, description="Centre the target by plate solving before its lights."
     )
     recenter_every: int | None = Field(
         default=None, ge=1, le=1000, description="Check the pointing every so many frames."
     )
     recenter_drift: float = Field(default=2.0, gt=0, le=60, description="Arcminutes.")
-    flip: bool = Field(default=True, description="Flip the mount at the meridian (ADR 0033).")
+    flip: bool = Field(default=True, description="Flip the mount at the meridian.")
     flip_after: float = Field(default=5, ge=0, le=60, description="Minutes past the meridian.")
     end: EndPlan = Field(default_factory=EndPlan)
     recovery: dict[FailureKind, Policy] = Field(default_factory=dict[FailureKind, Policy])
 
     @model_validator(mode="after")
-    def _target_with_coordinates(self) -> Self:
-        if self.target.ra is None:
-            raise ValueError("a template's target needs its coordinates")
+    def _cooling_known(self) -> Self:
+        if self.cooling == "global" and self.temperature is None:
+            raise ValueError("global cooling needs a temperature")
         return self
+
+    @property
+    def lights(self) -> bool:
+        return any(group.frame_type == "light" for group in self.groups)
 
 
 class Sequence(SequenceModel):

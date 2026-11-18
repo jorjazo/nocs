@@ -200,6 +200,8 @@ class _Progress:
     state: Literal["pending", "running", "done", "ended", "failed", "cancelled"] = "pending"
     message: str | None = None
     samples: list[Sample] = field(default_factory=list[Sample])
+    frames: list[int] = field(default_factory=list[int])
+    """Catalog ids of the flats kept."""
 
     def summary(self) -> dict[str, Json]:
         return {
@@ -312,7 +314,10 @@ class FlatsService:
             self._publish(plan, progress, outcome, error)
         if outcome == "failed":
             raise FlatsError(error or "no flats were taken")
-        return {"filters": [p.summary() for p in progress]}
+        return {
+            "filters": [p.summary() for p in progress],
+            "frames": [frame for p in progress for frame in p.frames],
+        }
 
     async def _open_sky(
         self, context: JobContext, plan: FlatPlan, progress: list[_Progress]
@@ -410,6 +415,7 @@ class FlatsService:
                 frame = captured.result.get("id")
                 if isinstance(frame, int):
                     self._levels.set_level(frame, round(level, 1))
+                    progress.frames.append(frame)
                 progress.done += 1
                 progress.samples.append(sample)
                 misses = 0

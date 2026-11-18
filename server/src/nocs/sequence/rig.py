@@ -19,8 +19,10 @@ from typing import Protocol
 
 import anyio
 
+from nocs.calibration.flats import FlatFilter, FlatPlan, FlatsError
+from nocs.calibration.master import MasterKind
 from nocs.devices import Coordinates, DeviceError, FrameType
-from nocs.devices.camera import SensorInfo
+from nocs.devices.camera import Range, SensorInfo
 from nocs.equipment import Role
 from nocs.filters.service import FilterWheelNotReadyError
 from nocs.focus.autofocus import AutofocusError, AutofocusOptions
@@ -39,11 +41,13 @@ from nocs.mount.service import MountNotReadyError, PointingError
 from nocs.pointing import CenteringError, CenterOptions, FrameSolve, SolveOptions, offset
 from nocs.sequence.model import (
     Action,
+    Aim,
     Autofocus,
     Center,
     Cool,
     Dither,
     ExposurePlan,
+    Flats,
     Flip,
     Guide,
     Outputs,
@@ -59,8 +63,9 @@ from nocs.sequence.model import (
 from nocs.sequence.runner import FrameResult, StepError
 from nocs.solving import SolveError
 from nocs.state import Json, StateStore
-from nocs.storage import StorageError
+from nocs.storage import SavedFrame, StorageError
 from nocs.storage.environment import number
+from nocs.storage.layout import UNTITLED
 
 log = logging.getLogger(__name__)
 
@@ -81,6 +86,8 @@ DEFAULT_RAMP = 3.0
 COOLING_MARGIN = 600.0
 """Seconds of patience beyond that estimate."""
 POLL = 5.0
+BIAS_EXPOSURE = 0.001
+"""Seconds of a bias when the driver does not say its shortest exposure."""
 
 
 class CameraDevice(Protocol):
@@ -96,6 +103,8 @@ class CameraDevice(Protocol):
     def offset(self) -> float | None: ...
     @property
     def binning(self) -> tuple[int, int]: ...
+    @property
+    def exposure_range(self) -> Range | None: ...
 
 
 class Capture(Protocol):
@@ -183,6 +192,41 @@ class Recovery(Protocol):
     async def power_cycle(self, role: Role, *, job: str | None = None) -> None: ...
 
 
+class FlatsTaker(Protocol):
+    async def run(self, context: JobContext, plan: FlatPlan) -> dict[str, Json]: ...
+
+
+class Stacker(Protocol):
+    async def hold(self, on: bool) -> None: ...
+    async def finish(self) -> list[SavedFrame]: ...
+
+
+class Masters(Protocol):
+    def forget(self) -> None: ...
+    async def keep(self, kind: MasterKind, frame_ids: list[int]) -> dict[str, Json] | None: ...
+
+
+class Framing(Protocol):
+    """What names and places what the camera has framed (an ``aim``)."""
+
+    def last_goto(self) -> str | None:
+        """The object of the last go to, if any."""
+        ...
+
+    def nearest(self, ra: float, dec: float, radius: float) -> str | None:
+        """The catalog object nearest a J2000 point within ``radius`` degrees (blocks)."""
+        ...
+
+    def within(self, name: str, ra: float, dec: float, radius: float) -> bool:
+        """Whether the catalog object ``name`` lies within ``radius`` degrees of a J2000
+        point; False for a name the catalog does not know (blocks)."""
+        ...
+
+    def position(self) -> Coordinates | None:
+        """Where the mount points, J2000."""
+        ...
+
+
 @dataclass(frozen=True, slots=True)
 class Parts:
     """The services a sequence drives; ``None`` for what the rig lacks."""
@@ -196,6 +240,10 @@ class Parts:
     recovery: Recovery | None = None
     centering: Centering | None = None
     pointing: Pointing | None = None
+    flats: FlatsTaker | None = None
+    stacking: Stacker | None = None
+    masters: Masters | None = None
+    framing: Framing | None = None
 
 
 def take_back(jobs: JobManager, job: str, guiding: Guiding | None) -> None:
@@ -220,6 +268,8 @@ def _classified(role: Role | None = None) -> Generator[None]:
         raise StepError("guiding", str(e) or type(e).__name__) from e
     except (SolveError, CenteringError) as e:
         raise StepError("solve", str(e) or type(e).__name__) from e
+    except FlatsError as e:
+        raise StepError("other", f"flats: {e}") from e
     except StorageError as e:
         raise StepError("storage", str(e) or type(e).__name__) from e
     except (
@@ -261,6 +311,8 @@ def _role(action: Action) -> Role | None:
             return None  # PHD2's, a guiding failure
         case Outputs():
             return Role.POWER
+        case Flats():
+            return CAMERA
         case _:
             return None
 
@@ -319,6 +371,8 @@ class RigExecutor:
                     log.info("not parking: %s; switching tracking off", e)
                     await mount.set_tracking(False, job=context.id)
             case Slew():
+                if target is not None and target.ra is None:
+                    return {"skipped": "where the framing is, is unknown"}
                 ra, dec = _aim(target)
                 await self._stop_guiding()
                 await self._mount().slew(context, ra, dec)
@@ -372,6 +426,10 @@ class RigExecutor:
                     raise ValueError("the rig has no power box")
                 for output in action.outputs:
                     await parts.power.set_output(output, on=action.on, job=context.id)
+            case Aim():
+                return await self._aim()
+            case Flats():
+                return await self._flats(action)
 
     async def _frame(self, plan: ExposurePlan, row: PlanRow, target: Target | None) -> FrameResult:
         capture = self._parts.capture
@@ -385,10 +443,14 @@ class RigExecutor:
         )
         if settings != CameraSettings():
             await capture.configure(CAMERA, settings, job=self._context.id)
+        exposure = row.exposure
+        if exposure is None:  # a bias: the camera's shortest
+            limits = camera.exposure_range
+            exposure = limits.min if limits is not None and limits.min > 0 else BIAS_EXPOSURE
         captured = await capture.capture(
             self._context,
             CAMERA,
-            row.exposure,
+            exposure,
             FRAME_TYPES[plan.frame_type],
             save=True,
             target=target.name if target is not None and plan.frame_type == "light" else None,
@@ -426,6 +488,20 @@ class RigExecutor:
         assert guiding is not None
         await guiding.start(self._context, recalibrate=self._recalibrate)
         self._recalibrate = False
+
+    async def plan_ended(self, plan: ExposurePlan, frames: list[int]) -> dict[str, Json] | None:
+        """A group of lights keeps its stack; darks, bias and flats their master."""
+        parts = self._parts
+        if plan.frame_type == "light":
+            if parts.stacking is None:
+                return None
+            saved = await parts.stacking.finish()
+            if not saved:
+                return None
+            return {"stacks": [str(s.relative) for s in saved]}
+        if parts.masters is None or not frames:
+            return None
+        return await parts.masters.keep(plan.frame_type, frames)
 
     async def paused(self) -> None:
         self._jobs.suspend(self._context.id)
@@ -532,6 +608,73 @@ class RigExecutor:
             error = last.get("angle") if isinstance(last, dict) else None
         count = len(attempts) if isinstance(attempts, list) else None
         return {"centered": True, "attempts": count, "error": error}
+
+    async def _aim(self) -> dict[str, Json]:
+        """What the camera has framed: where a frame of it was solved, or else where the
+        mount points; named after the last go to, or the object nearest it."""
+        parts = self._parts
+        ra = dec = None
+        radius = 0.5
+        solved_here = False
+        if parts.pointing is not None:
+            try:
+                solved = await parts.pointing.solve_frame(self._context, SolveOptions(sync=False))
+            except (SolveError, CenteringError, ValueError) as e:
+                log.info("aim: the frame did not solve (%s): taking the mount's position", e)
+            else:
+                solution = solved.result.solution
+                ra, dec = solution.ra, solution.dec
+                solved_here = True
+                field = min(solution.width, solution.height) * solution.scale / 3600
+                radius = max(field / 2, 0.05)
+        framing = parts.framing
+        if ra is None and framing is not None and (at := framing.position()) is not None:
+            ra, dec = at.ra, at.dec
+        # The last go to, unless a solved frame shows the camera framed something else
+        # since (by hand); then the catalog object nearest what is framed.
+        name = None
+        if framing is not None:
+            goto = framing.last_goto()
+            if ra is not None and dec is not None:
+                here = False
+                if goto and solved_here:
+                    here = await anyio.to_thread.run_sync(framing.within, goto, ra, dec, radius)
+                if goto and (here or not solved_here):
+                    name = goto
+                else:
+                    name = await anyio.to_thread.run_sync(framing.nearest, ra, dec, radius)
+            name = name or goto
+        return {"name": name or UNTITLED, "ra": ra, "dec": dec}
+
+    async def _flats(self, action: Flats) -> dict[str, Json]:
+        """A panel's flats of one filter, each exposure found; the group's master."""
+        if self._parts.flats is None:
+            raise ValueError("the rig cannot take flats")
+        plan = FlatPlan(
+            source="panel",
+            filters=[FlatFilter(filter=action.filter, count=action.count)],
+            gain=action.gain,
+            offset=action.offset,
+            binning=action.binning,
+        )
+        done = await self._parts.flats.run(self._context, plan)
+        frames = done.get("frames")
+        ids = [f for f in frames if isinstance(f, int)] if isinstance(frames, list) else []
+        result: dict[str, Json] = {"frames": len(ids)}
+        filters = done.get("filters")
+        if isinstance(filters, list) and filters and isinstance(filters[0], dict):
+            result["exposure"] = filters[0].get("exposure")
+        masters = self._parts.masters
+        if masters is not None and ids:
+            try:
+                kept = await masters.keep("flat", ids)
+            except Exception as e:  # the flats are kept; the master is a bonus
+                log.warning("flats master: %s", e)
+                result["master_error"] = str(e) or type(e).__name__
+            else:
+                if kept:
+                    result.update(kept)
+        return result
 
     def _mount(self) -> MountControl:
         if self._parts.mount is None:

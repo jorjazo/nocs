@@ -33,15 +33,16 @@ from concurrent.futures.process import BrokenProcessPool
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+# The module, not its names: nocs.stacking.stack imports nocs.imaging.pipeline, whose
+# package imports this module, so its names may not exist yet when this runs.
+from nocs.calibration import master as group_master
 from nocs.imaging import disc, pipeline
 from nocs.imaging.disc import Disc
 from nocs.imaging.pipeline import FrameAnalysis, StarMetrics
-
-# The module, not its names: nocs.stacking.stack imports nocs.imaging.pipeline, whose
-# package imports this module, so its names may not exist yet when this runs.
 from nocs.stacking import masters, stack
 
 if TYPE_CHECKING:
+    from nocs.calibration.master import GroupMaster, MasterKind
     from nocs.stacking.masters import Calibration, Kind, Master
     from nocs.stacking.stack import Added, Look, Rendered
 
@@ -183,6 +184,16 @@ class ImageWorker:
         """Build a live stack's calibration master at ``path`` (``masters.build``)."""
         call = functools.partial(masters.build, path, kind, frames, bayer, subtract=subtract)
         return await self._run(call)
+
+    async def group_master(
+        self, path: str, kind: MasterKind, frames: list[str]
+    ) -> tuple[GroupMaster, FrameAnalysis]:
+        """Build a sequence group's master at ``path`` (``master.build``), and its preview."""
+        master = await self._run(functools.partial(group_master.build, path, kind, frames))
+        preview = self.previews_dir / f"{uuid.uuid4().hex}.jpg"
+        analysis = await self._run(functools.partial(pipeline.analyze, path, str(preview)))
+        await self._expire("master", preview)
+        return master, analysis
 
     async def stack_render(self, stack_id: str, look: Look) -> Rendered:
         """The stack as it stands, rendered with ``look`` as a new preview."""

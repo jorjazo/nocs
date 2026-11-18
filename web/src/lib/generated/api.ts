@@ -313,6 +313,9 @@ export type Node =
   | Guide
   | Dither
   | Outputs
+  | Aim
+  | Flats
+  | Prompt
   | Wait
   | ExposurePlan
   | Container;
@@ -326,6 +329,11 @@ export type Name = string;
  * via the `definition` "OutputId".
  */
 export type OutputId = string;
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "FrameKind".
+ */
+export type FrameKind = "light" | "dark" | "flat" | "bias";
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "Darkness".
@@ -353,14 +361,10 @@ export type DriverName = string;
 export type FailureKind = "device" | "clouds" | "guiding" | "focus" | "solve" | "flip" | "storage" | "other";
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
- * via the `definition` "FrameKind".
- */
-export type FrameKind = "light" | "dark" | "flat" | "bias";
-/**
- * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "SavedFrameTypeName".
  */
-export type SavedFrameTypeName = "light" | "dark" | "bias" | "flat" | "stack";
+export type SavedFrameTypeName =
+  "light" | "dark" | "bias" | "flat" | "stack" | "master_dark" | "master_bias" | "master_flat";
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "PreparationReason".
@@ -394,6 +398,17 @@ export interface ActiveSiteRequest {
    * A saved site's id; None: no site is active.
    */
   id: string | null;
+}
+/**
+ * Take what the camera has framed as the target of the containers that name none:
+ * where the frame was solved (or the mount points), named after the last go to or the
+ * catalog object nearest it. Once per run: a run resumed after a restart keeps it.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "Aim".
+ */
+export interface Aim {
+  kind?: "aim";
 }
 /**
  * ``GET /api/sky/tonight``: the night at the active site.
@@ -2651,6 +2666,10 @@ export interface SequenceState {
    * The run's most recent events, oldest first.
    */
   events: SequenceEvent[];
+  /**
+   * The run's latest master of a group of darks, bias or flats.
+   */
+  master?: GroupMasterState | null;
   run: SequenceRun | null;
 }
 /**
@@ -2669,6 +2688,7 @@ export interface SequenceEvent {
     | "resumed_after_restart"
     | "action"
     | "frame"
+    | "prompt"
     | "trigger"
     | "condition"
     | "paused"
@@ -2687,6 +2707,37 @@ export interface SequenceEvent {
   time: string;
 }
 /**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "GroupMasterState".
+ */
+export interface GroupMasterState {
+  filter: string | null;
+  frame_id: number;
+  frames: number;
+  kind: "dark" | "bias" | "flat";
+  /**
+   * Below NOCS/ on its destination.
+   */
+  path: string;
+  preview: GroupMasterPreview;
+  /**
+   * UTC, ISO 8601, when it was saved.
+   */
+  time: string;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "GroupMasterPreview".
+ */
+export interface GroupMasterPreview {
+  height: number;
+  /**
+   * JPEG of the master, at most 1920 px wide; immutable.
+   */
+  url: string;
+  width: number;
+}
+/**
  * A sequence's run in progress, or the last one (ADR 0031).
  *
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -2701,16 +2752,24 @@ export interface SequenceRun {
   name: string;
   outcome: ("completed" | "stopped" | "failed") | null;
   /**
-   * Exposure plans by place in the tree.
+   * Exposure plans (and flats whose exposure is found) by place in the tree, in its order.
    */
   plans: {
     [k: string]: SequencePlan;
   };
   /**
+   * The run waits (paused) until the user readies the rig for these frames: uncovered, covered (darks and bias), on a panel.
+   */
+  prompt: ("light" | "dark" | "flat") | null;
+  /**
    * Times it was resumed after nocsd restarted.
    */
   restarts: number;
   run: string;
+  /**
+   * Id of the saved sequence it runs.
+   */
+  sequence: string;
   /**
    * UTC, ISO 8601.
    */
@@ -2728,7 +2787,11 @@ export interface SequenceRun {
  * via the `definition` "SequencePlan".
  */
 export interface SequencePlan {
+  frame_type: "light" | "dark" | "flat" | "bias";
   rows: SequencePlanRow[];
+  /**
+   * What the frames are named after, once known.
+   */
   target: string | null;
 }
 /**
@@ -2738,10 +2801,13 @@ export interface SequencePlan {
 export interface SequencePlanRow {
   count: number;
   /**
-   * Frames taken.
+   * Frames taken; flats whose exposure is found count only once done (`flats` has them as they come).
    */
   done: number;
-  exposure: number;
+  /**
+   * Seconds; None: a bias (the camera's shortest) or flats whose exposure is found.
+   */
+  exposure: number | null;
   filter: string | null;
 }
 /**
@@ -4306,6 +4372,35 @@ export interface Outputs {
   outputs: [OutputId, ...OutputId[]];
 }
 /**
+ * Flats of one filter on a panel, each exposure found from the last frame's level.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "Flats".
+ */
+export interface Flats {
+  binning?: number | null;
+  count: number;
+  /**
+   * None: whatever the wheel holds.
+   */
+  filter?: Name | null;
+  gain?: number | null;
+  kind?: "flats";
+  offset?: number | null;
+}
+/**
+ * Stop until the user says the rig is ready for these frames (the telescope
+ * covered for darks, the panel on for flats, uncovered for lights); the rig is lent
+ * back meanwhile, as in a pause.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "Prompt".
+ */
+export interface Prompt {
+  frame_type: FrameKind;
+  kind?: "prompt";
+}
+/**
  * Wait for a time, for the night to get dark, or for the target to rise.
  *
  * The runner itself waits, letting stops, pauses and conditions take effect.
@@ -4350,9 +4445,9 @@ export interface PlanRow {
   binning?: number | null;
   count: number;
   /**
-   * Seconds.
+   * Seconds; None only for bias: the camera's shortest.
    */
-  exposure: number;
+  exposure?: number | null;
   /**
    * None: whatever the wheel holds.
    */
@@ -4825,7 +4920,7 @@ export interface FocusCalibrationRequest {
   step?: number | null;
 }
 /**
- * When a template's sequence focuses: at the start, and on these reasons.
+ * When a template's sequence focuses: at the start of its lights, and on these reasons.
  *
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "FocusPlan".
@@ -4965,6 +5060,31 @@ export interface GpsSiteRequest {
    * The name of a new site, when the GPS is at none of the saved ones.
    */
   name?: string;
+}
+/**
+ * Frames of one kind taken alike: what the Sequences view lists.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "Group".
+ */
+export interface Group {
+  binning?: number | null;
+  count: number;
+  /**
+   * Seconds. Bias: always the camera's shortest; flats: None finds it.
+   */
+  exposure?: number | null;
+  /**
+   * None: whatever the wheel holds; darks and bias take none.
+   */
+  filter?: Name | null;
+  frame_type?: "light" | "dark" | "flat" | "bias";
+  gain?: number | null;
+  offset?: number | null;
+  /**
+   * Sensor °C while this group is taken, when cooling is per group.
+   */
+  temperature?: number | null;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -5576,7 +5696,8 @@ export interface Container1 {
   triggers?: Trigger[];
 }
 /**
- * This target, these filters, tonight: what the builder edits (phase 5.10).
+ * What the Sequences view edits: groups of frames of what the camera has framed,
+ * and what happens around them.
  *
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "Template".
@@ -5584,13 +5705,13 @@ export interface Container1 {
 export interface Template {
   batch?: number;
   /**
-   * Centre the target by plate solving instead of only going.
+   * Centre the target by plate solving before its lights.
    */
   center?: boolean;
   /**
-   * Sensor °C.
+   * global: `temperature` for the whole sequence; group: each group's own.
    */
-  cooling?: number | null;
+  cooling?: "off" | "global" | "group";
   cooling_ramp?: number | null;
   /**
    * The twilight that starts and ends the night.
@@ -5606,7 +5727,7 @@ export interface Template {
   dither_pixels?: number;
   end?: EndPlan;
   /**
-   * Flip the mount at the meridian (ADR 0033).
+   * Flip the mount at the meridian.
    */
   flip?: boolean;
   /**
@@ -5614,12 +5735,19 @@ export interface Template {
    */
   flip_after?: number;
   focus?: FocusPlan | null;
+  /**
+   * @minItems 1
+   */
+  groups: [Group, ...Group[]];
   guide?: boolean;
   /**
-   * Image the target only above this (and the horizon).
+   * Lights only while the target is this high.
    */
   min_altitude?: number | null;
   name: Name;
+  /**
+   * Light groups in a row: up to `batch` frames of each in turn, or each to its end.
+   */
   order?: "batches" | "in_turn";
   /**
    * Arcminutes.
@@ -5633,18 +5761,20 @@ export interface Template {
     [k: string]: Policy;
   };
   /**
-   * @minItems 1
-   */
-  rows: [PlanRow, ...PlanRow[]];
-  /**
-   * Wait until dark first; otherwise start at once.
+   * Lights wait until dark; darks, bias and flats do not.
    */
   start_at_dusk?: boolean;
-  target: Target;
+  /**
+   * Sensor °C when cooling is global.
+   */
+  temperature?: number | null;
+  /**
+   * Lights end at dawn; the rest goes on.
+   */
   until_dawn?: boolean;
 }
 /**
- * What a template's plan costs, and how much of tonight it has (phase 5.10).
+ * What a template's groups cost.
  *
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "SequenceEstimate".
@@ -5655,11 +5785,11 @@ export interface SequenceEstimate {
    */
   bytes: number | null;
   /**
-   * Seconds the frames take, without focusing or slewing.
+   * Seconds the frames take, without focusing, cooling or waiting for the user.
    */
   duration: number;
   /**
-   * UTC, ISO 8601: when the plan would be done, or the window close if that comes first.
+   * UTC, ISO 8601: when its frames would be done.
    */
   ends: string | null;
   frames: number;
@@ -5668,13 +5798,9 @@ export interface SequenceEstimate {
    */
   integration: number;
   /**
-   * UTC, ISO 8601: when imaging would start tonight (now, or when the target's window opens); None without the site or a window left tonight.
+   * UTC, ISO 8601: now, or tonight's dusk when the first group is lights that wait for it.
    */
   starts: string | null;
-  /**
-   * Seconds tonight's dark window keeps the target above the minimum altitude and the horizon; None while the site is unknown.
-   */
-  window: number | null;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema

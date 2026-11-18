@@ -13,6 +13,7 @@
   import { pageWidth } from "./lib/layout";
   import { live } from "./lib/live.svelte";
   import { router } from "./lib/router.svelte";
+  import { workingView } from "./lib/sequence";
   import { boxSetup } from "./lib/setup.svelte";
   import AuthScreen from "./screens/AuthScreen.svelte";
   import BoxSetup from "./screens/BoxSetup.svelte";
@@ -24,7 +25,9 @@
   import Flats from "./screens/flats/Flats.svelte";
   import Explore from "./screens/explore/Explore.svelte";
   import Plan from "./screens/plan/Plan.svelte";
-  import SequenceScreen from "./screens/plan/Sequence.svelte";
+  import PromptDialog from "./screens/sequence/PromptDialog.svelte";
+  import SequenceEditor from "./screens/sequence/SequenceEditor.svelte";
+  import SequenceScreen from "./screens/sequence/Sequence.svelte";
   import TargetDetail from "./screens/plan/TargetDetail.svelte";
   import ProfileEditor from "./screens/ProfileEditor.svelte";
   import Rig from "./screens/Rig.svelte";
@@ -92,6 +95,16 @@
   );
   // How wide the page grows: Explore edge to edge, Session in columns on a PC.
   const width = $derived(pageWidth(router.route));
+
+  // Explore and Sequences exclude each other: while one works, going to the other
+  // leads to the one that works.
+  const working = $derived(live.synced ? workingView(live.app.sequence?.run, live.app.jobs) : null);
+  $effect(() => {
+    const screen = router.route.screen;
+    if ((screen === "explore" || screen === "sequence") && working && working !== screen) {
+      router.go({ screen: working });
+    }
+  });
 </script>
 
 {#if view === "loading"}
@@ -161,6 +174,8 @@
           {#key router.route.id}<Report id={router.route.id} />{/key}
         {:else if router.route.screen === "sequence"}
           <SequenceScreen />
+        {:else if router.route.screen === "sequence-edit"}
+          <SequenceEditor />
         {:else if router.route.screen === "target"}
           {#key router.route.id}<TargetDetail id={router.route.id} />{/key}
         {:else if router.route.screen === "profile"}
@@ -170,6 +185,7 @@
         {/if}
       </main>
     {/if}
+    <PromptDialog />
   {/key}
 {/if}
 

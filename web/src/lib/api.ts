@@ -76,6 +76,7 @@ import type {
   SolveRequest,
   TargetRequest,
   Template,
+  Group,
   TrackingRequest,
   CalibrationPlan,
   CalibrationReport,
@@ -750,6 +751,11 @@ export function getCalibration(query: { night: number } | { sequence: string }):
 // What the "calibration" sequence would take for the chosen groups, not kept.
 export function planCalibrationSequence(body: CalibrationSequenceRequest): Promise<CalibrationPlan> {
   return request("POST", "/api/calibration/plan", body);
+}
+
+// Groups for the flats, bias and darks a saved sequence's lights still lack.
+export function missingCalibration(sequence: string): Promise<Group[]> {
+  return request("GET", `/api/calibration/missing?${new URLSearchParams({ sequence })}`);
 }
 
 // Keeps the missing darks and bias as the "calibration" sequence, not started.
