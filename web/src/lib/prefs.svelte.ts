@@ -52,7 +52,7 @@ function browserLocale(): Locale {
 class Prefs {
   theme: Theme = $state(read("nocs.theme", THEMES) ?? "dusk");
   locale: Locale = $state(read("nocs.locale", LOCALES) ?? browserLocale());
-  // Off until the user turns it on: the rig is often offline, and it asks CDS.
+  // Off until the user turns it on: the rig is often offline, and it asks IRSA, ESA or CDS.
   survey: boolean = $state(read("nocs.survey", ["on"] as const) === "on");
   // The user's own solved frames under the chart: on unless turned off (they come from nocsd).
   ownFrames: boolean = $state(read("nocs.ownFrames", ["off"] as const) !== "off");

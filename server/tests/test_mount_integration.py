@@ -145,10 +145,12 @@ def test_goto_near_the_sun_waits_for_its_warning(
     api: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # The Sun 5° from anything, whatever the hour: the check's wiring, not the ephemeris.
+    # Dec -70 is always at least 10° up at latitude -30 (-60 touched the horizon at
+    # its lower culmination).
     monkeypatch.setattr("nocs.mount.service.near_sun", _five_degrees_away)
     assert mount(api)["sun_acknowledged"] is False
     for goto in (
-        {"frame": "j2000", "ra": 1.0, "dec": -60.0, "force": True},
+        {"frame": "j2000", "ra": 1.0, "dec": -70.0, "force": True},
         {"frame": "altaz", "alt": 90, "az": 0},
     ):
         response = api.post("/api/mount/goto", json=goto)
@@ -156,7 +158,7 @@ def test_goto_near_the_sun_waits_for_its_warning(
         assert "near the Sun" in response.json()["detail"]
     assert api.post("/api/mount/sun-warning").status_code == 204
     wait(api, lambda s: s["mount"]["sun_acknowledged"])
-    response = api.post("/api/mount/goto", json={"frame": "j2000", "ra": 1.0, "dec": -60.0})
+    response = api.post("/api/mount/goto", json={"frame": "j2000", "ra": 1.0, "dec": -70.0})
     assert response.status_code == 202, response.text
     wait(api, finished(response.json()["job"]))
 

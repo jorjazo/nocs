@@ -32,16 +32,18 @@
     viewRadius,
     viewSpan,
   } from "../lib/sky/projection";
+  import { children, type Cover, coverView, drawTile, parent, type Tile, tileKey, tileOrder } from "../lib/sky/hips";
   import {
     browserLoader,
-    fetchSurvey,
-    type Missed,
+    DEEPEST,
+    fetchSkyView,
+    type Miss,
     SERVICE,
     serves,
-    type Source,
     surveyMemory,
     type SurveyRequest,
     surveyRequest,
+    surveyTiles as tiles,
   } from "../lib/sky/survey";
   import type { CameraField, CatalogObject, SkyChart } from "../lib/types";
 
@@ -72,8 +74,8 @@
     highlight?: string | null;
     // The last solved frame, drawn dashed where it landed (degrees, J2000).
     solved?: { ra: number; dec: number; width: number; height: number; rotation: number } | null;
-    // Draw a survey image under the chart, fetched by this browser from CDS
-    // hips2fits or NASA SkyView (ADR 0020): only when the user turned it on.
+    // Draw a survey image under the chart, fetched by this browser from a HiPS
+    // mirror (IRSA, ESA, CDS) or NASA SkyView: only when the user turned it on.
     survey?: boolean;
     // The user's own solved frames, drawn under the stars where they landed
     // (3.7c): the image as NOCS shows the frame, its top `rotation` east of north.
@@ -139,89 +141,157 @@
 
   // -- Survey image -----------------------------------------------------------------
 
-  // CDS hips2fits (colour) or NASA SkyView (DSS2 red), the one that worked last in
-  // this browser first (lib/sky/survey.ts). Both give a gnomonic image, north up, east left.
-  type SurveyImage = { image: HTMLImageElement; ra: number; dec: number; fov: number; width: number; source: Source };
-  let surveyImage: SurveyImage | null = $state(null);
-  let surveyStatus:
-    | { kind: "off" }
-    | { kind: "asking"; source: Source }
-    | { kind: "ready" }
-    | { kind: "failed"; offline: boolean; misses: Missed[] } = $state({ kind: "off" });
-  let surveyTimer: ReturnType<typeof setTimeout> | undefined;
-  // The request on its way, so a small pan or zoom meanwhile does not start it over.
-  let surveyAsked: { request: SurveyRequest; controller: AbortController } | null = null;
-  // What failed last, not asked again until the view moves on or the device comes back online.
-  let surveyMissed: SurveyRequest | null = null;
+  // DSS2 colour drawn from HiPS tiles, asked of the mirror that worked last in this
+  // browser first; NASA SkyView's DSS2 red when no mirror answers (lib/sky/survey.ts).
+  // The tiles and which mirrors are down are the page's, shared by every chart.
+  let tilesChanged = $state(0);
+  $effect(() => tiles.subscribe(() => (tilesChanged += 1)));
+  // The tiles around the view, at the order its pixels need.
+  let cover: Cover | null = null;
+  let wantedTiles: Tile[] = $state.raw([]);
+  // Bumped when the device goes on or offline.
   let online = $state(0);
 
   $effect(() => {
     void online;
-    clearTimeout(surveyTimer);
-    if (!survey || width === 0 || height === 0) {
-      untrack(stopSurvey);
-      surveyMissed = null;
-      surveyStatus = { kind: "off" };
+    cover =
+      !survey || width === 0 || height === 0
+        ? null
+        : coverView(view, tileOrder(view, window.devicePixelRatio || 1, DEEPEST), cover);
+    const wanted = cover?.tiles ?? [];
+    if (untrack(() => wantedTiles) === wanted) return;
+    wantedTiles = wanted;
+    // Asked at once, while the view moves too.
+    untrack(() => tiles.want(wanted));
+  });
+  $effect(() => () => tiles.want([]));
+
+  // SkyView gives a gnomonic image, north up, east left, like the chart.
+  type SkyViewImage = { image: HTMLImageElement; ra: number; dec: number; fov: number; width: number };
+  let skyViewImage: SkyViewImage | null = $state(null);
+  let skyViewStatus: { kind: "idle" } | { kind: "asking" } | { kind: "failed"; miss: Miss } = $state({ kind: "idle" });
+  let skyViewTimer: ReturnType<typeof setTimeout> | undefined;
+  // The request on its way, so a small pan or zoom meanwhile does not start it over.
+  let skyViewAsked: { request: SurveyRequest; controller: AbortController } | null = null;
+  // What failed last, not asked again until the view moves on or the device comes back online.
+  let skyViewMissed: SurveyRequest | null = null;
+
+  $effect(() => {
+    void online;
+    void tilesChanged;
+    clearTimeout(skyViewTimer);
+    if (!survey || width === 0 || height === 0 || !tiles.allDown()) {
+      untrack(stopSkyView);
+      skyViewMissed = null;
+      if (untrack(() => skyViewStatus.kind) !== "idle") skyViewStatus = { kind: "idle" };
+      // The mirrors are back and their tiles cover the view: SkyView's image goes.
+      if (untrack(() => skyViewImage) && wantedTiles.length && wantedTiles.every((tile) => tiles.image(tile))) {
+        skyViewImage = null;
+      }
       return;
     }
     const wanted = surveyRequest(view, window.devicePixelRatio || 1);
     const near = (image: { ra: number; dec: number; fov: number; width: number }) =>
       serves(image, wanted, separation(wanted, image));
-    const shown = untrack(() => surveyImage);
+    const shown = untrack(() => skyViewImage);
     if (shown && near(shown)) {
-      untrack(stopSurvey);
-      surveyStatus = { kind: "ready" };
+      untrack(stopSkyView);
       return;
     }
-    if (surveyAsked && near(surveyAsked.request)) return;
-    if (surveyMissed && near(surveyMissed)) return;
-    surveyTimer = setTimeout(() => void loadSurvey(wanted), 600);
+    if (skyViewAsked && near(skyViewAsked.request)) return;
+    if (skyViewMissed && near(skyViewMissed)) return;
+    skyViewTimer = setTimeout(() => void loadSkyView(wanted), 600);
   });
   $effect(() => () => {
-    clearTimeout(surveyTimer);
-    stopSurvey();
+    clearTimeout(skyViewTimer);
+    stopSkyView();
   });
   $effect(() => {
     const retry = () => {
-      if (surveyStatus.kind !== "failed") return;
-      surveyMissed = null;
+      skyViewMissed = null;
       online += 1;
+      tiles.reset();
     };
+    const offline = () => (online += 1);
     window.addEventListener("online", retry);
-    return () => window.removeEventListener("online", retry);
+    window.addEventListener("offline", offline);
+    return () => {
+      window.removeEventListener("online", retry);
+      window.removeEventListener("offline", offline);
+    };
   });
 
-  function stopSurvey(): void {
-    surveyAsked?.controller.abort();
-    surveyAsked = null;
+  function stopSkyView(): void {
+    skyViewAsked?.controller.abort();
+    skyViewAsked = null;
   }
 
-  async function loadSurvey(request: SurveyRequest): Promise<void> {
-    stopSurvey();
+  async function loadSkyView(request: SurveyRequest): Promise<void> {
+    stopSkyView();
+    if (!browserLoader.online()) return;
     const asked = { request, controller: new AbortController() };
-    surveyAsked = asked;
-    const result = await fetchSurvey(request, surveyMemory, browserLoader, asked.controller.signal, (source) => {
-      surveyStatus = { kind: "asking", source };
-    });
-    if (result === null || surveyAsked !== asked) return;
-    surveyAsked = null;
-    surveyMissed = "image" in result ? null : request;
+    skyViewAsked = asked;
+    skyViewStatus = { kind: "asking" };
+    const result = await fetchSkyView(request, browserLoader, asked.controller.signal);
+    if (result === null || skyViewAsked !== asked) return;
+    skyViewAsked = null;
     if ("image" in result) {
-      surveyImage = { image: result.image, ...request, source: result.source };
-      surveyStatus = { kind: "ready" };
+      skyViewMissed = null;
+      skyViewImage = { image: result.image, ...request };
+      skyViewStatus = { kind: "idle" };
     } else {
-      surveyStatus = { kind: "failed", ...result };
+      skyViewMissed = request;
+      skyViewStatus = { kind: "failed", miss: result.miss };
     }
   }
+
+  // What stands in for a wanted tile: its image, or else its nearest loaded
+  // ancestor's (coarser, zooming in), or else its loaded children's or
+  // grandchildren's (finer, zooming out).
+  function standIns(tile: Tile): [Tile, HTMLImageElement][] {
+    for (let at: Tile | null = tile; at && at.order >= tile.order - 4; at = parent(at)) {
+      const image = tiles.image(at);
+      if (image) return [[at, image]];
+    }
+    const found: [Tile, HTMLImageElement][] = [];
+    for (const child of children(tile)) {
+      const image = tiles.image(child);
+      if (image) found.push([child, image]);
+      else {
+        for (const grandchild of children(child)) {
+          const deeper = tiles.image(grandchild);
+          if (deeper) found.push([grandchild, deeper]);
+        }
+      }
+    }
+    return found;
+  }
+
+  const surveyFailed = $derived.by(() => {
+    void tilesChanged;
+    return tiles.allDown() && skyViewStatus.kind === "failed";
+  });
 
   const surveyText = $derived.by(() => {
-    const s = surveyStatus;
-    if (s.kind === "asking") return t.chart.surveyAsking(SERVICE[s.source]);
-    if (s.kind === "failed") {
-      if (s.offline) return t.chart.surveyOffline;
-      return t.chart.surveyFailed(s.misses.map(({ source, miss }) => ({ service: SERVICE[source], miss })));
+    void tilesChanged;
+    void online;
+    if (!survey) return "";
+    const offline = !browserLoader.online();
+    if (!tiles.allDown()) {
+      if (wantedTiles.some((tile) => standIns(tile).length)) {
+        return t.chart.surveyCredit.tiles(SERVICE[tiles.last ?? "irsa"]);
+      }
+      if (offline) return t.chart.surveyOffline;
+      const asking = tiles.asking();
+      return asking ? t.chart.surveyAsking(SERVICE[asking]) : "";
     }
-    return surveyImage ? t.chart.surveyCredit[surveyImage.source] : "";
+    if (offline) return t.chart.surveyOffline;
+    if (skyViewStatus.kind === "asking") return t.chart.surveyAsking(SERVICE.skyview);
+    if (skyViewStatus.kind === "failed") {
+      const misses = [...(tiles.misses() ?? []), { source: "skyview" as const, miss: skyViewStatus.miss }];
+      return t.chart.surveyFailed(misses.map(({ source, miss }) => ({ service: SERVICE[source], miss })));
+    }
+    return skyViewImage ? t.chart.surveyCredit.skyview : "";
   });
 
   // -- Own frames -------------------------------------------------------------------
@@ -272,7 +342,7 @@
   }
 
   $effect(() => {
-    void [view, magnitude, chart, field, rotation, highlight, solved, survey, surveyImage, frames, ownImages];
+    void [view, magnitude, chart, field, rotation, highlight, solved, survey, skyViewImage, wantedTiles, tilesChanged, frames, ownImages];
     schedule();
   });
 
@@ -290,7 +360,7 @@
     context.fillStyle = colors.bg;
     context.fillRect(0, 0, width, height);
     const v = view;
-    if (survey && surveyImage) drawSurvey(context, v, surveyImage);
+    if (survey) drawSurvey(context, v, ratio);
     drawOwnFrames(context, v);
     if (chart) {
       drawObjects(context, v, chart.objects, colors);
@@ -301,16 +371,42 @@
     drawCrosshair(context, colors);
   }
 
-  function drawSurvey(context: CanvasRenderingContext2D, v: View, shown: SurveyImage): void {
+  // SkyView's image and the tiles are drawn opaque into a layer of their own, then
+  // painted at once: tiles cover the SkyView image under them instead of letting
+  // it show through, and cells that overlap by a pixel show no darker seams.
+  let layer: HTMLCanvasElement | null = null;
+
+  function drawSurvey(context: CanvasRenderingContext2D, v: View, ratio: number): void {
+    const shown = new Map<string, [Tile, HTMLImageElement]>();
+    for (const tile of wantedTiles) {
+      for (const found of standIns(tile)) shown.set(tileKey(found[0]), found);
+    }
+    if (!shown.size && !skyViewImage) return;
+    layer ??= document.createElement("canvas");
+    if (layer.width !== canvas.width || layer.height !== canvas.height) {
+      layer.width = canvas.width;
+      layer.height = canvas.height;
+    }
+    const layerContext = layer.getContext("2d");
+    if (!layerContext) return;
+    layerContext.setTransform(1, 0, 0, 1, 0, 0);
+    layerContext.clearRect(0, 0, layer.width, layer.height);
+    layerContext.setTransform(ratio, 0, 0, ratio, 0, 0);
+    if (skyViewImage) drawSkyView(layerContext, v, skyViewImage);
+    // Coarser first, so a finer tile lies over its stand-in.
+    for (const [tile, image] of [...shown.values()].sort(([a], [b]) => a.order - b.order)) {
+      drawTile(layerContext, v, tile, image);
+    }
+    paintImage(context, layer, v.width, v.height, 0.85);
+  }
+
+  function drawSkyView(context: CanvasRenderingContext2D, v: View, shown: SkyViewImage): void {
     const at = project(v, shown);
     if (!at) return;
     // The image's tangent plane at its own centre, scaled to the chart's.
     const w = shown.fov * RAD * v.scale;
     const h = (w * shown.image.naturalHeight) / shown.image.naturalWidth;
-    context.save();
-    context.translate(at.x - w / 2, at.y - h / 2);
-    paintImage(context, shown.image, w, h, 0.85);
-    context.restore();
+    context.drawImage(shown.image, at.x - w / 2, at.y - h / 2, w, h);
   }
 
   // Oldest first, so the newest lies on top.
@@ -334,7 +430,7 @@
   }
 
   // An image into the rectangle (0, 0, w, h) of the current transform.
-  function paintImage(context: CanvasRenderingContext2D, image: HTMLImageElement, w: number, h: number, alpha: number): void {
+  function paintImage(context: CanvasRenderingContext2D, image: CanvasImageSource, w: number, h: number, alpha: number): void {
     if (prefs.theme === "night") {
       // Night mode: its light in red only, never white (docs/ux.md).
       context.filter = "grayscale(1) brightness(0.8)";
@@ -616,7 +712,7 @@
     <span>{field ? `${frameText} · ` : ""}{t.chart.view(degrees(viewSpan(view)))}</span>
   </div>
   <div class="credit">
-    {t.chart.credit}{#if frames.length}<br />{t.chart.ownCredit(frames.length)}{/if}{#if survey && surveyText}<br /><span class:error={surveyStatus.kind === "failed"}>{surveyText}</span>{/if}
+    {t.chart.credit}{#if frames.length}<br />{t.chart.ownCredit(frames.length)}{/if}{#if survey && surveyText}<br /><span class:error={surveyFailed}>{surveyText}</span>{/if}
   </div>
 </div>
 

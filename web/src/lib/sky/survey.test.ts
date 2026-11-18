@@ -2,17 +2,22 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { en } from "../i18n/en.ts";
 import { es } from "../i18n/es.ts";
+import { type Tile, tileKey } from "./hips.ts";
 import {
   classify,
+  DOWN_MS,
   FALLBACK_KEPT_MS,
-  fetchSurvey,
+  fetchSkyView,
+  KEPT_TILES,
   type KeyValueStore,
   type Loader,
   MAX_FIELD,
   MAX_PIXELS,
+  type Mirror,
   type Probe,
   type Source,
   SourceMemory,
+  SurveyTiles,
   serves,
   surveyRequest,
 } from "./survey.ts";
@@ -26,105 +31,283 @@ function store(initial: Record<string, string> = {}): KeyValueStore & { data: Re
   };
 }
 
-// A loader whose services answer as told; records what was asked.
+type Outcome = "load" | "error" | "timeout";
+
+// A loader whose services answer as told (an outcome, or a promise to settle
+// later); records what was asked, by service and URL.
 function loader(
-  images: Partial<Record<Source, "load" | "error" | "timeout">>,
+  images: Partial<Record<Source, Outcome>>,
   probes: Partial<Record<Source, Probe>> = {},
   online = true,
-): Loader<string> & { asked: string[] } {
-  const asked: string[] = [];
-  const source = (url: string): Source => (url.includes("skyview") ? "skyview" : "cds");
+): Loader<string> & { asked: Source[]; urls: string[]; setOnline(on: boolean): void } {
+  const asked: Source[] = [];
+  const urls: string[] = [];
+  const source = (url: string): Source =>
+    url.includes("skyview") ? "skyview" : url.includes("irsa") ? "irsa" : url.includes("esac") ? "esa" : "cds";
   return {
     asked,
-    image: (url) => {
+    urls,
+    setOnline: (on) => void (online = on),
+    image: (url, _timeout, signal) => {
       const s = source(url);
       asked.push(s);
+      urls.push(url);
       const outcome = images[s] ?? "error";
-      return outcome === "load" ? Promise.resolve(`image from ${s}`) : Promise.reject(outcome);
+      if (signal.aborted) return Promise.reject("abort");
+      return outcome === "load" ? Promise.resolve(`${url}`) : Promise.reject(outcome);
     },
     probe: (origin) => Promise.resolve(probes[source(origin)] ?? "failed"),
     online: () => online,
   };
 }
 
-const signal = new AbortController().signal;
-const request = { ra: 5.6, dec: -69, fov: 2, width: 800, height: 600 };
+const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-test("CDS is asked first, SkyView when it gives nothing", async () => {
-  const memory = new SourceMemory(store());
-  assert.deepEqual(memory.order(), ["cds", "skyview"]);
-  const services = loader({ cds: "timeout", skyview: "load" });
-  const result = await fetchSurvey(request, memory, services, signal);
-  assert.deepEqual(result, { image: "image from skyview", source: "skyview" });
-  assert.deepEqual(services.asked, ["cds", "skyview"]);
+const tile = (ix: number, iy = 0): Tile => ({ order: 7, face: 9, ix, iy });
+
+// Tiles from fake services, with a clock moved by hand and the retries it
+// schedules run when asked.
+function tilesWith(
+  images: Partial<Record<Source, Outcome>>,
+  probes: Partial<Record<Source, Probe>> = {},
+  memory = new SourceMemory(store()),
+  saved = store(),
+) {
+  let now = 1_000_000;
+  let changes = 0;
+  const timers: { at: number; run: () => void }[] = [];
+  const services = loader(images, probes);
+  const options = {
+    store: saved,
+    now: () => now,
+    later: (run: () => void, ms: number) => void timers.push({ at: now + ms, run }),
+  };
+  const tiles = new SurveyTiles(memory, services, options);
+  tiles.subscribe(() => (changes += 1));
+  return {
+    tiles,
+    services,
+    memory,
+    saved,
+    options,
+    changes: () => changes,
+    // The clock moves on, and what was due by then runs.
+    later: (ms: number) => {
+      now += ms;
+      for (const timer of timers.splice(0)) {
+        if (timer.at <= now) timer.run();
+        else timers.push(timer);
+      }
+    },
+  };
+}
+
+test("tiles come from IRSA first, as HiPS paths", async () => {
+  const { tiles, services } = tilesWith({ irsa: "load" });
+  tiles.want([tile(1), tile(2)]);
+  assert.equal(tiles.asking(), "irsa");
+  await settle();
+  assert.deepEqual(services.asked, ["irsa", "irsa"]);
+  assert.ok(services.urls[0]?.startsWith("https://irsa.ipac.caltech.edu/data/hips/CDS/DSS2/color/Norder7/Dir"));
+  assert.ok(tiles.image(tile(1)));
+  assert.equal(tiles.asking(), null);
+  assert.equal(tiles.last, "irsa");
+  // Wanted again: not asked again.
+  tiles.want([tile(1), tile(2)]);
+  await settle();
+  assert.equal(services.asked.length, 2);
 });
 
-test("the service that worked is asked first next time, across charts and reloads", async () => {
-  const saved = store();
-  await fetchSurvey(request, new SourceMemory(saved), loader({ cds: "timeout", skyview: "load" }), signal);
-  // A new memory reads what the last one saved: a reload, or another chart's.
-  const services = loader({ skyview: "load" });
-  await fetchSurvey(request, new SourceMemory(saved), services, signal);
-  assert.deepEqual(services.asked, ["skyview"]);
+test("a mirror that fails a tile is skipped, and the next one gives it", async () => {
+  const { tiles, services, memory } = tilesWith({ irsa: "timeout", esa: "load" });
+  tiles.want([tile(1), tile(2), tile(3)]);
+  await settle();
+  // Every tile asked of IRSA at once; each goes on to ESA; later ones skip IRSA.
+  assert.ok(tiles.image(tile(1)) && tiles.image(tile(3)));
+  assert.equal(tiles.last, "esa");
+  assert.deepEqual(memory.order(), ["esa", "irsa", "cds"]);
+  services.asked.length = 0;
+  tiles.want([tile(4)]);
+  await settle();
+  assert.deepEqual(services.asked, ["esa"]);
 });
 
-test("a later success of the other service moves the preference back", async () => {
+test("a mirror is asked again once its down time is over, without the view moving", async () => {
+  const { tiles, services, later } = tilesWith({ irsa: "error", esa: "error", cds: "error" });
+  tiles.want([tile(1)]);
+  await settle();
+  assert.ok(tiles.allDown());
+  services.asked.length = 0;
+  tiles.want([tile(2)]);
+  await settle();
+  assert.deepEqual(services.asked, []);
+  // The tiles wanted then are asked again when the down time runs out.
+  later(DOWN_MS + 1);
+  await settle();
+  assert.deepEqual(services.asked, ["irsa", "esa", "cds"]);
+});
+
+test("which mirrors are down outlives the chart and a reload", async () => {
+  const first = tilesWith({ irsa: "timeout", esa: "timeout", cds: "error" }, { irsa: "timeout", esa: "timeout", cds: "answered" });
+  first.tiles.want([tile(1)]);
+  await settle();
+  assert.ok(first.tiles.allDown());
+  // A new page (or a new chart on it) reads what the last one saved: straight to SkyView.
+  const services = loader({ irsa: "load" });
+  const again = new SurveyTiles(new SourceMemory(store()), services, { ...first.options, store: first.saved });
+  assert.ok(again.allDown());
+  assert.deepEqual(again.misses(), [
+    { source: "irsa", miss: "silent" },
+    { source: "esa", miss: "silent" },
+    { source: "cds", miss: "error" },
+  ]);
+  again.want([tile(2)]);
+  await settle();
+  assert.deepEqual(services.asked, []);
+  // Saved down times that ran out are dropped.
+  first.later(DOWN_MS + 1);
+  const later = new SurveyTiles(new SourceMemory(store()), services, { ...first.options, store: first.saved });
+  assert.ok(!later.allDown());
+  // Unreadable: nothing is down.
+  assert.ok(!new SurveyTiles(new SourceMemory(store()), services, { store: store({ "nocs.surveyDown": "{bad" }) }).allDown());
+});
+
+test("when every mirror is down, each says why, in the order tried", async () => {
+  const { tiles, services } = tilesWith({ irsa: "timeout", esa: "error", cds: "timeout" }, { irsa: "answered", esa: "answered", cds: "timeout" });
+  tiles.want([tile(1)]);
+  await settle();
+  assert.ok(tiles.allDown());
+  assert.deepEqual(tiles.misses(), [
+    { source: "irsa", miss: "slow" },
+    { source: "esa", miss: "error" },
+    { source: "cds", miss: "silent" },
+  ]);
+  // Back online: all of them may be asked again, the tiles wanted at once.
+  services.asked.length = 0;
+  tiles.reset();
+  assert.ok(!tiles.allDown());
+  assert.deepEqual(services.asked, ["irsa"]);
+});
+
+test("tiles no longer wanted are dropped on their way, and an offline device asks nothing", async () => {
+  const pending: string[] = [];
+  const services: Loader<string> = {
+    image: (url, _t, signal) =>
+      new Promise((_resolve, reject) => {
+        pending.push(url);
+        signal.addEventListener("abort", () => reject("abort"));
+      }),
+    probe: () => Promise.resolve("answered"),
+    online: () => true,
+  };
+  const tiles = new SurveyTiles(new SourceMemory(store()), services, { store: null, later: () => {} });
+  tiles.want([tile(1), tile(2)]);
+  tiles.want([tile(2)]);
+  await settle();
+  // tile(1) was aborted: no mirror marked down for it.
+  assert.ok(!tiles.allDown());
+  assert.equal(tiles.asking(), "irsa");
+  assert.equal(pending.length, 2);
+  tiles.stop();
+  assert.equal(tiles.asking(), null);
+
+  const offline = tilesWith({ irsa: "load" });
+  offline.services.setOnline(false);
+  offline.tiles.want([tile(1)]);
+  assert.deepEqual(offline.services.asked, []);
+});
+
+test("only so many tiles are kept, the least recently wanted dropped first", async () => {
+  const { tiles } = tilesWith({ irsa: "load" });
+  const many = Array.from({ length: KEPT_TILES }, (_, i) => tile(i % 128, Math.floor(i / 128)));
+  tiles.want(many);
+  await settle();
+  // The first wanted again, then one more: the second goes.
+  tiles.want([many[0] as Tile]);
+  tiles.want([tile(0, 100)]);
+  await settle();
+  assert.ok(tiles.image(many[0] as Tile));
+  assert.equal(tiles.image(many[1] as Tile), undefined);
+  assert.ok(tiles.image(tile(0, 100)));
+  assert.equal(new Set(many.map(tileKey)).size, KEPT_TILES);
+});
+
+test("SkyView gives its image, or why not", async () => {
+  const signal = new AbortController().signal;
+  const request = { ra: 5.6, dec: -69, fov: 2, width: 800, height: 600 };
+  const ok = loader({ skyview: "load" });
+  const image = await fetchSkyView(request, ok, signal);
+  assert.ok(image && "image" in image && image.image.includes("skyview.gsfc.nasa.gov") && image.image.includes("DSS2+Red"));
+  assert.deepEqual(await fetchSkyView(request, loader({ skyview: "timeout" }, { skyview: "answered" }), signal), { miss: "slow" });
+  assert.deepEqual(await fetchSkyView(request, loader({ skyview: "error" }, { skyview: "failed" }), signal), {
+    miss: "unreachable",
+  });
+  const controller = new AbortController();
+  controller.abort();
+  assert.equal(await fetchSkyView(request, loader({ skyview: "timeout" }), controller.signal), null);
+});
+
+test("the mirror that worked is asked first next time, across charts and reloads", () => {
   const saved = store();
   const memory = new SourceMemory(saved);
-  memory.worked("skyview");
-  const back = loader({ skyview: "timeout", cds: "load" });
-  assert.deepEqual((await fetchSurvey(request, memory, back, signal)) ?? {}, { image: "image from cds", source: "cds" });
-  assert.deepEqual(back.asked, ["skyview", "cds"]);
-  assert.deepEqual(new SourceMemory(saved).order(), ["cds", "skyview"]);
+  assert.deepEqual(memory.order(), ["irsa", "esa", "cds"]);
+  memory.worked("esa");
+  // A new memory reads what the last one saved: a reload, or another chart's.
+  assert.deepEqual(new SourceMemory(saved).order(), ["esa", "irsa", "cds"]);
+  // A later success of the default moves the preference back.
+  memory.worked("irsa");
+  assert.deepEqual(new SourceMemory(saved).order(), ["irsa", "esa", "cds"]);
 });
 
-test("the fallback is preferred for a night, then CDS is tried first again", () => {
+test("another mirror is preferred for a night, then IRSA is tried first again", () => {
   let now = 1_000_000;
   const saved = store();
-  new SourceMemory(saved, () => now).worked("skyview");
+  new SourceMemory(saved, () => now).worked("esa");
   now += FALLBACK_KEPT_MS - 1;
-  assert.deepEqual(new SourceMemory(saved, () => now).order(), ["skyview", "cds"]);
+  assert.deepEqual(new SourceMemory(saved, () => now).order(), ["esa", "irsa", "cds"]);
   now += 2;
-  assert.deepEqual(new SourceMemory(saved, () => now).order(), ["cds", "skyview"]);
+  assert.deepEqual(new SourceMemory(saved, () => now).order(), ["irsa", "esa", "cds"]);
 });
 
-test("a fallback that keeps working still gives way to CDS the next night", () => {
+test("a mirror that keeps working still gives way to IRSA the next night", () => {
   let now = 1_000_000;
   const saved = store();
   const memory = new SourceMemory(saved, () => now);
-  memory.worked("skyview");
-  // Every chart of the night got its image from SkyView, the last one 18 h before the next night.
+  memory.worked("esa");
+  // Every chart of the night got its tiles from ESA, the last one 18 h before the next night.
   now += 2 * 3600 * 1000;
-  memory.worked("skyview");
+  memory.worked("esa");
   now += 18 * 3600 * 1000;
-  assert.deepEqual(new SourceMemory(saved, () => now).order(), ["cds", "skyview"]);
+  assert.deepEqual(new SourceMemory(saved, () => now).order(), ["irsa", "esa", "cds"]);
 });
 
-test("while CDS stays down, the fallback is preferred again each night", async () => {
+test("while IRSA stays down, ESA is preferred again each night", async () => {
   let now = 1_000_000;
   const saved = store();
-  new SourceMemory(saved, () => now).worked("skyview");
-  // The next night: CDS first, still not answering, and SkyView gives the image.
+  new SourceMemory(saved, () => now).worked("esa");
+  // The next night: IRSA first, still not answering, and ESA gives the tile.
   now += 24 * 3600 * 1000;
   const memory = new SourceMemory(saved, () => now);
-  const services = loader({ cds: "timeout", skyview: "load" });
-  await fetchSurvey(request, memory, services, signal);
-  assert.deepEqual(services.asked, ["cds", "skyview"]);
-  // The night's next charts, and a reload, ask SkyView first.
+  const services = loader({ irsa: "timeout", esa: "load" });
+  const tiles = new SurveyTiles(memory, services, { store: null, now: () => now, later: () => {} });
+  tiles.want([tile(1)]);
+  await settle();
+  assert.deepEqual(services.asked, ["irsa", "esa"]);
+  // The night's next charts, and a reload, ask ESA first.
   now += 3600 * 1000;
-  assert.deepEqual(memory.order(), ["skyview", "cds"]);
-  assert.deepEqual(new SourceMemory(saved, () => now).order(), ["skyview", "cds"]);
+  assert.deepEqual(memory.order(), ["esa", "irsa", "cds"]);
+  assert.deepEqual(new SourceMemory(saved, () => now).order(), ["esa", "irsa", "cds"]);
 });
 
 test("a preference saved with the clock ahead runs out", () => {
   const saved = store();
-  new SourceMemory(saved, () => 5e12).worked("skyview");
-  assert.deepEqual(new SourceMemory(saved, () => 1e12).order(), ["cds", "skyview"]);
+  new SourceMemory(saved, () => 5e12).worked("esa");
+  assert.deepEqual(new SourceMemory(saved, () => 1e12).order(), ["irsa", "esa", "cds"]);
 });
 
 test("unreadable or blocked storage falls back to the default order", () => {
-  assert.deepEqual(new SourceMemory(store({ "nocs.surveySource": "{bad" })).order(), ["cds", "skyview"]);
-  assert.deepEqual(new SourceMemory(store({ "nocs.surveySource": '{"source":"x","at":1}' })).order(), ["cds", "skyview"]);
+  assert.deepEqual(new SourceMemory(store({ "nocs.surveyMirror": "{bad" })).order(), ["irsa", "esa", "cds"]);
+  assert.deepEqual(new SourceMemory(store({ "nocs.surveyMirror": '{"source":"x","at":1}' })).order(), ["irsa", "esa", "cds"]);
   const throwing: KeyValueStore = {
     getItem: () => {
       throw new Error("blocked");
@@ -134,9 +317,9 @@ test("unreadable or blocked storage falls back to the default order", () => {
     },
   };
   const memory = new SourceMemory(throwing);
-  memory.worked("skyview");
-  assert.deepEqual(memory.order(), ["skyview", "cds"]);
-  assert.deepEqual(new SourceMemory(null).order(), ["cds", "skyview"]);
+  memory.worked("esa");
+  assert.deepEqual(memory.order(), ["esa", "irsa", "cds"]);
+  assert.deepEqual(new SourceMemory(null).order(), ["irsa", "esa", "cds"]);
 });
 
 test("a miss is told apart by its probe", () => {
@@ -146,43 +329,6 @@ test("a miss is told apart by its probe", () => {
   assert.equal(classify("error", "timeout"), "silent");
   assert.equal(classify("error", "failed"), "unreachable");
   assert.equal(classify("timeout", "failed"), "unreachable");
-});
-
-test("every miss is reported, in the order asked", async () => {
-  const memory = new SourceMemory(store());
-  const result = await fetchSurvey(
-    request,
-    memory,
-    loader({ cds: "timeout", skyview: "timeout" }, { cds: "timeout", skyview: "answered" }),
-    signal,
-  );
-  assert.deepEqual(result, {
-    offline: false,
-    misses: [
-      { source: "cds", miss: "silent" },
-      { source: "skyview", miss: "slow" },
-    ],
-  });
-  // Nothing worked: nothing remembered.
-  assert.deepEqual(memory.order(), ["cds", "skyview"]);
-});
-
-test("an offline device asks nobody", async () => {
-  const services = loader({ cds: "load" }, {}, false);
-  assert.deepEqual(await fetchSurvey(request, new SourceMemory(store()), services, signal), { offline: true, misses: [] });
-  assert.deepEqual(services.asked, []);
-});
-
-test("an aborted request ends in nothing", async () => {
-  const controller = new AbortController();
-  const services = loader({ cds: "timeout", skyview: "load" });
-  const asking: Source[] = [];
-  const pending = fetchSurvey(request, new SourceMemory(store()), services, controller.signal, (s) => {
-    asking.push(s);
-    controller.abort();
-  });
-  assert.equal(await pending, null);
-  assert.deepEqual(asking, ["cds"]);
 });
 
 test("the failure says what failed, in both languages", () => {
@@ -204,6 +350,10 @@ test("the failure says what failed, in both languages", () => {
     "No survey image: CDS and SkyView are not answering",
   );
   assert.ok(!en.chart.surveyOffline.includes("?"));
+  const four = ["IRSA", "ESA", "CDS", "SkyView"].map((service) => ({ service, miss: "unreachable" as const }));
+  assert.equal(en.chart.surveyFailed(four), "No survey image: IRSA, ESA, CDS, and SkyView cannot be reached. No internet on this device?");
+  assert.equal(es.chart.surveyFailed(four), "Sin imagen del survey: no se puede llegar a IRSA, ESA, CDS y SkyView. ¿Este dispositivo no tiene internet?");
+  assert.equal(en.chart.surveyCredit.tiles("ESA"), "Image: DSS2 colour by CDS, via ESA");
 });
 
 // A 4:3 view, `degrees` across its width.

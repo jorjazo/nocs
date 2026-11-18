@@ -1111,12 +1111,15 @@ export const es: Messages = {
     failed: "No se pudo cargar la carta.",
     noStars: "No hay catálogo de estrellas instalado: solo objetos de cielo profundo.",
     credit: "Estrellas: Tycho-2, ESA · Objetos: OpenNGC",
-    surveyCredit: { cds: "Imagen: DSS2 vía CDS hips2fits", skyview: "Imagen: DSS2 roja vía NASA SkyView" },
+    surveyCredit: {
+      tiles: (mirror) => `Imagen: DSS2 en color de CDS, vía ${mirror}`,
+      skyview: "Imagen: DSS2 roja vía NASA SkyView",
+    },
     ownCredit: (count) => (count === 1 ? "Imagen: uno de tus cuadros" : `Imágenes: ${count} de tus cuadros`),
     surveyAsking: (service) => `Pidiendo la imagen del survey a ${service}…`,
     surveyOffline: "Sin imagen del survey: este dispositivo no tiene conexión",
     surveyFailed: (misses) => {
-      const all = misses.map((m) => m.service).join(" y ");
+      const all = new Intl.ListFormat("es", { type: "conjunction" }).format(misses.map((m) => m.service));
       const [first] = misses;
       if (first && misses.length > 1 && misses.every((m) => m.miss === first.miss)) {
         const together = {
@@ -1361,7 +1364,7 @@ export const es: Messages = {
     solvingOne: "Resolviendo la light con más estrellas…",
     solveFailed: "Ese cuadro no se resolvió.",
     survey: "Imagen del survey",
-    surveyHint: "Una imagen DSS2 bajo la carta, de CDS o NASA SkyView, que descarga este dispositivo cuando tiene internet.",
+    surveyHint: "Una imagen DSS2 en color bajo la carta, de IRSA, ESA o CDS (o NASA SkyView), que descarga este dispositivo cuando tiene internet.",
     choose: "Elegir para esta noche",
     update: "Actualizar el objetivo",
     goesToFrame: "Ir e Ir y centrar van a donde apunta el cuadro, no al centro del objeto.",

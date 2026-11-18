@@ -561,12 +561,20 @@ Tonight and Plan (stage 3.6):
 - The framing chart (stage 3.7b) draws the last solved frame dashed where it
   landed, and under the rotation slider says how far to turn the camera from that
   frame's angle to the framing's, with "Use the camera's angle". "Survey image" (off
-  by default, kept per device) puts a DSS image under the chart, fetched by the
-  phone itself from CDS, or NASA SkyView when CDS does not answer; the service that
-  worked last is asked first. A view wider than 5° gets an image of its middle only
-  (SkyView is too slow for more). While loading, the caption names the service
-  being asked; without an image it says why, per service ("CDS not answering ·
-  SkyView too slow for this view", "cannot be reached. No internet on this
+  by default, kept per device) puts DSS2 in colour under the chart: the phone
+  itself fetches the survey's HiPS tiles and draws them in the chart's projection,
+  from IRSA, ESA or CDS (mirrors of the same tiles; the one that worked last is
+  asked first, for 20 h). Any view gets its whole image, at the screen's pixels,
+  in a second or two; tiles are asked as the view moves (and a little past its
+  edges), and the tiles already loaded stand in while the ones the new zoom needs
+  come: coarser ones zooming in, finer ones zooming out. A mirror that fails a
+  tile (5 s without it) is skipped for five minutes by every chart, across reloads,
+  then asked again by itself; when none answers, NASA SkyView's DSS2 red covers the
+  view's middle 5° at most (it is too slow for more), until the mirrors' tiles cover
+  the view again. While loading, the caption names the service being asked, and
+  then credits the mirror; without an image it says why, per service ("IRSA not
+  answering · ESA not answering · CDS answered with an error · SkyView too slow for
+  this view", "IRSA, ESA, CDS, and SkyView cannot be reached. No internet on this
   device?", "this device is offline"). In Night mode it is drawn in red only.
 
 Sequence builder (stage 5.13):
