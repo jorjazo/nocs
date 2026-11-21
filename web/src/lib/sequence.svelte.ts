@@ -380,6 +380,7 @@ export function describeEvent(event: SequenceEvent, t: Messages, locale: string)
       const name = typeof data.name === "string" ? data.name : event.message;
       if (data.why === "priority") return e.targetFirst(name);
       if (data.why === "changed") return e.targetChanged(name);
+      if (data.why === "left_out") return e.leftOut(name, typeof data.until === "string" ? formatTime(data.until, locale) : "?");
       return e.target(name);
     }
     case "trigger": {

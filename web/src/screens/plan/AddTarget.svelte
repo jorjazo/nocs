@@ -132,10 +132,13 @@
         type: "light",
         target: group.target ?? undefined,
         filter: group.filter ?? undefined,
-        limit: 20,
+        limit: 50,
       });
-      // The one with the most stars, on a drive that is plugged in.
-      const best = frames.filter((f) => f.available).sort((a, b) => (b.stars ?? 0) - (a.stars ?? 0))[0];
+      // The group's (the query cannot ask for no target or no filter), the one with the
+      // most stars, on a drive that is plugged in.
+      const best = frames
+        .filter((f) => f.available && f.target === group.target && f.filter === group.filter)
+        .sort((a, b) => (b.stars ?? 0) - (a.stars ?? 0))[0];
       if (!best) {
         frameError = p.frameUnavailable;
         return;
@@ -148,10 +151,25 @@
 
   // When the solve ends: its centre and angle make the new target, or what failed.
   const job = $derived(solving ? (live.app.jobs?.[solving.job] ?? null) : null);
+  // A job seen once and then gone (nocsd restarted, or it was let go): not waited for.
+  let seenJob = false;
   $effect(() => {
     const done = job;
     const asked = solving;
-    if (!done || !asked || done.state === "running") return;
+    if (!asked) {
+      seenJob = false;
+      return;
+    }
+    if (!done) {
+      if (seenJob) {
+        solving = null;
+        seenJob = false;
+        frameError = p.solveLost;
+      }
+      return;
+    }
+    seenJob = true;
+    if (done.state === "running") return;
     solving = null;
     const result = done.result as { ra?: unknown; dec?: unknown; rotation?: unknown } | null;
     if (done.state !== "succeeded" || typeof result?.ra !== "number" || typeof result.dec !== "number") {

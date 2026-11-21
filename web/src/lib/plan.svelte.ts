@@ -2,11 +2,15 @@
 // change. The frames each line has are the server's: they come into the draft in
 // place (sheets keep editing the same objects), and a save never sends them back.
 
-import { savePlan } from "./api";
+import { ApiError, savePlan } from "./api";
+import { errorText } from "./errors";
+import { i18n } from "./i18n";
 import { copyDone, planShape } from "./plan";
 import type { NightPlan } from "./types";
 
 const SAVE_AFTER = 600;
+// A save that failed (no link, say) is tried again this long after.
+const RETRY_AFTER = 5000;
 
 class PlanDraft {
   draft: NightPlan | null = $state(null);
@@ -49,10 +53,12 @@ class PlanDraft {
     }
   }
 
-  async save(): Promise<void> {
+  // Save what changed; whether the server has the draft as it is now.
+  async save(): Promise<boolean> {
+    if (this.timer !== null) clearTimeout(this.timer);
     this.timer = null;
     const draft = this.draft;
-    if (!draft || !this.dirty) return;
+    if (!draft || !this.dirty) return true;
     const body = $state.snapshot(draft);
     const shape = planShape(body);
     this.saving = true;
@@ -60,8 +66,13 @@ class PlanDraft {
       await savePlan(body);
       this.saved = shape;
       this.error = "";
+      return !this.dirty;
     } catch (e) {
-      this.error = e instanceof Error ? e.message : String(e);
+      this.error = errorText(e, i18n.t);
+      // No link, or the box busy: tried again by itself, the changes stay in this draft
+      // meanwhile. A plan the server refuses stays as it is until it is changed.
+      if (!(e instanceof ApiError) || e.status >= 500) this.timer = setTimeout(() => void this.save(), RETRY_AFTER);
+      return false;
     } finally {
       this.saving = false;
     }
@@ -85,6 +96,15 @@ export function setPending(point: NewPoint): void {
 }
 
 let pendingPoint: NewPoint | null = null;
+
+export function clearPending(): void {
+  pendingPoint = null;
+  try {
+    sessionStorage.removeItem(PENDING);
+  } catch {
+    // Blocked: nothing was kept there.
+  }
+}
 
 export function getPending(): NewPoint | null {
   try {

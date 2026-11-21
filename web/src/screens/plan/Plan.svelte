@@ -159,8 +159,8 @@
 
   function start(): void {
     void act("start", async () => {
-      plan.flush();
-      await plan.save();
+      // The plan as shown, or none: a run of what the server had would surprise.
+      if (!(await plan.save())) throw new Error(plan.error || t.planView.notSaved);
       await startPlan();
     });
   }

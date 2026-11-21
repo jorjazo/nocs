@@ -19,7 +19,7 @@ from nocs.clock import Clock
 from nocs.config import Settings
 from nocs.devices import Location
 from nocs.jobs import JobManager
-from nocs.plan import NightPlan, PlanBusyError, PlanService, expand
+from nocs.plan import NightPlan, PlanService, expand
 from nocs.sequence import CheckpointFile, SequenceError, SequenceStore
 from nocs.sequence.model import (
     Actions,
@@ -77,9 +77,11 @@ async def test_the_plan_is_kept_and_published(tmp_path: Path) -> None:
     assert PlanService(StateStore(), tmp_path).plan == plan
 
 
-def test_an_unreadable_plan_is_ignored(tmp_path: Path) -> None:
+def test_an_unreadable_plan_is_moved_aside(tmp_path: Path) -> None:
     (tmp_path / "plan.json").write_text('{"target": {"name": "SMC"}}')
     assert PlanService(StateStore(), tmp_path).plan == NightPlan()
+    assert not (tmp_path / "plan.json").exists()
+    assert (tmp_path / "plan.json.unreadable").read_text() == '{"target": {"name": "SMC"}}'
 
 
 async def test_the_server_counts_the_frames(tmp_path: Path) -> None:
@@ -133,7 +135,6 @@ async def test_a_target_without_frames_left_is_not_chosen(tmp_path: Path) -> Non
     await service.taken(choice, 0)
     assert service.choose(NIGHT, ()) is None
     assert not service.pending()
-    assert PlanService(StateStore(), tmp_path).choose(NIGHT, ()) is None  # no site
 
 
 def _chosen(service: PlanService, when: datetime, skipped: set[str] | None = None) -> str | None:
@@ -142,11 +143,21 @@ def _chosen(service: PlanService, when: datetime, skipped: set[str] | None = Non
 
 
 async def test_while_it_runs_only_its_targets_change(tmp_path: Path) -> None:
-    service = PlanService(StateStore(), tmp_path)
+    service = PlanService(StateStore(), tmp_path, place=lambda: DIAGUITAS)
     await service.put(plan_of({**SMC, "lines": [line("a", 1)]}))
-    await service.put(plan_of({**SMC, "lines": [line("a", 2)]}, ORION), running=True)
-    with pytest.raises(PlanBusyError):
-        await service.put(plan_of(guide=True), running=True)
+    await service.put(plan_of({**SMC, "lines": [line("a", 2)]}, ORION, guide=True), running=True)
+    assert [t.id for t in service.plan.targets] == ["smc", "m42"]
+    assert not service.plan.actions.guide
+    # The target taken is as chosen until it changes, is done or leaves the plan.
+    choice = service.choose(NIGHT, ())
+    assert choice is not None
+    assert service.unchanged(choice)
+    await service.put(plan_of({**SMC, "lines": [line("a", 3)]}))
+    assert not service.unchanged(choice)
+    await service.put(plan_of(ORION))
+    assert not service.unchanged(choice)
+    with pytest.raises(ValueError, match="site"):
+        PlanService(StateStore(), tmp_path).choose(NIGHT, ())
 
 
 def test_the_plan_runs_as_a_sequence() -> None:
@@ -167,6 +178,10 @@ def test_the_plan_runs_as_a_sequence() -> None:
     assert (schedule.every, schedule.focus_first) == (10, True)
     assert schedule.each.conditions == [WhileAbove(altitude=25)]
     assert schedule.each.children == [Slew(), Guide(on=True)]
+    # Above the horizon at least, without a minimum.
+    bare = expand(NightPlan(actions=Actions(min_altitude=None))).targets.children[1]
+    assert isinstance(bare, Schedule)
+    assert bare.each.conditions == [WhileAbove(altitude=0)]
     assert [t.kind for t in schedule.each.triggers] == ["autofocus", "flip"]
     assert [c.kind for c in sequence.end.children] == ["guide", "park", "warm"]
     centred = expand(NightPlan()).targets.children[1]

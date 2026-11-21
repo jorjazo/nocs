@@ -32,8 +32,9 @@ from nocs.sequence.model import (
     Unpark,
     UntilDawn,
     Wait,
+    WhileAbove,
 )
-from nocs.sequence.template import above, end_steps, focus_at_start, triggers
+from nocs.sequence.template import end_steps, focus_at_start, triggers
 
 PLAN_ID = "plan"
 """The sequence a plan runs as: kept among the sequences, never listed with them."""
@@ -144,7 +145,9 @@ def expand(plan: NightPlan) -> Sequence:
     steps: list[Node] = [Center() if actions.center else Slew()]
     if actions.guide:
         steps.append(Guide(on=True))
-    each = Container(conditions=above(actions), triggers=triggers(actions), children=steps)
+    # Above the horizon at least: a target is chosen only while it is.
+    up: list[Condition] = [WhileAbove(altitude=actions.min_altitude or 0)]
+    each = Container(conditions=up, triggers=triggers(actions), children=steps)
     children: list[Node] = []
     if actions.start_at_dusk:
         children.append(Wait(dusk=actions.darkness))

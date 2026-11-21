@@ -1444,6 +1444,9 @@ export const es: Messages = {
     noLights: "Esa noche no hay lights.",
     frameUnavailable: "Esas tomas están en un disco que no está conectado.",
     solving: (name) => `Resolviendo una toma de ${name}…`,
+    notSaved: "Los cambios del plan aún no se guardan.",
+    noVisibility: "No se pudo calcular su altura esta noche.",
+    solveLost: "La resolución se perdió (¿se reinició la caja?): inténtalo de nuevo.",
   },
   targetTypes: {
     star: "Estrella",
@@ -1913,6 +1916,7 @@ export const es: Messages = {
       targetFirst: (name) => `Objetivo: ${name}, primero en prioridad`,
       targetChanged: (name) => `Objetivo: ${name}, con sus cambios`,
       noneUp: "Ningún objetivo arriba: esperando",
+      leftOut: (name, until) => `${name} queda fuera hasta las ${until}`,
       focusDue: (reason) => `Toca enfocar: ${reason}`,
       focusReason: {
         filter: (name) => `el filtro cambió a ${name}`,

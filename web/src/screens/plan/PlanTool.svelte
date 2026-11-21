@@ -70,7 +70,7 @@
           </li>
         {/each}
       </ol>
-    {:else if active}
+    {:else if active && run?.step?.kind === "schedule"}
       <p class="muted small">{p.noTarget}</p>
     {/if}
     {#if active && run}

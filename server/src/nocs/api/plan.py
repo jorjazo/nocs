@@ -12,7 +12,7 @@ from fastapi import APIRouter, HTTPException, Response, status
 
 from nocs.api.schemas import JobStarted
 from nocs.api.sequences import sequence_errors
-from nocs.plan import NightPlan, PlanBusyError, PlanService, expand
+from nocs.plan import NightPlan, PlanService, expand
 from nocs.sequence.service import SequenceService
 
 
@@ -28,11 +28,13 @@ def plan_router(
     @router.put("", status_code=status.HTTP_204_NO_CONTENT)
     async def put(body: NightPlan) -> Response:  # pyright: ignore[reportUnusedFunction]
         """Keep the plan; each line keeps the frames it has (``done`` is the server's).
-        While it runs, what it does around its targets cannot change."""
+        While it runs, what it does around its targets stays as it is."""
         try:
             await plan().put(body, running=sequences().running_plan)
-        except PlanBusyError as e:
-            raise HTTPException(status.HTTP_409_CONFLICT, str(e)) from e
+        except OSError as e:
+            raise HTTPException(
+                status.HTTP_507_INSUFFICIENT_STORAGE, f"cannot write the plan: {e}"
+            ) from e
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     @router.post("/targets/{target_id}/reset", status_code=status.HTTP_204_NO_CONTENT)

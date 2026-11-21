@@ -3,7 +3,8 @@
 Kept in ``<config dir>/plan.json`` and published whole under ``("plan",)``: every
 client shows the same targets and how far each line is. Lines count their frames
 here (``taken``), so a plan goes on where it was on another night; a client's
-``done`` is never taken over (``put`` keeps the server's).
+``done`` is never taken over (``put`` keeps the server's). A plan.json that cannot be
+read is moved aside (``plan.json.unreadable``), not overwritten by the next change.
 """
 
 from __future__ import annotations
@@ -30,10 +31,6 @@ FILE_NAME = "plan.json"
 STATE: tuple[str, ...] = ("plan",)
 
 
-class PlanBusyError(Exception):
-    """The change cannot be made while the plan runs."""
-
-
 class PlanService:
     def __init__(
         self,
@@ -53,13 +50,11 @@ class PlanService:
 
     async def put(self, plan: NightPlan, *, running: bool = False) -> NightPlan:
         """Keep ``plan``, with the frames each line has here. While it runs, its targets
-        and lines change (what it takes next) but not what it does around them."""
-        if running and (
-            plan.actions != self.plan.actions or plan.start_outputs != self.plan.start_outputs
-        ):
-            raise PlanBusyError("the plan is running: what it does around its targets is fixed")
+        and lines change (what it takes next) but not what it does around them: those
+        stay as they are."""
         done = {line.id: line.done for target in self.plan.targets for line in target.lines}
-        kept = plan.model_copy(deep=True)
+        update = {"actions": self.plan.actions, "start_outputs": self.plan.start_outputs}
+        kept = plan.model_copy(deep=True, update=update if running else None)
         for target in kept.targets:
             for line in target.lines:
                 line.done = done.get(line.id, 0)
@@ -81,7 +76,7 @@ class PlanService:
     def choose(self, now: datetime, skipped: Collection[str]) -> Choice | None:
         place = self._place()
         if place is None:
-            return None
+            raise ValueError("the site is unknown: choose the site")
         minimum = self.plan.actions.min_altitude or 0.0
         for target in self.plan.targets:
             if target.id in skipped or target.left == 0:
@@ -93,6 +88,12 @@ class PlanService:
 
     def pending(self) -> bool:
         return self.plan.left > 0
+
+    def unchanged(self, choice: Choice) -> bool:
+        target = self.plan.target(choice.key)
+        return (
+            target is not None and target.left > 0 and _choice(target).revision == choice.revision
+        )
 
     async def taken(self, choice: Choice, row: int) -> None:
         line_id = choice.lines[row]
@@ -112,7 +113,12 @@ class PlanService:
         except FileNotFoundError:
             return NightPlan()
         except (OSError, ValidationError) as e:
-            log.warning("ignoring unreadable %s: %s", self._path, e)
+            aside = self._path.with_name(FILE_NAME + ".unreadable")
+            log.warning("cannot read %s (moved to %s): %s", self._path, aside.name, e)
+            try:
+                self._path.replace(aside)
+            except OSError as moving:
+                log.warning("cannot move %s aside: %s", self._path, moving)
             return NightPlan()
 
     async def _save(self) -> None:

@@ -37,7 +37,7 @@
   import { live } from "../../lib/live.svelte";
   import { formatDec, formatRa, mountActivity } from "../../lib/mount.svelte";
   import { newId, newLine, planIds, targetSeconds } from "../../lib/plan";
-  import { getPending, plan } from "../../lib/plan.svelte";
+  import { clearPending, getPending, plan } from "../../lib/plan.svelte";
   import { prefs } from "../../lib/prefs.svelte";
   import { href, router } from "../../lib/router.svelte";
   import { separation, type Sky } from "../../lib/sky/projection";
@@ -86,9 +86,12 @@
   const already = $derived(objectId ? ((plan.draft?.targets ?? []).find((each) => each.object === objectId) ?? null) : null);
 
   let object = $state<CatalogObject | null>(null);
+  // A plan target's catalog object that could not be had.
+  let unknown = $state(false);
   let missing = $state(false);
   let failed = $state("");
   let seen = $state<TargetVisibility | null>(null);
+  let unseen = $state(false);
   const minAltitude = $derived(plan.draft?.actions?.min_altitude ?? 30);
 
   function freshTarget(name: string, ra: number, dec: number, rotation: number | null, catalog: string | null): PlanTarget {
@@ -105,6 +108,7 @@
     const designation = catalogId;
     object = null;
     missing = false;
+    unknown = false;
     failed = "";
     if (!designation) return;
     getTarget(designation)
@@ -121,7 +125,9 @@
       })
       .catch((e) => {
         if (designation !== catalogId) return;
-        if (e instanceof ApiError && e.status === 404) missing = true;
+        // A plan target carries its own position: only its names are missing then.
+        if (!objectId) unknown = true;
+        else if (e instanceof ApiError && e.status === 404) missing = true;
         else failed = errorText(e, t);
       });
   });
@@ -168,12 +174,15 @@
     const key = visibilityKey;
     const minimum = minAltitude;
     seen = null;
+    unseen = false;
     if (!key) return;
     getVisibility([key], minimum)
       .then((v) => {
         if (key === visibilityKey) seen = v.targets[0] ?? null;
       })
-      .catch(() => {});
+      .catch(() => {
+        if (key === visibilityKey) unseen = true;
+      });
   });
 
   // -- Framing ------------------------------------------------------------------------
@@ -228,7 +237,7 @@
       const found = await getSolvedFrames(where.ra, where.dec, radius, label);
       if (anchor && separation(anchor, where) < 1e-6) mine = found;
     } catch {
-      mine = null;
+      if (anchor && separation(anchor, where) < 1e-6) mine = null;
     }
   }
 
@@ -303,7 +312,9 @@
     const target = fresh;
     if (!draft || !target) return;
     draft.targets = [...(draft.targets ?? []), $state.snapshot(target)];
-    plan.flush();
+    void plan.save();
+    // Back here must not offer the same point again.
+    if (!objectId) clearPending();
     router.go({ screen: "plan-target", id: target.id });
   }
 
@@ -311,14 +322,14 @@
     const draft = plan.draft;
     if (!draft || !existing) return;
     draft.targets = (draft.targets ?? []).filter((each) => each.id !== existing.id);
-    plan.flush();
+    void plan.save();
     router.go({ screen: "plan-edit" });
   }
 
   async function reset(): Promise<void> {
     if (!existing) return;
     try {
-      plan.flush();
+      await plan.save();
       await resetPlanTarget(existing.id);
     } catch (e) {
       error = errorText(e, t);
@@ -366,7 +377,7 @@
 </script>
 
 <div class="page">
-  <a class="back" href={href({ screen: existing || !objectId ? "plan-edit" : "plan-add" })}><Icon name="chevronLeft" />{existing ? p.targetsTitle : p.addTitle}</a>
+  <a class="back" href={href({ screen: existing ? "plan-edit" : "plan-add" })}><Icon name="chevronLeft" />{existing ? p.targetsTitle : p.addTitle}</a>
 
   {#if targetId && plan.draft && !existing}
     <EmptyState icon="plan" title={p.gone} body={p.goneBody} />
@@ -374,7 +385,7 @@
     <EmptyState icon="plan" title={t.plan.missing} body={objectId ? t.plan.missingBody(objectId) : p.noPoint} />
   {:else if failed}
     <Banner icon="alert" tone="error">{failed}</Banner>
-  {:else if !entry || (catalogId && !object)}
+  {:else if !entry || (catalogId && !object && !unknown)}
     <p class="muted" role="status">{t.plan.loading}</p>
   {:else}
     <header class="title">
@@ -445,6 +456,8 @@
         </div>
       {:else if tonight.missingSite}
         <p class="muted">{t.tonight.noSite}</p>
+      {:else if unseen}
+        <p class="muted">{p.noVisibility}</p>
       {:else}
         <p class="muted" role="status">{t.tonight.loading}</p>
       {/if}

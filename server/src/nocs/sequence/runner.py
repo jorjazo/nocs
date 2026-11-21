@@ -148,6 +148,10 @@ class Scheduler(Protocol):
         """Some target has frames left (up or not)."""
         ...
 
+    def unchanged(self, choice: Choice) -> bool:
+        """``choice``'s target is still in the plan as it was chosen, with frames left."""
+        ...
+
     async def taken(self, choice: Choice, row: int) -> None:
         """A frame of ``choice``'s ``row`` was kept: count it in its line."""
         ...
@@ -355,10 +359,11 @@ class _SkipTarget(Exception):
 
 
 class _Preempt(Exception):
-    """A schedule leaves its target between frames: another comes first, or it changed."""
+    """A schedule leaves its target between frames: another comes first (``priority``),
+    or it changed or left the plan (``changed``)."""
 
-    def __init__(self, choice: Choice) -> None:
-        self.choice = choice
+    def __init__(self, why: str) -> None:
+        self.why = why
 
 
 class _ConditionEnded(Exception):
@@ -419,6 +424,8 @@ class Runner:
         self._scheduled: _Scheduled | None = None
         self._skipped: dict[str, datetime] = {}
         """Targets a schedule leaves out, until when."""
+        self._uncounted = False
+        """A frame could not be counted in the plan (said once)."""
         self._sleep = sleep
         self._guard_sleep = guard_sleep
         """The guard's own clock: real time, even when the steps' waits are faked."""
@@ -962,9 +969,15 @@ class Runner:
                 if isinstance(child, Container):
                     walk(child)
 
-        walk(self._sequence.targets)
-        if self._scheduled is not None:
-            walk(self._scheduled.container)
+        def walk_all(container: Container) -> None:
+            walk(container)
+            for child in container.children:
+                if isinstance(child, Schedule):
+                    walk(child.each)  # a target the schedule left keeps its guard
+                elif isinstance(child, Container):
+                    walk_all(child)
+
+        walk_all(self._sequence.targets)
         return found
 
     def _due(self, trigger: Trigger, row: PlanRow) -> str | None:
@@ -1142,19 +1155,30 @@ class Runner:
         scheduled = _Scheduled(
             choice, schedule, container, here, f"{here}.{len(children) - 1}", self._now()
         )
+        # Its rows are what is left: a row's index may be another line's than last time.
+        for row_key in [k for k in self._stars if k[0] == scheduled.plan]:
+            del self._stars[row_key]
         self._scheduled = scheduled
         data: dict[str, Json] = {"target": choice.key, "name": choice.target.name, "why": why}
         self._event(EventKind.TARGET, choice.target.name, here, data)
         try:
             await self._container(container, inner, None)
         except _Preempt as preempt:
-            return "changed" if preempt.choice.key == choice.key else "priority"
+            return preempt.why
         finally:
             self._scheduled = None
             self._on_change()
         if scheduled.skipped or scheduled.frames == 0:
             # Given up, or set before a frame: the others first for a while.
-            self._skipped[choice.key] = self._now() + SKIP_TARGET
+            until = self._now() + SKIP_TARGET
+            self._skipped[choice.key] = until
+            left_out: dict[str, Json] = {
+                "target": choice.key,
+                "name": choice.target.name,
+                "why": "left_out",
+                "until": until.isoformat(timespec="seconds"),
+            }
+            self._event(EventKind.TARGET, choice.target.name, here, left_out)
         return "next"
 
     def _look(self, plan: PathKey, index: int) -> None:
@@ -1163,6 +1187,8 @@ class Runner:
         scheduled = self._scheduled
         if scheduled is None or scheduled.plan != plan or self._scheduler is None:
             return
+        if not self._scheduler.unchanged(scheduled.choice):
+            raise _Preempt("changed")  # edited, done, or gone from the plan: before any frame
         now = self._now()
         line_ended = scheduled.row is not None and scheduled.row != index
         minutes = (now - scheduled.looked).total_seconds() / 60
@@ -1172,18 +1198,19 @@ class Runner:
         choice = self._scheduler.choose(now, self._left_out(now))
         if choice is None:
             return  # nothing up: this one's own conditions say when it sets
-        current = scheduled.choice
-        if choice.key != current.key or choice.revision != current.revision:
-            raise _Preempt(choice)
+        if choice.key != scheduled.choice.key:
+            raise _Preempt("priority")
 
     async def _count(self, choice: Choice, row: int) -> None:
         assert self._scheduler is not None
         try:
             await self._scheduler.taken(choice, row)
-        except Exception as e:  # the frame is kept: only the plan's count is behind
-            log.warning(
-                "sequence %s: cannot count a frame of %s: %s", self._sequence.name, choice.key, e
-            )
+        except OSError as e:  # the frame is kept: only the plan's count on disk is behind
+            message = f"cannot count a frame of {choice.target.name} in the plan: {e}"
+            log.warning("sequence %s: %s", self._sequence.name, message)
+            if not self._uncounted:
+                self._uncounted = True
+                self._event(EventKind.FAILED, message, self._current, {"kind": "storage"})
 
     def _left_out(self, now: datetime) -> set[str]:
         for target in [t for t, until in self._skipped.items() if until <= now]:

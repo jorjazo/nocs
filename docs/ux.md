@@ -669,16 +669,19 @@ Plan:
   altitude and the site's horizon) with frames left; it centres it (or goes to it),
   guides when asked, focuses on the first one, and takes its lines in order. Every
   10 minutes, and whenever a line ends, it looks again: between two frames (never
-  cutting one) it goes to a target that now comes first, or takes the same afresh
-  when it was changed. A target that fails (a solve, say) or sets before a frame
-  waits 15 minutes while the others are taken. With none up it waits, until one
-  rises or the night ends.
+  cutting one) it goes to a target that now comes first. A target that fails (a
+  solve, say) or sets before a frame is left out 15 minutes while the others are
+  taken (the events say until when). With none up it waits, until one rises or the
+  night ends. Without a minimum altitude a target is still taken only above the
+  horizon. A plan.json that cannot be read is moved aside, not overwritten.
 - The panel: Last frame · Stack, the plan's targets and frames left (to the targets'
   page), then what it does: At the start (outputs switched on, such as dew heaters,
   shown when there is a power box), Autofocus, Centring, Guiding, Meridian flip,
   Dither, Night (dusk, dawn, minimum altitude), Cooling (off or one temperature),
-  When it ends by itself. These are fixed while it runs; its targets are not: they
-  count from the next look. Changes are saved a moment after they are made.
+  When it ends by itself. These stay as they are while it runs; its targets do not:
+  a change to the target it takes (or removing it) counts before its next frame, the
+  rest at the next look. Changes are saved a moment after they are made, and tried
+  again while the box cannot be reached; Start saves them first.
 - The dock: Start the plan (off while Explore or a sequence works, or with no frames
   left), then Pause (Pause now while pausing), Resume and Stop…: after this frame or
   now, always leaving the rig as it is. The end (park, warm, outputs off) runs only

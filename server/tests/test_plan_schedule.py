@@ -8,6 +8,7 @@ from test_sequence import START, Rig, frames
 
 from nocs.sequence import Container, EventKind, Outcome, Runner, Sequence, StepError, Target
 from nocs.sequence.model import (
+    FlipTrigger,
     Park,
     PlanRow,
     Schedule,
@@ -64,18 +65,26 @@ class Plan:
                 ],
                 lines=[line.id for line in lines],
                 done=[line.done for line in lines],
-                revision=",".join(f"{line.id}:{line.count}:{line.exposure}" for line in aim.lines),
+                revision=_revision(aim),
             )
         return None
 
     def pending(self) -> bool:
         return any(aim.left for aim in self.targets)
 
+    def unchanged(self, choice: Choice) -> bool:
+        aim = next((a for a in self.targets if a.id == choice.key), None)
+        return aim is not None and aim.left > 0 and _revision(aim) == choice.revision
+
     async def taken(self, choice: Choice, row: int) -> None:
         for aim in self.targets:
             for line in aim.lines:
                 if line.id == choice.lines[row]:
                     line.done += 1
+
+
+def _revision(aim: Aim) -> str:
+    return ",".join(f"{line.id}:{line.count}:{line.exposure}" for line in aim.lines)
 
 
 def plan_night(every: float = 10, hours: float = 8) -> Sequence:
@@ -186,6 +195,7 @@ async def test_a_target_given_up_waits_while_the_others_are_taken() -> None:
     # which is waited for, and taken again.
     assert targets_taken(events) == [
         ("m42", "start"),
+        ("m42", "left_out"),
         ("m8", "next"),
         (None, "none"),
         ("m42", "next"),
@@ -217,9 +227,46 @@ async def test_a_target_changed_while_it_is_taken_is_taken_afresh() -> None:
     rig.on_frame = edit
     run, events = runner(rig, plan)
     await run.run()
-    # From the next look on, 10 minutes in.
-    assert frames(rig) == ["L 60"] * 10 + ["L 120"] * 4
+    # Before its next frame.
+    assert frames(rig) == ["L 60"] * 2 + ["L 120"] * 12
     assert targets_taken(events)[:2] == [("m42", "start"), ("m42", "changed")]
+
+
+async def test_a_target_removed_while_it_is_taken_is_left_at_once() -> None:
+    rig = Rig()
+    plan = Plan([Aim("m42", [Line("a", "L", 30)]), Aim("m8", [Line("b", "R", 1)])])
+
+    def remove(n: int) -> None:
+        if n == 2:
+            del plan.targets[0]
+
+    rig.on_frame = remove
+    run, _ = runner(rig, plan)
+    await run.run()
+    assert frames(rig) == ["L 60", "L 60", "R 60"]
+
+
+async def test_a_line_taken_again_is_not_judged_by_another_lines_stars() -> None:
+    rig = Rig()
+    rises = START + timedelta(minutes=1)
+    # m42's L has many stars; its Ha few. m8 takes over once L ends, then m42 comes
+    # back with Ha alone, in the row L had.
+    rig.stars = lambda n: 2000 if n <= 2 else 150
+    first = Aim("m42", [Line("a", "L", 2), Line("b", "Ha", 2)])
+    second = Aim("m8", [Line("c", "R", 1)], up=lambda now: now >= rises)
+    plan = Plan([second, first])
+    run, _ = runner(rig, plan)
+    assert await run.run() is Outcome.COMPLETED
+    assert first.lines[1].done == 2
+
+
+async def test_the_meridian_guard_watches_while_no_target_is_taken() -> None:
+    sequence = plan_night()
+    schedule = sequence.targets.children[0]
+    assert isinstance(schedule, Schedule)
+    schedule.each.triggers.append(FlipTrigger())
+    run, _ = runner(Rig(), Plan([]), sequence)
+    assert [t.kind for t in run._flip_triggers()] == ["flip"]  # pyright: ignore[reportPrivateUsage]
 
 
 async def test_the_status_shows_the_target_and_its_lines() -> None:

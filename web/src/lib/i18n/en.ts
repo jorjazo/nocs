@@ -1468,6 +1468,9 @@ export const en = {
     noLights: "No lights that night.",
     frameUnavailable: "Those frames are on a drive that is not plugged in.",
     solving: (name: string) => `Solving a light of ${name}…`,
+    notSaved: "The plan's changes are not saved yet.",
+    noVisibility: "Its altitude tonight could not be worked out.",
+    solveLost: "The solve was lost (did the box restart?): try again.",
   },
   targetTypes: {
     star: "Star",
@@ -1939,6 +1942,7 @@ export const en = {
       targetFirst: (name: string) => `Target: ${name}, first in priority`,
       targetChanged: (name: string) => `Target: ${name}, as changed`,
       noneUp: "No target up: waiting",
+      leftOut: (name: string, until: string) => `${name} left out until ${until}`,
       focusDue: (reason: string) => `Autofocus due: ${reason}`,
       focusReason: {
         filter: (name: string) => `the filter changed to ${name}`,
