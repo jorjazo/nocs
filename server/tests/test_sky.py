@@ -28,7 +28,7 @@ from nocs.sites import HorizonPoint, Site, SiteFile, SiteStore
 from nocs.sky import Target, horizon_altitude, night, tonight, visibility
 from nocs.sky.almanac import TWILIGHTS
 from nocs.sky.bodies import Body, position, separation
-from nocs.sky.ephemeris import illumination, pressure, refraction, sky
+from nocs.sky.ephemeris import illumination, planet, pressure, refraction, sky
 from nocs.targets import bundled_catalog
 
 TOLOLO = Location(-(30 + 10 / 60), -(70 + 49 / 60), 0)
@@ -472,3 +472,12 @@ def test_search_finds_the_planets_that_are_up(client: TestClient) -> None:
         if bodies:
             assert found[0]["frame"] == "jnow"
             assert found[0]["ra"] == pytest.approx(seen.jnow.ra, abs=0.01)
+
+
+def test_planets_at_many_instants_at_once() -> None:
+    times = [datetime(2026, 11, 21, h, tzinfo=UTC).timestamp() for h in (0, 6, 12)]
+    together = planet(sky(DIAGUITAS, times), "jupiter")
+    for i, t in enumerate(times):
+        alone = planet(sky(DIAGUITAS, [t]), "jupiter")
+        assert together.alt[i] == pytest.approx(alone.alt[0], abs=1e-6)
+        assert together.az[i] == pytest.approx(alone.az[0], abs=1e-6)

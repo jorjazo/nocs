@@ -704,6 +704,7 @@ export const en = {
     delete: "Delete",
     deleteConfirm: "Delete the file",
     locked: "Settings are locked while recording.",
+    recordingHolds: "The mount stays still while recording.",
     ownerOnly: "Only the owner can use the video.",
     cameraBusy: "The main camera is busy with something else: stop it there first.",
     needsStream: "Start the video to record.",

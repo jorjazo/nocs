@@ -318,7 +318,7 @@
                 autofocus={null}
                 autofocusable={false}
                 {owner}
-                locked={focuserJob !== null && focuserJob.info.kind !== "focus"}
+                locked={recording !== null || (focuserJob !== null && focuserJob.info.kind !== "focus")}
                 cameraBusy={false}
                 open={exploreLayout.open("focus")}
                 ontoggle={() => exploreLayout.toggle("focus")}
@@ -338,7 +338,12 @@
           {/snippet}
           {#snippet side()}
             {#if mount}
-              <GoToTool {mount} {owner} open={exploreLayout.open("goto")} ontoggle={() => exploreLayout.toggle("goto")} />
+              <GoToTool
+                {mount}
+                {owner}
+                held={recording ? t.video.recordingHolds : null}
+                open={exploreLayout.open("goto")}
+                ontoggle={() => exploreLayout.toggle("goto")} />
             {/if}
           {/snippet}
         </ImageOverlay>

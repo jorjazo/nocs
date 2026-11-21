@@ -683,6 +683,7 @@ export const es: Messages = {
     delete: "Borrar",
     deleteConfirm: "Borrar el archivo",
     locked: "Los ajustes están bloqueados mientras graba.",
+    recordingHolds: "La montura queda quieta mientras graba.",
     ownerOnly: "Solo el dueño puede usar el video.",
     cameraBusy: "La cámara principal está ocupada en otra cosa: detenla ahí primero.",
     needsStream: "Inicia el video para grabar.",

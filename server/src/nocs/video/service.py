@@ -36,7 +36,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import anyio
 
@@ -48,7 +48,7 @@ from nocs.indi import IndiClient
 from nocs.jobs import JobContext, JobManager
 from nocs.state import Json, StateStore
 from nocs.state import Path as StatePath
-from nocs.storage import StorageService, VideoPlace
+from nocs.storage import StorageError, StorageService, VideoPlace
 from nocs.storage.layout import clean
 from nocs.video.frames import FrameError, Rendered, render
 from nocs.video.ser import HEADER, SerError, SerHeader, frames_written, read_header
@@ -69,6 +69,8 @@ STATS_PERIOD = 0.5
 CROP_WAIT = 5.0
 """Seconds a driver has to send its first frame once the stream is on (beyond the
 exposure)."""
+STOPPED_AFTER = 3.0
+"""Seconds the driver may say it does not stream before the video fails."""
 BAD_FRAMES = 20
 """Frames in a row that cannot be shown before it is logged."""
 BANDWIDTH = 90.0
@@ -239,9 +241,17 @@ class VideoService:
     def job(self) -> str | None:
         return self._job
 
+    def _live_job(self) -> str | None:
+        """The video's job while it runs: one cancelled before it started never ran
+        ``_run``, which forgets it at its end."""
+        if self._job is not None and self._store.get(("jobs", self._job, "state")) != "running":
+            self._job = None
+            self._publish()
+        return self._job
+
     def start_stream(self) -> str:
         """Start streaming as a job that holds the main camera until it is cancelled."""
-        if self._job is not None:
+        if self._live_job() is not None:
             raise VideoError("the video is already on")
         camera = self._camera()
         if not camera.can_stream:
@@ -252,8 +262,8 @@ class VideoService:
         return self._job
 
     def stop_stream(self) -> None:
-        if self._job is not None:
-            self._jobs.cancel(self._job)
+        if (job := self._live_job()) is not None:
+            self._jobs.cancel(job)
 
     async def configure(
         self,
@@ -328,11 +338,18 @@ class VideoService:
         fps = camera.stream_fps or 1 / self._settings.exposure
         count = frames if frames is not None else (seconds or 0) * fps
         expected = HEADER + int(frame_bytes * count)
-        place = await anyio.to_thread.run_sync(self._storage.video_place, expected)
-        if place.max_file is not None:
-            expected = min(expected, place.max_file)
+        place = await anyio.to_thread.run_sync(self._storage.video_place, HEADER)
         token: str | None = None
         try:
+            # A FAT drive's recording stops at its file limit: no more is needed.
+            if place.max_file is not None:
+                expected = min(expected, place.max_file)
+            free = await anyio.to_thread.run_sync(self._storage.free, place.directory)
+            if expected > free:
+                raise StorageError(
+                    f"{place.destination.label} has {max(0, free) / 1e9:.1f} GB free and the"
+                    f" recording takes about {expected / 1e9:.1f} GB"
+                )
             token = self._jobs.reserve(RECORDING_KIND, RECORDING_HOLDS)
             started = self._now()
             target = self._target()
@@ -344,9 +361,8 @@ class VideoService:
                 n += 1
                 name = f"{recording_name(started, target, self._settings.exposure, gain)}-{n}"
                 path = place.directory / f"{name}.ser"
-            await camera.start_recording(
-                Recording(self._to_driver(place.directory), name, seconds, frames)
-            )
+            directory = await anyio.to_thread.run_sync(self._to_driver, place.directory)
+            await camera.start_recording(Recording(directory, name, seconds, frames))
         except BaseException:
             if token is not None:
                 self._jobs.release(token)
@@ -405,41 +421,59 @@ class VideoService:
 
     async def _run(self, context: JobContext) -> Json:
         camera = self._camera()
-        # Frames are parsed once: on this connection, not also on Explore's.
-        await self._release_images()
-        images = await self._connect_images(camera.name)
-        restore = _Restore.of(camera)
-        stream = Camera(camera.client, camera.name, images)
-        stop_watching = stream.watch_frames(self._on_frame, lambda: self._settings.exposure)
+        images: IndiClient | None = None
+        restore: _Restore | None = None
+        stop_watching: Callable[[], None] | None = None
         try:
+            # Frames are parsed once: on this connection, not also on Explore's.
+            await self._release_images()
+            images = await self._connect_images(camera.name)
+            restore = _Restore.of(camera)
+            stream = Camera(camera.client, camera.name, images)
+            stop_watching = stream.watch_frames(self._on_frame, lambda: self._settings.exposure)
             while True:
                 self._restart.clear()
-                await self._setup(camera)
+                applied = await self._setup(camera)
                 self._streaming = True
                 self._publish()
                 context.progress(None, "streaming")
-                tasks = [
-                    asyncio.get_running_loop().create_task(self._previews(camera)),
-                    asyncio.get_running_loop().create_task(self._stats(camera)),
-                ]
-                try:
-                    await self._restart.wait()
-                finally:
-                    for task in tasks:
-                        task.cancel()
-                    await asyncio.gather(*tasks, return_exceptions=True)
+                if self._settings != applied:
+                    self._restart.set()  # changed while the stream started
+                await self._stream(camera)
                 self._streaming = False
                 await camera.stop_stream()
-        except DeviceError as e:
-            self._error = str(e)
+        except Exception as e:
+            self._error = str(e) or type(e).__name__
             raise
         finally:
-            stop_watching()
+            if stop_watching is not None:
+                stop_watching()
             self._streaming = False
             await self._end(camera, images, restore)
         return None
 
-    async def _setup(self, camera: Camera) -> None:
+    async def _stream(self, camera: Camera) -> None:
+        """Preview the stream until it is to restart; raises when the camera fails."""
+        loop = asyncio.get_running_loop()
+        restart = loop.create_task(self._restart.wait())
+        tasks: list[asyncio.Task[Any]] = [
+            loop.create_task(self._previews(camera)),
+            loop.create_task(self._stats()),
+            restart,
+        ]
+        try:
+            done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+            for task in done:
+                if task is not restart and (error := task.exception()) is not None:
+                    raise error
+        finally:
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+    async def _setup(self, camera: Camera) -> VideoSettings:
+        """Set the camera up as the settings say and start the stream; returns the
+        settings it used."""
         if self._settings.depth not in (depths := camera.video_depths):
             self._settings = replace(self._settings, depth=depths[0])
         settings = self._settings
@@ -463,6 +497,11 @@ class VideoService:
         frame = region.width * region.height * (2 if settings.depth == 16 else 1)
         low, high = PREVIEW_FPS
         await camera.set_preview_rate(round(min(high, max(low, PREVIEW_BYTES / frame)), 1))
+        # A cut left by the stream manager from a region before (see _crop) goes.
+        cut = camera.stream_frame
+        if cut is not None and (cut.x, cut.y) != (0, 0):
+            await camera.set_region(None)
+            await camera.set_stream_frame(Region(0, 0, sensor.width, sensor.height))
         await camera.set_region(settings.region)
         self._latest = None
         self._arrived.clear()
@@ -471,6 +510,7 @@ class VideoService:
         await camera.start_stream()
         if settings.region is not None:
             await self._crop(camera, settings.region)
+        return settings
 
     async def _crop(self, camera: Camera, region: Region) -> None:
         """Have the stream manager cut the region out when the driver streams the whole
@@ -500,7 +540,7 @@ class VideoService:
             return
         try:
             size = self._camera().stream_frame
-        except (DeviceError, KeyError) as e:
+        except Exception as e:  # the camera gone (not ready): the stream job notices
             log.debug("a video frame without its size: %s", e)
             return
         if size is None:
@@ -535,26 +575,41 @@ class VideoService:
             event, self._new_frame = self._new_frame, asyncio.Event()
             event.set()
 
-    async def _stats(self, camera: Camera) -> None:
+    async def _stats(self) -> None:
+        """Publish the frame rate; raises when the camera goes or stops streaming."""
+        quiet = 0
         while True:
+            camera = self._camera()
+            quiet = 0 if camera.streaming else quiet + 1
+            if quiet * STATS_PERIOD > STOPPED_AFTER:
+                raise DeviceError(f"{camera.name} stopped streaming")
             self._fps = camera.stream_fps
             self._publish()
             await asyncio.sleep(STATS_PERIOD)
 
-    async def _end(self, camera: Camera, images: IndiClient, restore: _Restore) -> None:
-        """Leave the camera as it was before the video, whatever happened; never raises."""
-        for step in (camera.stop_recording, camera.stop_stream, lambda: restore.apply(camera)):
-            try:
-                await asyncio.wait_for(step(), 30)
-            except (DeviceError, TimeoutError, ConnectionError, KeyError, ValueError) as e:
-                log.warning("leaving the video: %s", e)
-        with contextlib.suppress(Exception):
-            await images.close()
-        self._job = None
-        self._fps = None
-        self._rendered = None
-        self._jpeg = None
-        self._publish()
+    async def _end(
+        self, camera: Camera, images: IndiClient | None, restore: _Restore | None
+    ) -> None:
+        """Leave the camera as it was before the video, whatever happened; never raises
+        (but a second cancellation)."""
+        try:
+            steps: list[Callable[[], Awaitable[None]]] = [camera.stop_recording, camera.stop_stream]
+            if restore is not None:
+                steps.append(lambda: restore.apply(camera))
+            for step in steps:
+                try:
+                    await asyncio.wait_for(step(), 30)
+                except Exception as e:
+                    log.warning("leaving the video: %s", e)
+            if images is not None:
+                with contextlib.suppress(Exception):
+                    await images.close()
+        finally:
+            self._job = None
+            self._fps = None
+            self._rendered = None
+            self._jpeg = None
+            self._publish()
 
     # -- recordings ---------------------------------------------------------
 
@@ -572,19 +627,31 @@ class VideoService:
                     recording.fps_samples.append(fps)
                 await self._check_room(camera, recording)
                 self._publish()
-        except (DeviceError, ConnectionError, KeyError) as e:
+        except Exception as e:
+            # The drive pulled out, the camera gone: the driver is told to stop.
             log.warning("recording %s: %s", recording.name, e)
+            with contextlib.suppress(Exception):
+                await camera.stop_recording()
         finally:
-            # The driver writes the frame count into the header as it closes the file.
-            await asyncio.sleep(1.0)
-            entry = await anyio.to_thread.run_sync(self._finished, recording)
-            self._jobs.release(recording.token)
-            self._storage.done_writing(recording.place.destination)
-            self._recording = None
+            entry: dict[str, Json] | None = None
+            try:
+                # The driver writes the frame count into the header as it closes the file.
+                await asyncio.sleep(1.0)
+                entry = await anyio.to_thread.run_sync(self._finished, recording)
+            except Exception:
+                log.exception("cannot list recording %s", recording.name)
+            finally:
+                self._jobs.release(recording.token)
+                self._storage.done_writing(recording.place.destination)
+                self._recording = None
+                self._publish()
             if entry is not None:
                 self._recordings = [entry, *self._recordings][:KEEP]
-                await anyio.to_thread.run_sync(self._save)
-            self._publish()
+                try:
+                    await anyio.to_thread.run_sync(self._save)
+                except OSError as e:
+                    log.warning("cannot save the list of recordings: %s", e)
+                self._publish()
 
     async def _check_room(self, camera: Camera, recording: _Recording) -> None:
         path = recording.path
@@ -770,6 +837,9 @@ class _Restore:
     region: Region
     binning: int
     controls: dict[str, float]
+    switches: dict[str, str]
+    """Property -> the element that was on: the video format (ZWO's also applies to
+    exposures) and the stream's depth."""
 
     @classmethod
     def of(cls, camera: Camera) -> _Restore:
@@ -777,19 +847,32 @@ class _Restore:
         for name in ("BandWidth", "HighSpeedMode"):
             if (element := camera.control(name)) is not None:
                 controls[name] = element.value
-        return cls(camera.region, camera.binning[0], controls)
+        switches: dict[str, str] = {}
+        for name in ("CCD_VIDEO_FORMAT", "STREAM_FULL_DEPTH"):
+            if camera.has(name):
+                prop = camera.prop(name)
+                on = next((e for e in prop.elements if prop.switch(e)), None)
+                if on is not None:
+                    switches[name] = on
+        return cls(camera.region, camera.binning[0], controls, switches)
 
     async def apply(self, camera: Camera) -> None:
         sensor = camera.sensor
+        for name, element in self.switches.items():
+            prop = camera.prop(name)
+            if not prop.switch(element):
+                values = {e: e == element for e in prop.elements}
+                await camera.command(name, values, done=lambda p, on=element: p.switch(on))
         stream = camera.stream_frame
         if stream is not None and (stream.width, stream.height) != (sensor.width, sensor.height):
             with contextlib.suppress(DeviceError):
                 await camera.set_region(None)
                 await camera.set_stream_frame(Region(0, 0, sensor.width, sensor.height))
-        await camera.set_region(self.region)
-        if camera.binning[0] != self.binning:
-            await camera.set_binning(self.binning)
+        # The region after the format: ZWO's SDK reads the whole sensor again after one.
         for name, value in self.controls.items():
             element = camera.control(name)
             if element is not None and element.value != value:
                 await camera.set_control(name, value)
+        if camera.binning[0] != self.binning:
+            await camera.set_binning(self.binning)
+        await camera.set_region(self.region)

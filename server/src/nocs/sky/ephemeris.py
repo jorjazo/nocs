@@ -167,7 +167,8 @@ def planet(chart: Sky, name: str) -> Body:
     earth = np.asarray(_erfa.epv00(tt1, tt2)[0]["p"], dtype=np.float64)
 
     def geocentric(delay_days: Floats | float) -> Floats:
-        helio = np.asarray(_erfa.plan94(tt1, tt2 - delay_days, number)[0]["p"], np.float64)
+        # plan94 returns the positions alone, not with a status as epv00 does.
+        helio = np.asarray(_erfa.plan94(tt1, tt2 - delay_days, number)["p"], np.float64)
         return helio - earth
 
     geo = geocentric(0.0)

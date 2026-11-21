@@ -30,11 +30,14 @@
     owner,
     open,
     ontoggle,
+    held = null,
   }: {
     mount: MountState;
     owner: boolean;
     open: boolean;
     ontoggle: () => void;
+    // Why the screen keeps the mount still now (Video while it records), if it does.
+    held?: string | null;
   } = $props();
 
   const t = $derived(i18n.t);
@@ -45,6 +48,7 @@
 
   const padReason = $derived.by((): string | null => {
     if (!owner) return t.mount.locked;
+    if (held) return held;
     if (mount.parked) return t.mount.padParked;
     if (guiding) return t.guiding.padHeld;
     if (mountJob) return t.mount.padBusy;
@@ -52,6 +56,7 @@
   });
   const goReason = $derived.by((): string | null => {
     if (!owner) return t.plan.ownerOnly;
+    if (held) return held;
     if (mount.parked) return t.plan.parked;
     if (mountJob) return mountJob.info.kind === "goto" || mountJob.info.kind === "center" ? t.plan.mountGoing : t.plan.mountBusy;
     return null;

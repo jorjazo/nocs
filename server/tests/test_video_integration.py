@@ -160,6 +160,16 @@ def test_stream_preview_region_and_recording(api: TestClient) -> None:
     assert response.status_code == 200
     assert response.content[:14].rstrip(b"\0").endswith(b"RECORDER")
 
+    # Back to the whole sensor: the simulator's cut goes too.
+    assert api.put("/api/video/settings", json={"region": "full"}).status_code == 204
+    wait(
+        api,
+        lambda s: (
+            (f := s["video"]["frame"]) is not None
+            and (f["frame_width"], f["frame_height"]) == (sensor["width"], sensor["height"])
+        ),
+    )
+
     assert api.post("/api/video/stop").status_code == 204
     wait(api, lambda s: s["jobs"][job]["state"] != "running" and not s["video"]["streaming"])
     # The camera is left as it was: the whole sensor.
