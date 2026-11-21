@@ -345,8 +345,11 @@ class LiveStackService:
                 self._background(self._discard(pending))
 
     async def idle(self) -> None:
-        """Wait until every offered frame has been dealt with (tests)."""
+        """Wait until every offered frame has been dealt with, the links of those a newer
+        one replaced deleted too (tests)."""
         await self._idle.wait()
+        while self._tasks:
+            await asyncio.gather(*self._tasks, return_exceptions=True)
 
     async def _take(self, frame: Offered) -> None:
         if not self.on:
