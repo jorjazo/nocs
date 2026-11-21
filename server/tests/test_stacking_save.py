@@ -10,6 +10,7 @@ from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+import cv2
 import numpy as np
 import pytest
 from astropy.io import fits  # pyright: ignore[reportMissingTypeStubs]
@@ -21,6 +22,7 @@ from test_storage_service import (  # noqa: F401 (fixtures)
     shm,  # pyright: ignore[reportUnusedImport]
 )
 
+from nocs.imaging.worker import FULL_SIZE
 from nocs.stacking import masters, stack
 from nocs.stacking.frames import Offered
 from nocs.stacking.masters import Calibration, Kind, Master
@@ -72,6 +74,9 @@ class DirectWorker:
         return await asyncio.to_thread(
             stack.render, stack_id, str(self.previews_dir / "r.jpg"), look
         )
+
+    async def stack_picture(self, stack_id: str, jpeg_path: str, look: Look) -> Rendered:
+        return await asyncio.to_thread(stack.render, stack_id, jpeg_path, look, FULL_SIZE)
 
     async def stack_drop(self, stack_id: str) -> None:
         stack.drop(stack_id)
@@ -155,9 +160,17 @@ async def test_a_stack_is_saved_as_a_frame_of_the_night(
             )
             await service.idle()
         saved = await service.save()
+        # A visitor's picture of it: at its full size, as the saved JPEG.
+        await service.picture(tmp_path / "picture.jpg")
     finally:
         task.cancel()
         stack.drop_all()
+
+    picture = cv2.imread(str(tmp_path / "picture.jpg"))
+    kept = cv2.imread(str(saved.path.with_suffix(".jpg")))
+    assert picture is not None
+    assert kept is not None
+    assert picture.shape == kept.shape
 
     # In the night of its frames, under Stack/<target>/, with its JPEG beside it.
     assert str(saved.relative).startswith("2026-10-30/Stack/NGC_253/")

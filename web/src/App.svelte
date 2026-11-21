@@ -37,6 +37,7 @@
   import Report from "./screens/session/Report.svelte";
   import Session from "./screens/session/Session.svelte";
   import Tonight from "./screens/tonight/Tonight.svelte";
+  import Visits from "./screens/visits/Visits.svelte";
 
   const t = $derived(i18n.t);
   void auth.refresh();
@@ -126,7 +127,15 @@
 {:else}
   <!-- Drawn again in another time zone when the active site changes (ADR 0052). -->
   {#key zone}
-    {#if router.route.screen === "focus"}
+    {#if role === "observer"}
+      <!-- Someone watching without pairing sees the Visitors view, and nothing else. -->
+      <main class="content full alone">
+        {#if offline}
+          <div class="banner"><Banner icon="offline" tone="warning">{t.link.offline}</Banner></div>
+        {/if}
+        <Visits />
+      </main>
+    {:else if router.route.screen === "focus"}
       <!-- Guided flows take the whole screen, without the tabs (docs/ux.md §1). -->
       <Focus {offline} />
     {:else if router.route.screen === "focus-calibration"}
@@ -150,16 +159,6 @@
             </Banner>
           </div>
         {/if}
-        {#if role === "observer"}
-          <div class="banner">
-            <Banner icon="eye">
-              {t.link.observer}
-              {#snippet action()}
-                <Button variant="text" onclick={() => (auth.wantsPair = true)}>{t.link.pair}</Button>
-              {/snippet}
-            </Banner>
-          </div>
-        {/if}
         {#if router.route.screen === "rig"}
           <Rig />
         {:else if router.route.screen === "explore"}
@@ -178,6 +177,8 @@
           <SequenceScreen />
         {:else if router.route.screen === "sequence-edit"}
           <SequenceEditor />
+        {:else if router.route.screen === "visits"}
+          <Visits />
         {:else if router.route.screen === "plan-edit"}
           <PlanEditor />
         {:else if router.route.screen === "plan-add"}
@@ -227,7 +228,13 @@
     margin: 0;
     padding: var(--space-2) var(--margin) 0;
   }
+  .alone {
+    padding: 0;
+  }
   @media (min-width: 768px) {
+    .content.alone {
+      margin-left: 0;
+    }
     .content {
       padding: var(--space-4) var(--space-8) var(--space-8);
       margin-left: max(var(--rail-width), calc((100vw - var(--page-width)) / 2));

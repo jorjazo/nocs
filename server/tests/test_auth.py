@@ -220,6 +220,9 @@ def test_observer_watches_but_cannot_command(client: TestClient) -> None:
     assert (status["role"], status["observer"]) == ("observer", True)
     assert client.get("/api/state").status_code == 200
     assert client.get("/api/previews/none.jpg").status_code == 404  # allowed, just missing
+    # The Visitors view's downloads: nothing to show yet, but allowed.
+    assert client.get("/api/visit/frame.jpg").status_code == 404
+    assert client.get("/api/visit/stack.jpg").status_code == 404
     assert client.get("/api/guiding/steps").status_code == 200  # the guiding graph
     assert client.post("/api/guiding/stop").status_code == 401
     assert client.post("/api/guiding/restart").status_code == 401

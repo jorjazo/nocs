@@ -10,6 +10,7 @@
   let {
     portrait,
     expanded = false,
+    alone = false,
     sheetOpen,
     stageLabel,
     panelLabel,
@@ -23,6 +24,8 @@
   }: {
     portrait: boolean;
     expanded?: boolean;
+    // Without the tabs (a visitor's only screen): the whole height.
+    alone?: boolean;
     sheetOpen: boolean;
     stageLabel: string;
     panelLabel: string;
@@ -36,7 +39,7 @@
   } = $props();
 </script>
 
-<div class="screen" class:portrait class:landscape={!portrait} class:expanded>
+<div class="screen" class:portrait class:landscape={!portrait} class:expanded class:alone>
   <section class="stage" aria-label={stageLabel}>
     <div class="image">{@render image()}</div>
     {@render under?.()}
@@ -70,6 +73,9 @@
     .screen {
       --available: 100dvh;
     }
+  }
+  .screen.alone {
+    --available: 100dvh;
   }
   .landscape {
     display: grid;

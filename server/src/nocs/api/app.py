@@ -82,6 +82,7 @@ from nocs.api.solver import align_router, saved_frames_router, solver_router
 from nocs.api.stacking import stacking_router
 from nocs.api.system import system_router
 from nocs.api.targets import targets_router
+from nocs.api.visit import visit_router
 from nocs.auth import AuthStore
 from nocs.calibration.flats import FlatsService
 from nocs.calibration.groups import GroupMasterService
@@ -120,6 +121,7 @@ from nocs.imaging import (
     image_connector,
 )
 from nocs.imaging.capture import DitherPlan, NothingToSaveError, UploadDirs
+from nocs.imaging.pictures import Pictures
 from nocs.imaging.worker import ImageWorker
 from nocs.indi.drivers import DriverControlError, DriverFifo, load_catalog
 from nocs.jobs import JobManager, ResourceBusyError
@@ -279,6 +281,10 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
     def plan() -> PlanService:
         assert services.plan is not None
         return services.plan
+
+    def pictures() -> Pictures:
+        assert services.pictures is not None
+        return services.pictures
 
     def sequences() -> SequenceService:
         assert services.sequences is not None
@@ -528,6 +534,13 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
         )
         await services.stacking.start()
         services.capture.use_stacker(services.stacking)
+        services.pictures = Pictures(
+            settings.data_dir / "pictures",
+            services.worker,
+            services.capture.kept,
+            lambda: services.stacking,
+        )
+        await anyio.to_thread.run_sync(services.pictures.clear)
         services.masters = GroupMasterService(store, services.worker, storage, settings.data_dir)
         services.flats = FlatsService(
             store,
@@ -648,6 +661,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
     app.include_router(sites_router(sites))
     app.include_router(targets_router())
     app.include_router(plan_router(plan, sequences))
+    app.include_router(visit_router(pictures))
     app.include_router(stacking_router(stacking, storage))
 
     @app.get("/api/autofocus/runs")
@@ -1067,6 +1081,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
 @dataclass
 class _Services:
     worker: ImageWorker | None = None
+    pictures: Pictures | None = None
     jobs: JobManager | None = None
     equipment: EquipmentService | None = None
     capture: CaptureService | None = None

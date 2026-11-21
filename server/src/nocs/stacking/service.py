@@ -94,6 +94,7 @@ class Worker(Protocol):
         calibration: Calibration | None = None,
     ) -> Added: ...
     async def stack_render(self, stack_id: str, look: Look) -> Rendered: ...
+    async def stack_picture(self, stack_id: str, jpeg_path: str, look: Look) -> Rendered: ...
     async def stack_drop(self, stack_id: str) -> None: ...
     async def stack_save(
         self,
@@ -528,6 +529,36 @@ class LiveStackService:
         target = self._masters / available.file_name(bayer, subtract)
         await self._worker.build_master(str(target), spec.kind, files, bayer, subtract)
         return str(target), len(files)
+
+    def picture_key(self) -> str | None:
+        """What the current stack's picture is of (the stack, its frames and look); None
+        without one to show."""
+        stack = self._current
+        if stack is None or not stack.created or stack.frames == 0:
+            return None
+        look = self.settings.look
+        return f"{stack.id}-{stack.frames}-{look.model_dump_json()}"
+
+    def picture_name(self) -> str | None:
+        """What the current stack is of: its target, if it has one."""
+        stack = self._current
+        return None if stack is None else stack.offered.target
+
+    async def picture(self, path: Path) -> None:
+        """Write the current stack as a JPEG at its full size, with its look (a visitor's
+        download); ``NothingToSaveError`` without one."""
+        stack = self._current
+        if stack is None or not stack.created or stack.frames == 0:
+            raise NothingToSaveError("there is no stack yet")
+        async with self._worker_lock:
+            try:
+                await self._worker.stack_picture(stack.id, str(path), _look(self.settings.look))
+            except StackLostError:
+                self._lost(stack)
+                self._publish()
+                raise NothingToSaveError(
+                    "the stack was lost (the imaging worker restarted)"
+                ) from None
 
     async def save(self) -> SavedFrame:
         """Save the current stack now; it goes on stacking. Raises ``NothingToSaveError``

@@ -19,6 +19,7 @@ from nocs.imaging.pipeline import (
     measure_stars,
     midtone_point,
     mtf_parameters,
+    picture,
 )
 
 _fits: Any = fits  # untyped library; see nocs.imaging.pipeline
@@ -152,6 +153,17 @@ def test_mono_preview(tmp_path: Path) -> None:
     # Its parameters: black a little below the sky, mid grey above it.
     (only,) = result.stretch
     assert 0.9 * 1000 / 65535 < only.shadows < 1000 / 65535 < only.midtones < 1
+
+
+def test_a_picture_is_the_whole_frame_stretched_as_its_preview(tmp_path: Path) -> None:
+    source = write_fits(tmp_path / "frame.fits", star_field(2400, 1600, 30))
+    size = picture(source, str(tmp_path / "picture.jpg"))
+    image = read_jpeg(str(tmp_path / "picture.jpg"))
+    assert size == (2400, 1600) == image.shape[::-1]
+    assert 40 < float(np.median(image)) < 90  # the background near 25 % grey
+    colour = write_fits(tmp_path / "colour.fits", star_field(800, 600, 10), BAYERPAT="RGGB")
+    assert picture(colour, str(tmp_path / "colour.jpg")) == (800, 600)
+    assert read_jpeg(str(tmp_path / "colour.jpg")).shape == (600, 800, 3)
 
 
 def test_midtone_point_turns_mid_grey() -> None:
