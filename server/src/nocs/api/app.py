@@ -7,7 +7,7 @@ import contextlib
 import dataclasses
 import json
 import logging
-from collections.abc import AsyncGenerator, Generator
+from collections.abc import AsyncGenerator, Callable, Generator
 from contextlib import asynccontextmanager
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime, timedelta
@@ -82,6 +82,7 @@ from nocs.api.solver import align_router, saved_frames_router, solver_router
 from nocs.api.stacking import stacking_router
 from nocs.api.system import system_router
 from nocs.api.targets import targets_router
+from nocs.api.video import video_router
 from nocs.api.visit import visit_router
 from nocs.auth import AuthStore
 from nocs.calibration.flats import FlatsService
@@ -89,7 +90,7 @@ from nocs.calibration.groups import GroupMasterService
 from nocs.calibration.service import CalibrationService, camera_facts
 from nocs.clock import Clock
 from nocs.config import Settings
-from nocs.devices import Coordinates, DeviceError, Focuser, Location
+from nocs.devices import Coordinates, DeviceError, FilterWheel, Focuser, Location
 from nocs.devices.camera import Region
 from nocs.equipment import (
     Connection,
@@ -166,6 +167,7 @@ from nocs.system.client import HelperUnavailableError
 from nocs.system.protocol import HelperError
 from nocs.targets import TargetCatalog, bundled_catalog, loaded_catalog
 from nocs.targets.catalog import separation
+from nocs.video import VideoService
 
 log = logging.getLogger(__name__)
 
@@ -293,6 +295,20 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
     def sites() -> SiteService:
         assert services.sites is not None
         return services.sites
+
+    def video() -> VideoService:
+        assert services.video is not None
+        return services.video
+
+    def current_filter() -> str | None:
+        """The filter in the beam, for a recording's name in the list."""
+        wheel = equipment().ready_device(Role.FILTER_WHEEL)
+        if wheel is None or bridge.client is None:
+            return None
+        try:
+            return FilterWheel(bridge.client, wheel).filter
+        except (DeviceError, KeyError):
+            return None
 
     class RigRecovery:
         """Bringing a device back for a sequence (ADR 0030)."""
@@ -553,6 +569,20 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
             mount=mount,
             now=services.clock.now,
         )
+        services.video = VideoService(
+            store,
+            services.jobs,
+            lambda: capture().camera(Role.MAIN_CAMERA),
+            lambda: capture().release_images(Role.MAIN_CAMERA),
+            image_connector(settings.indi_host, settings.indi_port),
+            services.storage,
+            settings.data_dir,
+            to_driver=_shared_path(settings),
+            target=lambda: storage().target,
+            filter=current_filter,
+            now=services.clock.now,
+        )
+        await services.video.start()
         services.sequences = SequenceService(
             store,
             services.jobs,
@@ -625,6 +655,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
             await focuser().close()
             await filter_wheel().close()
             await jobs().close()
+            await video().close()
             await capture().close()
             await equipment().close()
             await storage().close()
@@ -663,6 +694,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
     app.include_router(plan_router(plan, sequences))
     app.include_router(visit_router(pictures))
     app.include_router(stacking_router(stacking, storage))
+    app.include_router(video_router(video, lambda: explore_allowed("Video")))
 
     @app.get("/api/autofocus/runs")
     async def focus_runs(  # pyright: ignore[reportUnusedFunction]
@@ -823,13 +855,13 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
             await capture().set_cooling(Role(role), request.on, request.target, request.ramp)
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
-    def explore_allowed() -> None:
-        """Explore and Sequences exclude each other: no frames of Explore's while a
-        sequence holds the rig, waits paused or asks the user something."""
+    def explore_allowed(view: str = "Explore") -> None:
+        """Explore and Video exclude Sequences: no frames of theirs while a sequence
+        holds the rig, waits paused or asks the user something."""
         if services.sequences is not None and services.sequences.active:
             raise HTTPException(
                 status.HTTP_409_CONFLICT,
-                "a sequence is running: Explore takes no frames until it ends",
+                f"a sequence is running: {view} takes no frames until it ends",
             )
 
     @app.post("/api/cameras/{role}/expose", status_code=status.HTTP_202_ACCEPTED)
@@ -1111,6 +1143,7 @@ class _Services:
     sites: SiteService | None = None
     stacking: LiveStackService | None = None
     masters: GroupMasterService | None = None
+    video: VideoService | None = None
 
 
 def _iso(time: datetime) -> str:
@@ -1125,6 +1158,22 @@ def _focus_run(run: FocusRun) -> AutofocusRun:
     fields = dataclasses.asdict(run)
     fields["run"] = json.loads(run.run)
     return AutofocusRun.model_validate(fields)
+
+
+def _shared_path(settings: Settings) -> Callable[[Path], str]:
+    """A path of nocsd's as indiserver's drivers see it (for the SER files they write)."""
+    shared, local = settings.indi_shared_dir, settings.indi_shared_dir_local
+    if shared is None or local is None:
+        return str
+    root = local.resolve()
+
+    def to_driver(path: Path) -> str:
+        try:
+            return str(PurePosixPath(shared) / path.resolve().relative_to(root))
+        except ValueError:
+            return str(path)
+
+    return to_driver
 
 
 def _upload_dirs(settings: Settings) -> UploadDirs | None:

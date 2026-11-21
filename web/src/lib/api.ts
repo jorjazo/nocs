@@ -90,6 +90,9 @@ import type {
   WifiNetwork,
   StackLook,
   StackSwitchRequest,
+  VideoRecordRequest,
+  VideoRecordStarted,
+  VideoSettingsRequest,
 } from "./types";
 
 export class ApiError extends Error {
@@ -809,4 +812,56 @@ export function saveStack(): Promise<StackSaved> {
 // Kept by the server for every client; the current stack is shown with it at once.
 export function setStackLook(look: StackLook): Promise<void> {
   return request("PUT", "/api/stack/look", look);
+}
+
+// -- Video (lucky imaging) --------------------------------------------------------
+
+// Streaming is a job that holds the main camera until it is stopped.
+export async function startVideo(): Promise<string> {
+  return (await request<JobStarted>("POST", "/api/video/start")).job;
+}
+
+export function stopVideo(): Promise<void> {
+  return request("POST", "/api/video/stop");
+}
+
+export function setVideoSettings(body: VideoSettingsRequest): Promise<void> {
+  return request("PUT", "/api/video/settings", body);
+}
+
+export async function recordVideo(body: VideoRecordRequest): Promise<string> {
+  return (await request<VideoRecordStarted>("POST", "/api/video/record", body)).id;
+}
+
+export function stopRecording(): Promise<void> {
+  return request("POST", "/api/video/record/stop");
+}
+
+export function deleteRecording(id: string): Promise<void> {
+  return request("DELETE", `/api/video/recordings/${encodeURIComponent(id)}`);
+}
+
+export function recordingUrl(id: string): string {
+  return `/api/video/recordings/${encodeURIComponent(id)}`;
+}
+
+// The next preview of the video after frame `after`: null when none came for a
+// while (the server answers 204), or when `signal` aborts the wait.
+export async function nextVideoFrame(
+  after: number,
+  signal: AbortSignal,
+): Promise<{ seq: number; image: Blob } | null> {
+  let response: Response;
+  try {
+    response = await fetch(`/api/video/frame?after=${after}`, { signal, cache: "no-store" });
+  } catch (e) {
+    if (signal.aborted) return null;
+    throw new ApiError(0, e instanceof Error ? e.message : String(e));
+  }
+  if (response.status === 204) return null;
+  if (!response.ok) {
+    if (response.status === 401) onUnauthorized();
+    throw new ApiError(response.status, response.statusText);
+  }
+  return { seq: Number(response.headers.get("X-Frame") ?? after), image: await response.blob() };
 }

@@ -10,7 +10,7 @@ The site is the one USNO rounds Cerro Tololo to (W070°49', S30°10'); Tromsø
 """
 
 from collections.abc import Iterator
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 import numpy as np
@@ -27,7 +27,7 @@ from nocs.sequence.sky import Place, altitude
 from nocs.sites import HorizonPoint, Site, SiteFile, SiteStore
 from nocs.sky import Target, horizon_altitude, night, tonight, visibility
 from nocs.sky.almanac import TWILIGHTS
-from nocs.sky.bodies import Body, position
+from nocs.sky.bodies import Body, position, separation
 from nocs.sky.ephemeris import illumination, pressure, refraction, sky
 from nocs.targets import bundled_catalog
 
@@ -444,3 +444,31 @@ def test_search_needs_a_site(config_dir: Path) -> None:
         pair_owner(client)
         assert client.get("/api/sky/search", params={"q": "m 42"}).status_code == 409
         assert client.get("/api/sky/search", params={"q": ""}).status_code == 422
+
+
+def test_planets_jupiter_and_saturn_in_the_great_conjunction() -> None:
+    """2020-12-21: Jupiter passed 6.1' from Saturn (USNO)."""
+    when = datetime(2020, 12, 21, 18, 0, tzinfo=UTC)
+    jupiter = position(Body.JUPITER, DIAGUITAS, when)
+    saturn = position(Body.SATURN, DIAGUITAS, when)
+    assert separation(jupiter.jnow, saturn.jnow) * 60 == pytest.approx(6.1, abs=0.3)
+    assert jupiter.semidiameter * 3600 == pytest.approx(16.4, abs=0.5)
+
+
+def test_venus_and_mercury_stay_near_the_sun() -> None:
+    for day in range(0, 365, 7):
+        when = datetime(2026, 1, 1, tzinfo=UTC) + timedelta(days=day)
+        sun = position(Body.SUN, DIAGUITAS, when)
+        assert separation(position(Body.VENUS, DIAGUITAS, when).jnow, sun.jnow) < 48
+        assert separation(position(Body.MERCURY, DIAGUITAS, when).jnow, sun.jnow) < 29
+
+
+def test_search_finds_the_planets_that_are_up(client: TestClient) -> None:
+    for body, query in ((Body.JUPITER, "Júpiter"), (Body.SATURN, "saturno"), (Body.MARS, "marte")):
+        seen = position(body, DIAGUITAS, datetime.now(UTC))
+        found = client.get("/api/sky/search", params={"q": query}).json()
+        bodies = [m["body"] for m in found if m["body"]]
+        assert bodies == ([body.value] if seen.alt > 0 else [])
+        if bodies:
+            assert found[0]["frame"] == "jnow"
+            assert found[0]["ra"] == pytest.approx(seen.jnow.ra, abs=0.01)

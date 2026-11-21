@@ -775,6 +775,7 @@ export interface AppState {
    * None where NOCS does not install updates (a PC).
    */
   updates?: UpdatesState | null;
+  video?: VideoState | null;
   /**
    * None: no weather sensor is ready.
    */
@@ -949,6 +950,10 @@ export interface CameraState {
    * Another client drives the camera (PHD2, ADR 0023): NOCS shows its frames and takes none of its own.
    */
   used_by: "phd2" | null;
+  /**
+   * None: the driver streams no video (no SER recording).
+   */
+  video?: CameraVideo | null;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -1138,6 +1143,22 @@ export interface SensorInfo {
    */
   pixel_size: number;
   width: number;
+}
+/**
+ * What the camera's video stream allows (the Video view).
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "CameraVideo".
+ */
+export interface CameraVideo {
+  /**
+   * Bits per pixel the stream can have: 8, 16.
+   */
+  depths: number[];
+  /**
+   * Seconds per video frame.
+   */
+  exposure_range: ValueRange | null;
 }
 /**
  * The running centring, or the most recent one.
@@ -3681,6 +3702,205 @@ export interface UpgradablePackage {
   to: string;
 }
 /**
+ * The Video view (lucky imaging): the main camera's stream and its recordings.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "VideoState".
+ */
+export interface VideoState {
+  /**
+   * Bits per pixel: 8 or 16.
+   */
+  depth: number;
+  /**
+   * Why the stream stopped, if it failed.
+   */
+  error: string | null;
+  /**
+   * Seconds per frame.
+   */
+  exposure: number;
+  /**
+   * Frames per second the driver measures.
+   */
+  fps: number | null;
+  frame: VideoFrame | null;
+  /**
+   * None: the camera's own, until set here.
+   */
+  gain: number | null;
+  /**
+   * The running video job, which holds the main camera.
+   */
+  job: string | null;
+  recording: VideoRecordingProgress | null;
+  /**
+   * Newest first.
+   */
+  recordings: VideoRecording[];
+  /**
+   * Read out by the camera; None: the whole sensor.
+   */
+  region: Region | null;
+  streaming: boolean;
+}
+/**
+ * The latest preview of the video stream: linear, as recorded, never stretched.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "VideoFrame".
+ */
+export interface VideoFrame {
+  color: boolean;
+  /**
+   * Bits per pixel: 8 or 16.
+   */
+  depth: number;
+  frame_height: number;
+  /**
+   * Of the frame as streamed and recorded.
+   */
+  frame_width: number;
+  height: number;
+  /**
+   * 256 bins of the brightest channel, 8-bit scale.
+   */
+  histogram: number[];
+  /**
+   * Share of the pixels at the top of the scale, 0..1.
+   */
+  saturated: number;
+  /**
+   * Its number: GET /api/video/frame?after=<seq> waits for the next.
+   */
+  seq: number;
+  /**
+   * Variance of the Laplacian: grows as focus improves, at the same exposure, gain and region.
+   */
+  sharpness: number;
+  /**
+   * UTC, ISO 8601.
+   */
+  time: string;
+  /**
+   * Of the JPEG.
+   */
+  width: number;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "VideoRecordingProgress".
+ */
+export interface VideoRecordingProgress {
+  destination_label: string;
+  /**
+   * Asked for: frames; None when by seconds.
+   */
+  frames: number | null;
+  id: string;
+  /**
+   * The largest file the drive holds (FAT: 4 GiB); None without a limit.
+   */
+  max_file: number | null;
+  /**
+   * The SER file's name.
+   */
+  name: string;
+  /**
+   * Below <destination>/NOCS/.
+   */
+  path: string;
+  /**
+   * Asked for: seconds; None when by frames.
+   */
+  seconds: number | null;
+  /**
+   * Bytes in the file so far.
+   */
+  size: number;
+  /**
+   * UTC, ISO 8601.
+   */
+  started: string;
+  /**
+   * NOCS is stopping it before its end, and why.
+   */
+  stopping: ("file_limit" | "drive_full") | null;
+  /**
+   * Frames in the file so far.
+   */
+  written: number;
+}
+/**
+ * A SER file the Video view recorded.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "VideoRecording".
+ */
+export interface VideoRecording {
+  /**
+   * Frames per second the driver measured.
+   */
+  camera_fps: number | null;
+  /**
+   * mono, a Bayer pattern (RGGB…), RGB or BGR.
+   */
+  color: string | null;
+  /**
+   * Bits per pixel.
+   */
+  depth: number | null;
+  /**
+   * Id of the destination.
+   */
+  destination: string;
+  destination_label: string;
+  /**
+   * Frames the camera sent that the file lacks (estimated from camera_fps).
+   */
+  dropped: number | null;
+  /**
+   * Seconds per frame.
+   */
+  exposure: number;
+  /**
+   * Absolute path on the box.
+   */
+  file: string;
+  filter: string | null;
+  /**
+   * Frames recorded per second.
+   */
+  fps: number | null;
+  frames: number;
+  gain: number | null;
+  height: number | null;
+  id: string;
+  name: string;
+  /**
+   * Below <destination>/NOCS/.
+   */
+  path: string;
+  /**
+   * From the first frame to the last.
+   */
+  seconds: number;
+  /**
+   * Bytes.
+   */
+  size: number;
+  /**
+   * UTC, ISO 8601.
+   */
+  started: string;
+  /**
+   * NOCS stopped it before its end, and why.
+   */
+  stopped: ("file_limit" | "drive_full") | null;
+  target: string | null;
+  width: number | null;
+}
+/**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "WeatherState".
  */
@@ -6173,8 +6393,8 @@ export interface SkyChart {
   truncated: boolean;
 }
 /**
- * A catalog object, or the Sun or the Moon, that matched a search and is above the
- * horizon now (Explore's go to, ADR 0054).
+ * A catalog object, or the Sun, the Moon or a planet, that matched a search and is
+ * above the horizon now (the go to of Explore and Video).
  *
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "SkyMatch".
@@ -6188,13 +6408,13 @@ export interface SkyMatch {
    * Degrees from north through east.
    */
   azimuth: number;
-  body: ("sun" | "moon") | null;
+  body: ("sun" | "moon" | "mercury" | "venus" | "mars" | "jupiter" | "saturn" | "uranus" | "neptune") | null;
   /**
    * Degrees.
    */
   dec: number;
   /**
-   * Of ``ra`` and ``dec``: J2000 for catalog objects, of the date for the Sun and the Moon (where they are now).
+   * Of ``ra`` and ``dec``: J2000 for catalog objects, of the date for the Sun, the Moon and the planets (where they are now).
    */
   frame: "j2000" | "jnow";
   /**
@@ -6202,7 +6422,7 @@ export interface SkyMatch {
    */
   matched: string;
   /**
-   * None for the Sun and the Moon.
+   * None for the Sun, the Moon and planets.
    */
   object: CatalogObject | null;
   /**
@@ -6468,6 +6688,41 @@ export interface TrackingRequest {
    */
   mode?: string | null;
   on?: boolean | null;
+}
+/**
+ * Seconds or frames, one of them.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "VideoRecordRequest".
+ */
+export interface VideoRecordRequest {
+  frames?: number | null;
+  seconds?: number | null;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "VideoRecordStarted".
+ */
+export interface VideoRecordStarted {
+  id: string;
+}
+/**
+ * Only the fields present are changed.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "VideoSettingsRequest".
+ */
+export interface VideoSettingsRequest {
+  depth?: (8 | 16) | null;
+  /**
+   * Seconds per frame.
+   */
+  exposure?: number | null;
+  gain?: number | null;
+  /**
+   * Read out by the camera (fitted to its rules), or "full" for the sensor.
+   */
+  region?: Region | "full" | null;
 }
 /**
  * A Wi-Fi network in range (ADR 0028).

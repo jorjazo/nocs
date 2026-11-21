@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import UTC, date, datetime
-from typing import Annotated, overload
+from typing import Annotated, Literal, overload
 
 import anyio.to_thread
 import numpy as np
@@ -49,8 +49,16 @@ SEARCHED = 200
 BODY_NAMES: dict[Body, tuple[str, ...]] = {
     Body.SUN: ("sun", "sol"),
     Body.MOON: ("moon", "luna"),
+    Body.MERCURY: ("mercury", "mercurio"),
+    Body.VENUS: ("venus",),
+    Body.MARS: ("mars", "marte"),
+    Body.JUPITER: ("jupiter",),
+    Body.SATURN: ("saturn", "saturno"),
+    Body.URANUS: ("uranus", "urano"),
+    Body.NEPTUNE: ("neptune", "neptuno"),
 }
-"""What a search finds the Sun and the Moon by, in the app's languages (folded)."""
+"""What a search finds the Sun, the Moon and the planets by, in the app's languages
+(folded)."""
 
 type Resolver = Callable[[str], Target | None]
 """Finds a target by name (e.g. a catalog id), or None if there is none."""
@@ -296,7 +304,9 @@ def _search_up(query: str, limit: int, site: Location, now: datetime) -> list[Sk
     return found[:limit]
 
 
-def _body_at(where: Site, now: datetime, ra: float, dec: float, radius: float) -> Body | None:
+def _body_at(
+    where: Site, now: datetime, ra: float, dec: float, radius: float
+) -> Literal[Body.SUN, Body.MOON] | None:
     """The Sun or the Moon when its disc reaches within ``radius`` of a J2000 point."""
     location = Location(where.latitude, where.longitude, where.elevation)
     point = Coordinates(ra, dec)

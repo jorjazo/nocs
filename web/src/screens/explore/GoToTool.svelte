@@ -1,8 +1,9 @@
 <script lang="ts">
   // Go to, at the right of Explore's image (ADR 0054): the slew pad, then a search of
-  // what is above the horizon now (catalog objects, the Sun and the Moon) with "Go"
-  // and "Go and centre". Going somewhere names the frames saved there after it. For
-  // the Sun or the Moon, "Go and centre" runs their finder (ADR 0049); near the Sun,
+  // what is above the horizon now (catalog objects, the Sun, the Moon and the planets)
+  // with "Go" and "Go and centre". Going somewhere names the frames saved there after
+  // it. For the Sun or the Moon, "Go and centre" runs their finder (ADR 0049); a planet
+  // has only "Go" (no stars to solve at its focal lengths, no disc to find); near the Sun,
   // its warning comes first. While PHD2 guides, going stops it and guides again once
   // there (not at the Sun or the Moon). Refused go tos say why and offer the way on.
   import Banner from "../../components/Banner.svelte";
@@ -70,6 +71,8 @@
   let searched = $state("");
   let searchError = $state("");
   let chosen = $state<SkyMatch | null>(null);
+  // The finder knows the Sun and the Moon; a planet is only gone to.
+  const centrable = $derived(!chosen?.body || chosen.body === "sun" || chosen.body === "moon");
   let asked = 0;
 
   // Asked a moment after typing stops; only the latest answer counts. A new search
@@ -102,11 +105,21 @@
   });
 
   function name(match: SkyMatch): string {
-    return match.body ? t.finder.bodies[match.body] : (match.object?.label ?? match.matched);
+    return match.body ? t.live.bodies[match.body] : (match.object?.label ?? match.matched);
   }
   // What names the lights saved there: the catalog's label, or the body in English,
   // whatever language the device that went there speaks.
-  const BODY_NAMES = { sun: "Sun", moon: "Moon" } as const;
+  const BODY_NAMES = {
+    sun: "Sun",
+    moon: "Moon",
+    mercury: "Mercury",
+    venus: "Venus",
+    mars: "Mars",
+    jupiter: "Jupiter",
+    saturn: "Saturn",
+    uranus: "Uranus",
+    neptune: "Neptune",
+  } as const satisfies Record<NonNullable<SkyMatch["body"]>, string>;
   function targetName(match: SkyMatch): string {
     return match.body ? BODY_NAMES[match.body] : (match.object?.label ?? match.matched);
   }
@@ -139,7 +152,7 @@
     error = "";
     belowHorizon = null;
     try {
-      if (target.body && kind === "center") {
+      if ((target.body === "sun" || target.body === "moon") && kind === "center") {
         await findBody({ body: target.body, radius: 5, stop_guiding: guided || target.body === "sun" });
       } else if (kind === "center") {
         await centerOn({ ra: target.ra, dec: target.dec, force, resume_guiding: resume });
@@ -220,15 +233,19 @@
       <Button disabled={goReason !== null || busy !== null} busy={busy === "goto"} onclick={() => void go("goto")}>
         {t.live.go}
       </Button>
-      <Button
-        variant="primary"
-        disabled={centerReason !== null || busy !== null}
-        busy={busy === "center"}
-        onclick={() => void go("center")}>
-        {t.center.goCenter}
-      </Button>
+      {#if centrable}
+        <Button
+          variant="primary"
+          disabled={centerReason !== null || busy !== null}
+          busy={busy === "center"}
+          onclick={() => void go("center")}>
+          {t.center.goCenter}
+        </Button>
+      {/if}
     </div>
-    {#if centerReason ?? goReason}<p class="caption muted">{centerReason ?? goReason}</p>{/if}
+    {#if (centrable ? centerReason : null) ?? goReason}
+      <p class="caption muted">{(centrable ? centerReason : null) ?? goReason}</p>
+    {/if}
     {#if guiding && !goReason}
       <p class="caption muted">{chosen.body ? t.live.guidingStops : t.live.guidingResumes}</p>
     {/if}

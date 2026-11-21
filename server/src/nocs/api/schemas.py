@@ -247,6 +247,13 @@ class CameraField(StateModel):
     height: float = Field(description="Degrees along a frame's y axis.")
 
 
+class CameraVideo(StateModel):
+    """What the camera's video stream allows (the Video view)."""
+
+    exposure_range: ValueRange | None = Field(description="Seconds per video frame.")
+    depths: list[int] = Field(description="Bits per pixel the stream can have: 8, 16.")
+
+
 class CameraState(StateModel):
     device: str
     exposing: bool
@@ -286,6 +293,9 @@ class CameraState(StateModel):
     used_by: Literal["phd2"] | None = Field(
         description="Another client drives the camera (PHD2, ADR 0023): NOCS shows its frames"
         " and takes none of its own."
+    )
+    video: CameraVideo | None = Field(
+        default=None, description="None: the driver streams no video (no SER recording)."
     )
 
 
@@ -1448,6 +1458,90 @@ class StackState(StateModel):
     )
 
 
+class VideoFrame(StateModel):
+    """The latest preview of the video stream: linear, as recorded, never stretched."""
+
+    seq: int = Field(description="Its number: GET /api/video/frame?after=<seq> waits for the next.")
+    width: int = Field(description="Of the JPEG.")
+    height: int
+    frame_width: int = Field(description="Of the frame as streamed and recorded.")
+    frame_height: int
+    depth: int = Field(description="Bits per pixel: 8 or 16.")
+    color: bool
+    histogram: list[int] = Field(description="256 bins of the brightest channel, 8-bit scale.")
+    saturated: float = Field(description="Share of the pixels at the top of the scale, 0..1.")
+    sharpness: float = Field(
+        description="Variance of the Laplacian: grows as focus improves, at the same exposure,"
+        " gain and region."
+    )
+    time: str = Field(description="UTC, ISO 8601.")
+
+
+class VideoRecordingProgress(StateModel):
+    id: str
+    name: str = Field(description="The SER file's name.")
+    path: str = Field(description="Below <destination>/NOCS/.")
+    destination_label: str
+    started: str = Field(description="UTC, ISO 8601.")
+    seconds: float | None = Field(description="Asked for: seconds; None when by frames.")
+    frames: int | None = Field(description="Asked for: frames; None when by seconds.")
+    written: int = Field(description="Frames in the file so far.")
+    size: int = Field(description="Bytes in the file so far.")
+    max_file: int | None = Field(
+        description="The largest file the drive holds (FAT: 4 GiB); None without a limit."
+    )
+    stopping: Literal["file_limit", "drive_full"] | None = Field(
+        description="NOCS is stopping it before its end, and why."
+    )
+
+
+class VideoRecording(StateModel):
+    """A SER file the Video view recorded."""
+
+    id: str
+    name: str
+    file: str = Field(description="Absolute path on the box.")
+    path: str = Field(description="Below <destination>/NOCS/.")
+    destination: str = Field(description="Id of the destination.")
+    destination_label: str
+    size: int = Field(description="Bytes.")
+    frames: int
+    width: int | None
+    height: int | None
+    depth: int | None = Field(description="Bits per pixel.")
+    color: str | None = Field(description="mono, a Bayer pattern (RGGB…), RGB or BGR.")
+    seconds: float = Field(description="From the first frame to the last.")
+    fps: float | None = Field(description="Frames recorded per second.")
+    camera_fps: float | None = Field(description="Frames per second the driver measured.")
+    dropped: int | None = Field(
+        description="Frames the camera sent that the file lacks (estimated from camera_fps)."
+    )
+    exposure: float = Field(description="Seconds per frame.")
+    gain: float | None
+    target: str | None
+    filter: str | None
+    started: str = Field(description="UTC, ISO 8601.")
+    stopped: Literal["file_limit", "drive_full"] | None = Field(
+        description="NOCS stopped it before its end, and why."
+    )
+
+
+class VideoState(StateModel):
+    """The Video view (lucky imaging): the main camera's stream and its recordings."""
+
+    job: str | None = Field(description="The running video job, which holds the main camera.")
+    streaming: bool
+    exposure: float = Field(description="Seconds per frame.")
+    gain: float | None = Field(description="None: the camera's own, until set here.")
+    depth: int = Field(description="Bits per pixel: 8 or 16.")
+    region: Region | None = Field(description="Read out by the camera; None: the whole sensor.")
+    fps: float | None = Field(description="Frames per second the driver measures.")
+    frame: VideoFrame | None
+    recording: VideoRecordingProgress | None
+    recordings: list[VideoRecording] = Field(description="Newest first.")
+    error: str | None = Field(description="Why the stream stopped, if it failed.")
+
+
 class AppState(StateModel):
     """The whole state tree sent in snapshots and modified by patches."""
 
@@ -1484,6 +1578,7 @@ class AppState(StateModel):
     preparation: PreparationState | None = None
     plan: NightPlan | None = Field(default=None, description="The plan's targets, in priority.")
     stack: StackState | None = None
+    video: VideoState | None = None
     guiding: GuidingState | None = None
     system: SystemState | None = None
     sequence: SequenceState | None = None
@@ -1624,6 +1719,33 @@ class CameraSettingsRequest(BaseModel):
         default=None, description='A readout region, or "full" for the whole sensor.'
     )
     frame_type: FrameTypeName | None = None
+
+
+class VideoSettingsRequest(BaseModel):
+    """Only the fields present are changed."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    exposure: float | None = Field(default=None, gt=0, le=60, description="Seconds per frame.")
+    gain: float | None = None
+    depth: Literal[8, 16] | None = None
+    region: Region | Literal["full"] | None = Field(
+        default=None,
+        description='Read out by the camera (fitted to its rules), or "full" for the sensor.',
+    )
+
+
+class VideoRecordRequest(BaseModel):
+    """Seconds or frames, one of them."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    seconds: float | None = Field(default=None, gt=0, le=3600)
+    frames: int | None = Field(default=None, gt=0, le=1_000_000)
+
+
+class VideoRecordStarted(WireModel):
+    id: str
 
 
 class CoolingRequest(BaseModel):
@@ -2450,15 +2572,18 @@ class CatalogObject(WireModel):
 
 
 class SkyMatch(WireModel):
-    """A catalog object, or the Sun or the Moon, that matched a search and is above the
-    horizon now (Explore's go to, ADR 0054)."""
+    """A catalog object, or the Sun, the Moon or a planet, that matched a search and is
+    above the horizon now (the go to of Explore and Video)."""
 
-    object: CatalogObject | None = Field(description="None for the Sun and the Moon.")
-    body: Literal["sun", "moon"] | None
+    object: CatalogObject | None = Field(description="None for the Sun, the Moon and planets.")
+    body: (
+        Literal["sun", "moon", "mercury", "venus", "mars", "jupiter", "saturn", "uranus", "neptune"]
+        | None
+    )
     matched: str = Field(description="The designation or name the query matched.")
     frame: Literal["j2000", "jnow"] = Field(
         description="Of ``ra`` and ``dec``: J2000 for catalog objects, of the date for the"
-        " Sun and the Moon (where they are now)."
+        " Sun, the Moon and the planets (where they are now)."
     )
     ra: float = Field(description="Hours.")
     dec: float = Field(description="Degrees.")

@@ -100,6 +100,9 @@ _WATCHED = frozenset(
         "CCD_FRAME_TYPE",
         "CCD_INFO",
         "CCD_CFA",
+        "CCD_VIDEO_STREAM",
+        "STREAMING_EXPOSURE",
+        "STREAM_FULL_DEPTH",
     }
 )
 
@@ -282,6 +285,18 @@ def camera_summary(camera: Camera) -> dict[str, Json]:
             "bits": sensor.bits_per_pixel,
         },
         "bayer": camera.bayer_pattern,
+        "video": _video_summary(camera),
+    }
+
+
+def _video_summary(camera: Camera) -> dict[str, Json] | None:
+    """What the camera's video stream allows (the Video view), or ``None`` without one."""
+    if not camera.can_stream:
+        return None
+    exposure = camera.stream_exposure_range
+    return {
+        "exposure_range": {"min": exposure.min, "max": exposure.max} if exposure else None,
+        "depths": list[Json](camera.video_depths),
     }
 
 
@@ -651,6 +666,11 @@ class CaptureService:
         if (task := self._following.pop(role, None)) is not None:
             task.cancel()
         self._publish(role)
+
+    async def release_images(self, role: Role) -> None:
+        """Close the camera's image connection until the next exposure needs it: the
+        Video view opens its own, and every BLOB would be parsed twice otherwise."""
+        await self._close_images(role)
 
     async def close(self) -> None:
         for task in list(self._following.values()):

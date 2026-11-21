@@ -13,7 +13,7 @@
   import { pageWidth } from "./lib/layout";
   import { live } from "./lib/live.svelte";
   import { router } from "./lib/router.svelte";
-  import { workingView } from "./lib/sequence";
+  import { isWorkView, workingView } from "./lib/sequence";
   import { boxSetup } from "./lib/setup.svelte";
   import AuthScreen from "./screens/AuthScreen.svelte";
   import BoxSetup from "./screens/BoxSetup.svelte";
@@ -24,6 +24,7 @@
   import Polar from "./screens/polar/Polar.svelte";
   import Flats from "./screens/flats/Flats.svelte";
   import Explore from "./screens/explore/Explore.svelte";
+  import Video from "./screens/video/Video.svelte";
   import Plan from "./screens/plan/Plan.svelte";
   import PlanEditor from "./screens/plan/PlanEditor.svelte";
   import AddTarget from "./screens/plan/AddTarget.svelte";
@@ -99,12 +100,12 @@
   // How wide the page grows: Explore edge to edge, Session in columns on a PC.
   const width = $derived(pageWidth(router.route));
 
-  // Explore, Sequences and Plan exclude each other: while one works, going to another
-  // leads to the one that works.
+  // Explore, Sequences, Plan and Video exclude each other: while one works, going to
+  // another leads to the one that works.
   const working = $derived(live.synced ? workingView(live.app.sequence?.run, live.app.jobs) : null);
   $effect(() => {
     const screen = router.route.screen;
-    if ((screen === "explore" || screen === "sequence" || screen === "plan") && working && working !== screen) {
+    if (isWorkView(screen) && working && working !== screen) {
       router.go({ screen: working });
     }
   });
@@ -163,6 +164,8 @@
           <Rig />
         {:else if router.route.screen === "explore"}
           <Explore />
+        {:else if router.route.screen === "video"}
+          <Video />
         {:else if router.route.screen === "session"}
           <Session />
         {:else if router.route.screen === "dev"}

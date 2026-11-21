@@ -773,6 +773,17 @@
           "default": null,
           "description": "None where NOCS does not install updates (a PC)."
         },
+        "video": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VideoState"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "weather": {
           "anyOf": [
             {
@@ -2301,6 +2312,18 @@
             }
           ],
           "description": "Another client drives the camera (PHD2, ADR 0023): NOCS shows its frames and takes none of its own."
+        },
+        "video": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CameraVideo"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "None: the driver streams no video (no SER recording)."
         }
       },
       "required": [
@@ -2330,6 +2353,36 @@
         "used_by"
       ],
       "title": "CameraState",
+      "type": "object"
+    },
+    "CameraVideo": {
+      "additionalProperties": false,
+      "description": "What the camera's video stream allows (the Video view).",
+      "properties": {
+        "depths": {
+          "description": "Bits per pixel the stream can have: 8, 16.",
+          "items": {
+            "type": "integer"
+          },
+          "type": "array"
+        },
+        "exposure_range": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ValueRange"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Seconds per video frame."
+        }
+      },
+      "required": [
+        "exposure_range",
+        "depths"
+      ],
+      "title": "CameraVideo",
       "type": "object"
     },
     "CatalogMatch": {
@@ -11527,7 +11580,7 @@
       "type": "object"
     },
     "SkyMatch": {
-      "description": "A catalog object, or the Sun or the Moon, that matched a search and is above the\nhorizon now (Explore's go to, ADR 0054).",
+      "description": "A catalog object, or the Sun, the Moon or a planet, that matched a search and is\nabove the horizon now (the go to of Explore and Video).",
       "properties": {
         "altitude": {
           "description": "Degrees above the horizon now (geometric).",
@@ -11542,7 +11595,14 @@
             {
               "enum": [
                 "sun",
-                "moon"
+                "moon",
+                "mercury",
+                "venus",
+                "mars",
+                "jupiter",
+                "saturn",
+                "uranus",
+                "neptune"
               ],
               "type": "string"
             },
@@ -11556,7 +11616,7 @@
           "type": "number"
         },
         "frame": {
-          "description": "Of ``ra`` and ``dec``: J2000 for catalog objects, of the date for the Sun and the Moon (where they are now).",
+          "description": "Of ``ra`` and ``dec``: J2000 for catalog objects, of the date for the Sun, the Moon and the planets (where they are now).",
           "enum": [
             "j2000",
             "jnow"
@@ -11576,7 +11636,7 @@
               "type": "null"
             }
           ],
-          "description": "None for the Sun and the Moon."
+          "description": "None for the Sun, the Moon and planets."
         },
         "ra": {
           "description": "Hours.",
@@ -13826,6 +13886,581 @@
         "max"
       ],
       "title": "ValueRange",
+      "type": "object"
+    },
+    "VideoFrame": {
+      "additionalProperties": false,
+      "description": "The latest preview of the video stream: linear, as recorded, never stretched.",
+      "properties": {
+        "color": {
+          "type": "boolean"
+        },
+        "depth": {
+          "description": "Bits per pixel: 8 or 16.",
+          "type": "integer"
+        },
+        "frame_height": {
+          "type": "integer"
+        },
+        "frame_width": {
+          "description": "Of the frame as streamed and recorded.",
+          "type": "integer"
+        },
+        "height": {
+          "type": "integer"
+        },
+        "histogram": {
+          "description": "256 bins of the brightest channel, 8-bit scale.",
+          "items": {
+            "type": "integer"
+          },
+          "type": "array"
+        },
+        "saturated": {
+          "description": "Share of the pixels at the top of the scale, 0..1.",
+          "type": "number"
+        },
+        "seq": {
+          "description": "Its number: GET /api/video/frame?after=<seq> waits for the next.",
+          "type": "integer"
+        },
+        "sharpness": {
+          "description": "Variance of the Laplacian: grows as focus improves, at the same exposure, gain and region.",
+          "type": "number"
+        },
+        "time": {
+          "description": "UTC, ISO 8601.",
+          "type": "string"
+        },
+        "width": {
+          "description": "Of the JPEG.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "seq",
+        "width",
+        "height",
+        "frame_width",
+        "frame_height",
+        "depth",
+        "color",
+        "histogram",
+        "saturated",
+        "sharpness",
+        "time"
+      ],
+      "title": "VideoFrame",
+      "type": "object"
+    },
+    "VideoRecordRequest": {
+      "additionalProperties": false,
+      "description": "Seconds or frames, one of them.",
+      "properties": {
+        "frames": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "maximum": 1000000,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "seconds": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "maximum": 3600,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "VideoRecordRequest",
+      "type": "object"
+    },
+    "VideoRecordStarted": {
+      "properties": {
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "VideoRecordStarted",
+      "type": "object"
+    },
+    "VideoRecording": {
+      "additionalProperties": false,
+      "description": "A SER file the Video view recorded.",
+      "properties": {
+        "camera_fps": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Frames per second the driver measured."
+        },
+        "color": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "mono, a Bayer pattern (RGGB\u2026), RGB or BGR."
+        },
+        "depth": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Bits per pixel."
+        },
+        "destination": {
+          "description": "Id of the destination.",
+          "type": "string"
+        },
+        "destination_label": {
+          "type": "string"
+        },
+        "dropped": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Frames the camera sent that the file lacks (estimated from camera_fps)."
+        },
+        "exposure": {
+          "description": "Seconds per frame.",
+          "type": "number"
+        },
+        "file": {
+          "description": "Absolute path on the box.",
+          "type": "string"
+        },
+        "filter": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fps": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Frames recorded per second."
+        },
+        "frames": {
+          "type": "integer"
+        },
+        "gain": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "height": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "path": {
+          "description": "Below <destination>/NOCS/.",
+          "type": "string"
+        },
+        "seconds": {
+          "description": "From the first frame to the last.",
+          "type": "number"
+        },
+        "size": {
+          "description": "Bytes.",
+          "type": "integer"
+        },
+        "started": {
+          "description": "UTC, ISO 8601.",
+          "type": "string"
+        },
+        "stopped": {
+          "anyOf": [
+            {
+              "enum": [
+                "file_limit",
+                "drive_full"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "NOCS stopped it before its end, and why."
+        },
+        "target": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "width": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "file",
+        "path",
+        "destination",
+        "destination_label",
+        "size",
+        "frames",
+        "width",
+        "height",
+        "depth",
+        "color",
+        "seconds",
+        "fps",
+        "camera_fps",
+        "dropped",
+        "exposure",
+        "gain",
+        "target",
+        "filter",
+        "started",
+        "stopped"
+      ],
+      "title": "VideoRecording",
+      "type": "object"
+    },
+    "VideoRecordingProgress": {
+      "additionalProperties": false,
+      "properties": {
+        "destination_label": {
+          "type": "string"
+        },
+        "frames": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Asked for: frames; None when by seconds."
+        },
+        "id": {
+          "type": "string"
+        },
+        "max_file": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The largest file the drive holds (FAT: 4 GiB); None without a limit."
+        },
+        "name": {
+          "description": "The SER file's name.",
+          "type": "string"
+        },
+        "path": {
+          "description": "Below <destination>/NOCS/.",
+          "type": "string"
+        },
+        "seconds": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Asked for: seconds; None when by frames."
+        },
+        "size": {
+          "description": "Bytes in the file so far.",
+          "type": "integer"
+        },
+        "started": {
+          "description": "UTC, ISO 8601.",
+          "type": "string"
+        },
+        "stopping": {
+          "anyOf": [
+            {
+              "enum": [
+                "file_limit",
+                "drive_full"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "NOCS is stopping it before its end, and why."
+        },
+        "written": {
+          "description": "Frames in the file so far.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "path",
+        "destination_label",
+        "started",
+        "seconds",
+        "frames",
+        "written",
+        "size",
+        "max_file",
+        "stopping"
+      ],
+      "title": "VideoRecordingProgress",
+      "type": "object"
+    },
+    "VideoSettingsRequest": {
+      "additionalProperties": false,
+      "description": "Only the fields present are changed.",
+      "properties": {
+        "depth": {
+          "anyOf": [
+            {
+              "enum": [
+                8,
+                16
+              ],
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "exposure": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "maximum": 60,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Seconds per frame."
+        },
+        "gain": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "region": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Region"
+            },
+            {
+              "const": "full",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Read out by the camera (fitted to its rules), or \"full\" for the sensor."
+        }
+      },
+      "title": "VideoSettingsRequest",
+      "type": "object"
+    },
+    "VideoState": {
+      "additionalProperties": false,
+      "description": "The Video view (lucky imaging): the main camera's stream and its recordings.",
+      "properties": {
+        "depth": {
+          "description": "Bits per pixel: 8 or 16.",
+          "type": "integer"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Why the stream stopped, if it failed."
+        },
+        "exposure": {
+          "description": "Seconds per frame.",
+          "type": "number"
+        },
+        "fps": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Frames per second the driver measures."
+        },
+        "frame": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VideoFrame"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "gain": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "None: the camera's own, until set here."
+        },
+        "job": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The running video job, which holds the main camera."
+        },
+        "recording": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VideoRecordingProgress"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "recordings": {
+          "description": "Newest first.",
+          "items": {
+            "$ref": "#/$defs/VideoRecording"
+          },
+          "type": "array"
+        },
+        "region": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Region"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Read out by the camera; None: the whole sensor."
+        },
+        "streaming": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "job",
+        "streaming",
+        "exposure",
+        "gain",
+        "depth",
+        "region",
+        "fps",
+        "frame",
+        "recording",
+        "recordings",
+        "error"
+      ],
+      "title": "VideoState",
       "type": "object"
     },
     "Wait": {

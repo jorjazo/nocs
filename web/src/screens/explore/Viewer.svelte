@@ -27,8 +27,9 @@
     // Shown while there is no image.
     empty?: Snippet;
     reticle?: boolean;
-    // A single tap on the image, once it cannot be the start of a double tap.
-    ontap?: () => void;
+    // A single tap on the image, once it cannot be the start of a double tap: where,
+    // from 0 to 1 across and down the image, or null outside it.
+    ontap?: (at: { x: number; y: number } | null) => void;
     // Overlays (readouts, buttons) on top of the image.
     children?: Snippet;
   } = $props();
@@ -203,9 +204,19 @@
       lastTap = { time: now, ...point };
       if (ontap) {
         clearTimeout(pendingTap);
-        pendingTap = setTimeout(() => ontap?.(), DOUBLE_TAP);
+        const at = onImage(point);
+        pendingTap = setTimeout(() => ontap?.(at), DOUBLE_TAP);
       }
     }
+  }
+
+  // A point of the box (from its centre) on the image, 0 to 1 across and down.
+  function onImage(point: Point): { x: number; y: number } | null {
+    if (width <= 0 || height <= 0) return null;
+    const scale = fit * zoom;
+    const x = (point.x - panX) / scale / width + 0.5;
+    const y = (point.y - panY) / scale / height + 0.5;
+    return x >= 0 && x <= 1 && y >= 0 && y <= 1 ? { x, y } : null;
   }
 
   function onpointercancel(event: PointerEvent): void {

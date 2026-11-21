@@ -103,6 +103,9 @@ from nocs.api.schemas import (
     TemperatureRecord,
     TemplateRequest,
     TrackingRequest,
+    VideoRecordRequest,
+    VideoRecordStarted,
+    VideoSettingsRequest,
     WifiNetwork,
 )
 from nocs.calibration.flats import FlatPlan
@@ -157,6 +160,8 @@ MODELS: list[tuple[type[BaseModel], Mode]] = [
     (FocuserBacklashRequest, "validation"),
     (MountMoveRequest, "validation"),
     (StackSwitchRequest, "validation"),
+    (VideoSettingsRequest, "validation"),
+    (VideoRecordRequest, "validation"),
     (FrameSaved, "serialization"),
     (StackSaved, "serialization"),
     (StackLook, "validation"),
@@ -204,6 +209,7 @@ MODELS: list[tuple[type[BaseModel], Mode]] = [
     (AuthStatus, "serialization"),
     (PairedDevice, "serialization"),
     (JobStarted, "serialization"),
+    (VideoRecordStarted, "serialization"),
     (Driver, "serialization"),
     (SerialPortInfo, "serialization"),
     (DetectedPort, "serialization"),

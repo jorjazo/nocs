@@ -212,6 +212,14 @@ export type {
   ForecastState,
   SkyMatch,
   SkyPointing,
+  CameraVideo,
+  VideoFrame,
+  VideoRecording,
+  VideoRecordingProgress,
+  VideoRecordRequest,
+  VideoRecordStarted,
+  VideoSettingsRequest,
+  VideoState,
 } from "./generated/api";
 
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };

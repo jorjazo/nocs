@@ -33,6 +33,11 @@ class Settings(BaseSettings):
     sees it. Without it, and always for the guide camera, frames arrive as BLOBs (ADR 0012)."""
     indi_upload_dir_local: Path | None = None
     """The same directory as nocsd sees it, when that differs (indiserver in a container)."""
+    indi_shared_dir: Path | None = None
+    """A directory indiserver sees at another path than nocsd (a container), as it sees it:
+    paths below ``indi_shared_dir_local`` reach drivers below it (the Video view's SER
+    files). Without both, drivers get nocsd's own paths, as on the box."""
+    indi_shared_dir_local: Path | None = None
     astap: Path | None = None
     """The ASTAP command-line solver; by default ``astap_cli`` on the PATH or in /opt/astap."""
     astap_db: Path | None = None
