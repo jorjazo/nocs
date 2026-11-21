@@ -178,16 +178,21 @@ export function currentPlan(run: SequenceRun): string | null {
   return Object.keys(run.plans).find((path) => current === path || path.startsWith(`${current}.`) || current.startsWith(`${path}.`)) ?? null;
 }
 
-// The row a frame in progress belongs to: the current plan's row with the wheel's
-// filter that still has frames left, else its first unfinished one.
-export function currentRow(run: SequenceRun, filter: string | null): RowProgress | null {
+// The row a frame in progress belongs to: the current plan's first unfinished row,
+// since a sequence's groups are taken in their order, each to its end (a plan in
+// batches, only ever built by hand, is shown as if it were too).
+export function currentRow(run: SequenceRun): RowProgress | null {
   const path = run.current && run.plans[run.current] ? run.current : null;
   if (!path) return null;
   const plan = run.plans[path];
-  if (!plan) return null;
-  const open = plan.rows.filter((row) => row.done < row.count);
-  const row = open.find((r) => r.filter === filter) ?? open[0];
-  return row ? { frameType: plan.frame_type, filter: row.filter, exposure: row.exposure, count: row.count, done: row.done, path } : null;
+  const row = plan?.rows.find((r) => r.done < r.count);
+  return plan && row ? { frameType: plan.frame_type, filter: row.filter, exposure: row.exposure, count: row.count, done: row.done, path } : null;
+}
+
+// Which of a run's rows (runProgress) is being taken in the plan at `plan`: its first
+// unfinished one; -1 when none.
+export function currentIndex(rows: RowProgress[], plan: string | null): number {
+  return plan ? rows.findIndex((r) => r.path === plan && r.done < r.count) : -1;
 }
 
 // What a trigger event says (the server's words, "<trigger>: <reason>"): which

@@ -4429,7 +4429,7 @@ export interface ExposurePlan {
   frame_type?: "light" | "dark" | "flat" | "bias";
   kind?: "expose";
   /**
-   * batches: up to `batch` frames of a row, then the next row with frames left; in_turn: each row to its end.
+   * batches: up to `batch` frames of a row, then the next row with frames left (back to the first after the last); in_turn: each row to its end before the next, no interleaving (what templates build).
    */
   order?: "batches" | "in_turn";
   /**
@@ -5755,7 +5755,7 @@ export interface Template {
   flip_after?: number;
   focus?: FocusPlan | null;
   /**
-   * Taken in order, each to its end.
+   * Taken in order, each to its last frame; the night's end (dawn, the minimum altitude) can leave later light groups short or empty.
    *
    * @minItems 1
    */

@@ -609,7 +609,9 @@ Sequences:
   (Light, Dark, Bias, Flat), a filter (lights and flats), an exposure (bias take the
   camera's shortest; flats find theirs from the last frame's level, or take a fixed
   one), frames, gain, offset, binning, and a temperature when cooling is per group.
-  Groups are taken in their order, each to its end. When the run starts it
+  Groups are taken in their order, each to its last frame; the night's end (dawn,
+  the minimum altitude) can cut the lights short, leaving later light groups with
+  fewer frames or none. When the run starts it
   solves what is framed (or takes where the mount points) and names it after the
   last go to or the catalog object nearest it: the target of the flip, the centring
   and the altitude.

@@ -222,7 +222,8 @@ class ExposurePlan(SequenceModel):
     order: Literal["batches", "in_turn"] = Field(
         default="batches",
         description="batches: up to `batch` frames of a row, then the next row with frames "
-        "left; in_turn: each row to its end.",
+        "left (back to the first after the last); in_turn: each row to its end before the "
+        "next, no interleaving (what templates build).",
     )
     batch: int = Field(default=5, ge=1, le=1000)
     frame_type: FrameKind = "light"
@@ -616,7 +617,11 @@ class Template(SequenceModel):
     and what happens around them."""
 
     name: Name
-    groups: list[Group] = Field(min_length=1, description="Taken in order, each to its end.")
+    groups: list[Group] = Field(
+        min_length=1,
+        description="Taken in order, each to its last frame; the night's end (dawn, the "
+        "minimum altitude) can leave later light groups short or empty.",
+    )
     start_at_dusk: bool = Field(
         default=True, description="Lights wait until dark; darks, bias and flats do not."
     )

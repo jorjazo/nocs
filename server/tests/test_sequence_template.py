@@ -9,7 +9,7 @@ import anyio
 import pytest
 from fastapi.testclient import TestClient
 from owner import pair_owner
-from test_sequence import DIAGUITAS, M42, Rig, frames
+from test_sequence import DIAGUITAS, M42, Rig, frames, order
 
 from nocs.api.app import create_app
 from nocs.config import Settings
@@ -95,6 +95,8 @@ def test_lights_in_a_row_are_one_plan_each_to_its_end() -> None:
         ("B", 180, 10),
     ]
     assert (plan.order, plan.frame_type) == ("in_turn", "light")
+    # Taken in their order, each to its end: no filter takes turns with another.
+    assert order(plan) == [0] * 40 + [1] * 10 + [2] * 10 + [3] * 10
     assert [c.kind for c in sequence.end.children] == ["park", "warm"]
 
 

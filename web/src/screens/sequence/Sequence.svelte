@@ -105,7 +105,7 @@
 
   // The frame in progress, for the widget and the status bar.
   const exposingRow = $derived(
-    going && going.step?.kind === "expose" && camera?.exposing ? currentRow(going, live.app.filter_wheel?.filter ?? null) : null,
+    going && going.step?.kind === "expose" && camera?.exposing ? currentRow(going) : null,
   );
   const exposing = $derived(
     exposingRow
