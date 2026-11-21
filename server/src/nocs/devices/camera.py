@@ -65,9 +65,29 @@ class Range:
     max: float
 
 
+@dataclass(frozen=True, slots=True)
+class Recording:
+    """A recording of the video stream in progress or asked for (``RECORD_STREAM``)."""
+
+    directory: str
+    """As indiserver's host sees it."""
+    name: str
+    """The file's name without ``.ser``, which the driver adds."""
+    seconds: float | None = None
+    frames: int | None = None
+
+
 # Gain and offset live in vendor-specific places: (property, element) in order of preference.
 _GAIN = (("CCD_CONTROLS", "Gain"), ("CCD_GAIN", "GAIN"))
 _OFFSET = (("CCD_CONTROLS", "Offset"), ("CCD_OFFSET", "OFFSET"))
+_STREAM_PROPERTIES = (
+    "CCD_VIDEO_STREAM",
+    "STREAMING_EXPOSURE",
+    "RECORD_STREAM",
+    "RECORD_FILE",
+    "RECORD_OPTIONS",
+)
+_RECORDING = ("RECORD_ON", "RECORD_DURATION_ON", "RECORD_FRAME_ON")
 
 
 class Camera(Device):
@@ -379,6 +399,181 @@ class Camera(Device):
             raise ValueError("exposure must not be negative")
         if frame_type is not None and frame_type is not self.frame_type:
             await self.set_frame_type(frame_type)
+
+    # -- video stream (INDI's StreamManager) -------------------------------------------
+
+    @property
+    def can_stream(self) -> bool:
+        """The driver streams video and records it to SER files itself."""
+        return all(self.has(name) for name in _STREAM_PROPERTIES)
+
+    @property
+    def stream_exposure(self) -> float | None:
+        """Seconds of each video frame (``STREAMING_EXPOSURE``)."""
+        element = self._control((("STREAMING_EXPOSURE", "STREAMING_EXPOSURE_VALUE"),))
+        return element.value if element is not None else None
+
+    @property
+    def stream_exposure_range(self) -> Range | None:
+        element = self._control((("STREAMING_EXPOSURE", "STREAMING_EXPOSURE_VALUE"),))
+        return Range(element.min, element.max) if element is not None else None
+
+    @property
+    def stream_frame(self) -> Region | None:
+        """The part of the streamed image that is sent and recorded (``CCD_STREAM_FRAME``),
+        in the stream's own pixels."""
+        if not self.has("CCD_STREAM_FRAME"):
+            return None
+        prop = self.prop("CCD_STREAM_FRAME")
+        return Region(
+            round(prop.number("X")),
+            round(prop.number("Y")),
+            round(prop.number("WIDTH")),
+            round(prop.number("HEIGHT")),
+        )
+
+    @property
+    def stream_fps(self) -> float | None:
+        """Frames per second the driver measures (``FPS.AVG_FPS``), while it streams."""
+        element = self._control((("FPS", "AVG_FPS"),))
+        return element.value if element is not None and element.value > 0 else None
+
+    @property
+    def video_depths(self) -> list[int]:
+        """Bits per pixel the stream records: what the camera's video formats offer (ZWO's
+        ``CCD_VIDEO_FORMAT``, RAW8 and RAW16), else the sensor's own: the stream manager
+        records frames as the driver reads them (``STREAM_FULL_DEPTH`` is the preview's)."""
+        if self.has("CCD_VIDEO_FORMAT"):
+            names = self.prop("CCD_VIDEO_FORMAT").elements
+            found = [bits for bits in (8, 16) if any(n.endswith(f"RAW{bits}") for n in names)]
+            if found:
+                return found
+        return [16 if self.sensor.bits_per_pixel > 8 else 8]
+
+    @property
+    def recording(self) -> bool:
+        if not self.has("RECORD_STREAM"):
+            return False
+        prop = self.prop("RECORD_STREAM")
+        return any(prop.switch(name) for name in _RECORDING if name in prop.elements)
+
+    def control(self, name: str) -> NumberElement | None:
+        """One of a vendor's ``CCD_CONTROLS`` (ZWO: ``BandWidth``, ``HighSpeedMode``)."""
+        return self._control((("CCD_CONTROLS", name),))
+
+    async def set_control(self, name: str, value: float) -> None:
+        await self._set_control((("CCD_CONTROLS", name),), name, value)
+
+    async def set_stream_exposure(self, seconds: float) -> None:
+        await self._set_control(
+            (("STREAMING_EXPOSURE", "STREAMING_EXPOSURE_VALUE"),), "video exposure", seconds
+        )
+
+    async def set_video_depth(self, bits: int) -> None:
+        """8 or 16 bits per pixel for the stream and its recordings.
+
+        Cameras with a video format of their own (ZWO's ``CCD_VIDEO_FORMAT``) are set to
+        their raw format of that depth too: the driver records what the camera sends.
+        """
+        if bits not in self.video_depths:
+            raise ValueError(f"{self.name} cannot stream {bits}-bit video")
+        if self.has("CCD_VIDEO_FORMAT"):
+            prop = self.prop("CCD_VIDEO_FORMAT")
+            wanted = next((n for n in prop.elements if n.endswith(f"RAW{bits}")), None)
+            if wanted is not None and not prop.switch(wanted):
+                values = {n: n == wanted for n in prop.elements}
+                await self.command("CCD_VIDEO_FORMAT", values, done=lambda p: p.switch(wanted))
+        # The preview at the same depth, so that it shows what is recorded.
+        full = self.prop("STREAM_FULL_DEPTH") if self.has("STREAM_FULL_DEPTH") else None
+        if full is not None and {"FULL_DEPTH_8BIT", "FULL_DEPTH_16BIT"} <= set(full.elements):
+            element = "FULL_DEPTH_16BIT" if bits == 16 else "FULL_DEPTH_8BIT"
+            if not full.switch(element):
+                values = {n: n == element for n in self.prop("STREAM_FULL_DEPTH").elements}
+                await self.command("STREAM_FULL_DEPTH", values, done=lambda p: p.switch(element))
+
+    async def set_stream_frame(self, region: Region) -> None:
+        """Send and record only this part of the streamed image (the stream's pixels)."""
+        await self.command(
+            "CCD_STREAM_FRAME",
+            {"X": region.x, "Y": region.y, "WIDTH": region.width, "HEIGHT": region.height},
+        )
+
+    async def set_preview_rate(self, fps: float) -> None:
+        """At most this many stream frames a second reach clients; recordings get all."""
+        if not self.has("LIMITS") or "LIMITS_PREVIEW_FPS" not in self.prop("LIMITS").elements:
+            return
+        if round(self.prop("LIMITS").number("LIMITS_PREVIEW_FPS"), 3) != round(fps, 3):
+            await self.command("LIMITS", {"LIMITS_PREVIEW_FPS": fps})
+
+    async def set_stream_encoder(self, encoder: str) -> None:
+        """``RAW`` (frames as the camera reads them) or ``MJPEG`` for the stream's BLOBs."""
+        if not self.has("CCD_STREAM_ENCODER") or self.prop("CCD_STREAM_ENCODER").switch(encoder):
+            return
+        values = {n: n == encoder for n in self.prop("CCD_STREAM_ENCODER").elements}
+        await self.command("CCD_STREAM_ENCODER", values, done=lambda p: p.switch(encoder))
+
+    async def start_stream(self, timeout: float = 30.0) -> None:
+        """Start streaming; the driver reports the stream ``Busy`` while it runs."""
+        if self.streaming:
+            return
+        await self.command(
+            "CCD_VIDEO_STREAM",
+            {"STREAM_ON": True, "STREAM_OFF": False},
+            timeout=timeout,
+            accept=frozenset({PropertyState.BUSY, PropertyState.OK}),
+            done=lambda p: p.switch("STREAM_ON"),
+        )
+
+    async def stop_stream(self, timeout: float = 30.0) -> None:
+        if not self.has("CCD_VIDEO_STREAM") or not self.streaming:
+            return
+        await self.command(
+            "CCD_VIDEO_STREAM",
+            {"STREAM_ON": False, "STREAM_OFF": True},
+            timeout=timeout,
+            accept=frozenset({PropertyState.IDLE, PropertyState.OK}),
+            done=lambda p: p.switch("STREAM_OFF"),
+        )
+
+    async def start_recording(self, recording: Recording) -> None:
+        """Record the stream to ``<directory>/<name>.ser``, for ``seconds`` or ``frames``
+        (until ``stop_recording`` with neither). The driver writes the file; it reports
+        ``RECORD_STREAM`` ``Busy`` while it records and switches it off at the end."""
+        if recording.seconds is not None and recording.frames is not None:
+            raise ValueError("a recording lasts seconds or frames, not both")
+        # The driver leaves RECORD_FILE Idle when it takes it: no Ok to wait for.
+        await self.client.send(
+            self.name,
+            "RECORD_FILE",
+            {"RECORD_FILE_DIR": recording.directory, "RECORD_FILE_NAME": recording.name},
+        )
+        if recording.seconds is not None:
+            await self.command("RECORD_OPTIONS", {"RECORD_DURATION": recording.seconds})
+            switch = "RECORD_DURATION_ON"
+        elif recording.frames is not None:
+            await self.command("RECORD_OPTIONS", {"RECORD_FRAME_TOTAL": recording.frames})
+            switch = "RECORD_FRAME_ON"
+        else:
+            switch = "RECORD_ON"
+        values = {n: n == switch for n in self.prop("RECORD_STREAM").elements}
+        await self.command(
+            "RECORD_STREAM",
+            values,
+            accept=frozenset({PropertyState.BUSY, PropertyState.OK, PropertyState.IDLE}),
+            # A short recording can be over before its Busy arrives.
+            done=lambda p: p.switch(switch) or p.switch("RECORD_OFF"),
+        )
+
+    async def stop_recording(self) -> None:
+        if not self.recording:
+            return
+        values = {n: n == "RECORD_OFF" for n in self.prop("RECORD_STREAM").elements}
+        await self.command(
+            "RECORD_STREAM",
+            values,
+            accept=frozenset({PropertyState.IDLE, PropertyState.OK}),
+            done=lambda p: p.switch("RECORD_OFF"),
+        )
 
     async def set_upload_mode(self, mode: str) -> None:
         """How the driver hands over frames: ``UPLOAD_CLIENT`` (BLOBs), ``UPLOAD_LOCAL``

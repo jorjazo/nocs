@@ -18,6 +18,7 @@
     solved = null,
     mount = null,
     longitude = null,
+    items = [],
   }: {
     camera: CameraState;
     // The frame on screen, or the stack's picture when that is shown instead.
@@ -30,6 +31,8 @@
     mount?: MountState | null;
     // Of the site, for the meridian; null without one.
     longitude?: number | null;
+    // Figures of a screen with frames of its own (Video's), in place of the preview's.
+    items?: string[];
   } = $props();
 
   const t = $derived(i18n.t);
@@ -81,11 +84,12 @@
     {#if size}<span class="item mono">{size}</span>{/if}
     <span class="item mono">{metrics}</span>
   {/if}
+  {#each items as item, i (i)}<span class="item mono">{item}</span>{/each}
   {#if solved}
     <span class="item mono">{formatRa(solved.ra)} {formatDec(solved.dec)}</span>
   {/if}
   {#if meridian}<span class="item">{meridian}</span>{/if}
-  {#if !preview && !stack}<span class="item muted">{t.live.noPreview}</span>{/if}
+  {#if !preview && !stack && items.length === 0}<span class="item muted">{t.live.noPreview}</span>{/if}
 </div>
 
 <style>

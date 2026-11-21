@@ -18,6 +18,7 @@ Navigation follows the night, not the device tree.
 | **Sequences** | Run groups of frames of what the camera has framed (lights per filter, darks, bias, flats), with the meridian flip and the night's rules; the same base as Explore, with the sequence's widget instead of go to. Explore, Sequences and Plan exclude each other | Sequences · Configure the sequence |
 | **Visitors** | The night's image for people watching: the stack or the last capture, what it is of, how it was taken, the weather, a full-size JPEG to keep. The only view of a device that is not paired when the owner lets others watch | Visitors |
 | **Plan** | Targets over one night or many, in priority, each with its lines of lights; the run takes the first that is up with frames left. The same base as Explore, with the plan's widget instead of go to | Plan · its targets · add a target · a target's page (search, framing, lines) |
+| **Video** | Lucky imaging of the Moon, the Sun and the planets: the main camera's video live, a region read out for speed, SER recordings straight to the storage drive. The same base as Explore, with focus by hand on a sharpness number and go to (planets included) | Video |
 | **Session** | The night's frames, their calibration and downloads, past sessions and their reports | Session · report |
 | **Rig** | Equipment profile, optical trains, devices, the site, the box, settings | Rig · device details |
 
@@ -33,11 +34,12 @@ Navigation follows the night, not the device tree.
   fixed, and has no button (ADR 0041).
 - A running sequence or plan is always reachable in one tap from any screen (its
   tab, with a dot), and a sequence's prompts to ready the rig show on any screen.
-- Explore, Sequences and Plan exclude each other: while Explore loops or takes
-  frames, or while a sequence or the plan is active (running, paused, or waiting on
-  the user), the others' tabs are dimmed and going to them leads to the one that
-  works. The server refuses Explore's frames during a run and a run during Explore's
-  frames; the plan runs as a sequence, so only one of the two runs at a time.
+- Explore, Sequences, Plan and Video exclude each other: while Explore loops or
+  takes frames, while Video streams, or while a sequence or the plan is active
+  (running, paused, or waiting on the user), the others' tabs are dimmed and going
+  to them leads to the one that works. The server refuses Explore's and Video's
+  frames during a run, and the camera's lock refuses the rest; the plan runs as a
+  sequence, so only one of the two runs at a time.
 
 ## 2. Key screens (Phase 1 canvas)
 
@@ -53,6 +55,7 @@ Navigation follows the night, not the device tree.
 | A target's page | Search (or coordinates, or one of my frames), the object, its lines, its altitude tonight, the framing chart with camera frame and rotation, "Go and center", remove, start its frames again. |
 | Explore | The image edge to edge with a status bar and a folding histogram under it, guiding, focus and go to over it, and a panel of actions at its side (a sheet when upright): stack, filter, exposure, loop / capture, save / solve / download what is on screen (ADR 0054). |
 | Sequences | Explore's base (image, histogram, status bar, guiding and focus over it) with the sequence's widget at the right (state, groups and their frames, the frame in progress, recent events, the way to configure it), a panel with what it does around its groups, last frame or group stack, start / pause / resume / stop. |
+| Video | Explore's base: the live video edge to edge (linear, as recorded) with its histogram (the clipped top in the warning tone, the share saturated said) and a status bar (size, depth, exposure, fps, sharpness); the focuser over it by hand, with the sharpness and the best since the image last changed, no autofocus; go to at the right (the Sun, the Moon and the planets too; a planet has only "Go"). The panel: exposure in ms, gain, depth (8 or 16 bits, when the camera records both), the region (full or a size, placed by tapping the image), filter, tracking rate, the recording's length in seconds or frames with its size, then the recordings (download, delete, frames dropped). Dock: Start/Stop the video, Record. A recording keeps the mount, the focuser and the wheel still. |
 | Configure the sequence | The saved sequences, the name, the groups in order (kind, filter, exposure, frames, settings), the calibration still missing, where the run will ask to ready the rig, estimates, the steps. |
 | Session | The night's frames and their calibration, the past sessions; a banner leads to a running sequence. |
 

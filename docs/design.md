@@ -34,7 +34,6 @@ hardware, and is operated through a beautiful, touch-first web app.
 
 ### Non-goals (for now)
 
-- Planetary / lucky imaging (high-speed video capture).
 - EAA / live stacking.
 - Multiple simultaneous imaging rigs on one server (dual rig).
 - Observatory automation: roofs, domes, weather safety (see §13).
@@ -235,6 +234,8 @@ frame is downloaded. To be validated early.
   `Flat/<filter>/`, `Dark/`, `Bias/`, with configurable filename templates
   ([ADR 0013](adr/0013-storage-and-catalog.md)).
 - SQLite catalog: nights, targets, frames, metrics, events.
+- Video recordings (SER) go to `<night>/Video/<target>/` on the same destination,
+  written by the driver; they are listed by the Video view, not in the catalog.
 - Access: download through the web app; SMB share for desktop access (later).
 
 ## 9. Workflows
@@ -292,8 +293,38 @@ across nights, so editing it while it runs changes what comes next, not the
 sequence. A plan the user stops leaves the rig as it is; its end runs only when it
 ends by itself.
 
-Explore, Sequences and Plan exclude each other: Explore takes no frames while a
-run is active, and a run does not start while Explore takes frames.
+Explore, Sequences, Plan and Video exclude each other: Explore and Video take no
+frames while a run is active, and a run does not start while either holds the
+main camera.
+
+### 9.7 Video (lucky imaging)
+
+The Moon, the Sun and the planets are taken as video: thousands of frames of a few
+milliseconds, of which a stacker on a computer keeps the sharpest. INDI's stream
+manager does the heavy part in the driver: it reads the camera as fast as it goes
+and records SER files itself, straight into the storage destination
+(`<night>/Video/<target>/`), so no frame crosses the INDI connection or nocsd's
+event loop. nocsd sets the stream up (exposure, gain, 8 or 16 bits, the region),
+turns a few frames a second into linear previews with their histogram, the share
+saturated and a sharpness number for focusing by hand, and watches each file grow,
+stopping it before a FAT drive's 4 GB limit or a full drive.
+
+- The region of interest is read out by the camera (`CCD_FRAME`): that is what makes
+  the stream fast (the ZWO ASI2600MC Duo on the lab Pi: 125 fps at 640×480, 58 at
+  1080p, 11 at full frame). ZWO's SDK reads the whole sensor again after a change of
+  format or speed, so the region is set last, right before the stream. Drivers that
+  stream the whole sensor anyway get it cut by the stream manager.
+- ZWO cameras stream with `BandWidth` at 90 and `HighSpeedMode` on (their defaults
+  halve the frame rate); the video puts both back when it stops.
+- The depth offered is what is recorded: RAW8 or RAW16 where the camera has video
+  formats, else the sensor's own (the stream manager records frames as read).
+- Each recording is listed with its frames, its frame rate from the file's
+  timestamps and the frames dropped (what the driver measured minus what the file
+  holds): a drive slower than the camera shows there.
+- Streaming is a job holding the main camera; a recording also holds the mount, the
+  focuser and the wheel. There is no guiding and no autofocus here.
+- Previews reach the browser by long polling (`/api/video/frame?after=<n>`), so a
+  slow phone gets fewer frames and the state is not flooded.
 
 ### 9.6 Safety (foundation for observatories)
 

@@ -18,6 +18,7 @@ from nocs.storage.service import (
     SavedFrame,
     StorageError,
     StorageService,
+    VideoPlace,
 )
 
 __all__ = [
@@ -36,4 +37,5 @@ __all__ = [
     "StorageError",
     "StorageService",
     "TemperatureSample",
+    "VideoPlace",
 ]

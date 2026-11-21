@@ -73,6 +73,9 @@ ROOT: StatePath = ("storage",)
 AUTO = "auto"
 RESERVE = 1 << 30
 """Bytes left free on any destination after a frame, so the OS disk never fills up."""
+FAT_TYPES = frozenset({"vfat", "msdos", "fat"})
+FAT_MAX_FILE = (1 << 32) - 1
+"""FAT32 holds no file of 4 GiB or more."""
 POLL_SECONDS = 5.0
 OWNED_KEYWORDS = frozenset({"OBJECT", "SWCREATE"})
 """Header keywords NOCS always writes; others are added only when the driver did not."""
@@ -166,6 +169,21 @@ class Located:
     row: FrameRow
     path: Path | None
     """Where the file is now; ``None`` while its drive is not mounted."""
+
+
+@dataclass(frozen=True, slots=True)
+class VideoPlace:
+    """Where a recording goes, and the drive it is on."""
+
+    directory: Path
+    relative: PurePosixPath
+    """Below the destination's ``NOCS/``."""
+    destination: Destination
+
+    @property
+    def max_file(self) -> int | None:
+        """The largest file the drive's filesystem holds, when it has a limit (FAT)."""
+        return FAT_MAX_FILE if self.destination.volume.mount.fs_type in FAT_TYPES else None
 
 
 class StorageService:
@@ -458,6 +476,37 @@ class StorageService:
                     )
                 )
         return SavedFrame(frame_id, directory / name, relative, destination.id, size, started)
+
+    def video_place(self, size: int) -> VideoPlace:
+        """Where a recording that starts now goes, its directory made (blocks).
+
+        ``<destination>/NOCS/<night>/Video/<target>``: the destination frames go to,
+        with ``size`` bytes free beyond the reserve. Until ``done_writing``, ejecting
+        that drive is refused.
+        """
+        night = layout.night_of(self._now(), self._longitude())
+        destination = self._checked(self._resolve(Volumes(self._paths), night), size)
+        with self._lock:
+            if destination.volume.id in self._ejecting:
+                raise StorageError(f"{destination.label} is being ejected")
+            self._writing[destination.volume.id] += 1
+        relative = layout.video_folder(night, self._config.target)
+        directory = destination.directory / layout.ROOT / relative
+        try:
+            directory.mkdir(parents=True, exist_ok=True)
+        except OSError as e:
+            self.done_writing(destination)
+            raise StorageError(f"cannot create {directory}: {e}") from e
+        return VideoPlace(directory, relative, destination)
+
+    def done_writing(self, destination: Destination) -> None:
+        """A recording ``video_place`` gave a place to is over."""
+        with self._lock:
+            self._writing.subtract([destination.volume.id])
+
+    def free(self, directory: Path) -> int:
+        """Bytes free for files below ``directory``, the reserve left aside (blocks)."""
+        return shutil.disk_usage(directory).free - RESERVE
 
     def keep_unsaved(self, source: Path) -> Path | None:
         """Move a frame that could not be saved out of the way, so it is not lost."""

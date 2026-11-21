@@ -261,7 +261,12 @@ export function isPlanRun(run: SequenceRun | null | undefined): boolean {
 // Explore, Sequences and Plan exclude each other: the one that is working, if any.
 // Explore works while it loops or takes frames; Sequences or Plan while a run of
 // theirs is active.
-export type WorkingView = "explore" | "sequence" | "plan";
+export type WorkingView = "explore" | "sequence" | "plan" | "video";
+
+// The views that use the rig in turns (they exclude each other).
+export function isWorkView(screen: string): screen is WorkingView {
+  return screen === "explore" || screen === "sequence" || screen === "plan" || screen === "video";
+}
 
 export function workingView(
   run: SequenceRun | null | undefined,
@@ -270,6 +275,7 @@ export function workingView(
   if (isActive(run)) return isPlanRun(run) ? "plan" : "sequence";
   for (const job of Object.values(jobs ?? {})) {
     if ((job.kind === "loop" || job.kind === "expose") && job.state === "running") return "explore";
+    if (job.kind === "video" && job.state === "running") return "video";
   }
   return null;
 }

@@ -5,7 +5,7 @@
   import { live } from "../lib/live.svelte";
   import { rigAttention } from "../lib/rigsections";
   import { href, router, TABS, type Tab } from "../lib/router.svelte";
-  import { workingView } from "../lib/sequence";
+  import { isWorkView, workingView } from "../lib/sequence";
   import Icon from "./Icon.svelte";
   import ThemeButton from "./ThemeButton.svelte";
 
@@ -29,12 +29,12 @@
   // any screen: a dot on its tab, which says how it stands to screen readers too.
   const run = $derived(live.app.sequence?.run ?? null);
   const session = $derived(run && run.state !== "finished" ? run.state : null);
-  // Explore, Sequences and Plan exclude each other: while one works, the others' tabs
-  // are dimmed and lead to the one that works.
+  // Explore, Sequences, Plan and Video exclude each other: while one works, the others'
+  // tabs are dimmed and lead to the one that works.
   const working = $derived(workingView(run, live.app.jobs));
   const runTab = $derived<Tab | null>(session ? (working === "plan" ? "plan" : "sequence") : null);
   function blocked(tab: Tab): boolean {
-    return (tab === "explore" || tab === "sequence" || tab === "plan") && working !== null && working !== tab;
+    return isWorkView(tab) && working !== null && working !== tab;
   }
   // Something on Rig needs a look, or the owner has updates worth installing: a dot
   // on the Rig tab, since the section that says so may be closed.

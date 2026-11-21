@@ -6,7 +6,9 @@ one ERFA context per instant serves the Sun, the Moon and every target. As in
 
 The Sun comes from ``epv00`` and the Moon from ``moon98`` (a few arcseconds), with
 the Moon's parallax from the site (up to a degree) applied in the local frame:
-ERFA's star pipeline would treat it as an annual parallax.
+ERFA's star pipeline would treat it as an annual parallax. The planets come from
+``plan94`` (arcseconds), corrected for light time; their parallax (Mars' at most
+~25") is left out.
 
 Altitudes are geometric (no refraction); :func:`refraction` turns them into
 apparent ones for a standard atmosphere at the site's elevation (Saemundsson's
@@ -37,6 +39,17 @@ EARTH_RADIUS_KM = 6378.137
 MOON_RADIUS_KM = 1737.4
 SUN_RADIUS_KM = 695_700.0
 SIDEREAL_DAY = 86_164.0905
+LIGHT_KM_S = 299_792.458
+PLANETS: dict[str, tuple[int, float]] = {
+    "mercury": (1, 2_439.7),
+    "venus": (2, 6_051.8),
+    "mars": (4, 3_389.5),
+    "jupiter": (5, 69_911.0),
+    "saturn": (6, 58_232.0),
+    "uranus": (7, 25_362.0),
+    "neptune": (8, 24_622.0),
+}
+"""ERFA's ``plan94`` number and mean radius (km) of each planet."""
 """Seconds."""
 TEMPERATURE = 10.0
 """°C of the standard atmosphere, the almanacs' convention."""
@@ -98,11 +111,8 @@ class Sky:
 
 def sky(site: Location, times: Floats | list[float]) -> Sky:
     t = np.atleast_1d(np.asarray(times, dtype=np.float64))
-    days = t / 86400
-    whole = np.floor(days)
-    utc1, utc2 = _UNIX_EPOCH_JD + whole, days - whole
-    tai1, tai2 = _erfa.utctai(utc1, utc2)
-    tt1, tt2 = _erfa.taitt(tai1, tai2)
+    utc1, utc2 = _utc(t)
+    tt1, tt2 = _tt(t)
     # No pressure: ERFA adds no refraction (see the module's docstring).
     astrom = _erfa.apco13(
         utc1,
@@ -148,6 +158,44 @@ def sky(site: Location, times: Floats | list[float]) -> Sky:
         moon_geo,
     )
     return Sky(site, t, sun, moon, astrom)
+
+
+def planet(chart: Sky, name: str) -> Body:
+    """Where a planet (a key of :data:`PLANETS`) is in ``chart``'s sky, at its instants."""
+    number, radius_km = PLANETS[name]
+    tt1, tt2 = _tt(chart.times)
+    earth = np.asarray(_erfa.epv00(tt1, tt2)[0]["p"], dtype=np.float64)
+
+    def geocentric(delay_days: Floats | float) -> Floats:
+        # plan94 returns the positions alone, not with a status as epv00 does.
+        helio = np.asarray(_erfa.plan94(tt1, tt2 - delay_days, number)["p"], np.float64)
+        return helio - earth
+
+    geo = geocentric(0.0)
+    # The light that arrives now left the planet minutes to hours ago.
+    light_days = np.linalg.norm(geo, axis=-1) * AU_KM / LIGHT_KM_S / 86400
+    geo = geocentric(light_days)
+    az, zenith = _direction(chart.astrom, geo)
+    km = np.linalg.norm(geo, axis=-1) * AU_KM
+    return Body(
+        90 - np.degrees(zenith),
+        np.degrees(az) % 360,
+        km,
+        np.degrees(np.arcsin(radius_km / km)),
+        geo,
+    )
+
+
+def _utc(t: Floats) -> tuple[Floats, Floats]:
+    days = t / 86400
+    whole = np.floor(days)
+    return _UNIX_EPOCH_JD + whole, days - whole
+
+
+def _tt(t: Floats) -> tuple[Floats, Floats]:
+    tai1, tai2 = _erfa.utctai(*_utc(t))
+    tt1, tt2 = _erfa.taitt(tai1, tai2)
+    return np.asarray(tt1, dtype=np.float64), np.asarray(tt2, dtype=np.float64)
 
 
 def refraction(altitude: Floats, pressure: float, temperature: float = TEMPERATURE) -> Floats:

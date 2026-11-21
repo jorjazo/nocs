@@ -78,7 +78,8 @@ server/   Python package `nocs` (nocsd): indi/ (protocol + async client, driver
           solving/ (ASTAP, fields of view), pointing/ (solve and sync, centre),
           align/ (polar alignment: axis from three solves, knobs),
           finder/ (the Sun and the Moon found and centred by brightness),
-          sky/ (a night's almanac at the site, targets' visibility),
+          video/ (the Video view: the stream, linear previews, SER recordings),
+          sky/ (a night's almanac at the site, targets' visibility, the planets),
           sites/ (the saved sites and the box's active one),
           preparation/ (what blocks each step of Tonight's checklist),
           targets/ (bundled OpenNGC catalog and its search; Tycho-2
@@ -118,7 +119,9 @@ pnpm gen:types        # after changing server/src/nocs/api/schemas.py (CI checks
 NOCS_WEB_DIR=web/dist NOCS_INDI_FIFO=dev/.run/fifo NOCS_INDI_DRIVERS_DIR=dev/.run/drivers \
   NOCS_INDI_UPLOAD_DIR=/run/indi/uploads NOCS_INDI_UPLOAD_DIR_LOCAL=dev/.run/uploads \
   NOCS_PHD2_SETTINGS=dev/.run/phd2.phd NOCS_PHD2_INDI_HOST=indi \
+  NOCS_INDI_SHARED_DIR=/run/indi NOCS_INDI_SHARED_DIR_LOCAL=dev/.run NOCS_STORAGE_DIR=dev/.run/storage \
   uv run --project server nocsd               # http://127.0.0.1:8000
+# (the shared dir and storage below it: Video's SER files are written by the driver)
 # profiles live in ~/.config/nocs/profiles/ (NOCS_CONFIG_DIR); dev/profiles/ has the simulators,
 # and dev/sites.json an example site (copy it to ~/.config/nocs/sites.json)
 # the first visit sets the owner passphrase and pairs that browser;

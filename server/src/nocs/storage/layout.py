@@ -96,6 +96,11 @@ def folder(frame_type: str, night: date, target: str | None, filter: str | None)
     return path
 
 
+def video_folder(night: date, target: str | None) -> PurePosixPath:
+    """``<night>/Video/<target>``: where the Video view's recordings go."""
+    return PurePosixPath(night.isoformat(), "Video", clean(target or "") or UNTITLED)
+
+
 def check_template(template: str) -> str:
     """Validate a file name template: known fields only, nothing a file name cannot hold."""
     try:

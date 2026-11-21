@@ -1,4 +1,5 @@
-"""Where the Sun and the Moon are for the mount: JNow coordinates from a site, now.
+"""Where the Sun, the Moon and the planets are for the mount: JNow coordinates from a
+site, now.
 
 The ephemeris gives their topocentric geometric altitude and azimuth (the Moon's
 parallax from the site included); :func:`nocs.mount.coords.horizontal_to_jnow`
@@ -15,12 +16,30 @@ from enum import StrEnum
 
 from nocs.devices import Coordinates, Location
 from nocs.mount.coords import horizontal_to_jnow
-from nocs.sky.ephemeris import sky
+from nocs.sky.ephemeris import planet, sky
 
 
 class Body(StrEnum):
     SUN = "sun"
     MOON = "moon"
+    MERCURY = "mercury"
+    VENUS = "venus"
+    MARS = "mars"
+    JUPITER = "jupiter"
+    SATURN = "saturn"
+    URANUS = "uranus"
+    NEPTUNE = "neptune"
+
+
+PLANETS = (
+    Body.MERCURY,
+    Body.VENUS,
+    Body.MARS,
+    Body.JUPITER,
+    Body.SATURN,
+    Body.URANUS,
+    Body.NEPTUNE,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,7 +57,12 @@ class BodyPosition:
 def position(body: Body, site: Location, when: datetime) -> BodyPosition:
     """Where ``body`` is in ``site``'s sky at ``when``."""
     now = sky(site, [when.timestamp()])
-    seen = now.sun if body is Body.SUN else now.moon
+    if body is Body.SUN:
+        seen = now.sun
+    elif body is Body.MOON:
+        seen = now.moon
+    else:
+        seen = planet(now, body.value)
     alt, az = float(seen.alt[0]), float(seen.az[0])
     return BodyPosition(
         body,
