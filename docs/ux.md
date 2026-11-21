@@ -16,6 +16,7 @@ Navigation follows the night, not the device tree.
 | **Tonight** | Home: the night and how the rig stands now. A "get ready" checklist that leads to each setup flow, the night window, where the mount points, the weather, the actuators, the location and time, the host (ADR 0053) | Tonight · Polar alignment · Autofocus (full-screen flows) |
 | **Explore** | Try the sky tonight: the image, its histogram and status, the tools over it (guiding, focus, go to), loop, capture, save what is on screen (ADR 0054) | Explore |
 | **Sequences** | Run groups of frames of what the camera has framed (lights per filter, darks, bias, flats), with the meridian flip and the night's rules; the same base as Explore, with the sequence's widget instead of go to. Explore, Sequences and Plan exclude each other | Sequences · Configure the sequence |
+| **Visitors** | The night's image for people watching: the stack or the last capture, what it is of, how it was taken, the weather, a full-size JPEG to keep. The only view of a device that is not paired when the owner lets others watch | Visitors |
 | **Plan** | Targets over one night or many, in priority, each with its lines of lights; the run takes the first that is up with frames left. The same base as Explore, with the plan's widget instead of go to | Plan · its targets · add a target · a target's page (search, framing, lines) |
 | **Session** | The night's frames, their calibration and downloads, past sessions and their reports | Session · report |
 | **Rig** | Equipment profile, optical trains, devices, the site, the box, settings | Rig · device details |
@@ -186,11 +187,9 @@ Rig (2026-11-14):
   chip on Updates. Plain system updates come every few days and do not light it, nor
   does a failed join of a network: nocs-system keeps the last one until the next, so
   Network says it in words and nothing more.
-- Observers see what is informative (devices, the box's status, storage, whether the
-  box is on its access point or a Wi-Fi network); not where the box is or which
-  networks it knows (ADR 0047): no Site group, a GPS fix without its position, and no
-  network names. Access and Updates are for the owner, and the app's banner offers to
-  pair.
+- Observers see only Visitors (below), not Rig; the state they get still leaves
+  out where the box is and which networks it knows (ADR 0047): no site, a GPS fix
+  without its position, and no network names.
 - From 1200 px the groups sit in two columns: the rig and its site on the left, the
   box and settings on the right.
 
@@ -291,7 +290,7 @@ Session: the night's frames (phase 2 field test):
   Downloads are plain links, so the phone's browser keeps and shows them.
 - Tapping a group lists only its frames. A frame whose drive is not connected is
   dimmed, without a download, under a banner naming the drive.
-- Only the owner's devices list frames; an observer sees why.
+- Only the owner's devices list frames.
 
 Power box (stage 2.10):
 
@@ -694,6 +693,29 @@ Plan:
   frames, its exposure so far and what is left, "Taking now" and how it does tonight;
   up and down change its priority, a tap opens its page, Add a target finds another.
 
+Visitors:
+
+- `#/visits`: a tab for the owner, and the only screen of a device that is not paired
+  while the owner lets others watch (Rig → Access): no tabs, whatever the address
+  says, with the banner that offers to pair. Visitors reach it on the box's network at
+  `nocs.local`; nothing is shared from it (no QR, no network name).
+- Explore's base, without the tools over the image: the image fills the screen (a
+  tap enlarges it), with the stack or the last capture, each visitor's choice (kept in
+  the browser, as Explore's); before the first image, "Waiting for the first image".
+- The panel: what the image is of, as Tonight's Pointing names it (one of tonight's
+  objects, the Sun or the Moon, else the nearest catalog object) with what it is
+  (type, constellation, magnitude, size); how it was taken (the stack: frames, total
+  time, each exposure, gain, filter; the capture: exposure, gain, filter, when); the
+  temperature and humidity outside (the sensor's, else the forecast's hour, said
+  so); night mode, off until the visitor turns it on.
+- The dock: Download the stack, or this capture: a full-size JPEG
+  (`/api/visit/stack.jpg`, `/api/visit/frame.jpg`), stretched as on screen, rendered
+  once per image (or stack and look) however many download it. The button says
+  "Making the picture…" meanwhile (a few seconds for 26 MP), and why it could not be
+  (not ready yet, watching turned off, the box out of reach), without paths. A
+  frame replaced as it is asked for gives the newer one. No FITS, and no share button
+  (sharing waits for HTTPS on the box): the gallery shares it.
+
 Session report (stage 5.15):
 
 - The Session tab lists the past sessions, newest first, each with its date and
@@ -758,8 +780,7 @@ Live stacking (ADR 0040, after v1.0):
   is tapped: the server re-renders the stack at once for every client. The sheet keeps
   its own copy while it is open (a second tap must not undo the first before the
   server answers), and shows its own errors.
-- Observers see the stack and its numbers (an outreach night); the switch and the
-  buttons are disabled for them.
+- Observers see the stack in Visitors (an outreach night), not this card.
 
 ## 8. Open UX questions
 

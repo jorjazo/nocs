@@ -57,6 +57,7 @@ class FakeWorker:
     saves: list[tuple[str, dict[str, str | int | float | bool | None]]] = field(
         default_factory=list[tuple[str, dict[str, str | int | float | bool | None]]]
     )
+    pictures: list[tuple[str, Look]] = field(default_factory=list[tuple[str, Look]])
     entered: asyncio.Event = field(default_factory=asyncio.Event)
     """Set when a frame reaches the worker (before ``gate``)."""
 
@@ -108,6 +109,13 @@ class FakeWorker:
         if stack_id not in self.frames:
             raise StackLostError("unknown")
         return Rendered(str(self.previews_dir / f"{'f' * 32}.jpg"), 1920, 1280)
+
+    async def stack_picture(self, stack_id: str, jpeg_path: str, look: Look) -> Rendered:
+        if stack_id not in self.frames:
+            raise StackLostError("unknown")
+        self.pictures.append((stack_id, look))
+        Path(jpeg_path).write_bytes(b"jpeg")  # noqa: ASYNC240 (a test double)
+        return Rendered(jpeg_path, 6248, 4176)
 
     async def stack_save(
         self,
@@ -364,6 +372,23 @@ async def test_newest_frame_wins_while_busy(rig: Rig, tmp_path: Path) -> None:
     assert Path(rig.worker.calls[1].path).parent == tmp_path / "data" / "stacking"
     assert not any((tmp_path / "data" / "stacking").iterdir())
     assert all(f.path.exists() for f in loop_frames)  # the capture's own files stay
+
+
+async def test_a_picture_of_the_stack_at_its_full_size(rig: Rig, tmp_path: Path) -> None:
+    assert rig.service.picture_key() is None
+    with pytest.raises(NothingToSaveError):
+        await rig.service.picture(tmp_path / "none.jpg")
+    await offer(rig, rig.frame())
+    key = rig.service.picture_key()
+    assert key is not None
+    await rig.service.picture(tmp_path / "stack.jpg")
+    assert (tmp_path / "stack.jpg").read_bytes() == b"jpeg"
+    assert [stack for stack, _ in rig.worker.pictures] == [rig.worker.calls[0].stack_id]
+    await offer(rig, rig.frame())
+    assert rig.service.picture_key() not in (None, key)  # a frame more: another picture
+    rig.worker.frames.clear()  # the worker restarted
+    with pytest.raises(NothingToSaveError, match="lost"):
+        await rig.service.picture(tmp_path / "lost.jpg")
 
 
 async def test_switching_off_ends_the_stacks(rig: Rig) -> None:

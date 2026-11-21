@@ -12,7 +12,7 @@ import type { Route } from "./router.svelte";
 export type PageWidth = "narrow" | "wide" | "full";
 
 export function pageWidth(route: Route): PageWidth {
-  if (route.screen === "explore" || route.screen === "sequence" || route.screen === "plan") return "full";
+  if (route.screen === "explore" || route.screen === "sequence" || route.screen === "plan" || route.screen === "visits") return "full";
   if (route.screen === "session" || route.screen === "rig") return "wide";
   return "narrow";
 }

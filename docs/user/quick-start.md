@@ -129,7 +129,11 @@ them by priority. Started, it takes the first target that is up with frames left
 switches to one that comes first between frames, and goes on the next night where it
 left off; stopped by you it leaves the rig as it is, and when it ends by itself (dawn,
 or every target done) it parks and warms the camera.
-While either runs, Explore waits; **Session** keeps the night's frames. The box runs the
+While either runs, Explore waits; **Session** keeps the night's frames.
+**Visitors** is the night's image for the people around you: switch on **Let others
+watch** (Rig → Access) and anyone on the box's network who opens `nocs.local` sees
+only that, the stack or the last capture with what it is and how it was taken, and can
+download a full-size JPEG of it to share. The box runs the
 night by itself: you can lock the phone, or close the browser, and come back to it
 later.
 

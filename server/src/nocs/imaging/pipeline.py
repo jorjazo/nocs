@@ -176,6 +176,25 @@ def level(fits_path: str, bayer: str | None = None) -> float:
     return max(float(np.median(channel)) for channel in channels)
 
 
+def picture(fits_path: str, jpeg_path: str, bayer: str | None = None) -> tuple[int, int]:
+    """Write a frame as a stretched JPEG at its full size, as the preview stretches it
+    (a visitor's download); its width and height. No stars are measured."""
+    data, header_bayer, bottom_up = load(fits_path)
+    pattern = (header_bayer or bayer or "").upper() or None
+    if pattern is not None and pattern not in _DEBAYER:
+        raise ValueError(f"unsupported Bayer pattern {pattern}")
+    image: NDArray[np.uint16] = (
+        np.asarray(cv2.cvtColor(data, _DEBAYER[pattern]), dtype=np.uint16)
+        if pattern is not None
+        else data
+    )
+    stretched = stretch(image.astype(np.float32))
+    if bottom_up:
+        stretched = np.ascontiguousarray(stretched[::-1])
+    write_jpeg(Path(jpeg_path), stretched)
+    return int(stretched.shape[1]), int(stretched.shape[0])
+
+
 def load(path: str) -> tuple[Mono16, str | None, bool]:
     """Pixels as 16-bit, the Bayer pattern if the header has one, and whether rows are bottom-up."""
     with _fits.open(path, memmap=False) as hdul:

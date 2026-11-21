@@ -51,6 +51,8 @@ log = logging.getLogger(__name__)
 KEEP_PREVIEWS = 10
 """Previews kept per camera; older files are deleted."""
 PREVIEW_NAME = re.compile(r"^[0-9a-f]{32}\.jpg$")
+FULL_SIZE = 1 << 16
+"""Pixels across that no sensor reaches: a render at its full size."""
 CLOSE_TIMEOUT = 10.0
 """Seconds ``close`` waits for the frame in hand before killing the worker."""
 
@@ -112,6 +114,10 @@ class ImageWorker:
         except BrokenProcessPool:
             self._died()
             raise
+
+    async def picture(self, fits_path: str, jpeg_path: str, bayer: str | None) -> tuple[int, int]:
+        """A frame as a JPEG at its full size (``pipeline.picture``); its size."""
+        return await self._run(functools.partial(pipeline.picture, fits_path, jpeg_path, bayer))
 
     async def measure(self, fits_path: str, bayer: str | None) -> StarMetrics:
         """Star count and HFR of a frame, without a preview; frames queue, none is dropped."""
@@ -201,6 +207,11 @@ class ImageWorker:
         rendered = await self._run(functools.partial(stack.render, stack_id, str(preview), look))
         await self._expire("stack", preview)
         return rendered
+
+    async def stack_picture(self, stack_id: str, jpeg_path: str, look: Look) -> Rendered:
+        """The stack as it stands, as a JPEG at its full size where asked."""
+        call = functools.partial(stack.render, stack_id, jpeg_path, look, FULL_SIZE)
+        return await self._run(call)
 
     async def stack_save(
         self,

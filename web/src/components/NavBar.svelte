@@ -130,10 +130,14 @@
     background: var(--error);
   }
   .name {
-    font-size: 13px;
+    max-width: 100%;
+    overflow: hidden;
+    font-size: 12px;
     line-height: 16px;
     font-weight: 500;
     text-align: center;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   a.blocked {
     opacity: 0.45;

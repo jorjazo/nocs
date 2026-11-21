@@ -5,7 +5,7 @@
   // the guiding error. Closed: the object, its altitude and the RMS.
   import AltitudeChart from "../../components/AltitudeChart.svelte";
   import Section from "../../components/Section.svelte";
-  import { getSkyPointing, getVisibility } from "../../lib/api";
+  import { getVisibility } from "../../lib/api";
   import { plannedName } from "../../lib/catalog.svelte";
   import { formatDecimal } from "../../lib/format";
   import { guidingActive } from "../../lib/guiding.svelte";
@@ -13,8 +13,9 @@
   import { live } from "../../lib/live.svelte";
   import { formatDec, formatRa } from "../../lib/mount.svelte";
   import { objectName } from "../../lib/targets";
-  import { frameRadius, movedFrom, pointedAt, type Sky } from "../../lib/tonightcards";
-  import type { Almanac, SkyPointing, TargetVisibility } from "../../lib/types";
+  import { AroundMount } from "../../lib/pointed.svelte";
+  import { frameRadius, pointedAt, type Sky } from "../../lib/tonightcards";
+  import type { Almanac, TargetVisibility } from "../../lib/types";
 
   let {
     almanac,
@@ -23,8 +24,6 @@
     ontoggle,
   }: { almanac: Almanac | null; now: number; open: boolean; ontoggle: (open: boolean) => void } = $props();
 
-  // The Sun and the Moon move: what is around the mount is asked again now and then.
-  const REASK = 5 * 60_000;
   const MIN_ALTITUDE = 30;
 
   const t = $derived(i18n.t);
@@ -34,27 +33,9 @@
   const radius = $derived(frameRadius(live.app.cameras?.main_camera?.field));
   const at = $derived<Sky | null>(mount ? { ra: mount.ra_j2000, dec: mount.dec_j2000 } : null);
 
-  let around: SkyPointing | null = $state(null);
-  let asked: Sky | null = null;
-  let askedAt = 0;
-  $effect(() => {
-    if (!at || mount?.slewing) return;
-    const moved = movedFrom(asked, at, radius);
-    if (!moved && now - askedAt < REASK) return;
-    const here = at;
-    // What was around the last field is not around this one.
-    if (moved) around = null;
-    asked = here;
-    askedAt = now;
-    getSkyPointing(here.ra, here.dec, radius)
-      .then((found) => {
-        if (asked === here) around = found;
-      })
-      .catch(() => {
-        // Asked again in a minute; what is shown stays while the mount stays.
-        if (asked === here) askedAt = Date.now() - REASK + 60_000;
-      });
-  });
+  const watch = new AroundMount();
+  $effect(() => watch.look(at, radius, now, !!mount?.slewing));
+  const around = $derived(watch.around);
 
   const pointed = $derived(at ? pointedAt(at, radius, planned, around) : null);
   const name = $derived.by(() => {
