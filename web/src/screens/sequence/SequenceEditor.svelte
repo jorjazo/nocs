@@ -234,9 +234,6 @@
       {#if advanced}
         <section class="advanced">
           <fieldset disabled={locked}>
-            {#if draft.order !== "in_turn"}
-              <Stepper label={s.batch} bind:value={() => draft.batch ?? 5, (v) => v !== null && (draft.batch = v)} min={1} max={1000} />
-            {/if}
             {#if draft.flip !== false}
               <Stepper
                 label={s.flipAfter}

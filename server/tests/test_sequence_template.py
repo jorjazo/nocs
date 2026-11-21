@@ -94,7 +94,7 @@ def test_lights_in_a_row_take_turns_in_one_plan() -> None:
         ("G", 180, 10),
         ("B", 180, 10),
     ]
-    assert (plan.order, plan.batch, plan.frame_type) == ("batches", 5, "light")
+    assert (plan.order, plan.frame_type) == ("in_turn", "light")
     assert [c.kind for c in sequence.end.children] == ["park", "warm"]
 
 

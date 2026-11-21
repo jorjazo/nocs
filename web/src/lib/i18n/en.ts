@@ -1646,9 +1646,6 @@ export const en = {
     dither: "Dither",
     ditherOn: (every: number, pixels: string) => `Every ${every} ${every === 1 ? "frame" : "frames"} · up to ${pixels} px`,
     noGuiding: "No guide camera in the profile.",
-    rotate: "Rotate filters",
-    rotateOn: (batch: number) => `${batch} of each filter in turn`,
-    rotateOff: "Each filter to its end, in order",
     night: "Night",
     cooling: "Cooling",
     whenFinished: "When finished",
@@ -1669,7 +1666,6 @@ export const en = {
     noSite: "Choose the site in Rig to see tonight's window.",
     start: "Start sequence",
     advanced: "Advanced",
-    batch: "Frames per turn",
     steps: "Steps",
     stepsHint: "What the sequence will do, in order. The night's conditions are checked between steps.",
     row: {

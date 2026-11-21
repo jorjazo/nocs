@@ -13000,12 +13000,6 @@
       "additionalProperties": false,
       "description": "What the Sequences view edits: groups of frames of what the camera has framed,\nand what happens around them.",
       "properties": {
-        "batch": {
-          "default": 5,
-          "maximum": 1000,
-          "minimum": 1,
-          "type": "integer"
-        },
         "center": {
           "default": false,
           "description": "Centre the target by plate solving before its lights.",
@@ -13085,6 +13079,7 @@
           ]
         },
         "groups": {
+          "description": "Taken in order, each to its end.",
           "items": {
             "$ref": "#/$defs/Group"
           },
@@ -13111,15 +13106,6 @@
         },
         "name": {
           "$ref": "#/$defs/Name"
-        },
-        "order": {
-          "default": "batches",
-          "description": "Light groups in a row: up to `batch` frames of each in turn, or each to its end.",
-          "enum": [
-            "batches",
-            "in_turn"
-          ],
-          "type": "string"
         },
         "recenter_drift": {
           "default": 2.0,

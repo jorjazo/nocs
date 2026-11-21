@@ -616,13 +616,7 @@ class Template(SequenceModel):
     and what happens around them."""
 
     name: Name
-    groups: list[Group] = Field(min_length=1)
-    order: Literal["batches", "in_turn"] = Field(
-        default="batches",
-        description="Light groups in a row: up to `batch` frames of each in turn, or each "
-        "to its end.",
-    )
-    batch: int = Field(default=5, ge=1, le=1000)
+    groups: list[Group] = Field(min_length=1, description="Taken in order, each to its end.")
     start_at_dusk: bool = Field(
         default=True, description="Lights wait until dark; darks, bias and flats do not."
     )

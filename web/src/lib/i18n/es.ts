@@ -1621,9 +1621,6 @@ export const es: Messages = {
     dither: "Dither",
     ditherOn: (every, pixels) => `Cada ${every} ${every === 1 ? "toma" : "tomas"} · hasta ${pixels} px`,
     noGuiding: "El perfil no tiene cámara de guiado.",
-    rotate: "Alternar filtros",
-    rotateOn: (batch) => `${batch} de cada filtro por turno`,
-    rotateOff: "Cada filtro hasta el final, en orden",
     night: "Noche",
     cooling: "Refrigeración",
     whenFinished: "Al terminar",
@@ -1644,7 +1641,6 @@ export const es: Messages = {
     noSite: "Elige el sitio en Equipo para ver la ventana de esta noche.",
     start: "Iniciar secuencia",
     advanced: "Avanzado",
-    batch: "Tomas por turno",
     steps: "Pasos",
     stepsHint: "Lo que hará la secuencia, en orden. Las condiciones de la noche se revisan entre pasos.",
     row: {

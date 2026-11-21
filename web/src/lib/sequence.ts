@@ -56,8 +56,6 @@ export function newTemplate(
   return {
     name,
     groups: [{ frame_type: "light", filter, exposure: DEFAULT_EXPOSURE, count: DEFAULT_COUNT, gain: camera.gain, offset: camera.offset }],
-    order: "batches",
-    batch: 5,
     start_at_dusk: true,
     darkness: "astronomical",
     until_dawn: true,

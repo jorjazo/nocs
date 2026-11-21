@@ -5723,7 +5723,6 @@ export interface Container1 {
  * via the `definition` "Template".
  */
 export interface Template {
-  batch?: number;
   /**
    * Centre the target by plate solving before its lights.
    */
@@ -5756,6 +5755,8 @@ export interface Template {
   flip_after?: number;
   focus?: FocusPlan | null;
   /**
+   * Taken in order, each to its end.
+   *
    * @minItems 1
    */
   groups: [Group, ...Group[]];
@@ -5765,10 +5766,6 @@ export interface Template {
    */
   min_altitude?: number | null;
   name: Name;
-  /**
-   * Light groups in a row: up to `batch` frames of each in turn, or each to its end.
-   */
-  order?: "batches" | "in_turn";
   /**
    * Arcminutes.
    */
