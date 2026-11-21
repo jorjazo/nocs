@@ -53,9 +53,12 @@
   const here = $derived(run && active ? currentPlan(run) : null);
   const rows = $derived.by((): Row[] => {
     if (run && progress) {
-      return progress.rows.map((r) => {
+      // Groups are taken in their order, each to its end: the current one is the first
+      // of the plan in progress with frames left.
+      const current = progress.rows.findIndex((r) => r.path === here && r.done < r.count);
+      return progress.rows.map((r, i) => {
         const group = { frame_type: r.frameType, filter: r.filter, exposure: r.exposure, count: r.count };
-        return { name: groupName(group, t), frames: groupFrames(group, t, locale), done: r.done, count: r.count, current: r.path === here && r.done < r.count };
+        return { name: groupName(group, t), frames: groupFrames(group, t, locale), done: r.done, count: r.count, current: i === current };
       });
     }
     return (template?.groups ?? []).map((g) => ({ name: groupName(g, t), frames: groupFrames(g, t, locale), done: 0, count: g.count, current: false }));

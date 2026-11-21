@@ -73,7 +73,7 @@ def imaging_of(template: Template, index: int = 0) -> Container:
     return imaging
 
 
-def test_lights_in_a_row_take_turns_in_one_plan() -> None:
+def test_lights_in_a_row_are_one_plan_each_to_its_end() -> None:
     sequence = expand(lrgb())
     assert sequence.template == lrgb()
     assert sequence.start.children == [Unpark()]
