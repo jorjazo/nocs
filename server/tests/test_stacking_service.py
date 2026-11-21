@@ -531,7 +531,7 @@ async def test_new_stack_while_its_masters_are_built(tmp_path: Path) -> None:
 async def test_a_stack_ended_while_its_first_frame_is_added_is_dropped(rig: Rig) -> None:
     rig.worker.gate = asyncio.Event()
     await rig.service.offer(rig.frame())
-    await asyncio.sleep(0.01)  # the frame is in the worker
+    await rig.worker.entered.wait()  # the frame is in the worker
     await rig.service.reset()
     rig.worker.gate.set()
     await rig.service.idle()
