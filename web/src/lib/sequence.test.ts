@@ -119,6 +119,7 @@ test("a run's progress adds its groups up", () => {
 
 test("Explore and Sequences exclude each other", () => {
   assert.equal(workingView(run, {}), "sequence");
+  assert.equal(workingView({ ...run, sequence: "plan" }, {}), "plan");
   assert.equal(workingView({ ...run, state: "finished" }, { a: { kind: "loop", state: "running" } }), "explore");
   assert.equal(workingView(null, { a: { kind: "loop", state: "succeeded" }, b: { kind: "autofocus", state: "running" } }), null);
 });

@@ -6,6 +6,7 @@ import type * as Api from "./generated/api";
 
 export type {
   AccessPointRequest,
+  Actions,
   ActiveSiteRequest,
   Almanac,
   AppState,
@@ -130,9 +131,10 @@ export type {
   PadStatusMessage,
   PairedDevice,
   PairRequest,
-  PlannedTarget,
+  NightPlan,
+  PlanLine,
   PlanRow,
-  PlanState,
+  PlanTarget,
   PolarAlignmentState,
   PolarAlignRequest,
   PolarAxisError,

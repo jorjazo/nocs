@@ -13,6 +13,13 @@ for the next kind of frames; a run resumed after a restart asks again. An **aim*
 takes what the camera has framed as the target of containers that name none, once
 per run.
 
+A **schedule** takes a plan's targets from a ``Scheduler``: the first in priority
+that is up with frames left runs in a container of its own (``<schedule>.<target
+id>``), built from the schedule's ``each``. Before a frame, once ``every`` minutes
+went by or a line ended, it asks again, and leaves the target (never a frame in
+progress) when another comes first or the target changed. The scheduler keeps the
+frames each line has, across runs: a target chosen again takes only what is left.
+
 *End* always runs, once *targets* is done, stopped with ``run_end`` or failed.
 Cancelling the task that runs the sequence stops it at once, without *end*.
 """
@@ -23,9 +30,9 @@ import functools
 import logging
 import statistics
 import uuid
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Collection
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import StrEnum
 from pathlib import Path
 from typing import Protocol
@@ -55,6 +62,7 @@ from nocs.sequence.model import (
     PlanRow,
     Prompt,
     RecenterTrigger,
+    Schedule,
     SelectFilter,
     Sequence,
     SequenceModel,
@@ -85,6 +93,8 @@ FRAME_OVERHEAD = 3.0
 GUARD_POLL = 30.0
 GUARD_MARGIN = 15.0
 """Minutes past the flip point after which the meridian guard stops tracking (ADR 0033)."""
+SKIP_TARGET = timedelta(minutes=15)
+"""How long a schedule leaves a target out after it was given up, or ended without a frame."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -107,6 +117,44 @@ class StepError(Exception):
         self.role = role
         self.frame = frame
         """The catalog id of a frame kept although it failed (under clouds)."""
+
+
+@dataclass(frozen=True, slots=True)
+class Choice:
+    """A plan's target a ``Scheduler`` chose, with the frames its lines still need."""
+
+    key: str
+    """The target's id: its container's place under the schedule (no dots)."""
+    target: Target
+    rows: list[PlanRow]
+    """One per line with frames left, ``count`` being what is left, in the lines' order."""
+    lines: list[str]
+    """Each row's line id."""
+    done: list[int]
+    """Each row's line's frames taken before (other nights included)."""
+    revision: str
+    """Changes when the target or its lines change: the schedule takes it afresh."""
+
+
+class Scheduler(Protocol):
+    """A plan's targets, in priority, and the frames each line has."""
+
+    def choose(self, now: datetime, skipped: Collection[str]) -> Choice | None:
+        """The first target in priority that is up at ``now`` with frames left, of those
+        not ``skipped``; ``None`` when there is none."""
+        ...
+
+    def pending(self) -> bool:
+        """Some target has frames left (up or not)."""
+        ...
+
+    def unchanged(self, choice: Choice) -> bool:
+        """``choice``'s target is still in the plan as it was chosen, with frames left."""
+        ...
+
+    async def taken(self, choice: Choice, row: int) -> None:
+        """A frame of ``choice``'s ``row`` was kept: count it in its line."""
+        ...
 
 
 class Executor(Protocol):
@@ -276,6 +324,9 @@ class EventKind(StrEnum):
     """A step that failed went through at a later attempt: its policy's retries (or the
     user, after a ``pause``) got the run past the failures."""
     SKIPPED = "skipped"
+    TARGET = "target"
+    """A schedule took a target (``data.target``, its id), or waits for one to rise
+    (``data.target`` None); ``data.why`` says why."""
     ENDING = "ending"
     ENDED = "ended"
 
@@ -307,6 +358,14 @@ class _SkipTarget(Exception):
     """A policy gave the step's target up."""
 
 
+class _Preempt(Exception):
+    """A schedule leaves its target between frames: another comes first (``priority``),
+    or it changed or left the plan (``changed``)."""
+
+    def __init__(self, why: str) -> None:
+        self.why = why
+
+
 class _ConditionEnded(Exception):
     def __init__(self, container: PathKey, condition: Condition) -> None:
         self.container = container
@@ -318,6 +377,25 @@ class _Scope:
     path: PathKey
     container: Container
     target: Target | None
+
+
+@dataclass(slots=True)
+class _Scheduled:
+    """The target a schedule is taking."""
+
+    choice: Choice
+    schedule: Schedule
+    container: Container
+    path: PathKey
+    """Its container's."""
+    plan: PathKey
+    """Its exposure plan's."""
+    looked: datetime
+    """When the schedule last asked for the first target."""
+    row: int | None = None
+    """The row of the last frame, or of the last look."""
+    frames: int = 0
+    skipped: bool = False
 
 
 # -- runner -------------------------------------------------------------------------
@@ -337,9 +415,17 @@ class Runner:
         sleep: Callable[[float], Awaitable[None]] = anyio.sleep,
         place: Callable[[], sky.Place | None] = lambda: None,
         guard_sleep: Callable[[float], Awaitable[None]] = anyio.sleep,
+        scheduler: Scheduler | None = None,
     ) -> None:
-        """Run ``sequence`` afresh, or from ``checkpoint`` after a restart."""
+        """Run ``sequence`` afresh, or from ``checkpoint`` after a restart; a sequence with
+        a ``schedule`` takes its targets from ``scheduler``."""
         self._sequence = sequence
+        self._scheduler = scheduler
+        self._scheduled: _Scheduled | None = None
+        self._skipped: dict[str, datetime] = {}
+        """Targets a schedule leaves out, until when."""
+        self._uncounted = False
+        """A frame could not be counted in the plan (said once)."""
         self._sleep = sleep
         self._guard_sleep = guard_sleep
         """The guard's own clock: real time, even when the steps' waits are faked."""
@@ -484,7 +570,7 @@ class Runner:
                     await self._plan(child, path, end.target)
                 elif isinstance(child, Wait):
                     await self._wait_for(child, path, end.target)
-                elif isinstance(child, Prompt):
+                elif isinstance(child, Prompt | Schedule):
                     continue  # nobody may be there to answer: the end never asks
                 else:
                     await self._action(child, path, end.target)
@@ -516,6 +602,8 @@ class Runner:
                         await self._wait_for(child, child_path, scope.target)
                     elif isinstance(child, Prompt):
                         await self._ask(child, child_path)
+                    elif isinstance(child, Schedule):
+                        await self._schedule(child, child_path)
                     else:
                         await self._action(child, child_path, scope.target)
                 iteration += 1
@@ -537,6 +625,8 @@ class Runner:
                 raise
             self._event(EventKind.SKIPPED, f"target {container.target.name}", here)
             self._forget_inside(here)
+            if self._scheduled is not None and self._scheduled.path == here:
+                self._scheduled.skipped = True
         finally:
             self._scopes.pop()
         checkpoint.iterations.pop(here, None)
@@ -618,6 +708,7 @@ class Runner:
         while (index := next_row(plan, progress)) is not None:
             row = plan.rows[index]
             await self._safe_point()
+            self._look(here, index)
             # After each of these steps, back to the safe point: a pause there may
             # have let someone change the filter or move the focuser.
             if row.filter is not None and row.filter != self._filter:
@@ -638,15 +729,23 @@ class Runner:
             count_frame(plan, progress, index)
             if result.frame is not None:
                 progress.frames.append(result.frame)
+            done_count, row_count = progress.done[index], row.count
+            scheduled = self._scheduled
+            if scheduled is not None and scheduled.plan == here:
+                scheduled.row = index
+                scheduled.frames += 1
+                # The line's frames, other nights' too, not this visit's.
+                done_count += scheduled.choice.done[index]
+                row_count += scheduled.choice.done[index]
+                await self._count(scheduled.choice, index)
             focus = self._checkpoint.focus
             focus.frames += 1
             self._checkpoint.since_dither += 1
             self._checkpoint.since_recenter += 1
             if result.hfr is not None:
                 focus.add_hfr(row.filter, result.hfr)
-            done_count = progress.done[index]
             exposure = f"{row.exposure:g} s" if row.exposure is not None else plan.frame_type
-            label = f"{exposure} {done_count}/{row.count}"
+            label = f"{exposure} {done_count}/{row_count}"
             self._event(
                 EventKind.FRAME,
                 f"{row.filter} {label}" if row.filter else label,
@@ -657,7 +756,7 @@ class Runner:
                     "filter": row.filter,
                     "exposure": row.exposure,
                     "done": done_count,
-                    "count": row.count,
+                    "count": row_count,
                     "stars": result.stars,
                     "hfr": result.hfr,
                     "id": result.frame,
@@ -870,7 +969,15 @@ class Runner:
                 if isinstance(child, Container):
                     walk(child)
 
-        walk(self._sequence.targets)
+        def walk_all(container: Container) -> None:
+            walk(container)
+            for child in container.children:
+                if isinstance(child, Schedule):
+                    walk(child.each)  # a target the schedule left keeps its guard
+                elif isinstance(child, Container):
+                    walk_all(child)
+
+        walk_all(self._sequence.targets)
         return found
 
     def _due(self, trigger: Trigger, row: PlanRow) -> str | None:
@@ -999,6 +1106,117 @@ class Runner:
                 scope.target = aimed
         return aimed
 
+    # -- schedules ------------------------------------------------------------------
+
+    async def _schedule(self, schedule: Schedule, path: tuple[str, ...]) -> None:
+        """Take the plan's targets until none has frames left; with none up, wait."""
+        here = key(path)
+        scheduler = self._scheduler
+        if scheduler is None:
+            raise ValueError("this sequence takes a plan's targets, and there is no plan")
+        waiting = False
+        why = "start"
+        while True:
+            await self._safe_point()
+            now = self._now()
+            choice = scheduler.choose(now, self._left_out(now))
+            if choice is None:
+                if not scheduler.pending():
+                    return
+                if not waiting:
+                    waiting = True
+                    self._event(EventKind.TARGET, "none up", here, {"target": None, "why": "none"})
+                self._current = here
+                self._on_change()
+                await self._wait(WAIT_POLL)
+                continue
+            waiting = False
+            why = await self._take(schedule, path, choice, why)
+
+    async def _take(
+        self, schedule: Schedule, path: tuple[str, ...], choice: Choice, why: str
+    ) -> str:
+        """Take ``choice`` until it is done, sets, fails or another comes first; why the
+        next target is taken."""
+        children = list(schedule.each.children)
+        if schedule.focus_first and self._checkpoint.focus.time is None:
+            children.append(Autofocus())
+        children.append(ExposurePlan(rows=choice.rows, order="in_turn"))
+        container = schedule.each.model_copy(
+            update={"name": choice.target.name, "target": choice.target, "children": children}
+        )
+        inner = (*path, choice.key)
+        here = key(inner)
+        # Taken before in this run: its frames are the scheduler's, not the checkpoint's.
+        self._forget_inside(here)
+        checkpoint = self._checkpoint
+        checkpoint.finished = [p for p in checkpoint.finished if p != here]
+        checkpoint.iterations.pop(here, None)
+        scheduled = _Scheduled(
+            choice, schedule, container, here, f"{here}.{len(children) - 1}", self._now()
+        )
+        # Its rows are what is left: a row's index may be another line's than last time.
+        for row_key in [k for k in self._stars if k[0] == scheduled.plan]:
+            del self._stars[row_key]
+        self._scheduled = scheduled
+        data: dict[str, Json] = {"target": choice.key, "name": choice.target.name, "why": why}
+        self._event(EventKind.TARGET, choice.target.name, here, data)
+        try:
+            await self._container(container, inner, None)
+        except _Preempt as preempt:
+            return preempt.why
+        finally:
+            self._scheduled = None
+            self._on_change()
+        if scheduled.skipped or scheduled.frames == 0:
+            # Given up, or set before a frame: the others first for a while.
+            until = self._now() + SKIP_TARGET
+            self._skipped[choice.key] = until
+            left_out: dict[str, Json] = {
+                "target": choice.key,
+                "name": choice.target.name,
+                "why": "left_out",
+                "until": until.isoformat(timespec="seconds"),
+            }
+            self._event(EventKind.TARGET, choice.target.name, here, left_out)
+        return "next"
+
+    def _look(self, plan: PathKey, index: int) -> None:
+        """Before a frame of a schedule's target: once its minutes went by or a line ended,
+        leave the target when another comes first, or when it changed."""
+        scheduled = self._scheduled
+        if scheduled is None or scheduled.plan != plan or self._scheduler is None:
+            return
+        if not self._scheduler.unchanged(scheduled.choice):
+            raise _Preempt("changed")  # edited, done, or gone from the plan: before any frame
+        now = self._now()
+        line_ended = scheduled.row is not None and scheduled.row != index
+        minutes = (now - scheduled.looked).total_seconds() / 60
+        if not line_ended and minutes < scheduled.schedule.every:
+            return
+        scheduled.looked, scheduled.row = now, index
+        choice = self._scheduler.choose(now, self._left_out(now))
+        if choice is None:
+            return  # nothing up: this one's own conditions say when it sets
+        if choice.key != scheduled.choice.key:
+            raise _Preempt("priority")
+
+    async def _count(self, choice: Choice, row: int) -> None:
+        assert self._scheduler is not None
+        try:
+            await self._scheduler.taken(choice, row)
+        except OSError as e:  # the frame is kept: only the plan's count on disk is behind
+            message = f"cannot count a frame of {choice.target.name} in the plan: {e}"
+            log.warning("sequence %s: %s", self._sequence.name, message)
+            if not self._uncounted:
+                self._uncounted = True
+                self._event(EventKind.FAILED, message, self._current, {"kind": "storage"})
+
+    def _left_out(self, now: datetime) -> set[str]:
+        for target in [t for t, until in self._skipped.items() if until <= now]:
+            del self._skipped[target]
+        return set(self._skipped)
+
     async def _pause(self) -> None:
         self._pause_asked = False
         await self._save()
@@ -1057,6 +1275,23 @@ class Runner:
                     for i, row in enumerate(node.rows)
                 ],
             }
+        scheduled = self._scheduled
+        if scheduled is not None:
+            progress = checkpoint.plans.get(scheduled.plan)
+            choice = scheduled.choice
+            rows[scheduled.plan] = {
+                "target": choice.target.name,
+                "frame_type": "light",
+                "rows": [
+                    {
+                        "filter": row.filter,
+                        "exposure": row.exposure,
+                        "count": row.count + choice.done[i],
+                        "done": choice.done[i] + (progress.done[i] if progress else 0),
+                    }
+                    for i, row in enumerate(choice.rows)
+                ],
+            }
         return {
             "run": checkpoint.run,
             "sequence": checkpoint.sequence,
@@ -1070,6 +1305,7 @@ class Runner:
             "outcome": self._outcome.value if self._outcome is not None else None,
             "error": self._error,
             "prompt": frame_class(self._prompt.frame_type) if self._prompt is not None else None,
+            "target": scheduled.choice.key if scheduled is not None else None,
         }
 
     def _describe(self, path: PathKey | None) -> dict[str, Json] | None:
@@ -1084,9 +1320,16 @@ class Runner:
     def _node(self, path: PathKey | None) -> Node | None:
         if not path:
             return None
-        first, *rest = path.split(".")
-        parts = {"start": self._sequence.start, "targets": self._sequence.targets}
-        node: Node | None = parts.get(first, self._sequence.end if first == "end" else None)
+        scheduled = self._scheduled
+        node: Node | None
+        if scheduled is not None and (path + ".").startswith(scheduled.path + "."):
+            # Inside the target a schedule takes: its container is not in the tree.
+            node = scheduled.container
+            rest = path[len(scheduled.path) :].split(".")[1:]
+        else:
+            first, *rest = path.split(".")
+            parts = {"start": self._sequence.start, "targets": self._sequence.targets}
+            node = parts.get(first, self._sequence.end if first == "end" else None)
         for part in rest:
             if not isinstance(node, Container) or not part.isdigit():
                 return None

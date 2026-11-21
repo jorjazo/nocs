@@ -1,7 +1,7 @@
 <script lang="ts">
   // The Session tab: the night's saved frames and their downloads, which only the
   // owner's devices may list, and the past sessions. A running sequence is followed
-  // in Sequences.
+  // in Sequences, a running plan in Plan.
   // On a PC the page is wide (docs/ux.md §5): the past sessions sit beside the frames.
   import Banner from "../../components/Banner.svelte";
   import Button from "../../components/Button.svelte";
@@ -12,13 +12,14 @@
   import { i18n } from "../../lib/i18n";
   import { live } from "../../lib/live.svelte";
   import { router } from "../../lib/router.svelte";
-  import { isActive } from "../../lib/sequence";
+  import { isActive, isPlanRun } from "../../lib/sequence";
   import NightFrames from "./NightFrames.svelte";
   import PastSessions from "./PastSessions.svelte";
 
   const t = $derived(i18n.t);
   const run = $derived(live.app.sequence?.run ?? null);
   const active = $derived(isActive(run));
+  const planRuns = $derived(isPlanRun(run));
 </script>
 
 <ScreenHeader title={t.tabs.session}>
@@ -28,9 +29,11 @@
 {#if active}
   <div class="again">
     <Banner icon="sequence">
-      {t.session.running}
+      {planRuns ? t.session.planRunning : t.session.running}
       {#snippet action()}
-        <Button variant="text" onclick={() => router.go({ screen: "sequence" })}>{t.session.openSequences}</Button>
+        <Button variant="text" onclick={() => router.go({ screen: planRuns ? "plan" : "sequence" })}>
+          {planRuns ? t.session.openPlan : t.session.openSequences}
+        </Button>
       {/snippet}
     </Banner>
   </div>

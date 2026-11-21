@@ -55,7 +55,7 @@ import type {
   OutputRequest,
   PairedDevice,
   PairRequest,
-  PlannedTarget,
+  NightPlan,
   PolarAlignRequest,
   Profile,
   Role,
@@ -686,12 +686,22 @@ export function getVisibility(targets: string[], minAltitude?: number): Promise<
   return request("GET", `/api/sky/visibility?${params}`);
 }
 
-export function choosePlanTarget(target: PlannedTarget): Promise<void> {
-  return request("PUT", "/api/plan/target", target);
+// -- The plan -----------------------------------------------------------------
+
+// Keep the plan; its lines keep the frames they have (the server counts them).
+export function savePlan(plan: NightPlan): Promise<void> {
+  return request("PUT", "/api/plan", plan);
 }
 
-export function forgetPlanTarget(): Promise<void> {
-  return request("DELETE", "/api/plan/target");
+// Forget the frames a target's lines have.
+export function resetPlanTarget(id: string): Promise<void> {
+  return request("POST", `/api/plan/targets/${encodeURIComponent(id)}/reset`);
+}
+
+// Run the plan: a sequence job (paused, resumed and stopped as a sequence).
+export async function startPlan(): Promise<string> {
+  const started = await request<JobStarted>("POST", "/api/plan/start");
+  return started.job;
 }
 
 // -- Sequences (ADR 0031) -----------------------------------------------------

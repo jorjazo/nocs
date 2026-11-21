@@ -107,6 +107,7 @@ from nocs.api.schemas import (
 )
 from nocs.calibration.flats import FlatPlan
 from nocs.equipment import Profile
+from nocs.plan import NightPlan
 from nocs.sequence import Sequence
 from nocs.sequence.model import Template
 from nocs.sites import Site
@@ -166,6 +167,7 @@ MODELS: list[tuple[type[BaseModel], Mode]] = [
     (DitherNowRequest, "validation"),
     (Sequence, "validation"),
     (Template, "validation"),
+    (NightPlan, "validation"),
     (SequenceEstimate, "serialization"),
     (SessionSummary, "serialization"),
     (SessionReport, "serialization"),

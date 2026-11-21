@@ -3,7 +3,7 @@
 // stands, and which forecast hours to show. Pure functions, tested with `pnpm test`.
 
 import { separation } from "./sky/projection.ts";
-import type { ForecastHour, PlannedTarget, SkyPointing } from "./types.ts";
+import type { ForecastHour, PlanTarget, SkyPointing } from "./types.ts";
 
 // -- Pointing -------------------------------------------------------------------------
 
@@ -13,7 +13,7 @@ export interface Sky {
 }
 
 export type Pointed =
-  | { kind: "planned"; target: PlannedTarget }
+  | { kind: "planned"; target: PlanTarget }
   | { kind: "body"; body: "sun" | "moon" }
   | { kind: "catalog"; object: SkyPointing["objects"][number] }
   | { kind: "none" };
@@ -29,15 +29,12 @@ export function frameRadius(field: { width: number; height: number } | null | un
   return field ? Math.min(MAX_RADIUS, Math.hypot(field.width, field.height) / 2) : DEFAULT_RADIUS;
 }
 
-// What the mount points at: tonight's target when it is in the frame, else the Sun
-// or the Moon, else the nearest catalog object the server found there.
-export function pointedAt(
-  mount: Sky,
-  radius: number,
-  planned: PlannedTarget | null,
-  around: SkyPointing | null,
-): Pointed {
-  if (planned && separation(mount, planned) <= radius) return { kind: "planned", target: planned };
+// What the mount points at: one of tonight's objects (the plan's targets, the first in
+// priority) when it is in the frame, else the Sun or the Moon, else the nearest catalog
+// object the server found there.
+export function pointedAt(mount: Sky, radius: number, planned: PlanTarget[], around: SkyPointing | null): Pointed {
+  const target = planned.find((t) => separation(mount, t) <= radius);
+  if (target) return { kind: "planned", target };
   if (around?.body) return { kind: "body", body: around.body };
   const object = around?.objects[0];
   return object ? { kind: "catalog", object } : { kind: "none" };

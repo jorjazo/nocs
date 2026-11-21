@@ -7,7 +7,7 @@ import { formatDecimal, formatDuration, formatPlain, formatSeconds, formatTemper
 import type { Messages } from "./i18n";
 import type { AutofocusTrigger, DitherTrigger, FlipTrigger, RecenterTrigger } from "./generated/api";
 import { focusReason, freeId, newTemplate, triggerDue, type CameraSettings } from "./sequence";
-import type { Container, Group, Node, PowerOutput, Sequence, SequenceEvent, SequenceRun, Template } from "./types";
+import type { Actions, Container, Group, Node, PowerOutput, Sequence, SequenceEvent, SequenceRun, Template } from "./types";
 
 export { isActive, sequenceId } from "./sequence";
 
@@ -139,7 +139,7 @@ export const sequences = new Sequences();
 
 // -- Words for a template, its groups and the steps it makes ----------------------
 
-export function windowSummary(template: Template, t: Messages, locale: string): string {
+export function windowSummary(template: Actions, t: Messages, locale: string): string {
   const s = t.sequence;
   const parts = [
     template.start_at_dusk !== false ? s.fromDusk(s.darkness[template.darkness ?? "astronomical"]) : s.fromNow,
@@ -149,7 +149,7 @@ export function windowSummary(template: Template, t: Messages, locale: string): 
   return parts.join(" · ");
 }
 
-export function focusSummary(template: Template, t: Messages, locale: string): string {
+export function focusSummary(template: Actions, t: Messages, locale: string): string {
   const s = t.sequence;
   const focus = template.focus;
   if (!focus) return s.off;
@@ -162,7 +162,7 @@ export function focusSummary(template: Template, t: Messages, locale: string): s
   return reasons.length ? capitalize(reasons.join(" · ")) : s.off;
 }
 
-export function pointingSummary(template: Template, t: Messages, locale: string): string {
+export function pointingSummary(template: Actions, t: Messages, locale: string): string {
   const s = t.sequence;
   if (!template.center) return s.pointingOff;
   if (template.recenter_every != null) {
@@ -171,7 +171,7 @@ export function pointingSummary(template: Template, t: Messages, locale: string)
   return s.pointingCenter;
 }
 
-export function coolingSummary(template: Template, t: Messages, locale: string): string {
+export function coolingSummary(template: Actions, t: Messages, locale: string): string {
   const s = t.sequence;
   switch (template.cooling ?? "off") {
     case "global":
@@ -183,7 +183,7 @@ export function coolingSummary(template: Template, t: Messages, locale: string):
   }
 }
 
-export function endSummary(template: Template, t: Messages, outputs: PowerOutput[]): string {
+export function endSummary(template: Actions, t: Messages, outputs: PowerOutput[]): string {
   const s = t.sequence;
   const end = template.end ?? { park: true, warm: true, outputs: [] };
   const parts: string[] = [];
@@ -263,6 +263,8 @@ export function describeNode(node: Node, t: Messages, locale: string, outputs: P
       return n.waitAltitude(formatPlain(node.altitude ?? 0, locale));
     case "expose":
       return n.expose(node.rows.reduce((sum, row) => sum + row.count, 0));
+    case "schedule":
+      return n.schedule;
     default:
       if (!("children" in node)) return "";
       // The template names the container that holds while the target is up.
@@ -373,6 +375,14 @@ export function describeEvent(event: SequenceEvent, t: Messages, locale: string)
     }
     case "skipped":
       return e.skipped(event.message);
+    case "target": {
+      if (typeof data.target !== "string") return e.noneUp;
+      const name = typeof data.name === "string" ? data.name : event.message;
+      if (data.why === "priority") return e.targetFirst(name);
+      if (data.why === "changed") return e.targetChanged(name);
+      if (data.why === "left_out") return e.leftOut(name, typeof data.until === "string" ? formatTime(data.until, locale) : "?");
+      return e.target(name);
+    }
     case "trigger": {
       const due = triggerDue(event.message);
       switch (due.kind) {

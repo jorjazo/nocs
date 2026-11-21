@@ -42,6 +42,164 @@
       "title": "AccessPointRequest",
       "type": "object"
     },
+    "Actions": {
+      "additionalProperties": false,
+      "description": "What a sequence or a plan does around its frames: the night's window, cooling,\nfocusing, guiding, pointing, the meridian flip, the end, and the recovery.",
+      "properties": {
+        "center": {
+          "default": false,
+          "description": "Centre the target by plate solving before its lights.",
+          "type": "boolean"
+        },
+        "cooling": {
+          "default": "off",
+          "description": "global: `temperature` for the whole sequence; group: each group's own.",
+          "enum": [
+            "off",
+            "global",
+            "group"
+          ],
+          "type": "string"
+        },
+        "cooling_ramp": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "darkness": {
+          "$ref": "#/$defs/Darkness",
+          "default": "astronomical",
+          "description": "The twilight that starts and ends the night."
+        },
+        "dither_every": {
+          "anyOf": [
+            {
+              "maximum": 1000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Dither every so many frames while guiding."
+        },
+        "dither_pixels": {
+          "default": 5,
+          "description": "Main camera pixels.",
+          "exclusiveMinimum": 0,
+          "maximum": 50,
+          "type": "number"
+        },
+        "end": {
+          "$ref": "#/$defs/EndPlan"
+        },
+        "flip": {
+          "default": true,
+          "description": "Flip the mount at the meridian.",
+          "type": "boolean"
+        },
+        "flip_after": {
+          "default": 5,
+          "description": "Minutes past the meridian.",
+          "maximum": 60,
+          "minimum": 0,
+          "type": "number"
+        },
+        "focus": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FocusPlan"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "guide": {
+          "default": false,
+          "type": "boolean"
+        },
+        "min_altitude": {
+          "anyOf": [
+            {
+              "maximum": 90,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": 30,
+          "description": "Lights only while the target is this high."
+        },
+        "recenter_drift": {
+          "default": 2.0,
+          "description": "Arcminutes.",
+          "exclusiveMinimum": 0,
+          "maximum": 60,
+          "type": "number"
+        },
+        "recenter_every": {
+          "anyOf": [
+            {
+              "maximum": 1000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Check the pointing every so many frames."
+        },
+        "recovery": {
+          "additionalProperties": {
+            "$ref": "#/$defs/Policy"
+          },
+          "propertyNames": {
+            "$ref": "#/$defs/FailureKind"
+          },
+          "type": "object"
+        },
+        "start_at_dusk": {
+          "default": true,
+          "description": "Lights wait until dark; darks, bias and flats do not.",
+          "type": "boolean"
+        },
+        "temperature": {
+          "anyOf": [
+            {
+              "maximum": 40,
+              "minimum": -60,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Sensor \u00b0C when cooling is global."
+        },
+        "until_dawn": {
+          "default": true,
+          "description": "Lights end at dawn; the rest goes on.",
+          "type": "boolean"
+        }
+      },
+      "title": "Actions",
+      "type": "object"
+    },
     "ActiveSiteRequest": {
       "additionalProperties": false,
       "properties": {
@@ -481,13 +639,14 @@
         "plan": {
           "anyOf": [
             {
-              "$ref": "#/$defs/PlanState"
+              "$ref": "#/$defs/NightPlan"
             },
             {
               "type": "null"
             }
           ],
-          "default": null
+          "default": null,
+          "description": "The plan's targets, in priority."
         },
         "polar_alignment": {
           "anyOf": [
@@ -8121,6 +8280,31 @@
       "title": "NightInfo",
       "type": "object"
     },
+    "NightPlan": {
+      "additionalProperties": false,
+      "description": "What the Plan view edits.",
+      "properties": {
+        "actions": {
+          "$ref": "#/$defs/Actions"
+        },
+        "start_outputs": {
+          "description": "Power outputs to switch on when it starts (dew heaters).",
+          "items": {
+            "$ref": "#/$defs/OutputId"
+          },
+          "type": "array"
+        },
+        "targets": {
+          "description": "In priority, the first first.",
+          "items": {
+            "$ref": "#/$defs/PlanTarget"
+          },
+          "type": "array"
+        }
+      },
+      "title": "NightPlan",
+      "type": "object"
+    },
     "Node": {
       "anyOf": [
         {
@@ -8176,6 +8360,9 @@
         },
         {
           "$ref": "#/$defs/ExposurePlan"
+        },
+        {
+          "$ref": "#/$defs/Schedule"
         },
         {
           "$ref": "#/$defs/Container"
@@ -8643,6 +8830,75 @@
       "title": "Phd2Server",
       "type": "object"
     },
+    "PlanLine": {
+      "additionalProperties": false,
+      "description": "Lights of a target taken alike.",
+      "properties": {
+        "count": {
+          "maximum": 10000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "done": {
+          "default": 0,
+          "description": "Frames kept, over every night; the server counts them (a client's value is ignored).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "exposure": {
+          "description": "Seconds.",
+          "exclusiveMinimum": 0,
+          "maximum": 7200.0,
+          "type": "number"
+        },
+        "filter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Name"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "None: whatever the wheel holds."
+        },
+        "gain": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "id": {
+          "description": "Chosen by the client; kept.",
+          "pattern": "^[a-z0-9]{1,16}$",
+          "type": "string"
+        },
+        "offset": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "id",
+        "exposure",
+        "count"
+      ],
+      "title": "PlanLine",
+      "type": "object"
+    },
     "PlanRow": {
       "additionalProperties": false,
       "properties": {
@@ -8719,30 +8975,9 @@
       "title": "PlanRow",
       "type": "object"
     },
-    "PlanState": {
+    "PlanTarget": {
       "additionalProperties": false,
-      "description": "What the Plan screen chose for tonight (stage 3.6).",
-      "properties": {
-        "target": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/PlannedTarget"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "description": "None: no target chosen."
-        }
-      },
-      "required": [
-        "target"
-      ],
-      "title": "PlanState",
-      "type": "object"
-    },
-    "PlannedTarget": {
-      "additionalProperties": false,
+      "description": "Where to point (the frame's centre, which may be off the object), and its lines.",
       "properties": {
         "dec": {
           "description": "J2000 degrees where the frame points.",
@@ -8751,6 +8986,21 @@
           "type": "number"
         },
         "id": {
+          "description": "Chosen by the client; kept.",
+          "pattern": "^[a-z0-9]{1,16}$",
+          "type": "string"
+        },
+        "lines": {
+          "items": {
+            "$ref": "#/$defs/PlanLine"
+          },
+          "type": "array"
+        },
+        "name": {
+          "$ref": "#/$defs/Name",
+          "description": "Frames carry it, and their folder."
+        },
+        "object": {
           "anyOf": [
             {
               "maxLength": 50,
@@ -8761,13 +9011,7 @@
             }
           ],
           "default": null,
-          "description": "Catalog id (e.g. NGC 292); None: coordinates."
-        },
-        "name": {
-          "description": "What to call it.",
-          "maxLength": 100,
-          "minLength": 1,
-          "type": "string"
+          "description": "Catalog id (NGC 292), when it is one."
         },
         "ra": {
           "description": "J2000 hours where the frame points.",
@@ -8791,11 +9035,12 @@
         }
       },
       "required": [
+        "id",
         "name",
         "ra",
         "dec"
       ],
-      "title": "PlannedTarget",
+      "title": "PlanTarget",
       "type": "object"
     },
     "PointingOffset": {
@@ -10285,6 +10530,35 @@
       "title": "SavedSite",
       "type": "object"
     },
+    "Schedule": {
+      "additionalProperties": false,
+      "description": "Take a plan's targets: the first in priority that is up and has frames left, in\n``each`` (its frames after ``each``'s steps). Every ``every`` minutes, and whenever\none of its lines ends, it looks again, and between frames goes to a target that\nnow comes first. It ends when no target has frames left; until then, with none up,\nit waits. The runner's ``Scheduler`` knows the targets.",
+      "properties": {
+        "each": {
+          "$ref": "#/$defs/Container",
+          "description": "What runs for the chosen target, its conditions and triggers included."
+        },
+        "every": {
+          "default": 10,
+          "description": "Minutes between looks for a target first in priority.",
+          "exclusiveMinimum": 0,
+          "maximum": 120,
+          "type": "number"
+        },
+        "focus_first": {
+          "default": false,
+          "description": "Focus on the first target, unless the run focused already.",
+          "type": "boolean"
+        },
+        "kind": {
+          "const": "schedule",
+          "default": "schedule",
+          "type": "string"
+        }
+      },
+      "title": "Schedule",
+      "type": "object"
+    },
     "SelectFilter": {
       "additionalProperties": false,
       "properties": {
@@ -10461,6 +10735,7 @@
             "recovery",
             "recovered",
             "skipped",
+            "target",
             "ending",
             "ended"
           ],
@@ -10689,6 +10964,18 @@
           ],
           "default": null,
           "description": "The instruction at `current` as stored (an exposure plan only as its kind and frame_type); None at a container or between steps."
+        },
+        "target": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The plan's target being taken (its id), in a plan's run."
         }
       },
       "required": [

@@ -488,11 +488,37 @@ type Node = Annotated[
     | Prompt
     | Wait
     | ExposurePlan
+    | Schedule
     | Container,
     Field(discriminator="kind"),
 ]
 
+
+class Schedule(SequenceModel):
+    """Take a plan's targets: the first in priority that is up and has frames left, in
+    ``each`` (its frames after ``each``'s steps). Every ``every`` minutes, and whenever
+    one of its lines ends, it looks again, and between frames goes to a target that
+    now comes first. It ends when no target has frames left; until then, with none up,
+    it waits. The runner's ``Scheduler`` knows the targets."""
+
+    kind: Literal["schedule"] = "schedule"
+    every: float = Field(
+        default=10,
+        gt=0,
+        le=120,
+        description="Minutes between looks for a target first in priority.",
+    )
+    each: Container = Field(
+        default_factory=lambda: Container(),
+        description="What runs for the chosen target, its conditions and triggers included.",
+    )
+    focus_first: bool = Field(
+        default=False, description="Focus on the first target, unless the run focused already."
+    )
+
+
 Container.model_rebuild()
+Schedule.model_rebuild()
 
 
 # -- recovery (ADR 0032) ------------------------------------------------------------
@@ -541,6 +567,8 @@ def needs_site(sequence: Sequence) -> bool:
                 return True
             if isinstance(child, Wait) and child.time is None:
                 return True
+            if isinstance(child, Schedule):
+                return True  # which target is up
         return False
 
     return any(asks(part) for part in (sequence.start, sequence.targets, sequence.end))
@@ -612,16 +640,10 @@ def frame_class(frame_type: FrameKind) -> FrameClass:
     return "dark" if frame_type == "bias" else frame_type
 
 
-class Template(SequenceModel):
-    """What the Sequences view edits: groups of frames of what the camera has framed,
-    and what happens around them."""
+class Actions(SequenceModel):
+    """What a sequence or a plan does around its frames: the night's window, cooling,
+    focusing, guiding, pointing, the meridian flip, the end, and the recovery."""
 
-    name: Name
-    groups: list[Group] = Field(
-        min_length=1,
-        description="Taken in order, each to its last frame; the night's end (dawn, the "
-        "minimum altitude) can leave later light groups short or empty.",
-    )
     start_at_dusk: bool = Field(
         default=True, description="Lights wait until dark; darks, bias and flats do not."
     )
@@ -663,6 +685,18 @@ class Template(SequenceModel):
         if self.cooling == "global" and self.temperature is None:
             raise ValueError("global cooling needs a temperature")
         return self
+
+
+class Template(Actions):
+    """What the Sequences view edits: groups of frames of what the camera has framed,
+    and what happens around them."""
+
+    name: Name
+    groups: list[Group] = Field(
+        min_length=1,
+        description="Taken in order, each to its last frame; the night's end (dawn, the "
+        "minimum altitude) can leave later light groups short or empty.",
+    )
 
     @property
     def lights(self) -> bool:

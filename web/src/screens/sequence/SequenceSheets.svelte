@@ -15,19 +15,23 @@
   import Toggle from "../../components/Toggle.svelte";
   import { i18n } from "../../lib/i18n";
   import { live } from "../../lib/live.svelte";
-  import type { PowerOutput, Template } from "../../lib/types";
+  import type { Actions, PowerOutput } from "../../lib/types";
 
   let {
     kind,
     template,
     outputs,
     canCool,
+    plan = false,
     onclose,
   }: {
     kind: SheetKind;
-    template: Template;
+    // What the sequence or the plan does around its frames.
+    template: Actions;
     outputs: PowerOutput[];
     canCool: boolean;
+    // The plan's: lights only, and one temperature for all.
+    plan?: boolean;
     onclose: () => void;
   } = $props();
 
@@ -54,7 +58,7 @@
   const solver = $derived(live.app.solver?.available === true);
   let pixels: number | null = $state(initial.dither_pixels ?? 5);
 
-  function setFocus(change: Partial<NonNullable<Template["focus"]>>): void {
+  function setFocus(change: Partial<NonNullable<Actions["focus"]>>): void {
     template.focus = { ...focus, ...change };
   }
   $effect(() => {
@@ -85,7 +89,7 @@
   }
 
   const end = $derived(template.end ?? { park: true, warm: true, outputs: [] });
-  function setEnd(change: Partial<NonNullable<Template["end"]>>): void {
+  function setEnd(change: Partial<NonNullable<Actions["end"]>>): void {
     template.end = { ...end, ...change };
   }
   function toggleOutput(id: string, off: boolean): void {
@@ -139,7 +143,7 @@
         <NumberField label={s.ditherSheet.pixels} bind:value={pixels} min={0.5} max={50} unit="px" hint={s.ditherSheet.pixelsHint} />
       {/if}
     {:else if kind === "night"}
-      <p class="muted">{s.nightSheet.lightsOnly}</p>
+      {#if !plan}<p class="muted">{s.nightSheet.lightsOnly}</p>{/if}
       <Toggle
         label={s.nightSheet.startAtDusk}
         hint={s.nightSheet.startAtDuskHint}
@@ -172,7 +176,7 @@
           options={[
             { value: "off" as const, label: s.coolingSheet.off },
             { value: "global" as const, label: s.coolingSheet.global },
-            { value: "group" as const, label: s.coolingSheet.group },
+            ...(plan ? [] : [{ value: "group" as const, label: s.coolingSheet.group }]),
           ]}
           value={template.cooling ?? "off"}
           disabled={!canCool && (template.cooling ?? "off") === "off"}

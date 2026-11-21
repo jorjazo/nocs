@@ -8,6 +8,7 @@
   import { i18n } from "../lib/i18n";
   import { live } from "../lib/live.svelte";
   import { href } from "../lib/router.svelte";
+  import { isPlanRun } from "../lib/sequence";
   import type { Role } from "../lib/types";
   import Banner from "./Banner.svelte";
   import Button from "./Button.svelte";
@@ -48,7 +49,7 @@
 
 {#if shown}
   <Banner icon="session" tone={shown === "paused" ? "neutral" : "warning"}>
-    <a href={href({ screen: "sequence" })}>
+    <a href={href({ screen: isPlanRun(run) ? "plan" : "sequence" })}>
       {shown === "paused" ? t.session.hold.paused : shown === "pausing" ? t.session.hold.pausing : t.session.hold.using}
     </a>
     {#if error}<br />{error}{/if}
