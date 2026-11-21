@@ -609,7 +609,9 @@ Sequences:
   (Light, Dark, Bias, Flat), a filter (lights and flats), an exposure (bias take the
   camera's shortest; flats find theirs from the last frame's level, or take a fixed
   one), frames, gain, offset, binning, and a temperature when cooling is per group.
-  Light groups in a row take turns ("Rotate filters"). When the run starts it
+  Groups are taken in their order, each to its last frame; the night's end (dawn,
+  the minimum altitude) can cut the lights short, leaving later light groups with
+  fewer frames or none. When the run starts it
   solves what is framed (or takes where the mount points) and names it after the
   last go to or the catalog object nearest it: the target of the flip, the centring
   and the altitude.
@@ -623,7 +625,7 @@ Sequences:
 - The panel: Last frame · Group stack (a group of lights' live stack, held on during
   a sequence whatever the Stack switch; a group of darks, bias or flats' master once
   the group ends), and what it does around its groups, as Explore's old builder:
-  Autofocus, Centring, Guiding, Meridian flip, Dither, Rotate filters, Night (lights
+  Autofocus, Centring, Guiding, Meridian flip, Dither, Night (lights
   only: dusk, dawn, minimum altitude), Cooling (off, one temperature for all, or per
   group), When finished. Read only while it runs. Changes are saved a moment after
   they are made; a line says the time, the frames and their size.
@@ -639,7 +641,7 @@ Sequences:
   device), New sequence, the name, the groups (a sheet each; up and down to reorder),
   *Add missing calibration* (flats per filter, then the bias and darks its lights
   lack in the library and the sequence does not plan), the prompts the run will
-  make, the estimates; Advanced: frames per turn, minutes past the meridian, the
+  make, the estimates; Advanced: minutes past the meridian, the
   steps, delete.
 - Each group of lights keeps its live stacks (`<night>/Stack/…`); each group of
   darks, bias or flats its master (`<night>/Master/`, flats by filter): the median in

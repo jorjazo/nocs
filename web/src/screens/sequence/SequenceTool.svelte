@@ -7,7 +7,7 @@
   import { formatDuration, formatSeconds, formatTime } from "../../lib/format";
   import { i18n } from "../../lib/i18n";
   import { href } from "../../lib/router.svelte";
-  import { currentPlan, groupExposure, isActive, runProgress } from "../../lib/sequence";
+  import { currentIndex, currentPlan, groupExposure, isActive, runProgress } from "../../lib/sequence";
   import { describeEvent, describeStep, groupFrames, groupName } from "../../lib/sequence.svelte";
   import type { PowerOutput, SequenceEvent, SequenceRun, Template } from "../../lib/types";
   import ToolCard from "../explore/ToolCard.svelte";
@@ -53,9 +53,10 @@
   const here = $derived(run && active ? currentPlan(run) : null);
   const rows = $derived.by((): Row[] => {
     if (run && progress) {
-      return progress.rows.map((r) => {
+      const current = currentIndex(progress.rows, here);
+      return progress.rows.map((r, i) => {
         const group = { frame_type: r.frameType, filter: r.filter, exposure: r.exposure, count: r.count };
-        return { name: groupName(group, t), frames: groupFrames(group, t, locale), done: r.done, count: r.count, current: r.path === here && r.done < r.count };
+        return { name: groupName(group, t), frames: groupFrames(group, t, locale), done: r.done, count: r.count, current: i === current };
       });
     }
     return (template?.groups ?? []).map((g) => ({ name: groupName(g, t), frames: groupFrames(g, t, locale), done: 0, count: g.count, current: false }));

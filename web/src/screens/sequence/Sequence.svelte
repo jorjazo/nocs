@@ -105,7 +105,7 @@
 
   // The frame in progress, for the widget and the status bar.
   const exposingRow = $derived(
-    going && going.step?.kind === "expose" && camera?.exposing ? currentRow(going, live.app.filter_wheel?.filter ?? null) : null,
+    going && going.step?.kind === "expose" && camera?.exposing ? currentRow(going) : null,
   );
   const exposing = $derived(
     exposingRow
@@ -228,7 +228,6 @@
   const portrait = $derived(exploreLayout.orientation === "portrait");
   const overlays = $derived(exploreLayout.overlays);
   const sheetOpen = $derived(portrait && exploreLayout.open("panel"));
-  const lights = $derived((draft?.groups ?? []).filter((g) => (g.frame_type ?? "light") === "light").length);
   const canGuide = $derived(!!live.app.equipment?.devices.guide_camera);
   const promptKey = $derived(going?.prompt ? `${going.run}:${going.current}:${going.prompt}` : null);
 </script>
@@ -399,16 +398,6 @@
                 </span>
                 <Icon name="chevronRight" />
               </button>
-            </li>
-          {/if}
-          {#if lights > 1}
-            <li>
-              <Toggle
-                label={s.rotate}
-                hint={draft.order === "in_turn" ? s.rotateOff : s.rotateOn(draft.batch ?? 5)}
-                checked={draft.order !== "in_turn"}
-                disabled={!editable}
-                onchange={(on) => (draft.order = on ? "batches" : "in_turn")} />
             </li>
           {/if}
           <li>

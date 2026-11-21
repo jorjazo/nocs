@@ -1,8 +1,8 @@
 """Templates: groups of frames of what the camera has framed, made into a sequence.
 
 Groups run in their order, cut into **segments**: light groups in a row (at the same
-temperature, when cooling is per group) are one segment, whose rows take turns in
-batches; every other group is a segment of its own. The tree::
+temperature, when cooling is per group) are one segment, whose rows run one after
+another, each to its end; every other group is a segment of its own. The tree::
 
     start:   cool (global cooling)
     targets: the framed target (found by the first ``aim``)
@@ -210,8 +210,7 @@ def _lights(template: Template, segment: Segment, *, back: bool) -> list[Node]:
     imaging.append(
         ExposurePlan(
             rows=[row(group) for group in segment.groups],
-            order=template.order,
-            batch=template.batch,
+            order="in_turn",
         )
     )
     above: list[Condition] = []

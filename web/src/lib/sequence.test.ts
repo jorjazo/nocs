@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  currentIndex,
   currentPlan,
   currentRow,
   fitGroup,
@@ -86,6 +87,7 @@ const run: SequenceRun = {
       rows: [
         { filter: "L", exposure: 120, count: 10, done: 10 },
         { filter: "R", exposure: 60, count: 5, done: 2 },
+        { filter: "G", exposure: 60, count: 5, done: 0 },
       ],
     },
     "targets.1.1": { target: "M 42", frame_type: "bias", rows: [{ filter: null, exposure: null, count: 10, done: 0 }] },
@@ -98,15 +100,19 @@ const run: SequenceRun = {
 test("a run's progress adds its groups up", () => {
   const progress = runProgress(run);
   assert.equal(progress.done, 12);
-  assert.equal(progress.total, 25);
-  assert.equal(progress.left, 3 * 63 + 10 * 3.001);
+  assert.equal(progress.total, 30);
+  assert.equal(progress.left, 8 * 63 + 10 * 3.001);
   assert.deepEqual(
     progress.rows.map((r) => r.frameType),
-    ["light", "light", "bias"],
+    ["light", "light", "light", "bias"],
   );
-  assert.equal(currentRow(run, "L")?.filter, "R");
-  assert.equal(currentRow(run, "R")?.done, 2);
-  assert.equal(currentRow({ ...run, current: "end.0" }, "R"), null);
+  // Groups are taken in their order, each to its end: R, whatever the wheel holds.
+  assert.equal(currentRow(run)?.filter, "R");
+  assert.equal(currentRow(run)?.done, 2);
+  assert.equal(currentRow({ ...run, current: "end.0" }), null);
+  assert.equal(currentIndex(progress.rows, "targets.0.3.2"), 1);
+  assert.equal(currentIndex(progress.rows, "targets.1.1"), 3);
+  assert.equal(currentIndex(progress.rows, null), -1);
   assert.equal(currentPlan({ ...run, current: "targets.1.0" }), null);
   assert.equal(currentPlan({ ...run, current: "targets.0.3" }), "targets.0.3.2");
 });
