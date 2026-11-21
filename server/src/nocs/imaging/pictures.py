@@ -22,6 +22,7 @@ import anyio
 
 from nocs.equipment import Role
 from nocs.imaging.capture import KeptFrame, hold_frame
+from nocs.stacking.service import NothingToSaveError
 
 log = logging.getLogger(__name__)
 
@@ -30,6 +31,10 @@ type Kind = Literal["frame", "stack"]
 
 class NothingToShowError(Exception):
     """No frame, or no stack, to make a picture of."""
+
+
+class _Replaced(Exception):
+    """The frame was replaced (and deleted) before it could be held."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,7 +53,9 @@ class Renderer(Protocol):
 class Stacker(Protocol):
     def picture_key(self) -> str | None: ...
     def picture_name(self) -> str | None: ...
-    async def picture(self, path: Path) -> None: ...
+    async def picture(self, path: Path) -> None:
+        """Raises ``nocs.stacking.service.NothingToSaveError`` without a stack to show."""
+        ...
 
 
 @dataclass(slots=True)
@@ -76,25 +83,43 @@ class Pictures:
         self._locks: dict[Kind, anyio.Lock] = {"frame": anyio.Lock(), "stack": anyio.Lock()}
 
     async def frame(self) -> Picture:
-        """The main camera's frame behind its preview, at its full size."""
-        kept = self._kept(Role.MAIN_CAMERA)
+        """The main camera's frame behind its preview, at its full size; a frame replaced
+        while it was asked for gives the one that replaced it."""
+        try:
+            return await self._frame()
+        except _Replaced:
+            try:
+                return await self._frame()
+            except _Replaced:
+                raise NothingToShowError("frames come too fast: try again") from None
+
+    async def _frame(self) -> Picture:
+        # Off the loop: whether the frame is still on disk can wait on the microSD.
+        kept = await anyio.to_thread.run_sync(self._kept, Role.MAIN_CAMERA)
         if kept is None:
             raise NothingToShowError("no frame yet")
-        shot = kept.shot
+        shot, owned = kept.shot, kept.owned
         key = f"{shot.path.name}-{shot.taken.isoformat()}"
         name = _name("frame", shot.taken)
 
         async def render(path: Path) -> None:
-            # A newer frame may replace (and delete) this one meanwhile: render a link.
-            link = path.with_suffix(".fits")
+            if not owned:  # a saved frame: nothing deletes it
+                await self._worker.picture(str(shot.path), str(path), shot.bayer)
+                return
+            # A newer frame may replace (and delete) this one meanwhile: render a link,
+            # beside it (a hard link cannot cross to another drive).
+            link = shot.path.with_name(
+                f"{shot.path.stem}.picture-{uuid.uuid4().hex}{shot.path.suffix}"
+            )
             try:
                 await anyio.to_thread.run_sync(hold_frame, shot.path, link)
             except FileNotFoundError:
-                raise NothingToShowError("a newer frame replaced it") from None
+                raise _Replaced from None
             try:
                 await self._worker.picture(str(link), str(path), shot.bayer)
             finally:
-                await anyio.to_thread.run_sync(lambda: link.unlink(missing_ok=True))
+                with anyio.CancelScope(shield=True):
+                    await anyio.to_thread.run_sync(lambda: link.unlink(missing_ok=True))
 
         return await self._get("frame", key, name, render)
 
@@ -105,14 +130,25 @@ class Pictures:
         if stacker is None or key is None:
             raise NothingToShowError("no stack yet")
         name = _name(stacker.picture_name() or "stack", self._now())
-        return await self._get("stack", key, name, stacker.picture)
+
+        async def render(path: Path) -> None:
+            try:
+                await stacker.picture(path)
+            except NothingToSaveError as e:  # ended, lost or not covered yet
+                raise NothingToShowError(str(e)) from None
+
+        return await self._get("stack", key, name, render)
 
     async def _get(
         self, kind: Kind, key: str, name: str, render: Callable[[Path], Awaitable[None]]
     ) -> Picture:
         async with self._locks[kind]:
             kept = self._pictures.get(kind)
-            if kept is not None and kept.key == key and kept.picture.path.is_file():
+            if (
+                kept is not None
+                and kept.key == key
+                and await anyio.Path(kept.picture.path).is_file()
+            ):
                 return kept.picture
             await anyio.to_thread.run_sync(
                 lambda: self._directory.mkdir(parents=True, exist_ok=True)
@@ -128,11 +164,14 @@ class Pictures:
             return picture
 
     def clear(self) -> None:
-        """Delete what an earlier run left (nocsd starting)."""
-        if self._directory.is_dir():
-            for path in self._directory.iterdir():
-                if path.is_file():
-                    path.unlink(missing_ok=True)
+        """Delete what an earlier run left (nocsd starting); never raises."""
+        try:
+            if self._directory.is_dir():
+                for path in self._directory.iterdir():
+                    if path.is_file():
+                        path.unlink(missing_ok=True)
+        except OSError as e:
+            log.warning("cannot clear %s: %s", self._directory, e)
 
 
 def _name(what: str, when: datetime) -> str:

@@ -43,6 +43,11 @@ export const es: Messages = {
     downloadStack: "Descargar el apilado",
     downloadFrame: "Descargar esta captura",
     downloadHint: "Un JPEG en alta resolución, para guardarlo en tu galería y compartirlo.",
+    making: "Preparando la imagen…",
+    notReady: "La imagen aún no está lista (puede que acabe de llegar otra): inténtalo en un momento.",
+    closed: "En la caja se desactivó el acceso para mirar.",
+    failed: "La caja no pudo preparar la imagen: inténtalo de nuevo.",
+    unreachable: "No se alcanza la caja: ¿estás en su red?",
   },
   language: {
     label: "Idioma",

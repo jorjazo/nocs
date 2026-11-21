@@ -66,6 +66,11 @@ export const en = {
     downloadStack: "Download the stack",
     downloadFrame: "Download this capture",
     downloadHint: "A full-size JPEG, to keep in your gallery and share.",
+    making: "Making the picture…",
+    notReady: "The picture is not ready yet (a new one may have just arrived): try again in a moment.",
+    closed: "Watching was turned off on the box.",
+    failed: "The box could not make the picture: try again.",
+    unreachable: "The box cannot be reached: are you on its network?",
   },
   language: {
     label: "Language",

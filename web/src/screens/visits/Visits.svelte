@@ -39,8 +39,9 @@
   const preview = $derived(camera?.preview ?? null);
   const stack = $derived(live.app.stack?.current ?? null);
   const stacked = $derived(stack?.preview ?? null);
-  // The stack when the visitor asked for it and there is one; else the last capture.
-  const showStack = $derived(stackView.view === "stack" && stacked !== null);
+  // The stack when the visitor asked for it and there is one, or when it is all there
+  // is; else the last capture.
+  const showStack = $derived(stacked !== null && (stackView.view === "stack" || preview === null));
   const shown = $derived(showStack ? stacked : preview);
   const kind = $derived(showStack ? "stack" : "frame");
 
@@ -108,6 +109,40 @@
     const hour = forecast ? forecastHours(forecast.hours, now, now + 3600_000)[0] : undefined;
     return hour ? { temperature: hour.temperature, humidity: hour.humidity, forecast: true } : null;
   });
+
+  // -- Download ----------------------------------------------------------------------
+
+  // Fetched here (not a plain link) so that the visitor sees it being made, and why it
+  // could not be: a 26 MP picture takes the box a few seconds.
+  let downloading = $state(false);
+  let failed = $state("");
+
+  async function download(): Promise<void> {
+    downloading = true;
+    failed = "";
+    const asked = kind;
+    try {
+      const response = await fetch(`/api/visit/${asked}.jpg`, { credentials: "same-origin" });
+      if (!response.ok) {
+        failed = response.status === 404 ? v.notReady : response.status === 401 ? v.closed : v.failed;
+        return;
+      }
+      const blob = await response.blob();
+      const named = /filename="([^"]+)"/.exec(response.headers.get("content-disposition") ?? "")?.[1];
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = named ?? `NOCS_${asked}.jpg`;
+      document.body.append(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch {
+      failed = v.unreachable;
+    } finally {
+      downloading = false;
+    }
+  }
 
   // -- Layout ----------------------------------------------------------------------
 
@@ -210,10 +245,11 @@
   {/snippet}
   {#snippet dock()}
     {#if shown}
-      <a class="download" href="/api/visit/{kind}.jpg" download>
+      {#if failed}<p class="caption error" role="alert">{failed}</p>{/if}
+      <Button variant="primary" wide busy={downloading} onclick={() => void download()}>
         <Icon name="download" size={20} />
-        {showStack ? v.downloadStack : v.downloadFrame}
-      </a>
+        {downloading ? v.making : showStack ? v.downloadStack : v.downloadFrame}
+      </Button>
       <p class="caption muted">{v.downloadHint}</p>
     {/if}
   {/snippet}
@@ -272,18 +308,8 @@
     font-size: 17px;
     line-height: 24px;
   }
-  .download {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: var(--space-2);
-    min-height: var(--touch);
-    background: var(--accent);
-    color: var(--on-accent);
-    min-height: var(--primary-height);
-    font-size: 17px;
-    font-weight: 600;
-    text-decoration: none;
+  .error {
+    color: var(--error);
   }
   .caption {
     font-size: 12px;

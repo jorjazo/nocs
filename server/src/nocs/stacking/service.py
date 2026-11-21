@@ -54,7 +54,7 @@ from nocs.stacking.calibrate import MasterSpec
 from nocs.stacking.frames import Offered
 from nocs.stacking.masters import Calibration, Kind, Master
 from nocs.stacking.settings import StackLook, StackSettings
-from nocs.stacking.stack import Added, Look, Rendered, StackLostError
+from nocs.stacking.stack import Added, EmptyStackError, Look, Rendered, StackLostError
 from nocs.state import Json, StateStore
 from nocs.storage import FrameFacts, FrameRow, FrameUnavailableError, SavedFrame
 
@@ -546,13 +546,18 @@ class LiveStackService:
 
     async def picture(self, path: Path) -> None:
         """Write the current stack as a JPEG at its full size, with its look (a visitor's
-        download); ``NothingToSaveError`` without one."""
+        download); ``NothingToSaveError`` without one to show."""
         stack = self._current
         if stack is None or not stack.created or stack.frames == 0:
             raise NothingToSaveError("there is no stack yet")
         async with self._worker_lock:
+            if self._stacks.get(stack.key) is not stack:
+                # Ended (New stack, switched off) while it waited: not lost, just gone.
+                raise NothingToSaveError("that stack ended")
             try:
                 await self._worker.stack_picture(stack.id, str(path), _look(self.settings.look))
+            except EmptyStackError:
+                raise NothingToSaveError("no part of the stack is covered yet") from None
             except StackLostError:
                 self._lost(stack)
                 self._publish()

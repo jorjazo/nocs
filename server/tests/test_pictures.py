@@ -1,5 +1,6 @@
 """Full-size pictures of what the viewer shows, for visitors: rendered once, kept."""
 
+import asyncio
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -10,6 +11,7 @@ from nocs.devices import FrameType
 from nocs.equipment import Role
 from nocs.imaging.capture import KeptFrame, Shot
 from nocs.imaging.pictures import NothingToShowError, Pictures
+from nocs.stacking.service import NothingToSaveError
 
 TAKEN = datetime(2026, 11, 21, 3, 4, 5, tzinfo=UTC)
 
@@ -29,6 +31,7 @@ class Stacker:
     key: str | None = None
     name: str | None = "M 42"
     renders: int = 0
+    gone: bool = False
 
     def picture_key(self) -> str | None:
         return self.key
@@ -37,13 +40,15 @@ class Stacker:
         return self.name
 
     async def picture(self, path: Path) -> None:
+        if self.gone:
+            raise NothingToSaveError("that stack ended")
         self.renders += 1
         path.write_bytes(b"stack")  # noqa: ASYNC240 (a test double)
 
 
-def kept(path: Path, taken: datetime = TAKEN) -> KeptFrame:
+def kept(path: Path, taken: datetime = TAKEN, *, owned: bool = True) -> KeptFrame:
     shot = Shot(path, 4, FrameType.LIGHT, taken, 10.0, "RGGB")
-    return KeptFrame(shot=shot, owned=True, pointing=None, stars=0, hfr=None)
+    return KeptFrame(shot=shot, owned=owned, pointing=None, stars=0, hfr=None)
 
 
 async def test_a_frame_is_rendered_once_and_kept_until_the_next(tmp_path: Path) -> None:
@@ -60,7 +65,9 @@ async def test_a_frame_is_rendered_once_and_kept_until_the_next(tmp_path: Path) 
     assert first.name == "NOCS_frame_20261121_030405.jpg"
     assert await pictures.frame() == first
     assert worker.renders == [("first", "RGGB")]  # one render for two downloads
-    assert [p.suffix for p in (tmp_path / "pictures").iterdir()] == [".jpg"]  # no link left
+    assert [p.suffix for p in (tmp_path / "pictures").iterdir()] == [".jpg"]
+    left = await asyncio.to_thread(lambda: sorted(p.name for p in tmp_path.iterdir()))
+    assert left == ["frame.fits", "pictures"]  # no link
 
     second = tmp_path / "second.fits"
     second.write_text("second")
@@ -70,10 +77,26 @@ async def test_a_frame_is_rendered_once_and_kept_until_the_next(tmp_path: Path) 
     assert not first.path.exists()  # only the latest is kept
     assert worker.renders[-1] == ("second", "RGGB")
 
-    second.unlink()  # replaced by a newer frame while asked for
-    shown[Role.MAIN_CAMERA] = kept(second, TAKEN.replace(second=7))
-    with pytest.raises(NothingToShowError):
+    # Replaced (and deleted) as it is asked for: the one that replaced it.
+    third = tmp_path / "third.fits"
+    third.write_text("third")
+    gone = kept(tmp_path / "gone.fits", TAKEN.replace(second=7))
+    answers = iter([gone, kept(third, TAKEN.replace(second=8))])
+    pictures = Pictures(tmp_path / "pictures", worker, lambda _: next(answers), lambda: None)
+    await pictures.frame()
+    assert worker.renders[-1] == ("third", "RGGB")
+    pictures = Pictures(tmp_path / "pictures", worker, lambda _: gone, lambda: None)
+    with pytest.raises(NothingToShowError, match="too fast"):
         await pictures.frame()
+
+    # A saved frame is rendered as it is: nothing deletes it.
+    saved = tmp_path / "saved.fits"
+    saved.write_text("saved")
+    pictures = Pictures(
+        tmp_path / "pictures", worker, lambda _: kept(saved, owned=False), lambda: None
+    )
+    await pictures.frame()
+    assert worker.renders[-1] == ("saved", "RGGB")
 
 
 async def test_the_stack_is_rendered_again_when_it_changes(tmp_path: Path) -> None:
@@ -92,5 +115,8 @@ async def test_the_stack_is_rendered_again_when_it_changes(tmp_path: Path) -> No
     stacker.key = "a-4"  # a frame more, or another look
     await pictures.stack()
     assert stacker.renders == 2
+    stacker.key, stacker.gone = "b-1", True  # ended as it was asked for
+    with pytest.raises(NothingToShowError, match="ended"):
+        await pictures.stack()
     pictures.clear()
     assert not any((tmp_path / "pictures").iterdir())

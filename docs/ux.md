@@ -710,8 +710,11 @@ Visitors:
   so); night mode, off until the visitor turns it on.
 - The dock: Download the stack, or this capture: a full-size JPEG
   (`/api/visit/stack.jpg`, `/api/visit/frame.jpg`), stretched as on screen, rendered
-  once per image (or stack and look) however many download it. No FITS, and no
-  share button (sharing waits for HTTPS on the box): the gallery shares it.
+  once per image (or stack and look) however many download it. The button says
+  "Making the picture…" meanwhile (a few seconds for 26 MP), and why it could not be
+  (not ready yet, watching turned off, the box out of reach), without paths. A
+  frame replaced as it is asked for gives the newer one. No FITS, and no share button
+  (sharing waits for HTTPS on the box): the gallery shares it.
 
 Session report (stage 5.15):
 
