@@ -16,6 +16,11 @@ wheel, the focuser and the mount until it ends. Pausing lends them back
 holds them. The checkpoint goes to ``<data dir>/sequence/run.json`` after every
 step and is removed when the run ends; the run and all its events go to the
 catalog. When nocsd starts and finds a checkpoint, ``recover`` resumes the run.
+
+The plan runs as the sequence ``plan`` (``start_plan``), kept with the others but
+not listed with them, nor written through them; its schedule takes the targets from
+the ``scheduler``. Stopping a plan never runs its end: only a plan that ends by itself
+(dawn, every target done) parks and warms.
 """
 
 from __future__ import annotations
@@ -35,7 +40,14 @@ from nocs.equipment import Role
 from nocs.jobs import JobContext, JobManager, ResourceBusyError
 from nocs.sequence.model import Sequence, Template, needs_site
 from nocs.sequence.rig import Parts, RigExecutor, take_back
-from nocs.sequence.runner import Checkpoint, CheckpointFile, Event, Outcome, Runner
+from nocs.sequence.runner import (
+    Checkpoint,
+    CheckpointFile,
+    Event,
+    Outcome,
+    Runner,
+    Scheduler,
+)
 from nocs.sequence.sky import Place
 from nocs.sequence.store import SequenceError, SequenceStore
 from nocs.sequence.template import Estimate, estimate, expand
@@ -58,6 +70,8 @@ MAX_RESTARTS = 3
 """Restarts of nocsd in one run after which it only runs *end* (ADR 0032)."""
 RECOVERY_WAIT = 600.0
 """Seconds a restarted nocsd waits for the rig and the time before it only runs *end*."""
+PLAN_ID = "plan"
+"""The sequence the plan runs as (``nocs.plan``)."""
 
 
 class SequenceBusyError(Exception):
@@ -89,6 +103,7 @@ class SequenceService:
         recorder: Recorder | None = None,
         profile: Callable[[], str | None] = lambda: None,
         place: Callable[[], Place | None] = lambda: None,
+        scheduler: Scheduler | None = None,
     ) -> None:
         self._store = store
         self._jobs = jobs
@@ -99,6 +114,7 @@ class SequenceService:
         self._recorder = recorder
         self._profile = profile
         self._place = place
+        self._scheduler = scheduler
         self._runner: Runner | None = None
         self._job: str | None = None
         self._running: str | None = None
@@ -110,12 +126,17 @@ class SequenceService:
     # -- definitions ----------------------------------------------------------------
 
     def all(self) -> dict[str, Sequence]:
-        return self._definitions.load_all()
+        found = self._definitions.load_all()
+        found.pop(PLAN_ID, None)
+        return found
 
     def get(self, sequence_id: str) -> Sequence | None:
+        if sequence_id == PLAN_ID:
+            return None
         return self._definitions.get(sequence_id)
 
     def put(self, sequence_id: str, sequence: Sequence) -> None:
+        _not_the_plan(sequence_id)
         self._check_not_running(sequence_id)
         self._definitions.put(sequence_id, sequence)
 
@@ -135,6 +156,7 @@ class SequenceService:
         return estimate(template, sensor=sensor, place=self._place(), now=self._clock.now())
 
     def delete(self, sequence_id: str) -> bool:
+        _not_the_plan(sequence_id)
         self._check_not_running(sequence_id)
         return self._definitions.delete(sequence_id)
 
@@ -145,11 +167,27 @@ class SequenceService:
         """A run holds the rig, or waits paused or on a prompt: Explore takes no frames."""
         return self._job is not None
 
+    @property
+    def running_plan(self) -> bool:
+        return self._running == PLAN_ID
+
     def start(self, sequence_id: str) -> str:
         """Run a sequence as a job; returns the job id."""
-        sequence = self._definitions.get(sequence_id)
+        sequence = self.get(sequence_id)
         if sequence is None:
             raise KeyError(sequence_id)
+        return self._start_checked(sequence_id, sequence)
+
+    def start_plan(self, sequence: Sequence) -> str:
+        """Run the plan (its sequence, from ``nocs.plan.expand``) as a job."""
+        if self._scheduler is None:
+            raise ValueError("there is no plan")
+        if self._running is not None:
+            raise SequenceBusyError(f"sequence {self._running} is running")
+        self._definitions.put(PLAN_ID, sequence)
+        return self._start_checked(PLAN_ID, sequence)
+
+    def _start_checked(self, sequence_id: str, sequence: Sequence) -> str:
         if any(kind in EXPLORE_KINDS for kind in self._jobs.active()):
             raise SequenceBusyError("Explore is taking frames: stop it before a sequence starts")
         if needs_site(sequence) and self._place() is None:
@@ -187,7 +225,8 @@ class SequenceService:
         runner.resume()
 
     def stop(self, *, run_end: bool = True, now: bool = False) -> None:
-        self._active().stop(run_end=run_end, now=now)
+        # A plan the user stops leaves the rig as it is: its end is for a night it ends.
+        self._active().stop(run_end=run_end and not self.running_plan, now=now)
 
     async def recover(
         self,
@@ -264,6 +303,7 @@ class SequenceService:
             on_event=self._on_event,
             on_change=self._publish,
             place=self._place,
+            scheduler=self._scheduler,
         )
         runner.checkpoint.sequence = sequence_id
         self._runner = runner
@@ -368,6 +408,11 @@ class SequenceService:
     def _publish(self) -> None:
         if self._runner is not None:
             self._store.set((*ROOT, "run"), self._runner.status())
+
+
+def _not_the_plan(sequence_id: str) -> None:
+    if sequence_id == PLAN_ID:
+        raise SequenceError("the plan's sequence is the plan's: edit the plan")
 
 
 def _ready(events: MemoryObjectReceiveStream[Event]) -> list[Event]:

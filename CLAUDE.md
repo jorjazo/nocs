@@ -82,7 +82,9 @@ server/   Python package `nocs` (nocsd): indi/ (protocol + async client, driver
           sites/ (the saved sites and the box's active one),
           preparation/ (what blocks each step of Tonight's checklist),
           targets/ (bundled OpenNGC catalog and its search; Tycho-2
-          stars for the framing chart; tonight's target, `plan`),
+          stars for the framing chart),
+          plan/ (the plan's targets and lines, run as a sequence whose
+          schedule asks it for the first target up),
           system/ (nocs-system, the root helper: stdlib + anyio only),
           state/ (versioned store), services/ (indi_bridge), api/ (FastAPI
           REST + WebSocket, schemas, schema export)

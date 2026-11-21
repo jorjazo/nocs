@@ -251,15 +251,23 @@ export function frameLabel(data: Record<string, unknown>): string {
   return filter ? `${filter} ${done}` : `#${done}`;
 }
 
-// Explore and Sequences exclude each other: the one that is working, if either.
-// Explore works while it loops or takes frames; Sequences while a run is active.
-export type WorkingView = "explore" | "sequence";
+// The sequence the plan runs as (the server's): its runs are the Plan view's.
+export const PLAN_ID = "plan";
+
+export function isPlanRun(run: SequenceRun | null | undefined): boolean {
+  return run?.sequence === PLAN_ID;
+}
+
+// Explore, Sequences and Plan exclude each other: the one that is working, if any.
+// Explore works while it loops or takes frames; Sequences or Plan while a run of
+// theirs is active.
+export type WorkingView = "explore" | "sequence" | "plan";
 
 export function workingView(
   run: SequenceRun | null | undefined,
   jobs: Record<string, { kind: string; state: string }> | null | undefined,
 ): WorkingView | null {
-  if (isActive(run)) return "sequence";
+  if (isActive(run)) return isPlanRun(run) ? "plan" : "sequence";
   for (const job of Object.values(jobs ?? {})) {
     if ((job.kind === "loop" || job.kind === "expose") && job.state === "running") return "explore";
   }

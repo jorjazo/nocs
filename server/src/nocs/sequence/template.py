@@ -30,6 +30,7 @@ from datetime import UTC, datetime
 
 from nocs.sequence import sky
 from nocs.sequence.model import (
+    Actions,
     Aim,
     Autofocus,
     AutofocusTrigger,
@@ -148,21 +149,11 @@ def expand(template: Template) -> Sequence:
             children.append(Container(name=segment.groups[0].frame_type, children=steps))
         previous = kind
 
-    end: list[Node] = []
-    if template.guide and template.lights:
-        end.append(Guide(on=False))
-    if template.end.park:
-        end.append(Park())
-    if template.end.warm:
-        end.append(Warm(ramp=template.cooling_ramp))
-    if template.end.outputs:
-        end.append(Outputs(outputs=template.end.outputs, on=False))
-
     return Sequence(
         name=template.name,
         start=Container(children=start),
         targets=Container(name=template.name, children=children),
-        end=Container(children=end),
+        end=Container(children=end_steps(template, lights=template.lights)),
         recovery=template.recovery,
         template=template,
     )
@@ -183,41 +174,78 @@ def _lights(template: Template, segment: Segment, *, back: bool) -> list[Node]:
         imaging.append(Center())
     if template.guide:
         imaging.append(Guide(on=True))
-    triggers: list[Trigger] = []
-    focus = template.focus
-    if focus is not None:
-        # On a filter change the trigger focuses before the first frame anyway.
-        if focus.at_start and not focus.filter_change:
-            imaging.append(Autofocus())
-        if focus.filter_change or focus.temperature_change or focus.hfr_increase or focus.minutes:
-            triggers.append(
-                AutofocusTrigger(
-                    filter_change=focus.filter_change,
-                    temperature_change=focus.temperature_change,
-                    hfr_increase=focus.hfr_increase,
-                    minutes=focus.minutes,
-                )
-            )
-    if template.flip:
-        center = Center() if template.center else None
-        triggers.append(FlipTrigger(after=template.flip_after, flip=Flip(center=center)))
-    if template.center and template.recenter_every is not None:
-        recenter = Recenter(drift=template.recenter_drift)
-        triggers.append(RecenterTrigger(every=template.recenter_every, recenter=recenter))
-    if template.guide and template.dither_every is not None:
-        dither = Dither(pixels=template.dither_pixels)
-        triggers.append(DitherTrigger(every=template.dither_every, dither=dither))
+    if focus_at_start(template):
+        imaging.append(Autofocus())
     imaging.append(
         ExposurePlan(
             rows=[row(group) for group in segment.groups],
             order="in_turn",
         )
     )
-    above: list[Condition] = []
-    if template.min_altitude is not None:
-        above.append(WhileAbove(altitude=template.min_altitude))
-    steps.append(Container(name="imaging", conditions=above, triggers=triggers, children=imaging))
+    steps.append(
+        Container(
+            name="imaging",
+            conditions=above(template),
+            triggers=triggers(template),
+            children=imaging,
+        )
+    )
     return steps
+
+
+def focus_at_start(actions: Actions) -> bool:
+    """Whether lights focus before their first frame: on a filter change the trigger
+    focuses before it anyway."""
+    focus = actions.focus
+    return focus is not None and focus.at_start and not focus.filter_change
+
+
+def above(actions: Actions) -> list[Condition]:
+    """Lights only while the target is high enough."""
+    if actions.min_altitude is None:
+        return []
+    return [WhileAbove(altitude=actions.min_altitude)]
+
+
+def triggers(actions: Actions) -> list[Trigger]:
+    """What lights do between frames: focus, flip, check the pointing, dither."""
+    found: list[Trigger] = []
+    focus = actions.focus
+    if focus is not None and (
+        focus.filter_change or focus.temperature_change or focus.hfr_increase or focus.minutes
+    ):
+        found.append(
+            AutofocusTrigger(
+                filter_change=focus.filter_change,
+                temperature_change=focus.temperature_change,
+                hfr_increase=focus.hfr_increase,
+                minutes=focus.minutes,
+            )
+        )
+    if actions.flip:
+        center = Center() if actions.center else None
+        found.append(FlipTrigger(after=actions.flip_after, flip=Flip(center=center)))
+    if actions.center and actions.recenter_every is not None:
+        recenter = Recenter(drift=actions.recenter_drift)
+        found.append(RecenterTrigger(every=actions.recenter_every, recenter=recenter))
+    if actions.guide and actions.dither_every is not None:
+        dither = Dither(pixels=actions.dither_pixels)
+        found.append(DitherTrigger(every=actions.dither_every, dither=dither))
+    return found
+
+
+def end_steps(actions: Actions, *, lights: bool) -> list[Node]:
+    """The end of the session: guiding off (after lights), park, warm, outputs off."""
+    end: list[Node] = []
+    if actions.guide and lights:
+        end.append(Guide(on=False))
+    if actions.end.park:
+        end.append(Park())
+    if actions.end.warm:
+        end.append(Warm(ramp=actions.cooling_ramp))
+    if actions.end.outputs:
+        end.append(Outputs(outputs=actions.end.outputs, on=False))
+    return end
 
 
 def _calibration(segment: Segment) -> list[Node]:

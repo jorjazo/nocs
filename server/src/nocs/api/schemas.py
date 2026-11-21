@@ -17,12 +17,12 @@ from pydantic import (
 
 from nocs.equipment import Role
 from nocs.forecast import ForecastHour, ForecastProvider
+from nocs.plan.model import NightPlan
 from nocs.sites import Site
 from nocs.stacking.settings import StackLook
 from nocs.state import Patch
 from nocs.system.network import COUNTRIES
 from nocs.targets import TargetType
-from nocs.targets.plan import PlannedTarget
 
 # -- State -------------------------------------------------------------------
 # These models document the shape of the state tree for clients (and generate the
@@ -717,12 +717,6 @@ class PreparationState(StateModel):
     guide: PreparationStep
 
 
-class PlanState(StateModel):
-    """What the Plan screen chose for tonight (stage 3.6)."""
-
-    target: PlannedTarget | None = Field(description="None: no target chosen.")
-
-
 class CenteringState(StateModel):
     """The running centring, or the most recent one."""
 
@@ -1274,6 +1268,9 @@ class SequenceRun(StateModel):
         description="The run waits (paused) until the user readies the rig for these frames: "
         "uncovered, covered (darks and bias), on a panel."
     )
+    target: str | None = Field(
+        default=None, description="The plan's target being taken (its id), in a plan's run."
+    )
 
 
 class SequenceEvent(StateModel):
@@ -1292,6 +1289,7 @@ class SequenceEvent(StateModel):
         "recovery",
         "recovered",
         "skipped",
+        "target",
         "ending",
         "ended",
     ]
@@ -1484,7 +1482,7 @@ class AppState(StateModel):
     )
     finder: FinderState | None = Field(default=None, description="None: never run.")
     preparation: PreparationState | None = None
-    plan: PlanState | None = None
+    plan: NightPlan | None = Field(default=None, description="The plan's targets, in priority.")
     stack: StackState | None = None
     guiding: GuidingState | None = None
     system: SystemState | None = None

@@ -33,7 +33,7 @@ def sequences_router(sequences: Callable[[], SequenceService]) -> APIRouter:
 
     @router.get("/sequences/{sequence_id}")
     async def get(sequence_id: str) -> Sequence:  # pyright: ignore[reportUnusedFunction]
-        with _errors():
+        with sequence_errors():
             sequence = sequences().get(sequence_id)
         if sequence is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, f"no sequence {sequence_id!r}")
@@ -41,13 +41,13 @@ def sequences_router(sequences: Callable[[], SequenceService]) -> APIRouter:
 
     @router.put("/sequences/{sequence_id}", status_code=status.HTTP_204_NO_CONTENT)
     async def put(sequence_id: str, sequence: Sequence) -> Response:  # pyright: ignore[reportUnusedFunction]
-        with _errors():
+        with sequence_errors():
             sequences().put(sequence_id, sequence)
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     @router.delete("/sequences/{sequence_id}", status_code=status.HTTP_204_NO_CONTENT)
     async def delete(sequence_id: str) -> Response:  # pyright: ignore[reportUnusedFunction]
-        with _errors():
+        with sequence_errors():
             if not sequences().delete(sequence_id):
                 raise HTTPException(status.HTTP_404_NOT_FOUND, f"no sequence {sequence_id!r}")
         return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -55,13 +55,13 @@ def sequences_router(sequences: Callable[[], SequenceService]) -> APIRouter:
     @router.put("/sequences/{sequence_id}/template", status_code=status.HTTP_204_NO_CONTENT)
     async def put_template(sequence_id: str, template: Template) -> Response:  # pyright: ignore[reportUnusedFunction]
         """Build the sequence from a template and keep it (with the template)."""
-        with _errors():
+        with sequence_errors():
             sequences().put_template(sequence_id, template)
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     @router.post("/sequences/estimate")
     async def estimate(template: Template) -> SequenceEstimate:  # pyright: ignore[reportUnusedFunction]
-        with _errors():
+        with sequence_errors():
             found = await anyio.to_thread.run_sync(sequences().estimate, template)
         return SequenceEstimate(
             frames=found.frames,
@@ -75,14 +75,14 @@ def sequences_router(sequences: Callable[[], SequenceService]) -> APIRouter:
     @router.post("/sequences/expand")
     async def expand_template(template: Template) -> Sequence:  # pyright: ignore[reportUnusedFunction]
         """The sequence a template makes, without keeping it (the builder's Advanced view)."""
-        with _errors():
+        with sequence_errors():
             return expand(template)
 
     @router.post("/sequences/{sequence_id}/start", status_code=status.HTTP_202_ACCEPTED)
     async def start(sequence_id: str) -> JobStarted:  # pyright: ignore[reportUnusedFunction]
         """Start a sequence; guiding started by hand is stopped first (the sequence guides
         under its own job when it is asked to)."""
-        with _errors():
+        with sequence_errors():
             if sequences().get(sequence_id) is None:
                 raise KeyError(sequence_id)
             await sequences().take_over_guiding()
@@ -90,20 +90,20 @@ def sequences_router(sequences: Callable[[], SequenceService]) -> APIRouter:
 
     @router.post("/sequence/pause", status_code=status.HTTP_204_NO_CONTENT)
     async def pause(request: SequencePauseRequest) -> Response:  # pyright: ignore[reportUnusedFunction]
-        with _errors():
+        with sequence_errors():
             sequences().pause(now=request.now)
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     @router.post("/sequence/resume", status_code=status.HTTP_204_NO_CONTENT)
     async def resume() -> Response:  # pyright: ignore[reportUnusedFunction]
         """Go on after a pause, or after a prompt: the rig is ready for the next frames."""
-        with _errors():
+        with sequence_errors():
             sequences().resume()
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     @router.post("/sequence/stop", status_code=status.HTTP_204_NO_CONTENT)
     async def stop(request: SequenceStopRequest) -> Response:  # pyright: ignore[reportUnusedFunction]
-        with _errors():
+        with sequence_errors():
             sequences().stop(run_end=request.run_end, now=request.now)
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -115,7 +115,7 @@ def _iso(when: datetime | None) -> str | None:
 
 
 @contextlib.contextmanager
-def _errors() -> Generator[None]:
+def sequence_errors() -> Generator[None]:
     try:
         yield
     except KeyError as e:

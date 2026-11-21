@@ -15,8 +15,8 @@ Navigation follows the night, not the device tree.
 |---|---|---|
 | **Tonight** | Home: the night and how the rig stands now. A "get ready" checklist that leads to each setup flow, the night window, where the mount points, the weather, the actuators, the location and time, the host (ADR 0053) | Tonight · Polar alignment · Autofocus (full-screen flows) |
 | **Explore** | Try the sky tonight: the image, its histogram and status, the tools over it (guiding, focus, go to), loop, capture, save what is on screen (ADR 0054) | Explore |
-| **Sequences** | Run groups of frames of what the camera has framed (lights per filter, darks, bias, flats), with the meridian flip and the night's rules; the same base as Explore, with the sequence's widget instead of go to. Explore and Sequences exclude each other | Sequences · Configure the sequence |
-| **Plan** | Choose a target | Target (search + framing) |
+| **Sequences** | Run groups of frames of what the camera has framed (lights per filter, darks, bias, flats), with the meridian flip and the night's rules; the same base as Explore, with the sequence's widget instead of go to. Explore, Sequences and Plan exclude each other | Sequences · Configure the sequence |
+| **Plan** | Targets over one night or many, in priority, each with its lines of lights; the run takes the first that is up with frames left. The same base as Explore, with the plan's widget instead of go to | Plan · its targets · add a target · a target's page (search, framing, lines) |
 | **Session** | The night's frames, their calibration and downloads, past sessions and their reports | Session · report |
 | **Rig** | Equipment profile, optical trains, devices, the site, the box, settings | Rig · device details |
 
@@ -30,12 +30,13 @@ Navigation follows the night, not the device tree.
   done that can run. A step that cannot run yet shows what blocks it (the site, the
   plate solver, a device not ready, a parked mount, PHD2) with a link to where it is
   fixed, and has no button (ADR 0041).
-- A running sequence is always reachable in one tap from any screen (the
-  Sequences tab, with a dot), and its prompts to ready the rig show on any screen.
-- Explore and Sequences exclude each other: while Explore loops or takes frames, or
-  while a sequence is active (running, paused, or waiting on the user), the other's
-  tab is dimmed and going to it leads to the one that works. The server refuses
-  Explore's frames during a sequence and a sequence during Explore's frames.
+- A running sequence or plan is always reachable in one tap from any screen (its
+  tab, with a dot), and a sequence's prompts to ready the rig show on any screen.
+- Explore, Sequences and Plan exclude each other: while Explore loops or takes
+  frames, or while a sequence or the plan is active (running, paused, or waiting on
+  the user), the others' tabs are dimmed and going to them leads to the one that
+  works. The server refuses Explore's frames during a run and a run during Explore's
+  frames; the plan runs as a sequence, so only one of the two runs at a time.
 
 ## 2. Key screens (Phase 1 canvas)
 
@@ -46,7 +47,9 @@ Navigation follows the night, not the device tree.
 | Rig | The profile and its connection on top; below, collapsible sections in groups: imaging and guiding trains with derived FOV and pixel scale, devices with status; the saved sites and the active one; the box; settings (§7, "Rig"). |
 | Polar alignment | Target view with the axis error, per-axis readouts with plain-language direction ("Raise", "Turn west"). |
 | Autofocus | Live V-curve with fit, best position / HFR / stars / temperature, cancel restores the previous position. |
-| Framing | Target search, sky view with camera frame and rotation, altitude tonight, "Go and center". |
+| Plan | Explore's base with the plan's widget at the right (the run's state, the target it takes and its lines, the targets in priority with their frames, recent events, the way to the targets), a panel with what the plan does at its start, around its targets and when it ends by itself, last frame or stack, start / pause / resume / stop. |
+| The plan's targets | In priority, each with its lines, frames over every night, time left and how it does tonight; up and down, Add a target. |
+| A target's page | Search (or coordinates, or one of my frames), the object, its lines, its altitude tonight, the framing chart with camera frame and rotation, "Go and center", remove, start its frames again. |
 | Explore | The image edge to edge with a status bar and a folding histogram under it, guiding, focus and go to over it, and a panel of actions at its side (a sheet when upright): stack, filter, exposure, loop / capture, save / solve / download what is on screen (ADR 0054). |
 | Sequences | Explore's base (image, histogram, status bar, guiding and focus over it) with the sequence's widget at the right (state, groups and their frames, the frame in progress, recent events, the way to configure it), a panel with what it does around its groups, last frame or group stack, start / pause / resume / stop. |
 | Configure the sequence | The saved sequences, the name, the groups in order (kind, filter, exposure, frames, settings), the calibration still missing, where the run will ask to ready the rig, estimates, the steps. |
@@ -524,7 +527,7 @@ The Sun and the Moon (ADR 0049):
   run that failed before seeing the disc, Not centred one that failed after. Live
   view shows it while it runs, under the centring card; the frames are its previews.
 
-Tonight and Plan (stage 3.6):
+Tonight and Plan:
 
 - Tonight is the home screen: the night as one bar from
   sunset to sunrise (daylight and the three twilights lighter, the dark window
@@ -548,7 +551,8 @@ Tonight and Plan (stage 3.6):
   open while a step is left, last and closed once all are done. Order: checklist,
   night, Pointing, Weather, Actuators, Location and time (the owner's only), Host.
 - Pointing: the mount's altitude and azimuth and J2000 coordinates, what is there
-  (tonight's target when it is in the main camera's frame, else the Sun or the Moon,
+  (one of tonight's objects, the plan's targets, the first in priority, when it is in
+  the main camera's frame, else the Sun or the Moon,
   else the nearest catalog object, else nothing), its altitude through the night,
   and the guiding RMS (total, RA and Dec). Parked and no mount say so.
 - Actuators, read only: the camera's cooler (sensor against target, power, ramp; a
@@ -565,22 +569,31 @@ Tonight and Plan (stage 3.6):
   7 h 20 min" before it, "5 h 28 min of darkness left · 3 h 30 min without the
   Moon" during it (the Moon only when over 10 % lit), "The dark window is over"
   after it.
-- Plan opens on tonight's target (Open, Forget with a second tap) and the search:
-  a designation or a name, in either language and without accents; a few targets
-  to start from when it is empty. Each result says what it is (type,
+- Adding a target (`#/plan/add`): Catalog · Coordinates · My frames. The search
+  takes a designation or a name, in either language and without accents, with a few
+  targets to start from when it is empty; each result says what it is (type,
   constellation, magnitude, size) and how long it is up in the dark tonight.
-- A target's page (`#/plan/<id>`): its names and what it is, its altitude through
-  the night (twilight shaded, the site's horizon profile as ground under it, the
-  30° minimum dashed, the Moon dotted, now), the highest point, the best window
-  and the distance to the Moon; the framing chart with the main camera's frame and
-  a rotation slider (it starts at tonight's target's, else at the last solved
-  frame's); dragging the sky frames off the object, which the caption says with a
-  way back. Go and centre is the primary action, then Go and "Make tonight's
-  target"; going also makes it tonight's target, and the centring card follows
-  the run. While PHD2 guides, a go is refused with "Go and resume guiding" (one
-  job on the box: stop guiding, go or centre, guide again on a new star,
-  calibrating again only if the mount changed sides of the pier) and "Go, stop
-  guiding".
+  Coordinates take J2000 right ascension and declination, decimal or sexagesimal,
+  and a name. My frames lists a night's lights by target and filter; one is solved
+  (the one with the most stars, with the scale its headers give) and its centre and
+  angle make the target.
+- A target's page (`#/plan/object/<catalog id>` to add one, `#/plan/new` from
+  coordinates, `#/plan/target/<id>` for one of the plan's): its names and what it
+  is (a name to edit when it is not from the catalog), its lines, its altitude
+  through the night (twilight shaded, the site's horizon profile as ground under it,
+  the plan's minimum dashed, the Moon dotted, now), the highest point, the best
+  window and the distance to the Moon; the framing chart with the main camera's frame
+  and a rotation slider (it starts at the target's, else at the last solved frame's);
+  dragging the sky frames off the object, which the caption says with a way back.
+  Add to the plan is the primary action on a new one (a banner says when the object
+  is in the plan already); Go and centre and Go stay, and name Explore's lights after
+  the target. On one of the plan's: Start its frames again and Remove, each with a
+  second tap. While the plan runs, the mount is the plan's: Go waits.
+- A target's lines are taken in order, each to its end: a filter (none without a
+  wheel), an exposure, a count, gain and offset (empty: the camera's when it starts).
+  Each line keeps its frames over every night (the server counts them; all frames
+  kept count). A sheet edits one; Add a line takes the next filter of the wheel and
+  the last line's settings.
 - The framing chart (stage 3.7b) draws the last solved frame dashed where it
   landed, and under the rotation slider says how far to turn the camera from that
   frame's angle to the framing's, with "Use the camera's angle". "Survey image" (off
@@ -646,6 +659,37 @@ Sequences:
 - Each group of lights keeps its live stacks (`<night>/Stack/…`); each group of
   darks, bias or flats its master (`<night>/Master/`, flats by filter): the median in
   the sensor's own pixels, 16 bits, flats not bias-subtracted.
+
+Plan:
+
+- Same layout as Sequences (`ImageScreen`, `ImageOverlay`): guiding and focus at the
+  top left, the plan's widget at the right where Explore has go to.
+- The plan is the targets, in priority, each with its lines of lights, over one
+  night or many. Its run takes the first target that is up (above the plan's minimum
+  altitude and the site's horizon) with frames left; it centres it (or goes to it),
+  guides when asked, focuses on the first one, and takes its lines in order. Every
+  10 minutes, and whenever a line ends, it looks again: between two frames (never
+  cutting one) it goes to a target that now comes first, or takes the same afresh
+  when it was changed. A target that fails (a solve, say) or sets before a frame
+  waits 15 minutes while the others are taken. With none up it waits, until one
+  rises or the night ends.
+- The panel: Last frame · Stack, the plan's targets and frames left (to the targets'
+  page), then what it does: At the start (outputs switched on, such as dew heaters,
+  shown when there is a power box), Autofocus, Centring, Guiding, Meridian flip,
+  Dither, Night (dusk, dawn, minimum altitude), Cooling (off or one temperature),
+  When it ends by itself. These are fixed while it runs; its targets are not: they
+  count from the next look. Changes are saved a moment after they are made.
+- The dock: Start the plan (off while Explore or a sequence works, or with no frames
+  left), then Pause (Pause now while pausing), Resume and Stop…: after this frame or
+  now, always leaving the rig as it is. The end (park, warm, outputs off) runs only
+  when the plan ends by itself: at dawn, or with every target done.
+- The widget: the state, the target it takes with each line's frames (the current
+  one marked), the frame in progress or what the run is doing, the targets in
+  priority with their frames over every night, the time their frames still take, the
+  three latest events, and the way to the targets.
+- The plan's targets (`#/plan/edit`): each with its place, its lines, a bar of its
+  frames, its exposure so far and what is left, "Taking now" and how it does tonight;
+  up and down change its priority, a tap opens its page, Add a target finds another.
 
 Session report (stage 5.15):
 

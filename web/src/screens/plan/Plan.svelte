@@ -1,244 +1,560 @@
 <script lang="ts">
-  // Plan → Target (stage 3.6): tonight's target, if one is chosen, and the
-  // catalog search with how long each result is up in the dark tonight. A result
-  // opens the target's page (#/plan/<id>). The sequence builder is the other
-  // half of Plan (#/plan/sequence).
+  // Plan: the targets to take over one night or many, in priority, each with its lines
+  // of lights; the run takes the first that is up with frames left, and goes to one
+  // that comes first between frames. Explore's base (the image, its histogram and
+  // status bar, guiding and focus over it), with the plan's widget where Explore has
+  // its go to, and a panel with what the plan does around its targets. Explore,
+  // Sequences and Plan exclude each other.
+  import Banner from "../../components/Banner.svelte";
   import Button from "../../components/Button.svelte";
-  import ConfirmButton from "../../components/ConfirmButton.svelte";
+  import type { Tone } from "../../components/Chip.svelte";
+  import EmptyState from "../../components/EmptyState.svelte";
   import Icon from "../../components/Icon.svelte";
-  import RigStatus from "../../components/RigStatus.svelte";
-  import ScreenHeader from "../../components/ScreenHeader.svelte";
-  import TextField from "../../components/TextField.svelte";
-  import { forgetPlanTarget, getVisibility, searchTargets } from "../../lib/api";
+  import ImageScreen from "../../components/ImageScreen.svelte";
+  import SegmentedControl from "../../components/SegmentedControl.svelte";
+  import Sheet from "../../components/Sheet.svelte";
+  import Toggle from "../../components/Toggle.svelte";
+  import { pauseSequence, resumeSequence, startPlan, stopSequence } from "../../lib/api";
   import { auth } from "../../lib/auth.svelte";
+  import { holder } from "../../lib/camera.svelte";
   import { errorText } from "../../lib/errors";
-  import { formatDecimal, formatDuration } from "../../lib/format";
+  import { solvedShown } from "../../lib/explore";
+  import { exploreLayout } from "../../lib/explore.svelte";
+  import { formatDuration, formatPlain } from "../../lib/format";
   import { i18n } from "../../lib/i18n";
   import { live } from "../../lib/live.svelte";
-  import { formatDec, formatRa } from "../../lib/mount.svelte";
-  import { href, router } from "../../lib/router.svelte";
-  import { plannedName } from "../../lib/catalog.svelte";
-  import { objectName, objectSummary } from "../../lib/targets";
-  import type { CatalogMatch, TargetVisibility } from "../../lib/types";
+  import { isPlanRun, targetLeft, targetSeconds } from "../../lib/plan";
+  import { plan } from "../../lib/plan.svelte";
+  import { router } from "../../lib/router.svelte";
+  import { currentRow, isActive, workingView } from "../../lib/sequence";
+  import {
+    coolingSummary,
+    endSummary,
+    focusSummary,
+    groupName,
+    outputLabels,
+    pointingSummary,
+    windowSummary,
+  } from "../../lib/sequence.svelte";
+  import { stackView, type StackView } from "../../lib/stackview.svelte";
+  import FocuserSheet from "../devices/FocuserSheet.svelte";
+  import FocusTool from "../explore/FocusTool.svelte";
+  import FrameStatus from "../explore/FrameStatus.svelte";
+  import GuidingTool from "../explore/GuidingTool.svelte";
+  import HistogramBar from "../explore/HistogramBar.svelte";
+  import ImageOverlay from "../explore/ImageOverlay.svelte";
+  import Viewer from "../explore/Viewer.svelte";
+  import SequenceSheets, { type SheetKind } from "../sequence/SequenceSheets.svelte";
+  import StopSheet from "../sequence/StopSheet.svelte";
+  import PlanTool from "./PlanTool.svelte";
 
   const t = $derived(i18n.t);
+  const s = $derived(t.sequence);
+  const p = $derived(t.planView);
   const locale = $derived(i18n.locale);
-  const planned = $derived(live.app.plan?.target ?? null);
+  const owner = $derived(auth.owner);
 
-  // The search survives going to a target and back.
-  let query = $state(sessionQuery());
-  let matches: CatalogMatch[] = $state([]);
-  let seen: Partial<Record<string, TargetVisibility>> = $state({});
-  let searched = $state(false);
-  let error = $state("");
+  const camera = $derived(live.app.cameras?.main_camera ?? null);
+  const cameras = $derived(live.app.cameras ?? {});
+  const preview = $derived(camera?.preview ?? null);
+  const guiding = $derived(live.app.guiding ?? null);
+  const mount = $derived(live.app.mount ?? null);
+  const focuser = $derived(live.app.focuser ?? null);
+  const outputs = $derived(live.app.power?.outputs ?? []);
+  const livePlan = $derived(live.app.plan ?? null);
+  const anyRun = $derived(live.app.sequence?.run ?? null);
+  // The plan's run: in progress, or the last one when it was the plan's.
+  const run = $derived(isPlanRun(anyRun) ? anyRun : null);
+  const going = $derived(isActive(run) ? run : null);
+  const active = $derived(going !== null);
+  const events = $derived(run ? (live.app.sequence?.events ?? []) : []);
+  const working = $derived(workingView(anyRun, live.app.jobs));
 
-  function sessionQuery(): string {
-    try {
-      return sessionStorage.getItem("nocs.plan.query") ?? "";
-    } catch {
-      return "";
-    }
-  }
-
-  let seq = 0;
+  $effect(() => plan.sync(livePlan));
+  const draft = $derived(plan.draft);
+  const around = $derived(draft?.actions ?? null);
+  const editable = $derived(owner && !active && around !== null);
   $effect(() => {
-    const text = query.trim();
-    try {
-      sessionStorage.setItem("nocs.plan.query", query);
-    } catch {
-      // Private mode: the search is just not kept.
-    }
-    const id = ++seq;
-    if (!text) {
-      matches = [];
-      searched = false;
-      return;
-    }
-    const timer = setTimeout(async () => {
-      try {
-        const found = await searchTargets(text, 20);
-        if (id !== seq) return;
-        matches = found;
-        searched = true;
-        error = "";
-        if (found.length) {
-          // How each result does tonight; without a site there is simply no column.
-          const v = await getVisibility(found.map((m) => `${m.object.ra},${m.object.dec}`)).catch(() => null);
-          if (id === seq && v) {
-            seen = Object.fromEntries(v.targets.flatMap((target, i) => (found[i] ? [[found[i].object.id, target]] : [])));
-          }
-        }
-      } catch (e) {
-        if (id === seq) error = errorText(e, t);
-      }
-    }, 200);
-    return () => clearTimeout(timer);
+    if (!draft) return;
+    void JSON.stringify(draft);
+    plan.changed();
   });
 
-  // The phase's exit targets, to start from.
-  const SUGGESTIONS = ["NGC 292", "NGC 253", "NGC 104", "NGC 5139", "NGC 3372", "M 42"];
+  // -- The image -----------------------------------------------------------------
 
-  function upTonight(id: string): string | null {
-    const v = seen[id];
-    if (!v) return null;
-    if (v.observable > 0) return t.plan.upFor(formatDuration(v.observable));
-    return v.above_horizon > 0 ? t.plan.lowTonight : t.plan.notUp;
+  const stack = $derived(live.app.stack?.current ?? null);
+  const groupStack = $derived(stack?.preview ?? null);
+  const showStack = $derived(stackView.view === "stack" && groupStack !== null);
+  const shown = $derived(showStack ? groupStack : preview);
+  const stackStatus = $derived(showStack && stack ? { frames: stack.frames, exposure: stack.exposure } : null);
+  const lastSolution = $derived(live.app.solver?.last ?? null);
+  const solved = $derived(!showStack && solvedShown(preview, lastSolution) ? lastSolution : null);
+  const longitude = $derived.by(() => {
+    const sites = live.app.sites;
+    const site = sites?.active ? sites.saved[sites.active] : null;
+    return site?.longitude ?? mount?.site?.longitude ?? null;
+  });
+
+  // The frame in progress, for the widget and the status bar.
+  const exposingRow = $derived(going && going.step?.kind === "expose" && camera?.exposing ? currentRow(going) : null);
+  const exposing = $derived(
+    exposingRow
+      ? {
+          label: groupName({ frame_type: "light", filter: exposingRow.filter, count: exposingRow.count }, t),
+          frame: Math.min(exposingRow.done + 1, exposingRow.count),
+          count: exposingRow.count,
+          remaining: camera?.remaining ?? null,
+          total: exposingRow.exposure ?? camera?.exposure ?? 0,
+        }
+      : null,
+  );
+  const status = $derived.by((): { tone: Tone; text: string } | null => {
+    if (!going) return null;
+    if (exposing && exposing.remaining !== null) {
+      const total = formatPlain(exposing.total, locale);
+      const elapsed = formatPlain(Math.max(0, Math.floor(exposing.total - exposing.remaining)), locale);
+      return { tone: "accent", text: `${exposing.frame}/${exposing.count} · ${t.live.status.exposing(elapsed, total)}` };
+    }
+    return { tone: going.state === "paused" ? "warning" : "accent", text: t.session.states[going.state === "finished" ? "completed" : going.state] };
+  });
+
+  const focuserJob = $derived(holder(live.app.jobs, "focuser"));
+  const focuserLocked = $derived(focuserJob !== null && focuserJob.info.kind !== "focus");
+
+  // -- What is left ------------------------------------------------------------------
+
+  const targets = $derived(livePlan?.targets ?? []);
+  const left = $derived(targets.reduce((sum, target) => sum + targetLeft(target), 0));
+  const seconds = $derived(targets.reduce((sum, target) => sum + targetSeconds(target), 0));
+
+  // -- Actions -----------------------------------------------------------------------
+
+  let busy = $state<"start" | "pause" | "resume" | "stop" | null>(null);
+  let error = $state("");
+  let stopping = $state(false);
+  let sheet = $state<SheetKind | "start" | null>(null);
+  let focuserSheet = $state(false);
+  let expanded = $state(false);
+
+  async function act(what: NonNullable<typeof busy>, call: () => Promise<unknown>): Promise<void> {
+    busy = what;
+    error = "";
+    try {
+      await call();
+    } catch (e) {
+      error = errorText(e, t);
+    } finally {
+      busy = null;
+    }
   }
+
+  async function tool(call: () => Promise<unknown>): Promise<void> {
+    error = "";
+    try {
+      await call();
+    } catch (e) {
+      error = errorText(e, t);
+    }
+  }
+
+  function start(): void {
+    void act("start", async () => {
+      plan.flush();
+      await plan.save();
+      await startPlan();
+    });
+  }
+
+  function stop(now: boolean): void {
+    stopping = false;
+    void act("stop", () => stopSequence({ now, run_end: false }));
+  }
+
+  function toggleStartOutput(id: string, on: boolean): void {
+    if (!draft) return;
+    const now = draft.start_outputs ?? [];
+    draft.start_outputs = on ? [...now, id] : now.filter((o) => o !== id);
+  }
+
+  const portrait = $derived(exploreLayout.orientation === "portrait");
+  const overlays = $derived(exploreLayout.overlays);
+  const sheetOpen = $derived(portrait && exploreLayout.open("panel"));
+  const canGuide = $derived(!!live.app.equipment?.devices.guide_camera);
+  const startOutputs = $derived(draft?.start_outputs ?? []);
 </script>
 
-<ScreenHeader title={t.tabs.plan}>
-  {#snippet trailing()}<RigStatus />{/snippet}
-</ScreenHeader>
+<svelte:window
+  onkeydown={(event) => {
+    if (event.key === "Escape" && expanded && !document.querySelector("dialog[open]")) expanded = false;
+  }} />
 
-<div class="screen">
-  {#if planned}
-    <section class="card current" aria-labelledby="planned-title">
-      <span class="label muted">{t.plan.tonightsTarget}</span>
-      <h2 id="planned-title">{plannedName(planned, locale)}</h2>
-      <p class="muted mono">{formatRa(planned.ra)} · {formatDec(planned.dec)}</p>
-      <div class="buttons">
-        {#if planned.id}
-          <Button variant="primary" onclick={() => router.go({ screen: "target", id: planned.id ?? "" })}>{t.plan.open}</Button>
-        {/if}
-        {#if auth.owner}
-          <ConfirmButton label={t.plan.forget} confirmLabel={t.plan.forgetConfirm} onconfirm={() => void forgetPlanTarget().catch((e) => (error = errorText(e, t)))} />
-        {/if}
-      </div>
-    </section>
-  {/if}
+<h1 class="visually-hidden">{p.title}</h1>
 
-  <section class="search" aria-label={t.plan.search}>
-    <TextField label={t.plan.search} hint={t.plan.searchHint} bind:value={query} />
-    {#if !query.trim()}
-      <div class="suggestions">
-        {#each SUGGESTIONS as suggestion (suggestion)}
-          <button type="button" class="suggestion" onclick={() => (query = suggestion)}>{suggestion}</button>
-        {/each}
-      </div>
-    {/if}
-    {#if error}<p class="error">{error}</p>{/if}
-    {#if matches.length}
-      <ul class="results">
-        {#each matches as match (match.object.id)}
-          {@const object = match.object}
-          {@const up = upTonight(object.id)}
-          <li>
-            <a href={href({ screen: "target", id: object.id })}>
-              <span class="text">
-                <span class="name">{objectName(object, locale)}</span>
-                <span class="muted">{objectSummary(object, t, locale)}</span>
-              </span>
-              {#if up}
-                {@const v = seen[object.id]}
-                <span class="up" class:muted={!v?.observable}>
-                  {up}
-                  {#if v?.observable}
-                    <span class="muted">{t.plan.peak(formatDecimal(v.transit_altitude, locale, 0))}</span>
-                  {/if}
+{#if !camera}
+  <div class="padded">
+    <EmptyState icon="plan" title={t.live.noCamera} body={t.live.noCameraBody}>
+      {#snippet action()}
+        <Button variant="primary" onclick={() => router.go({ screen: "rig" })}>{t.empty.openRig}</Button>
+      {/snippet}
+    </EmptyState>
+  </div>
+{:else}
+  <ImageScreen
+    {portrait}
+    {expanded}
+    {sheetOpen}
+    stageLabel={t.live.preview}
+    panelLabel={t.live.controls}
+    openLabel={t.live.panelOpen}
+    closeLabel={t.live.panelClose}
+    ontogglesheet={() => exploreLayout.toggle("panel")}>
+    {#snippet image()}
+      <Viewer
+        url={shown?.url ?? null}
+        width={shown?.width ?? 0}
+        height={shown?.height ?? 0}
+        label={showStack ? t.stack.previewLabel(camera.device) : t.live.previewLabel(camera.device)}
+        reticle={false}
+        ontap={() => exploreLayout.toggleOverlays()}>
+        {#snippet empty()}
+          <div class="nopreview">
+            <p class="heading">{t.live.noPreview}</p>
+          </div>
+        {/snippet}
+        <ImageOverlay
+          {portrait}
+          {overlays}
+          {expanded}
+          wide={exploreLayout.open("sequence")}
+          ontoggleoverlays={() => exploreLayout.toggleOverlays()}
+          ontoggleexpanded={() => (expanded = !expanded)}>
+          {#snippet tools()}
+            {#if cameras.guide_camera || guiding?.phd2.connected}
+              <GuidingTool
+                {guiding}
+                jobs={live.app.jobs}
+                {owner}
+                rig={!!cameras.guide_camera && !!mount}
+                open={exploreLayout.open("guiding")}
+                ontoggle={() => exploreLayout.toggle("guiding")}
+                run={tool} />
+            {/if}
+            {#if focuser}
+              <FocusTool
+                {focuser}
+                autofocus={live.app.autofocus ?? null}
+                {owner}
+                locked={focuserLocked}
+                cameraBusy={!!going && going.state !== "paused"}
+                open={exploreLayout.open("focus")}
+                ontoggle={() => exploreLayout.toggle("focus")}
+                onsheet={() => (focuserSheet = true)}
+                run={tool} />
+            {/if}
+          {/snippet}
+          {#snippet side()}
+            <PlanTool
+              {run}
+              plan={livePlan}
+              {events}
+              {exposing}
+              {outputs}
+              open={exploreLayout.open("sequence")}
+              ontoggle={() => exploreLayout.toggle("sequence")} />
+          {/snippet}
+        </ImageOverlay>
+      </Viewer>
+    {/snippet}
+    {#snippet under()}
+      {#if overlays}
+        <HistogramBar
+          preview={showStack ? null : preview}
+          none={showStack ? t.live.histogramNone : t.live.noPreview}
+          open={exploreLayout.open("histogram")}
+          scale={exploreLayout.scale}
+          ontoggle={() => exploreLayout.toggle("histogram")}
+          onscale={(scale) => exploreLayout.setScale(scale)} />
+      {/if}
+      <FrameStatus {camera} preview={showStack ? null : preview} stack={stackStatus} {status} {solved} {mount} {longitude} />
+    {/snippet}
+    {#snippet body()}
+      <SegmentedControl
+        label={s.show}
+        options={[
+          { value: "frame" as StackView, label: s.showFrame },
+          { value: "stack" as StackView, label: p.showStack },
+        ]}
+        value={stackView.view}
+        onchange={(view) => stackView.set(view)} />
+      {#if stackView.view === "stack" && !groupStack}
+        <p class="caption muted">{p.stackLater}</p>
+      {/if}
+
+      {#if !owner}
+        <!-- Observers follow the run in the widget; the settings are the owner's. -->
+        <p class="caption muted">{p.ownerOnly}</p>
+      {:else if !draft || !around}
+        <p class="muted" role="status">{s.loading}</p>
+      {:else}
+        <div class="title">
+          <h2>{targets.length ? p.summary(targets.length, left) : p.empty}</h2>
+          <a class="link" href="#/plan/edit">{targets.length ? p.configure : p.addFirst}</a>
+        </div>
+        {#if seconds > 0}<p class="caption muted">{p.framesLeft(formatDuration(seconds))}</p>{/if}
+        {#if active}<p class="caption muted">{p.readOnly}</p>{/if}
+        <ul class="options">
+          {#if outputs.length}
+            <li>
+              <button type="button" class="option" disabled={!editable} onclick={() => (sheet = "start")}>
+                <span class="text">
+                  <span class="name">{p.atStart}</span>
+                  <span class="muted small">{startOutputs.length ? p.outputsOn(outputLabels(startOutputs, outputs)) : s.nothing}</span>
                 </span>
-              {/if}
+                <Icon name="chevronRight" />
+              </button>
+            </li>
+          {/if}
+          <li>
+            <button type="button" class="option" disabled={!editable} onclick={() => (sheet = "focus")}>
+              <span class="text"><span class="name">{s.autofocus}</span><span class="muted small">{focusSummary(around, t, locale)}</span></span>
               <Icon name="chevronRight" />
-            </a>
+            </button>
           </li>
-        {/each}
-      </ul>
-    {:else if searched && query.trim()}
-      <p class="muted">{t.plan.noMatch}</p>
-    {/if}
-  </section>
+          <li>
+            <button type="button" class="option" disabled={!editable} onclick={() => (sheet = "pointing")}>
+              <span class="text"><span class="name">{s.pointing}</span><span class="muted small">{pointingSummary(around, t, locale)}</span></span>
+              <Icon name="chevronRight" />
+            </button>
+          </li>
+          <li>
+            <Toggle
+              label={s.guiding}
+              hint={canGuide || around.guide ? s.guidingHint : s.noGuiding}
+              checked={around.guide ?? false}
+              disabled={!editable || (!canGuide && !around.guide)}
+              onchange={(on) => (around.guide = on)} />
+          </li>
+          <li>
+            <Toggle
+              label={s.flip}
+              hint={around.flip !== false ? s.flipHint(formatPlain(around.flip_after ?? 5, locale)) : s.flipOff}
+              checked={around.flip !== false}
+              disabled={!editable}
+              onchange={(on) => (around.flip = on)} />
+          </li>
+          {#if around.guide}
+            <li>
+              <button type="button" class="option" disabled={!editable} onclick={() => (sheet = "dither")}>
+                <span class="text">
+                  <span class="name">{s.dither}</span>
+                  <span class="muted small">
+                    {around.dither_every != null ? s.ditherOn(around.dither_every, formatPlain(around.dither_pixels ?? 5, locale)) : s.off}
+                  </span>
+                </span>
+                <Icon name="chevronRight" />
+              </button>
+            </li>
+          {/if}
+          <li>
+            <button type="button" class="option" disabled={!editable} onclick={() => (sheet = "night")}>
+              <span class="text"><span class="name">{s.night}</span><span class="muted small">{windowSummary(around, t, locale)}</span></span>
+              <Icon name="chevronRight" />
+            </button>
+          </li>
+          {#if camera.can_cool || (around.cooling ?? "off") !== "off"}
+            <li>
+              <button type="button" class="option" disabled={!editable} onclick={() => (sheet = "cooling")}>
+                <span class="text"><span class="name">{s.cooling}</span><span class="muted small">{coolingSummary(around, t, locale)}</span></span>
+                <Icon name="chevronRight" />
+              </button>
+            </li>
+          {/if}
+          <li>
+            <button type="button" class="option" disabled={!editable} onclick={() => (sheet = "end")}>
+              <span class="text"><span class="name">{p.whenFinished}</span><span class="muted small">{endSummary(around, t, outputs)}</span></span>
+              <Icon name="chevronRight" />
+            </button>
+          </li>
+        </ul>
+      {/if}
+    {/snippet}
+    {#snippet dock()}
+      {#if working === "explore" || working === "sequence"}
+        <Banner icon={working} tone="warning">
+          {working === "explore" ? s.exploreWorking : p.sequenceWorking}
+          {#snippet action()}
+            <Button variant="text" onclick={() => router.go({ screen: working })}>{working === "explore" ? s.openExplore : p.openSequences}</Button>
+          {/snippet}
+        </Banner>
+      {/if}
+      {#if plan.error}<Banner icon="alert" tone="error">{plan.error}</Banner>{/if}
+      {#if error}
+        <Banner icon="alert" tone="error">
+          {error}
+          {#snippet action()}
+            <Button variant="text" onclick={() => (error = "")}>{t.live.dismiss}</Button>
+          {/snippet}
+        </Banner>
+      {/if}
+      <div class="actions" class:hidden={!owner}>
+        {#if !going}
+          <Button
+            variant="primary"
+            wide
+            busy={busy === "start"}
+            disabled={left === 0 || busy !== null || (working !== null && working !== "plan")}
+            onclick={start}>
+            <Icon name="play" size={20} />
+            {p.start}
+          </Button>
+        {:else}
+          {#if going.state === "paused"}
+            <Button variant="primary" wide busy={busy === "resume"} onclick={() => void act("resume", resumeSequence)}>
+              <Icon name="play" size={20} />
+              {t.session.resume}
+            </Button>
+          {:else if going.state === "pausing"}
+            <Button wide busy={busy === "pause"} onclick={() => void act("pause", () => pauseSequence({ now: true }))}>{t.session.pauseNow}</Button>
+          {:else}
+            <Button wide disabled={going.state !== "running"} busy={busy === "pause"} onclick={() => void act("pause", () => pauseSequence())}>
+              <Icon name="pause" size={20} />
+              {t.session.pause}
+            </Button>
+          {/if}
+          <Button
+            variant="danger"
+            wide
+            disabled={going.state === "stopping" || going.state === "ending"}
+            busy={busy === "stop"}
+            onclick={() => (stopping = true)}>
+            <Icon name="stop" size={20} />
+            {t.session.stop}
+          </Button>
+        {/if}
+      </div>
+      {#if !going && left === 0 && targets.length}<p class="caption muted outcome">{p.allDone}</p>{/if}
+      {#if !active && plan.saving}<p class="caption muted outcome">{s.savingDraft}</p>{/if}
+    {/snippet}
+  </ImageScreen>
+{/if}
 
-  <p class="credit muted">{t.plan.credit}</p>
-</div>
+{#if around && sheet === "start" && draft}
+  <Sheet title={p.atStart} onclose={() => (sheet = null)}>
+    <div class="fields">
+      <p class="muted">{p.atStartHint}</p>
+      {#each outputs as output (output.id)}
+        <Toggle
+          label={output.label || output.id}
+          checked={startOutputs.includes(output.id)}
+          onchange={(on) => toggleStartOutput(output.id, on)} />
+      {/each}
+    </div>
+    {#snippet actions()}
+      <Button variant="primary" onclick={() => (sheet = null)}>{s.row.done}</Button>
+    {/snippet}
+  </Sheet>
+{:else if around && sheet && sheet !== "start"}
+  <SequenceSheets kind={sheet} template={around} {outputs} canCool={camera?.can_cool ?? false} plan onclose={() => (sheet = null)} />
+{/if}
+{#if stopping}
+  <StopSheet plan onstop={(now) => stop(now)} onclose={() => (stopping = false)} />
+{/if}
+{#if focuserSheet}
+  <FocuserSheet onclose={() => (focuserSheet = false)} />
+{/if}
 
 <style>
-  .screen {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-4);
-    margin-top: var(--space-4);
+  .padded {
+    padding: 0 var(--margin);
   }
-  .current {
+  .nopreview {
     display: flex;
     flex-direction: column;
     gap: var(--space-1);
   }
-  h2,
-  p {
-    margin: 0;
-  }
-  .label,
-  .credit {
-    font-size: 12px;
-    line-height: 16px;
-  }
-  .mono {
-    font-family: var(--font-mono);
-  }
-  .buttons {
+  .title {
     display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-2);
-    margin-top: var(--space-2);
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-3);
   }
-  .search {
+  h2 {
+    margin: 0;
+    font-size: 17px;
+    line-height: 24px;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+  }
+  .link {
+    color: var(--accent);
+    font-size: 15px;
+    font-weight: 600;
+    text-decoration: none;
+  }
+  .small {
+    font-size: 13px;
+    line-height: 18px;
+  }
+  .fields {
     display: flex;
     flex-direction: column;
     gap: var(--space-3);
   }
-  .suggestions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-2);
+  .fields p {
+    margin: 0;
   }
-  .suggestion {
-    min-height: var(--touch);
-    padding: 0 var(--space-3);
-    border: 1px solid var(--line);
-    background: var(--surface);
-    color: var(--text);
-    font: inherit;
-  }
-  .results {
+  .options {
     list-style: none;
     margin: 0;
     padding: 0;
-    border: 1px solid var(--line);
-    background: var(--surface);
   }
-  .results li + li {
-    border-top: 1px solid var(--line);
+  .options li {
+    display: flex;
+    align-items: center;
+    min-height: 56px;
+    border-bottom: 1px solid var(--line);
   }
-  .results a {
+  .options li > :global(*) {
+    flex: 1;
+  }
+  .option {
     display: flex;
     align-items: center;
     gap: var(--space-3);
-    min-height: 60px;
-    padding: var(--space-2) var(--space-4);
+    min-width: 0;
+    min-height: 56px;
+    padding: var(--space-1) 0;
+    border: 0;
+    background: transparent;
     color: var(--text);
-    text-decoration: none;
+    font: inherit;
+    cursor: pointer;
+  }
+  .option:disabled {
+    cursor: default;
+    opacity: 0.6;
+  }
+  .option :global(svg) {
+    color: var(--muted);
   }
   .text {
     flex: 1;
     display: flex;
     flex-direction: column;
     min-width: 0;
+    text-align: left;
   }
   .name {
     font-weight: 500;
   }
-  .text .muted {
-    font-size: 13px;
-    line-height: 18px;
-  }
-  .up {
+  .actions {
     display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    text-align: right;
-    font-size: 13px;
-    line-height: 18px;
+    gap: var(--space-2);
   }
-  .error {
-    color: var(--error);
+  .hidden {
+    display: none;
+  }
+  .outcome {
+    text-align: center;
   }
 </style>

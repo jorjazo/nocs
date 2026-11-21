@@ -14,7 +14,9 @@
   const current = $derived.by<Tab>(() => {
     const screen = router.route.screen;
     if (screen === "dev" || screen === "profile" || screen === "site") return "rig";
-    if (screen === "target") return "plan";
+    if (screen === "target" || screen === "plan-edit" || screen === "plan-add" || screen === "plan-new" || screen === "plan-target") {
+      return "plan";
+    }
     if (screen === "sequence-edit") return "sequence";
     if (screen === "report" || screen === "flats") return "session";
     if (screen === "focus" || screen === "focus-calibration" || screen === "guiding" || screen === "polar") {
@@ -23,15 +25,16 @@
     return screen;
   });
 
-  // A sequence that runs (or waits paused, or on you) is one tap away from any screen:
-  // a dot on the Sequences tab, which says how it stands to screen readers too.
+  // A sequence or the plan that runs (or waits paused, or on you) is one tap away from
+  // any screen: a dot on its tab, which says how it stands to screen readers too.
   const run = $derived(live.app.sequence?.run ?? null);
   const session = $derived(run && run.state !== "finished" ? run.state : null);
-  // Explore and Sequences exclude each other: while one works, the other's tab is
-  // dimmed and leads to the one that works.
+  // Explore, Sequences and Plan exclude each other: while one works, the others' tabs
+  // are dimmed and lead to the one that works.
   const working = $derived(workingView(run, live.app.jobs));
+  const runTab = $derived<Tab | null>(session ? (working === "plan" ? "plan" : "sequence") : null);
   function blocked(tab: Tab): boolean {
-    return (tab === "explore" || tab === "sequence") && working !== null && working !== tab;
+    return (tab === "explore" || tab === "sequence" || tab === "plan") && working !== null && working !== tab;
   }
   // Something on Rig needs a look, or the owner has updates worth installing: a dot
   // on the Rig tab, since the section that says so may be closed.
@@ -50,7 +53,7 @@
           title={blocked(tab) && working ? i18n.t.tabs.busy(i18n.t.tabs[working]) : undefined}>
           <span class="icon">
             <Icon name={tab} />
-            {#if tab === "sequence" && session}
+            {#if tab === runTab && session}
               <span class="badge" class:paused={session === "paused" || session === "pausing"}></span>
             {/if}
             {#if tab === "rig" && rig}
@@ -58,7 +61,7 @@
             {/if}
           </span>
           <span class="name">{i18n.t.tabs[tab]}</span>
-          {#if tab === "sequence" && session}<span class="visually-hidden">{i18n.t.session.states[session]}</span>{/if}
+          {#if tab === runTab && session}<span class="visually-hidden">{i18n.t.session.states[session]}</span>{/if}
           {#if blocked(tab) && working}<span class="visually-hidden">{i18n.t.tabs.busy(i18n.t.tabs[working])}</span>{/if}
           {#if tab === "rig" && rig}<span class="visually-hidden">{i18n.t.rig.tabAttention[rig]}</span>{/if}
         </a>

@@ -124,6 +124,7 @@ from nocs.imaging.worker import ImageWorker
 from nocs.indi.drivers import DriverControlError, DriverFifo, load_catalog
 from nocs.jobs import JobManager, ResourceBusyError
 from nocs.mount.service import MountNotReadyError, MountService
+from nocs.plan import PlanService
 from nocs.pointing import CenteringService, PointingService, SavedFrames
 from nocs.power.service import (
     PowerCycleError,
@@ -163,7 +164,6 @@ from nocs.system.client import HelperUnavailableError
 from nocs.system.protocol import HelperError
 from nocs.targets import TargetCatalog, bundled_catalog, loaded_catalog
 from nocs.targets.catalog import separation
-from nocs.targets.plan import PlanService
 
 log = logging.getLogger(__name__)
 
@@ -519,7 +519,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
         services.preparation = PreparationService(
             store, services.solver, site=lambda: sites().location()
         )
-        services.plan = PlanService(store, settings.config_dir)
+        services.plan = PlanService(store, settings.config_dir, place=sequence_place)
         services.capture.use_guider(services.guiding)
         services.capture.use_pointing(lambda: _pointing(services.mount))
         services.capture.use_namer(_nearest_object)
@@ -550,6 +550,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
             recorder=services.storage,
             profile=lambda: equipment().active,
             place=sequence_place,
+            scheduler=services.plan,
         )
         task = asyncio.create_task(bridge.run(), name="indi-bridge")
         guiding_task = asyncio.create_task(services.guiding.run(), name="phd2")
@@ -646,7 +647,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
     app.include_router(sky_router(lambda: sites().active, clock, _catalog_target))
     app.include_router(sites_router(sites))
     app.include_router(targets_router())
-    app.include_router(plan_router(plan))
+    app.include_router(plan_router(plan, sequences))
     app.include_router(stacking_router(stacking, storage))
 
     @app.get("/api/autofocus/runs")

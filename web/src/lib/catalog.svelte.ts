@@ -1,10 +1,10 @@
 // Catalog objects by id, asked for once and shared, for targets the server keeps
-// by id: tonight's target (`plan.target`) is shown in the viewer's language, not
-// in the language of whoever chose it.
+// by id: the plan's targets are shown in the viewer's language, not in the language
+// of whoever chose them.
 
 import { getTarget } from "./api";
 import { objectName } from "./targets";
-import type { CatalogObject, PlannedTarget } from "./types";
+import type { CatalogObject, PlanTarget } from "./types";
 
 class CatalogObjects {
   #known: Record<string, CatalogObject> = $state({});
@@ -26,7 +26,7 @@ export const catalogObjects = new CatalogObjects();
 
 // "M 42 · Orion Nebula" in this language; the stored name until the object arrives,
 // or for a target that is not from the catalog.
-export function plannedName(target: PlannedTarget, locale: string): string {
-  const object = target.id ? catalogObjects.get(target.id) : null;
+export function plannedName(target: Pick<PlanTarget, "object" | "name">, locale: string): string {
+  const object = target.object ? catalogObjects.get(target.object) : null;
   return object ? objectName(object, locale) : target.name;
 }

@@ -30,7 +30,7 @@
   const t = $derived(i18n.t);
   const locale = $derived(i18n.locale);
   const mount = $derived(live.app.mount ?? null);
-  const planned = $derived(live.app.plan?.target ?? null);
+  const planned = $derived(live.app.plan?.targets ?? []);
   const radius = $derived(frameRadius(live.app.cameras?.main_camera?.field));
   const at = $derived<Sky | null>(mount ? { ra: mount.ra_j2000, dec: mount.dec_j2000 } : null);
 

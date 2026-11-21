@@ -25,6 +25,8 @@
   import Flats from "./screens/flats/Flats.svelte";
   import Explore from "./screens/explore/Explore.svelte";
   import Plan from "./screens/plan/Plan.svelte";
+  import PlanEditor from "./screens/plan/PlanEditor.svelte";
+  import AddTarget from "./screens/plan/AddTarget.svelte";
   import PromptDialog from "./screens/sequence/PromptDialog.svelte";
   import SequenceEditor from "./screens/sequence/SequenceEditor.svelte";
   import SequenceScreen from "./screens/sequence/Sequence.svelte";
@@ -96,12 +98,12 @@
   // How wide the page grows: Explore edge to edge, Session in columns on a PC.
   const width = $derived(pageWidth(router.route));
 
-  // Explore and Sequences exclude each other: while one works, going to the other
+  // Explore, Sequences and Plan exclude each other: while one works, going to another
   // leads to the one that works.
   const working = $derived(live.synced ? workingView(live.app.sequence?.run, live.app.jobs) : null);
   $effect(() => {
     const screen = router.route.screen;
-    if ((screen === "explore" || screen === "sequence") && working && working !== screen) {
+    if ((screen === "explore" || screen === "sequence" || screen === "plan") && working && working !== screen) {
       router.go({ screen: working });
     }
   });
@@ -176,8 +178,16 @@
           <SequenceScreen />
         {:else if router.route.screen === "sequence-edit"}
           <SequenceEditor />
+        {:else if router.route.screen === "plan-edit"}
+          <PlanEditor />
+        {:else if router.route.screen === "plan-add"}
+          <AddTarget />
+        {:else if router.route.screen === "plan-new"}
+          <TargetDetail />
         {:else if router.route.screen === "target"}
-          {#key router.route.id}<TargetDetail id={router.route.id} />{/key}
+          {#key router.route.id}<TargetDetail object={router.route.id} />{/key}
+        {:else if router.route.screen === "plan-target"}
+          {#key router.route.id}<TargetDetail target={router.route.id} />{/key}
         {:else if router.route.screen === "profile"}
           {#key router.route.id}<ProfileEditor id={router.route.id} />{/key}
         {:else if router.route.screen === "site"}

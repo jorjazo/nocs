@@ -123,7 +123,13 @@ through each filter, then darks, bias and flats if you want them (**Configure** 
 or **Add missing calibration**). It flips at the meridian, focuses and guides as you
 set, keeps each group's stack (lights) or master (darks, bias, flats), and stops to ask
 you to cover the telescope or put the flat panel on when the kind of frames changes.
-While it runs, Explore waits; **Session** keeps the night's frames. The box runs the
+**Plan** is for nights you know what you want: add your targets (from the catalog,
+by coordinates, or from one of your frames), give each its lines of lights, and order
+them by priority. Started, it takes the first target that is up with frames left,
+switches to one that comes first between frames, and goes on the next night where it
+left off; stopped by you it leaves the rig as it is, and when it ends by itself (dawn,
+or every target done) it parks and warms the camera.
+While either runs, Explore waits; **Session** keeps the night's frames. The box runs the
 night by itself: you can lock the phone, or close the browser, and come back to it
 later.
 

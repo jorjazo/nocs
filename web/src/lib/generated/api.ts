@@ -188,6 +188,11 @@ export type WifiCountry =
   | "ZW";
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "OutputId".
+ */
+export type OutputId = string;
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "DarknessName".
  */
 export type DarknessName = "civil" | "nautical" | "astronomical";
@@ -241,6 +246,11 @@ export type NorthSouth = "north" | "south";
  * via the `definition` "WestEast".
  */
 export type WestEast = "west" | "east";
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "Name".
+ */
+export type Name = string;
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "Role".
@@ -318,17 +328,8 @@ export type Node =
   | Prompt
   | Wait
   | ExposurePlan
+  | Schedule
   | Container;
-/**
- * This interface was referenced by `NOCSAPI`'s JSON-Schema
- * via the `definition` "Name".
- */
-export type Name = string;
-/**
- * This interface was referenced by `NOCSAPI`'s JSON-Schema
- * via the `definition` "OutputId".
- */
-export type OutputId = string;
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "FrameKind".
@@ -388,6 +389,119 @@ export interface AccessPointRequest {
    */
   password?: string | null;
   ssid?: string | null;
+}
+/**
+ * What a sequence or a plan does around its frames: the night's window, cooling,
+ * focusing, guiding, pointing, the meridian flip, the end, and the recovery.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "Actions".
+ */
+export interface Actions {
+  /**
+   * Centre the target by plate solving before its lights.
+   */
+  center?: boolean;
+  /**
+   * global: `temperature` for the whole sequence; group: each group's own.
+   */
+  cooling?: "off" | "global" | "group";
+  cooling_ramp?: number | null;
+  /**
+   * The twilight that starts and ends the night.
+   */
+  darkness?: "civil" | "nautical" | "astronomical";
+  /**
+   * Dither every so many frames while guiding.
+   */
+  dither_every?: number | null;
+  /**
+   * Main camera pixels.
+   */
+  dither_pixels?: number;
+  end?: EndPlan;
+  /**
+   * Flip the mount at the meridian.
+   */
+  flip?: boolean;
+  /**
+   * Minutes past the meridian.
+   */
+  flip_after?: number;
+  focus?: FocusPlan | null;
+  guide?: boolean;
+  /**
+   * Lights only while the target is this high.
+   */
+  min_altitude?: number | null;
+  /**
+   * Arcminutes.
+   */
+  recenter_drift?: number;
+  /**
+   * Check the pointing every so many frames.
+   */
+  recenter_every?: number | null;
+  recovery?: {
+    [k: string]: Policy;
+  };
+  /**
+   * Lights wait until dark; darks, bias and flats do not.
+   */
+  start_at_dusk?: boolean;
+  /**
+   * Sensor °C when cooling is global.
+   */
+  temperature?: number | null;
+  /**
+   * Lights end at dawn; the rest goes on.
+   */
+  until_dawn?: boolean;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "EndPlan".
+ */
+export interface EndPlan {
+  /**
+   * Power outputs to switch off.
+   */
+  outputs?: OutputId[];
+  park?: boolean;
+  warm?: boolean;
+}
+/**
+ * When a template's sequence focuses: at the start of its lights, and on these reasons.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "FocusPlan".
+ */
+export interface FocusPlan {
+  at_start?: boolean;
+  filter_change?: boolean;
+  hfr_increase?: number | null;
+  minutes?: number | null;
+  temperature_change?: number | null;
+}
+/**
+ * What to do when a step fails with one kind of failure.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "Policy".
+ */
+export interface Policy {
+  /**
+   * Tries after the first; None: while the conditions hold.
+   */
+  retries?: number | null;
+  /**
+   * When the retries run out: skip the step, skip the target, pause for the user, or end the session (run *end*).
+   */
+  then?: "skip" | "skip_target" | "pause" | "end";
+  /**
+   * Seconds before each retry.
+   */
+  wait?: number;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -634,7 +748,10 @@ export interface AppState {
    * None where NOCS does not manage the network (a PC).
    */
   network?: NetworkState | null;
-  plan?: PlanState | null;
+  /**
+   * The plan's targets, in priority.
+   */
+  plan?: NightPlan | null;
   /**
    * None: never run.
    */
@@ -2344,34 +2461,46 @@ export interface LastJoin {
   ssid: string;
 }
 /**
- * What the Plan screen chose for tonight (stage 3.6).
+ * What the Plan view edits.
  *
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
- * via the `definition` "PlanState".
+ * via the `definition` "NightPlan".
  */
-export interface PlanState {
+export interface NightPlan {
+  actions?: Actions;
   /**
-   * None: no target chosen.
+   * Power outputs to switch on when it starts (dew heaters).
    */
-  target: PlannedTarget | null;
+  start_outputs?: OutputId[];
+  /**
+   * In priority, the first first.
+   */
+  targets?: PlanTarget[];
 }
 /**
+ * Where to point (the frame's centre, which may be off the object), and its lines.
+ *
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
- * via the `definition` "PlannedTarget".
+ * via the `definition` "PlanTarget".
  */
-export interface PlannedTarget {
+export interface PlanTarget {
   /**
    * J2000 degrees where the frame points.
    */
   dec: number;
   /**
-   * Catalog id (e.g. NGC 292); None: coordinates.
+   * Chosen by the client; kept.
    */
-  id?: string | null;
+  id: string;
+  lines?: PlanLine[];
   /**
-   * What to call it.
+   * Frames carry it, and their folder.
    */
   name: string;
+  /**
+   * Catalog id (NGC 292), when it is one.
+   */
+  object?: string | null;
   /**
    * J2000 hours where the frame points.
    */
@@ -2380,6 +2509,33 @@ export interface PlannedTarget {
    * Wanted angle of the frame's top, degrees east of north; None: any.
    */
   rotation?: number | null;
+}
+/**
+ * Lights of a target taken alike.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "PlanLine".
+ */
+export interface PlanLine {
+  count: number;
+  /**
+   * Frames kept, over every night; the server counts them (a client's value is ignored).
+   */
+  done?: number;
+  /**
+   * Seconds.
+   */
+  exposure: number;
+  /**
+   * None: whatever the wheel holds.
+   */
+  filter?: Name | null;
+  gain?: number | null;
+  /**
+   * Chosen by the client; kept.
+   */
+  id: string;
+  offset?: number | null;
 }
 /**
  * The running polar alignment, or the most recent one (ADR 0034).
@@ -2697,6 +2853,7 @@ export interface SequenceEvent {
     | "recovery"
     | "recovered"
     | "skipped"
+    | "target"
     | "ending"
     | "ended";
   message: string;
@@ -2781,6 +2938,10 @@ export interface SequenceRun {
   step?: {
     [k: string]: unknown;
   } | null;
+  /**
+   * The plan's target being taken (its id), in a plan's run.
+   */
+  target?: string | null;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -4456,6 +4617,46 @@ export interface PlanRow {
   offset?: number | null;
 }
 /**
+ * Take a plan's targets: the first in priority that is up and has frames left, in
+ * ``each`` (its frames after ``each``'s steps). Every ``every`` minutes, and whenever
+ * one of its lines ends, it looks again, and between frames goes to a target that
+ * now comes first. It ends when no target has frames left; until then, with none up,
+ * it waits. The runner's ``Scheduler`` knows the targets.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "Schedule".
+ */
+export interface Schedule {
+  each?: Container1;
+  /**
+   * Minutes between looks for a target first in priority.
+   */
+  every?: number;
+  /**
+   * Focus on the first target, unless the run focused already.
+   */
+  focus_first?: boolean;
+  kind?: "schedule";
+}
+/**
+ * What runs for the chosen target, its conditions and triggers included.
+ */
+export interface Container1 {
+  children?: Node[];
+  conditions?: Condition[];
+  kind?: "container";
+  name?: string;
+  /**
+   * Times to run the children; None: until a condition ends it.
+   */
+  repeat?: number | null;
+  /**
+   * What instructions inside aim at, unless a nested one names another.
+   */
+  target?: Target | null;
+  triggers?: Trigger[];
+}
+/**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "Target".
  */
@@ -4687,18 +4888,6 @@ export interface EjectRequest {
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
- * via the `definition` "EndPlan".
- */
-export interface EndPlan {
-  /**
-   * Power outputs to switch off.
-   */
-  outputs?: OutputId[];
-  park?: boolean;
-  warm?: boolean;
-}
-/**
- * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "EquatorialGoto".
  */
 export interface EquatorialGoto {
@@ -4918,19 +5107,6 @@ export interface FocusCalibrationRequest {
    * Autofocus's step.
    */
   step?: number | null;
-}
-/**
- * When a template's sequence focuses: at the start of its lights, and on these reasons.
- *
- * This interface was referenced by `NOCSAPI`'s JSON-Schema
- * via the `definition` "FocusPlan".
- */
-export interface FocusPlan {
-  at_start?: boolean;
-  filter_change?: boolean;
-  hfr_increase?: number | null;
-  minutes?: number | null;
-  temperature_change?: number | null;
 }
 /**
  * How autofocus sweeps with a train's optics (ADR 0021).
@@ -5529,26 +5705,6 @@ export interface PolarAlignRequest {
   tolerance?: number;
 }
 /**
- * What to do when a step fails with one kind of failure.
- *
- * This interface was referenced by `NOCSAPI`'s JSON-Schema
- * via the `definition` "Policy".
- */
-export interface Policy {
-  /**
-   * Tries after the first; None: while the conditions hold.
-   */
-  retries?: number | null;
-  /**
-   * When the retries run out: skip the step, skip the target, pause for the user, or end the session (run *end*).
-   */
-  then?: "skip" | "skip_target" | "pause" | "end";
-  /**
-   * Seconds before each retry.
-   */
-  wait?: number;
-}
-/**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "Profile".
  */
@@ -5681,7 +5837,7 @@ export interface ReportFrame {
  * via the `definition` "Sequence".
  */
 export interface Sequence {
-  end?: Container1;
+  end?: Container2;
   name: Name;
   /**
    * Policies that replace the defaults, by kind of failure (ADR 0032).
@@ -5700,7 +5856,7 @@ export interface Sequence {
 /**
  * Always runs, once.
  */
-export interface Container1 {
+export interface Container2 {
   children?: Node[];
   conditions?: Condition[];
   kind?: "container";

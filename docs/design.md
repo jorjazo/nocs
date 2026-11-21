@@ -280,11 +280,20 @@ of **containers** and **instructions**, with **conditions** and **triggers**.
 The UI exposes this power through simple templates first: the Sequences view's
 groups of frames of what the camera has framed (lights per filter, darks, bias,
 flats), which stop and ask the user to ready the rig when the kind of frames
-changes; a Plan of targets will build on the same model. The full tree editor is
-an advanced view for later.
+changes. The full tree editor is an advanced view for later.
 
-Explore and Sequences exclude each other: Explore takes no frames while a
-sequence is active, and a sequence does not start while Explore takes frames.
+The Plan's targets (in priority, each with lines of lights, over many nights) run
+as a sequence too, with a **schedule**: its targets are not in the tree but asked
+of the plan as it runs. The first target that is up with frames left runs in a
+container built for it (centre, guide, its lines, with the night's triggers);
+every 10 minutes and whenever a line ends the schedule looks again, and between
+frames goes to a target that now comes first. The plan counts each line's frames
+across nights, so editing it while it runs changes what comes next, not the
+sequence. A plan the user stops leaves the rig as it is; its end runs only when it
+ends by itself.
+
+Explore, Sequences and Plan exclude each other: Explore takes no frames while a
+run is active, and a run does not start while Explore takes frames.
 
 ### 9.6 Safety (foundation for observatories)
 

@@ -1,9 +1,11 @@
 <script lang="ts">
-  // A target's page (stage 3.6, #/plan/<id>): what it is, its altitude tonight
-  // over the site's horizon, the framing chart with the main camera's frame,
-  // and the actions: make it tonight's target, Go, and Go and centre. Moving
-  // the chart frames off the object; Go goes where the frame points, and going
-  // makes it tonight's target.
+  // A target's page: a catalog object to add to the plan (#/plan/object/<id>), a
+  // point from coordinates or a saved frame (#/plan/new), or one of the plan's own
+  // (#/plan/target/<id>). What it is, its altitude tonight over the site's horizon,
+  // the framing chart with the main camera's frame (dragging it frames off the
+  // object; the plan points where the frame does, at its angle), its lines of
+  // lights, and Go and centre. A target of the plan saves its changes as they are
+  // made.
   import { untrack } from "svelte";
   import AltitudeChart from "../../components/AltitudeChart.svelte";
   import Banner from "../../components/Banner.svelte";
@@ -13,15 +15,16 @@
   import EmptyState from "../../components/EmptyState.svelte";
   import Icon from "../../components/Icon.svelte";
   import SkyChart, { type OwnFrame } from "../../components/SkyChart.svelte";
+  import TextField from "../../components/TextField.svelte";
   import Toggle from "../../components/Toggle.svelte";
   import {
     ApiError,
     centerOn,
-    choosePlanTarget,
     getSolvedFrames,
     getTarget,
     getVisibility,
     gotoMount,
+    resetPlanTarget,
     setTarget,
     solveSavedFrame,
   } from "../../lib/api";
@@ -33,31 +36,34 @@
   import { i18n } from "../../lib/i18n";
   import { live } from "../../lib/live.svelte";
   import { formatDec, formatRa, mountActivity } from "../../lib/mount.svelte";
+  import { newId, newLine, planIds, targetSeconds } from "../../lib/plan";
+  import { getPending, plan } from "../../lib/plan.svelte";
   import { prefs } from "../../lib/prefs.svelte";
-  import { href } from "../../lib/router.svelte";
+  import { href, router } from "../../lib/router.svelte";
   import { separation, type Sky } from "../../lib/sky/projection";
   import { commonNames, objectSummary } from "../../lib/targets";
   import { siteKey, tonight } from "../../lib/tonight.svelte";
-  import type { CatalogObject, PlannedTarget, SolvedFrames, TargetVisibility } from "../../lib/types";
+  import type { CatalogObject, PlanTarget, SolvedFrames, TargetVisibility } from "../../lib/types";
   import CenteringCard from "../explore/CenteringCard.svelte";
   import SunWarning from "../devices/SunWarning.svelte";
+  import LinesEditor from "./LinesEditor.svelte";
 
-  let { id }: { id: string } = $props();
-
-  const MIN_ALTITUDE = 30;
+  // One of: a catalog object's id, a plan target's id, or neither (coordinates).
+  let { object: objectId = null, target: targetId = null }: { object?: string | null; target?: string | null } = $props();
 
   const t = $derived(i18n.t);
+  const p = $derived(t.planView);
   const locale = $derived(i18n.locale);
   const owner = $derived(auth.owner);
-  const planned = $derived(live.app.plan?.target ?? null);
   const almanac = $derived(tonight.almanac);
   const mount = $derived(live.app.mount ?? null);
 
-  let object: CatalogObject | null = $state(null);
-  let missing = $state(false);
-  let failed = $state("");
-  let seen: TargetVisibility | null = $state(null);
-
+  $effect(() => plan.sync(live.app.plan ?? null));
+  $effect(() => {
+    if (!plan.draft) return;
+    void JSON.stringify(plan.draft);
+    plan.changed();
+  });
   $effect(() => {
     void tonight.load(siteKey(live.app.sites));
   });
@@ -68,85 +74,170 @@
     return () => clearInterval(timer);
   });
 
+  // -- What the page is about -----------------------------------------------------------
+
+  // The plan's own target, edited in place (and saved a moment later).
+  const existing = $derived(targetId ? ((plan.draft?.targets ?? []).find((each) => each.id === targetId) ?? null) : null);
+  // A target to add: built here, and put in the plan by Add.
+  let fresh = $state<PlanTarget | null>(null);
+  const entry = $derived(existing ?? fresh);
+  const catalogId = $derived(objectId ?? existing?.object ?? null);
+  // Another target of the plan already on this object.
+  const already = $derived(objectId ? ((plan.draft?.targets ?? []).find((each) => each.object === objectId) ?? null) : null);
+
+  let object = $state<CatalogObject | null>(null);
+  let missing = $state(false);
+  let failed = $state("");
+  let seen = $state<TargetVisibility | null>(null);
+  const minAltitude = $derived(plan.draft?.actions?.min_altitude ?? 30);
+
+  function freshTarget(name: string, ra: number, dec: number, rotation: number | null, catalog: string | null): PlanTarget {
+    const taken = plan.draft ? planIds(plan.draft) : [];
+    const id = newId(taken);
+    const camera = live.app.cameras?.main_camera ?? null;
+    const filters = (live.app.filter_wheel?.names ?? []).filter((name) => name);
+    const line = newLine([], filters, newId([...taken, id]), { gain: camera?.gain ?? null, offset: camera?.offset ?? null });
+    return { id, name, object: catalog, ra, dec, rotation, lines: [line] };
+  }
+
+  // The catalog object, when the target is one.
   $effect(() => {
-    const designation = id;
+    const designation = catalogId;
     object = null;
     missing = false;
     failed = "";
-    seen = null;
+    if (!designation) return;
     getTarget(designation)
       .then((found) => {
-        if (designation !== id) return;
+        if (designation !== catalogId) return;
         object = found;
-        center = initialCenter(found);
-        rotation = initialRotation(found);
+        if (objectId && !fresh) {
+          const rotation = initialRotation();
+          fresh = freshTarget(found.label, found.ra, found.dec, rotation, found.id);
+          center = { ra: found.ra, dec: found.dec };
+          rotation_ = rotation;
+          framed = true;
+        }
       })
       .catch((e) => {
-        if (designation !== id) return;
+        if (designation !== catalogId) return;
         if (e instanceof ApiError && e.status === 404) missing = true;
         else failed = errorText(e, t);
       });
-    getVisibility([designation], MIN_ALTITUDE)
+  });
+
+  // A point from coordinates or a saved frame, waiting since #/plan/add.
+  $effect(() => {
+    if (objectId || targetId || fresh) return;
+    const point = untrack(() => getPending());
+    if (!point) {
+      missing = true;
+      return;
+    }
+    fresh = freshTarget(point.name, point.ra, point.dec, point.rotation, null);
+    center = { ra: point.ra, dec: point.dec };
+    rotation_ = point.rotation === null ? initialRotation() : Math.round(point.rotation) % 360;
+    framed = true;
+  });
+
+  // A plan target opens on its own framing.
+  let opened = false;
+  $effect(() => {
+    if (!existing || opened) return;
+    opened = true;
+    untrack(() => {
+      center = { ra: existing.ra, dec: existing.dec };
+      rotation_ = existing.rotation == null ? initialRotation() : Math.round(existing.rotation) % 360;
+      framed = true;
+    });
+  });
+
+  // Where the object is (the frame may be off it): the catalog's, or where the point was.
+  const anchor = $derived.by((): Sky | null => {
+    if (object) return { ra: object.ra, dec: object.dec };
+    return entry ? { ra: entryAnchor?.ra ?? entry.ra, dec: entryAnchor?.dec ?? entry.dec } : null;
+  });
+  // A point without an object is anchored where it was first.
+  let entryAnchor = $state<Sky | null>(null);
+  $effect(() => {
+    if (entry && !entryAnchor && !catalogId) entryAnchor = { ra: entry.ra, dec: entry.dec };
+  });
+
+  const visibilityKey = $derived(catalogId ?? (anchor ? `${anchor.ra},${anchor.dec}` : null));
+  $effect(() => {
+    const key = visibilityKey;
+    const minimum = minAltitude;
+    seen = null;
+    if (!key) return;
+    getVisibility([key], minimum)
       .then((v) => {
-        if (designation === id) seen = v.targets[0] ?? null;
+        if (key === visibilityKey) seen = v.targets[0] ?? null;
       })
       .catch(() => {});
   });
 
   // -- Framing ------------------------------------------------------------------------
 
-  // Tonight's target keeps its framing; anything else opens on the object.
-  const isPlanned = (o: CatalogObject) => planned?.id === o.id;
-  function initialCenter(o: CatalogObject): Sky {
-    return planned && isPlanned(o) ? { ra: planned.ra, dec: planned.dec } : { ra: o.ra, dec: o.dec };
-  }
-  function initialRotation(o: CatalogObject): number {
-    const wanted = planned && isPlanned(o) ? (planned.rotation ?? null) : null;
-    if (wanted !== null) return Math.round(wanted);
+  function initialRotation(): number {
     // The camera as it is: the angle of the last solved frame.
     const last = live.app.solver?.last?.rotation;
     return last === undefined || last === null ? 0 : Math.round(last) % 360;
   }
 
   let center: Sky = $state({ ra: 0, dec: 0 });
-  let rotation = $state(0);
+  let rotation_ = $state(0);
+  // The chart starts on the target's own framing, before it frames the target.
+  let framed = $state(false);
+  // A target without an angle keeps none until the slider moves.
+  let firstRotation: number | null = null;
+  // The framing is the target's: where the plan points, at that angle.
+  $effect(() => {
+    const target = entry;
+    const c = center;
+    const r = rotation_;
+    if (!target || !framed) return;
+    untrack(() => {
+      if (Math.abs(target.ra - c.ra) > 1e-7 || Math.abs(target.dec - c.dec) > 1e-7) {
+        target.ra = c.ra;
+        target.dec = c.dec;
+      }
+      if (firstRotation === null) firstRotation = r;
+      if (target.rotation !== r && (target.rotation != null || r !== firstRotation)) target.rotation = r;
+    });
+  });
+
   const field = $derived(live.app.cameras?.main_camera?.field ?? null);
   const span = $derived(field ? Math.max(1, Math.max(field.width, field.height) * 2.2) : 4);
-  // How far the frame was moved off the object, arcminutes.
-  const offset = $derived(object ? separation(center, object) * 60 : 0);
+  const offset = $derived(anchor ? separation(center, anchor) * 60 : 0);
   const moved = $derived(offset > 0.5);
-
-  // The last solved frame: drawn where it landed, and the camera's angle as it is.
   const last = $derived(live.app.solver?.last ?? null);
   const solved = $derived(
     last ? { ra: last.ra, dec: last.dec, width: last.fov[0] ?? 0, height: last.fov[1] ?? 0, rotation: last.rotation } : null,
   );
-  // How far to turn the camera for the framing's angle, -180..180°.
-  const turn = $derived(last ? ((((rotation - last.rotation) % 360) + 540) % 360) - 180 : null);
+  const turn = $derived(last ? ((((rotation_ - last.rotation) % 360) + 540) % 360) - 180 : null);
 
   // -- The user's own frames (3.7c) ---------------------------------------------------
 
-  // Solved frames around the target, and its lights still to solve (by its catalog
-  // label, which names them: see makeTonights). The owner's only.
   let mine = $state<SolvedFrames | null>(null);
   let solveJob = $state<string | null>(null);
   let solveError = $state("");
   const mineRadius = $derived(Math.min(30, Math.max(3, span)));
 
-  async function loadMine(o: CatalogObject, radius: number): Promise<void> {
+  async function loadMine(where: Sky, radius: number, label: string | undefined): Promise<void> {
     try {
-      const found = await getSolvedFrames(o.ra, o.dec, radius, o.label);
-      if (object?.id === o.id) mine = found;
+      const found = await getSolvedFrames(where.ra, where.dec, radius, label);
+      if (anchor && separation(anchor, where) < 1e-6) mine = found;
     } catch {
-      if (object?.id === o.id) mine = null;
+      mine = null;
     }
   }
 
   $effect(() => {
-    const o = object;
+    const where = anchor;
     const radius = mineRadius;
+    const label = object?.label ?? entry?.name;
     mine = null;
-    if (o && owner) void loadMine(o, radius);
+    if (where && owner) void untrack(() => loadMine(where, radius, label));
   });
 
   const ownFrames: OwnFrame[] = $derived(
@@ -170,7 +261,6 @@
     }
   }
 
-  // When the solve ends: what failed, and the frames again.
   const solving = $derived(solveJob ? (live.app.jobs?.[solveJob] ?? null) : null);
   $effect(() => {
     const job = solving;
@@ -178,40 +268,18 @@
     untrack(() => {
       if (job.state === "failed") solveError = job.error ?? t.plan.solveFailed;
       solveJob = null;
-      if (object) void loadMine(object, mineRadius);
+      if (anchor) void loadMine(anchor, mineRadius, object?.label ?? entry?.name);
     });
   });
-
-  const chosen = $derived.by(() => {
-    const o = object;
-    const p = planned;
-    if (!o || !p || p.id !== o.id || separation(center, p) * 60 >= 0.5) return false;
-    const wanted = p.rotation ?? null;
-    return wanted === null ? rotation === 0 : Math.round(wanted) === rotation;
-  });
-
-  function plannedTarget(o: CatalogObject): PlannedTarget {
-    const name = commonNames(o, locale)[0];
-    return {
-      id: o.id,
-      name: name ? `${o.label} · ${name}` : o.label,
-      ra: center.ra,
-      dec: center.dec,
-      rotation,
-    };
-  }
 
   // -- Actions ------------------------------------------------------------------------
 
   let busy = $state<string | null>(null);
   let error = $state("");
   type Go = "goto" | "center";
-  // While PHD2 guides, a go to is refused: stop guiding for it and guide again on the
-  // new field ("resume", one job on the server), or just stop guiding (ADR 0023).
   type Guiding = "resume" | "stop" | undefined;
   let refused = $state<{ kind: Go; guiding: Guiding } | null>(null);
   let guidingRefused = $state<Go | null>(null);
-  // Refused near the Sun (by day): sent again once its warning is acknowledged.
   let nearSun = $state<(() => void) | null>(null);
 
   const mountJob = $derived(holder(live.app.jobs, "mount"));
@@ -230,36 +298,42 @@
     return null;
   });
 
-  // Tonight's target also names the folder of the lights (Light/M_42/) and their
-  // OBJECT header, by its catalog label: otherwise they land in Light/Untitled.
-  async function makeTonights(target: PlannedTarget, label: string): Promise<void> {
-    await choosePlanTarget(target);
-    await setTarget(label);
+  function add(): void {
+    const draft = plan.draft;
+    const target = fresh;
+    if (!draft || !target) return;
+    draft.targets = [...(draft.targets ?? []), $state.snapshot(target)];
+    plan.flush();
+    router.go({ screen: "plan-target", id: target.id });
   }
 
-  async function choose(): Promise<void> {
-    if (!object) return;
-    busy = "choose";
-    error = "";
+  function remove(): void {
+    const draft = plan.draft;
+    if (!draft || !existing) return;
+    draft.targets = (draft.targets ?? []).filter((each) => each.id !== existing.id);
+    plan.flush();
+    router.go({ screen: "plan-edit" });
+  }
+
+  async function reset(): Promise<void> {
+    if (!existing) return;
     try {
-      await makeTonights(plannedTarget(object), object.label);
+      plan.flush();
+      await resetPlanTarget(existing.id);
     } catch (e) {
       error = errorText(e, t);
-    } finally {
-      busy = null;
     }
   }
 
   async function go(kind: Go, force = false, guiding: Guiding = undefined): Promise<void> {
-    if (!object) return;
-    const target = plannedTarget(object);
+    if (!entry) return;
     busy = guiding ? `${kind}:${guiding}` : kind;
     error = "";
     refused = null;
     guidingRefused = null;
     const body = {
-      ra: target.ra,
-      dec: target.dec,
+      ra: center.ra,
+      dec: center.dec,
       force,
       stop_guiding: guiding === "stop",
       resume_guiding: guiding === "resume",
@@ -267,8 +341,8 @@
     try {
       if (kind === "center") await centerOn(body);
       else await gotoMount({ frame: "j2000", ...body });
-      // Going there makes it tonight's target, for Tonight's checklist and later the sequence.
-      await makeTonights(target, object.label);
+      // Explore's lights are named after it (Light/M_42/), and their OBJECT header.
+      await setTarget(entry.name);
     } catch (e) {
       const why = e instanceof ApiError ? goRefusal(e.status, e.message) : null;
       if (why === "horizon") refused = { kind, guiding };
@@ -280,32 +354,58 @@
     }
   }
 
-  // The latest centring, while it is about this frame.
   const centering = $derived.by(() => {
     const c = live.app.centering ?? null;
-    if (!c || !object) return null;
-    return separation(c.target, center) * 60 < 1 || separation(c.target, object) * 60 < 1 ? c : null;
+    if (!c || !anchor) return null;
+    return separation(c.target, center) * 60 < 1 || separation(c.target, anchor) * 60 < 1 ? c : null;
   });
   const activity = $derived(mount ? mountActivity(mount, t) : null);
+  const names = $derived(object ? commonNames(object, locale) : []);
+  const title = $derived(names[0] ?? object?.label ?? entry?.name ?? "");
+  const running = $derived(live.app.sequence?.run?.sequence === "plan" && live.app.sequence.run.state !== "finished");
 </script>
 
 <div class="page">
-  <a class="back" href={href({ screen: "plan" })}><Icon name="chevronLeft" />{t.tabs.plan}</a>
+  <a class="back" href={href({ screen: existing || !objectId ? "plan-edit" : "plan-add" })}><Icon name="chevronLeft" />{existing ? p.targetsTitle : p.addTitle}</a>
 
-  {#if missing}
-    <EmptyState icon="plan" title={t.plan.missing} body={t.plan.missingBody(id)} />
+  {#if targetId && plan.draft && !existing}
+    <EmptyState icon="plan" title={p.gone} body={p.goneBody} />
+  {:else if missing}
+    <EmptyState icon="plan" title={t.plan.missing} body={objectId ? t.plan.missingBody(objectId) : p.noPoint} />
   {:else if failed}
     <Banner icon="alert" tone="error">{failed}</Banner>
-  {:else if !object}
+  {:else if !entry || (catalogId && !object)}
     <p class="muted" role="status">{t.plan.loading}</p>
   {:else}
-    {@const names = commonNames(object, locale)}
     <header class="title">
-      <span class="eyebrow muted">{object.label}{object.label !== object.id ? ` · ${object.id}` : ""}</span>
-      <h1>{names[0] ?? object.label}</h1>
-      <p class="summary muted">{objectSummary(object, t, locale)}</p>
-      <p class="coordinates muted mono">{formatRa(object.ra)} · {formatDec(object.dec)}</p>
+      {#if object}
+        <span class="eyebrow muted">{object.label}{object.label !== object.id ? ` · ${object.id}` : ""}</span>
+      {/if}
+      <h1>{title}</h1>
+      {#if object}<p class="summary muted">{objectSummary(object, t, locale)}</p>{/if}
+      <p class="coordinates muted mono">{formatRa(entry.ra)} · {formatDec(entry.dec)}</p>
     </header>
+
+    {#if already && !existing}
+      <Banner icon="plan">
+        {p.already}
+        {#snippet action()}
+          <Button variant="text" onclick={() => router.go({ screen: "plan-target", id: already.id })}>{p.openIt}</Button>
+        {/snippet}
+      </Banner>
+    {/if}
+
+    {#if !object}
+      <TextField label={p.name} hint={p.nameHint} bind:value={entry.name} />
+    {/if}
+
+    <section class="card" aria-labelledby="lines-title">
+      <div class="row">
+        <h2 id="lines-title">{p.lines}</h2>
+        {#if targetSeconds(entry) > 0}<span class="muted small">{p.framesLeft(formatDuration(targetSeconds(entry)))}</span>{/if}
+      </div>
+      <LinesEditor target={entry} disabled={!owner} />
+    </section>
 
     <section class="card" aria-labelledby="tonight-title">
       <div class="row">
@@ -323,9 +423,9 @@
           altitude={seen.altitude}
           horizon={seen.horizon}
           moon={almanac.moon.altitude}
-          minAltitude={MIN_ALTITUDE}
+          {minAltitude}
           {now} />
-        <p class="legend muted">{t.plan.legend(MIN_ALTITUDE)}</p>
+        <p class="legend muted">{t.plan.legend(minAltitude)}</p>
         <div class="facts">
           <div>
             <span class="label muted">{t.plan.transit}</span>
@@ -335,7 +435,7 @@
           <div>
             <span class="label muted">{t.plan.best}</span>
             <span class="readout">{seen.best ? `${formatTime(seen.best.start, locale)}–${formatTime(seen.best.end, locale)}` : "—"}</span>
-            <span class="muted">{t.plan.aboveMinimum(MIN_ALTITUDE)}</span>
+            <span class="muted">{t.plan.aboveMinimum(minAltitude)}</span>
           </div>
           <div>
             <span class="label muted">{t.plan.moon}</span>
@@ -353,34 +453,35 @@
     <section class="card framing" aria-labelledby="framing-title">
       <div class="row">
         <h2 id="framing-title">{t.plan.framing}</h2>
-        {#if chosen}<Chip tone="accent">{t.plan.isTonights}</Chip>{/if}
       </div>
       {#if !field}<p class="muted">{t.plan.noField}</p>{/if}
       <div class="chart">
-        {#key object.id}
-          <SkyChart
-            target={{ ra: object.ra, dec: object.dec }}
-            bind:center
-            {span}
-            {field}
-            {rotation}
-            {solved}
-            survey={prefs.survey}
-            frames={ownFrames}
-            highlight={object.id} />
-        {/key}
+        {#if anchor}
+          {#key catalogId ?? entry.id}
+            <SkyChart
+              target={anchor}
+              bind:center
+              {span}
+              {field}
+              rotation={rotation_}
+              {solved}
+              survey={prefs.survey}
+              frames={ownFrames}
+              highlight={object?.id} />
+          {/key}
+        {/if}
       </div>
       <p class="caption muted">
         {#if moved}
           {t.plan.moved(formatDecimal(offset, locale, offset < 10 ? 1 : 0))}
-          <button type="button" class="link" onclick={() => object && (center = { ra: object.ra, dec: object.dec })}>{t.plan.recenter}</button>
+          <button type="button" class="link" onclick={() => anchor && (center = { ...anchor })}>{t.plan.recenter}</button>
         {:else}
           {t.plan.chartHint}
         {/if}
       </p>
       <label class="rotation">
-        <span class="label muted">{t.plan.rotation} <span class="mono">{rotation}°</span></span>
-        <input type="range" min="0" max="359" step="1" bind:value={rotation} />
+        <span class="label muted">{t.plan.rotation} <span class="mono">{rotation_}°</span></span>
+        <input type="range" min="0" max="359" step="1" bind:value={rotation_} />
         <span class="caption muted">{t.plan.rotationHint}</span>
       </label>
       {#if last && turn !== null}
@@ -391,10 +492,10 @@
               : t.plan.turn(
                   formatDecimal(Math.abs(turn), locale, 0),
                   formatDecimal(last.rotation % 360, locale, 0),
-                  formatDecimal(rotation, locale, 0),
+                  formatDecimal(rotation_, locale, 0),
                 )}
           </p>
-          <Button variant="text" onclick={() => (rotation = Math.round(last.rotation) % 360)}>{t.plan.useCamera}</Button>
+          <Button variant="text" onclick={() => (rotation_ = Math.round(last.rotation) % 360)}>{t.plan.useCamera}</Button>
         </div>
       {/if}
       {#if mine && mine.frames.length}
@@ -407,7 +508,7 @@
       {#if mine && mine.unsolved}
         <div class="turn">
           <p class="caption">
-            {solveJob ? t.plan.solvingOne : mine.candidate === null ? t.plan.unsolvedUnplugged(object.label) : t.plan.unsolved(mine.unsolved, object.label)}
+            {solveJob ? t.plan.solvingOne : mine.candidate === null ? t.plan.unsolvedUnplugged(entry.name) : t.plan.unsolved(mine.unsolved, entry.name)}
           </p>
           <Button
             variant="text"
@@ -422,6 +523,7 @@
 
     <section class="card actions" aria-label={t.plan.actions}>
       {#if error}<Banner icon="alert" tone="error">{error}</Banner>{/if}
+      {#if plan.error}<Banner icon="alert" tone="error">{plan.error}</Banner>{/if}
       {#if refused}
         <Banner icon="alert" tone="warning">
           {t.mount.belowHorizon}
@@ -441,21 +543,28 @@
         </div>
       {/if}
       <div class="buttons">
-        <Button variant="primary" disabled={centerReason !== null} busy={busy === "center"} onclick={() => void go("center")}>
+        {#if !existing}
+          <Button variant="primary" disabled={!owner || !plan.draft || !entry.name.trim()} onclick={add}>
+            <Icon name="plus" size={20} />{p.add}
+          </Button>
+        {/if}
+        <Button variant={existing ? "primary" : "secondary"} disabled={centerReason !== null || running} busy={busy === "center"} onclick={() => void go("center")}>
           {t.center.goCenter}
         </Button>
-        <Button disabled={goReason !== null} busy={busy === "goto"} onclick={() => void go("goto")}>{t.mount.go}</Button>
-        <Button variant="text" disabled={!owner || chosen} busy={busy === "choose"} onclick={() => void choose()}>
-          {planned?.id === object.id ? t.plan.update : t.plan.choose}
-        </Button>
+        <Button disabled={goReason !== null || running} busy={busy === "goto"} onclick={() => void go("goto")}>{t.mount.go}</Button>
       </div>
-      <p class="caption muted">{centerReason ?? goReason ?? (moved ? t.plan.goesToFrame : t.plan.goHint)}</p>
+      <p class="caption muted">{running ? p.planRuns : (centerReason ?? goReason ?? (moved ? t.plan.goesToFrame : t.plan.goHint))}</p>
       {#if activity?.moving}<p class="caption" role="status">{activity.text}</p>{/if}
       {#if centering}<CenteringCard {centering} />{/if}
+      {#if existing && owner}
+        <div class="buttons">
+          <ConfirmButton label={p.reset} confirmLabel={p.resetConfirm} onconfirm={() => void reset()} />
+          <ConfirmButton label={p.remove} confirmLabel={p.removeConfirm} onconfirm={remove} />
+        </div>
+      {/if}
     </section>
   {/if}
 </div>
-
 
 {#if nearSun}
   <SunWarning
@@ -466,6 +575,7 @@
       again?.();
     }} />
 {/if}
+
 <style>
   .page {
     display: flex;
@@ -507,7 +617,8 @@
   .eyebrow,
   .label,
   .caption,
-  .legend {
+  .legend,
+  .small {
     font-size: 12px;
     line-height: 16px;
   }

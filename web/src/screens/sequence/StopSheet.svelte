@@ -1,23 +1,30 @@
 <script lang="ts">
   // How to stop a sequence: after the frame in progress or now, running the end
-  // (park, warm) or leaving the rig as it is.
+  // (park, warm) or leaving the rig as it is; a plan, only the latter.
   import Sheet from "../../components/Sheet.svelte";
   import { i18n } from "../../lib/i18n";
 
-  let { onstop, onclose }: { onstop: (now: boolean, runEnd: boolean) => void; onclose: () => void } = $props();
+  // A plan stopped leaves the rig as it is: its end is for a night it ends by itself.
+  let {
+    plan = false,
+    onstop,
+    onclose,
+  }: { plan?: boolean; onstop: (now: boolean, runEnd: boolean) => void; onclose: () => void } = $props();
   const t = $derived(i18n.t);
 </script>
 
 <Sheet title={t.session.stopTitle} {onclose}>
   <div class="choices">
-    <button type="button" class="choice" onclick={() => onstop(false, true)}>
-      <span class="name">{t.session.stopAfter}</span>
-      <span class="muted small">{t.session.stopAfterHint}</span>
-    </button>
-    <button type="button" class="choice" onclick={() => onstop(true, true)}>
-      <span class="name">{t.session.stopNow}</span>
-      <span class="muted small">{t.session.stopNowHint}</span>
-    </button>
+    {#if !plan}
+      <button type="button" class="choice" onclick={() => onstop(false, true)}>
+        <span class="name">{t.session.stopAfter}</span>
+        <span class="muted small">{t.session.stopAfterHint}</span>
+      </button>
+      <button type="button" class="choice" onclick={() => onstop(true, true)}>
+        <span class="name">{t.session.stopNow}</span>
+        <span class="muted small">{t.session.stopNowHint}</span>
+      </button>
+    {/if}
     <button type="button" class="choice" onclick={() => onstop(false, false)}>
       <span class="name">{t.session.stopAfterBare}</span>
       <span class="muted small">{t.session.stopAfterBareHint}</span>

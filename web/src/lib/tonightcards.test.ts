@@ -9,9 +9,10 @@ import {
   pointedAt,
   settledBy,
 } from "./tonightcards.ts";
-import type { ForecastHour, PlannedTarget, SkyPointing } from "./types.ts";
+import type { ForecastHour, PlanTarget, SkyPointing } from "./types.ts";
 
-const M42: PlannedTarget = { id: "NGC 1976", name: "M 42", ra: 5.588, dec: -5.391 };
+const M42: PlanTarget = { id: "m42", object: "NGC 1976", name: "M 42", ra: 5.588, dec: -5.391, lines: [] };
+const SMC: PlanTarget = { id: "smc", object: "NGC 292", name: "NGC 292", ra: 0.876, dec: -72.8, lines: [] };
 
 function object(label: string): SkyPointing["objects"][number] {
   return {
@@ -31,17 +32,17 @@ function object(label: string): SkyPointing["objects"][number] {
   };
 }
 
-test("tonight's target first, then the Sun or the Moon, then the catalog", () => {
+test("tonight's objects first, then the Sun or the Moon, then the catalog", () => {
   const near = { ra: 5.6, dec: -5.4 };
   const around: SkyPointing = { body: null, objects: [object("NGC 1977")] };
-  assert.equal(pointedAt(near, 0.5, M42, around).kind, "planned");
-  assert.deepEqual(pointedAt({ ra: 7, dec: 0 }, 0.5, M42, around), { kind: "catalog", object: around.objects[0] });
-  assert.deepEqual(pointedAt({ ra: 7, dec: 0 }, 0.5, M42, { body: "moon", objects: around.objects }), {
+  assert.deepEqual(pointedAt(near, 0.5, [SMC, M42], around), { kind: "planned", target: M42 });
+  assert.deepEqual(pointedAt({ ra: 7, dec: 0 }, 0.5, [M42], around), { kind: "catalog", object: around.objects[0] });
+  assert.deepEqual(pointedAt({ ra: 7, dec: 0 }, 0.5, [M42], { body: "moon", objects: around.objects }), {
     kind: "body",
     body: "moon",
   });
-  assert.deepEqual(pointedAt({ ra: 7, dec: 0 }, 0.5, null, { body: null, objects: [] }), { kind: "none" });
-  assert.deepEqual(pointedAt({ ra: 7, dec: 0 }, 0.5, null, null), { kind: "none" });
+  assert.deepEqual(pointedAt({ ra: 7, dec: 0 }, 0.5, [], { body: null, objects: [] }), { kind: "none" });
+  assert.deepEqual(pointedAt({ ra: 7, dec: 0 }, 0.5, [], null), { kind: "none" });
 });
 
 test("a frame's reach and when to ask again", () => {
