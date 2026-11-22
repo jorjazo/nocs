@@ -24,6 +24,7 @@ from nocs.system.network import (
     DEFAULT_PASSWORD,
     LOST_GRACE,
     RETRY_STATIONS,
+    STALL_GRACE,
     Network,
     Paths,
     check_country,
@@ -54,6 +55,11 @@ class FakeNetworkManager:
         self.exists = True
         self.country: str | None = None
         self.calls: list[tuple[str, ...]] = []
+        self.rx_packets: Path | None = None
+        """wlan0's received packets, as /sys counts them."""
+        self.gateway: str | None = "192.168.1.1"
+        self.answers = True
+        """The gateway answers a ping: the link passes traffic."""
 
     def known(self, ssid: str, password: str | None = None) -> None:
         self.connections[f"netplan-wlan0-{ssid}"] = {
@@ -61,6 +67,10 @@ class FakeNetworkManager:
             "mode": "infrastructure",
             "psk": password or "",
         }
+
+    def receive(self, packets: int = 1) -> None:
+        assert self.rx_packets is not None
+        self.rx_packets.write_text(f"{int(self.rx_packets.read_text()) + packets}\n")
 
     async def run(self, *argv: str, check: bool = True) -> str:
         self.calls.append(argv)
@@ -122,6 +132,15 @@ class FakeNetworkManager:
                 return "".join(
                     f"Station 00:11:22:33:44:{i:02x} (on wlan0)\n" for i in range(self.clients)
                 )
+            case ["ip", "-4", "route", "show", "default", "dev", "wlan0"]:
+                if self.gateway is None:
+                    return ""
+                return f"default via {self.gateway} proto dhcp src 192.168.1.20 metric 600\n"
+            case ["ping", "-c", "1", "-W", _, "-I", "wlan0", gateway]:
+                assert gateway == self.gateway
+                if self.answers:
+                    self.receive()
+                return ""
             case ["iw", "reg", "set", country]:
                 self.country = country
                 return ""
@@ -156,13 +175,17 @@ def nm(monkeypatch: pytest.MonkeyPatch) -> FakeNetworkManager:
 
 
 @pytest.fixture
-def paths(tmp_path: Path) -> Paths:
+def paths(tmp_path: Path, nm: FakeNetworkManager) -> Paths:
     (tmp_path / "serial-number").write_text("10000000a1b2c3d4\0")
+    nm.rx_packets = tmp_path / "net/wlan0/statistics/rx_packets"
+    nm.rx_packets.parent.mkdir(parents=True)
+    nm.rx_packets.write_text("1000\n")
     return Paths(
         state=tmp_path / "state/network.json",
         connections=tmp_path / "connections",
         dnsmasq=tmp_path / "dnsmasq-shared.d/nocs.conf",
         serial=tmp_path / "serial-number",
+        interfaces=tmp_path / "net",
     )
 
 
@@ -189,6 +212,7 @@ async def test_at_boot_known_networks_get_a_minute_then_the_access_point(
     assert paths.dnsmasq.read_text() == "address=/nocs.local/10.42.0.1\naddress=/nocs/10.42.0.1\n"
     keyfile = paths.connections / f"{AP_ID}.nmconnection"
     assert stat.S_IMODE(keyfile.stat().st_mode) == 0o600
+    assert "\npowersave=2\n" in keyfile.read_text()  # its own, whatever the default
     assert not any(DEFAULT_PASSWORD in " ".join(call) for call in nm.calls)
 
 
@@ -207,6 +231,65 @@ async def test_a_lost_station_gives_way_to_the_access_point(
     clock.now += 1
     await network.tick()
     assert nm.ap_is_up()
+
+
+def rejoins(nm: FakeNetworkManager) -> int:
+    return sum(
+        1 for call in nm.calls if call[-4:] == ("connection", "up", "id", "netplan-wlan0-Home")
+    )
+
+
+@pytest.mark.parametrize("pin", ["auto", "station"])
+async def test_a_station_that_receives_nothing_joins_again(
+    nm: FakeNetworkManager, paths: Paths, clock: Clock, pin: str
+) -> None:
+    nm.known("Home", "home-secret")
+    nm.reachable = {"Home": "home-secret"}
+    nm.active, nm.state = "netplan-wlan0-Home", "connected"
+    network = make(paths, clock)
+    await network.set_mode({"pin": pin})
+    for _ in range(10):  # quiet, but the gateway answers
+        await network.tick()
+        clock.now += 10
+    assert rejoins(nm) == 0
+    nm.answers = False
+    await network.tick()  # the first silent tick
+    clock.now += STALL_GRACE - 1
+    await network.tick()
+    assert rejoins(nm) == 0
+    clock.now += 1
+    await network.tick()
+    assert rejoins(nm) == 1
+    assert nm.active == "netplan-wlan0-Home"
+    clock.now += 10
+    await network.tick()  # it counts again from the next tick
+    assert rejoins(nm) == 1
+
+
+async def test_a_station_with_traffic_is_not_pinged(
+    nm: FakeNetworkManager, paths: Paths, clock: Clock
+) -> None:
+    nm.known("Home", "home-secret")
+    nm.active, nm.state = "netplan-wlan0-Home", "connected"
+    network = make(paths, clock)
+    for _ in range(3):
+        nm.receive(50)
+        await network.tick()
+        clock.now += STALL_GRACE
+    assert not any(call[0] == "ping" for call in nm.calls)
+
+
+async def test_a_station_without_a_gateway_is_not_judged(
+    nm: FakeNetworkManager, paths: Paths, clock: Clock
+) -> None:
+    nm.known("Home", "home-secret")
+    nm.active, nm.state = "netplan-wlan0-Home", "connected"
+    nm.gateway, nm.answers = None, False
+    network = make(paths, clock)
+    for _ in range(3):
+        await network.tick()
+        clock.now += STALL_GRACE
+    assert rejoins(nm) == 0
 
 
 async def test_the_access_point_is_left_only_without_clients(

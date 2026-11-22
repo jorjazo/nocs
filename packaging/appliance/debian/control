@@ -3,8 +3,8 @@ Version: @VERSION@
 Architecture: all
 Maintainer: Jorge Valencia <jorjazo@gmail.com>
 Installed-Size: @SIZE@
-Depends: nocs, network-manager, dnsmasq-base, iw, nftables, chrony, gpsd, avahi-daemon,
- samba, wsdd
+Depends: nocs, network-manager, dnsmasq-base, iw, iproute2, iputils-ping, nftables, chrony,
+ gpsd, avahi-daemon, samba, wsdd
 Section: science
 Priority: optional
 Homepage: https://github.com/jorjazo/nocs

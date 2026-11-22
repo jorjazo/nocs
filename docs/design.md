@@ -355,6 +355,9 @@ parks the mount. Observatory devices will plug into this later.
   web app is reachable at a fixed address and at `nocs.local` (mDNS).
 - Station mode to join home Wi-Fi; Ethernet supported.
 - If the station network is lost, fall back to access point automatically.
+- A station that stays connected but receives nothing for a minute, not even its
+  gateway's answer to a ping, joins its network again: the Pi's Wi-Fi has stalled
+  that way with NetworkManager still calling it connected. Wi-Fi power saving is off.
 - Several NOCS boxes may share a network (two rigs at home): the host name and
   its mDNS name are configurable (a nocs-system operation), so each box is
   reachable as e.g. `nocs-west.local`. A pairing belongs to the name the client

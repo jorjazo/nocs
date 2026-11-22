@@ -22,6 +22,12 @@ ones, or put the devices that do not need USB 3 on the USB 2 ports.
 - With two boxes on one network, the second one may answer as `nocs-2.local`. Give
   each its own name (Rig → The box → Status → Rename).
 
+**The box drops off the home Wi-Fi for a minute.** The box noticed that its Wi-Fi had
+stopped passing traffic while still connected, and joined the network again. Once in a
+while is harmless. If it happens often, the box may be far from the router or the mesh
+node, or USB 3 devices may be drowning out its Wi-Fi (see above). A network cable avoids
+it altogether.
+
 **The phone keeps leaving the box's Wi-Fi.** The phone prefers networks with
 internet. Turn off "switch to mobile data" (Android) or "Wi-Fi assist" (iOS), or
 answer "stay connected" when the phone asks.
