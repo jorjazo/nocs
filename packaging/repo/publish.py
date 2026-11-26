@@ -276,7 +276,7 @@ class Signer:
 # -- images --------------------------------------------------------------------------
 
 _IMAGE = re.compile(r"^images/nocs-(.+)-pi5-arm64\.img\.xz$")
-_TESTING_IMAGE = re.compile(r"^images/testing/nocs-(.+)-pi5-arm64\.img\.xz$")
+_TESTING_IMAGE = re.compile(r"^images/testing/(nocs-.+-pi5-arm64)\.img\.xz$")
 IMAGER_LIST = "images/rpi-imager.json"
 IMAGER_ICON = Path(__file__).with_name("nocs-icon.svg")
 # Raspberry Pi Imager's own profile of the board, from its repository JSON
@@ -339,10 +339,11 @@ def publish_image(bucket: Bucket, keep: int, files: list[Path], url: str, testin
         for path in sorted([*files, entry], key=lambda f: f.name.endswith(".img.xz")):
             bucket.put(path, f"{prefix}{path.name}")
         releases = release_versions(bucket)
-        write_imager_list(bucket, work, releases[-keep:], url)
+        name = image.name.removesuffix(".img.xz")
+        tested = name if testing else testing_name(bucket)
+        write_imager_list(bucket, work, releases[-keep:], tested, url)
         # Imager's list first, so that it never names a deleted image.
         if testing:
-            name = image.name.removesuffix(".img.xz")
             for key in bucket.list("images/testing/"):
                 if not key.startswith(f"images/testing/{name}."):
                     bucket.delete(key)
@@ -363,16 +364,21 @@ def release_versions(bucket: Bucket) -> list[str]:
     )
 
 
-def write_imager_list(bucket: Bucket, work: Path, versions: list[str], url: str) -> None:
+def testing_name(bucket: Bucket) -> str | None:
+    """The name of main's image in ``images/testing/`` (without .img.xz), if any."""
+    names = [m[1] for key in bucket.list("images/testing/") if (m := _TESTING_IMAGE.match(key))]
+    return names[-1] if names else None
+
+
+def write_imager_list(
+    bucket: Bucket, work: Path, versions: list[str], testing: str | None, url: str
+) -> None:
     """Imager's repository JSON: the release images kept, newest first, then main's
-    testing image, if one was published."""
+    testing image (its name), if there is one."""
     url = url.rstrip("/")
     names = [f"images/nocs-{version}-pi5-arm64" for version in reversed(versions)]
-    names += [
-        f"images/testing/nocs-{m[1]}-pi5-arm64"
-        for key in bucket.list("images/testing/")
-        if (m := _TESTING_IMAGE.match(key))
-    ]
+    if testing is not None:
+        names.append(f"images/testing/{testing}")
     entries: list[dict[str, object]] = []
     for name in names:
         if f"{name}.imager.json" not in bucket.list(f"{name}.imager.json"):

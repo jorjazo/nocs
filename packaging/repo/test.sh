@@ -71,6 +71,11 @@ done
 testing=$(cd "$repo/images/testing" && ls)
 [[ $testing == $'nocs-0.1.0.git5.ge-pi5-arm64.imager.json\nnocs-0.1.0.git5.ge-pi5-arm64.img.xz\nnocs-0.1.0.git5.ge-pi5-arm64.img.xz.sha256' ]] \
     || fail "testing images kept: $testing"
+python3 - "$repo/images/rpi-imager.json" <<'IMAGER' || fail "Imager's list: $(cat "$repo/images/rpi-imager.json")"
+import json, sys
+names = [entry["name"] for entry in json.load(open(sys.argv[1]))["os_list"]]
+assert names == ["NOCS 0.1.0", "NOCS 0.1.0rc1", "NOCS 0.1.0.git5.ge (testing)"], names
+IMAGER
 # A release published after it keeps it in Imager's list.
 image=$work/nocs-0.1.0-pi5-arm64.img.xz
 publish image --keep 2 --url https://apt.example/ "$image" "$image.sha256"
