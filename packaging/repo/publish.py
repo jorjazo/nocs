@@ -73,13 +73,16 @@ class Bucket:
         else:
             self._aws("s3", "cp", "--only-show-errors", f"s3://{self._bucket}/{key}", str(path))
 
-    def put(self, path: Path, key: str) -> None:
+    def put(self, path: Path, key: str, cache_control: str | None = None) -> None:
         print(f"  put {key}")
         if self._local is not None:
             (self._local / key).parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(path, self._local / key)
         else:
-            self._aws("s3", "cp", "--only-show-errors", str(path), f"s3://{self._bucket}/{key}")
+            cache = ["--cache-control", cache_control] if cache_control else []
+            self._aws(
+                "s3", "cp", "--only-show-errors", *cache, str(path), f"s3://{self._bucket}/{key}"
+            )  # fmt: skip
 
     def delete(self, key: str) -> None:
         print(f"  delete {key}")
@@ -399,7 +402,8 @@ def write_imager_list(
         json.dumps({"imager": {"devices": [IMAGER_DEVICE]}, "os_list": entries}, indent=2) + "\n"
     )
     bucket.put(IMAGER_ICON, f"images/{IMAGER_ICON.name}")
-    bucket.put(listing, IMAGER_LIST)
+    # Cloudflare kept an old list for hours: it must check the bucket every time.
+    bucket.put(listing, IMAGER_LIST, cache_control="no-cache")
 
 
 def main() -> None:
