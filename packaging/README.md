@@ -153,6 +153,8 @@ testing=true`), it builds the image from `main`'s head, boots it as always and
 publishes it to `images/testing/` (`publish.py image --testing`), replacing the one
 there; Imager's list shows it after the releases, as "NOCS <version> (testing)". It
 follows the `testing` suite. Pushes to `main` that build the image do not publish it.
+[`repo/testing-image.sh`](repo/testing-image.sh) runs it, waits for it and prints the
+image's address and Imager's list.
 
 To switch it on, the repository needs:
 
