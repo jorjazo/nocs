@@ -85,7 +85,8 @@ updating ([ADR 0025](../docs/adr/0025-packaging-and-updates.md)).
 
 | What | Where |
 |---|---|
-| NetworkManager runs the network (nocs-system runs the access point and the fallback, [ADR 0028](../docs/adr/0028-networking.md)); systemd-networkd disabled on install | `/usr/lib/netplan/01-nocs-network-manager.yaml`, `/usr/lib/NetworkManager/conf.d/nocs.conf` |
+| NetworkManager runs the network (nocs-system runs the access point and the fallback, [ADR 0028](../docs/adr/0028-networking.md)); systemd-networkd disabled on install | `/usr/lib/netplan/01-nocs-network-manager.yaml` |
+| Wi-Fi power saving off (in `/etc`: Ubuntu's own file there turns it on) | `/etc/NetworkManager/conf.d/nocs.conf` |
 | A firewall that keeps indiserver and PHD2 to the box | `nocs-firewall.service`, `/usr/share/nocs-appliance/firewall.nft` |
 | nocsd on port 80 | a drop-in for `nocsd.service` |
 | Every operation of nocs-system | `/etc/nocs/system.conf.d/appliance.conf` |

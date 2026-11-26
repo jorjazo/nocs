@@ -10,6 +10,10 @@ an operation asks, it looks at the device and decides.
 - As an access point, it looks for known networks every ``RETRY_STATIONS``
   seconds, and only while no client is associated: a phone on it is never cut off.
 - The owner can pin either mode.
+- A station that stays connected but receives nothing for ``STALL_GRACE`` seconds,
+  not even its gateway's answer to a ping, joins its network again: the Pi's Wi-Fi
+  has stopped passing traffic while NetworkManager still called it connected, until
+  the access point dropped it (17 minutes once) or the box was switched off.
 
 Connections are NetworkManager keyfiles that nocs-system writes itself (mode
 0600), so that no password ever appears on a command line. Settings (the pinned
@@ -66,6 +70,8 @@ COUNTRIES = frozenset(_REGDB.split())
 26.04): ``iw reg set`` leaves the radio on the world domain for any other."""
 SCAN_WAIT = 20
 """Seconds NetworkManager gets for a scan the owner asked for."""
+STALL_GRACE = 60.0
+"""Seconds a connected station may receive nothing before it joins its network again."""
 
 type Pin = Literal["auto", "ap", "station"]
 
@@ -88,6 +94,7 @@ class Paths:
     connections: Path = Path("/etc/NetworkManager/system-connections")
     dnsmasq: Path = Path("/etc/NetworkManager/dnsmasq-shared.d/nocs.conf")
     serial: Path = Path("/proc/device-tree/serial-number")
+    interfaces: Path = Path("/sys/class/net")
 
 
 @dataclass(slots=True)
@@ -113,6 +120,9 @@ class _Timers:
     pending_join: tuple[str, str | None] | None = None
     pending_ap: bool = False
     """New access point settings, to apply if it is on."""
+    received: int | None = None
+    """The station's received packets at the last tick."""
+    silent_since: float | None = None
     wake: anyio.Event = field(default_factory=anyio.Event)
 
 
@@ -194,6 +204,9 @@ def keyfile(name: str, ssid: str, password: str | None, *, ap: bool, interface: 
         "[wifi]",
         f"mode={'ap' if ap else 'infrastructure'}",
         f"ssid={ssid}",
+        # Power saving makes the Pi miss frames: phones on the access point, and
+        # stations that stop receiving.
+        "powersave=2",
     ]
     if ap:
         lines.append("band=bg")
@@ -359,9 +372,12 @@ class Network:
         if pin == "station":
             if device.mode == "ap":
                 await _nmcli("connection", "down", "id", AP_ID)
+            elif device.mode == "station":
+                await self._watch_station(device)
             return
         if device.mode == "station":
             timers.lost_since, timers.booting = None, False
+            await self._watch_station(device)
             return
         if device.mode == "ap":
             if now - timers.last_try >= RETRY_STATIONS and await self._clients() == 0:
@@ -377,6 +393,59 @@ class Network:
             await self._start_ap()
 
     # -- steps -------------------------------------------------------------------
+
+    async def _watch_station(self, device: Device) -> None:
+        """Join the station's network again when it has received nothing for
+        ``STALL_GRACE`` seconds. A quiet tick pings the gateway first: its answer, or
+        the ARP that precedes it, counts as received. Without a gateway the station is
+        not judged."""
+        timers = self._timers
+        received = self._received()
+        if received is None or received != timers.received:
+            timers.received, timers.silent_since = received, None
+            return
+        gateway = await self._gateway()
+        if gateway is None:
+            timers.silent_since = None
+            return
+        await _run("ping", "-c", "1", "-W", "2", "-I", self._interface, gateway, check=False)
+        answered = self._received()
+        if answered != received:
+            timers.received, timers.silent_since = answered, None
+            return
+        now = self._now()
+        if timers.silent_since is None:
+            timers.silent_since = now
+            return
+        if now - timers.silent_since < STALL_GRACE or device.connection is None:
+            return
+        log.warning(
+            "the Wi-Fi has received nothing for %.0f s, not even from %s: joining again",
+            now - timers.silent_since,
+            gateway,
+        )
+        timers.received, timers.silent_since = None, None
+        try:
+            await _nmcli("--wait", str(JOIN_WAIT), "connection", "up", "id", device.connection)
+        except HelperError as e:  # disconnected now: the access point follows if it lasts
+            log.warning("cannot join again: %s", e)
+
+    def _received(self) -> int | None:
+        path = self._paths.interfaces / self._interface / "statistics" / "rx_packets"
+        try:
+            return int(path.read_text())
+        except (OSError, ValueError):
+            return None
+
+    async def _gateway(self) -> str | None:
+        output = await _run(
+            "ip", "-4", "route", "show", "default", "dev", self._interface, check=False
+        )
+        for line in output.splitlines():
+            words = line.split()
+            if len(words) >= 3 and words[:2] == ["default", "via"]:
+                return words[2]
+        return None
 
     async def _join(self, ssid: str, password: str | None) -> None:
         name = station_id(ssid)

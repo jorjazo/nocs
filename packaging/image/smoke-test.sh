@@ -62,6 +62,7 @@ for unit in NetworkManager nocs-firewall; do
     [[ $(systemctl is-active "$unit") == active ]] || fail "$unit is not active"
 done
 [[ $(systemctl is-enabled systemd-networkd.service) == disabled ]] || fail "systemd-networkd still runs"
+NetworkManager --print-config | grep -qx 'wifi.powersave=2' || fail "Wi-Fi power saving is on"
 nft list chain inet nocs input | grep -q 'policy drop' || fail "no firewall"
 [[ -f /etc/avahi/services/nocs.service ]] || fail "the box does not announce itself over mDNS"
 runuser -u nocs -- /opt/nocs/venv/bin/nocs-system call network.status | grep -q '"ap_ssid": "NOCS-' \
