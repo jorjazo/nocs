@@ -1135,6 +1135,26 @@ class ShareState(StateModel):
     clients: int = Field(description="Computers connected now.")
 
 
+class TailscaleState(StateModel):
+    """The box on a tailnet, as Tailscale says; the owner's devices on it may pair
+    without the passphrase."""
+
+    state: Literal["running", "needs_login", "needs_approval", "stopped", "starting"] = Field(
+        description="running: on the tailnet; needs_login: not signed in; needs_approval: an "
+        "admin of the tailnet must approve the box."
+    )
+    signing_in: bool = Field(
+        description="A sign-in is pending: POST /api/system/tailscale/login gives its link."
+    )
+    name: str | None = Field(description="The box's MagicDNS name, e.g. nocs.tail1234.ts.net.")
+    tailnet: str | None
+    user: str | None = Field(
+        description="The login of the user who owns the box's node: their devices may pair "
+        "without the passphrase. None for a tagged node."
+    )
+    ips: list[str] = Field(description="The box's addresses on the tailnet.")
+
+
 class GpsState(StateModel):
     """A USB GPS through gpsd (ADR 0029); positions to 4 decimals, at most every 10 s."""
 
@@ -1592,6 +1612,9 @@ class AppState(StateModel):
     )
     share: ShareState | None = Field(
         default=None, description="None where NOCS does not share the frames (a PC)."
+    )
+    tailscale: TailscaleState | None = Field(
+        default=None, description="None where Tailscale is not installed or not running."
     )
     clients: ClientsState | None = Field(default=None, description="None until nocsd serves.")
     forecast: ForecastState | None = Field(
@@ -2656,6 +2679,28 @@ class PairRequest(BaseModel):
     name: str = Field(description='What the device is, e.g. "Pixel 8".')
 
 
+class TailscalePairRequest(BaseModel):
+    """Pair the owner's device on the box's tailnet (``/api/auth/pair/tailscale``)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(description='What the device is, e.g. "Pixel 8".')
+
+
+class TailscaleLogin(WireModel):
+    """Joining a tailnet: the link is a secret (whoever opens it first gets the box), so
+    only the owner who asks gets it, never the state."""
+
+    auth_url: str | None = Field(
+        description="Where to sign in; None when Tailscale needs none (an admin's approval)."
+    )
+
+
+class TailscaleOwner(WireModel):
+    login: str = Field(description="The owner's Tailscale login, e.g. someone@github.")
+    device: str = Field(description="This device's name on the tailnet.")
+
+
 class PassphraseRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -2682,6 +2727,10 @@ class AuthStatus(WireModel):
     role: ClientRole | None = Field(description="None: pair to do anything.")
     device: PairedDevice | None = Field(description="This client's device, when paired.")
     observer: bool = Field(description="Whether unpaired clients may watch (read only).")
+    tailscale: TailscaleOwner | None = Field(
+        description="Tailscale says this unpaired client is a device of the box's owner, "
+        "reaching the box by its tailnet name: it may pair without the passphrase."
+    )
 
 
 # -- WebSocket ---------------------------------------------------------------

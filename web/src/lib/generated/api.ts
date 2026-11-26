@@ -772,6 +772,10 @@ export interface AppState {
   storage?: StorageState | null;
   system?: SystemState | null;
   /**
+   * None where Tailscale is not installed or not running.
+   */
+  tailscale?: TailscaleState | null;
+  /**
    * None where NOCS does not install updates (a PC).
    */
   updates?: UpdatesState | null;
@@ -3633,6 +3637,36 @@ export interface SystemHealth {
   warnings: HealthWarningName[];
 }
 /**
+ * The box on a tailnet, as Tailscale says; the owner's devices on it may pair
+ * without the passphrase.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "TailscaleState".
+ */
+export interface TailscaleState {
+  /**
+   * The box's addresses on the tailnet.
+   */
+  ips: string[];
+  /**
+   * The box's MagicDNS name, e.g. nocs.tail1234.ts.net.
+   */
+  name: string | null;
+  /**
+   * A sign-in is pending: POST /api/system/tailscale/login gives its link.
+   */
+  signing_in: boolean;
+  /**
+   * running: on the tailnet; needs_login: not signed in; needs_approval: an admin of the tailnet must approve the box.
+   */
+  state: "running" | "needs_login" | "needs_approval" | "stopped" | "starting";
+  tailnet: string | null;
+  /**
+   * The login of the user who owns the box's node: their devices may pair without the passphrase. None for a tagged node.
+   */
+  user: string | null;
+}
+/**
  * Updates of the appliance from apt, installed only when the owner asks (ADR 0025).
  *
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -3940,6 +3974,10 @@ export interface AuthStatus {
    * No owner passphrase yet: set one up first.
    */
   setup_required: boolean;
+  /**
+   * Tailscale says this unpaired client is a device of the box's owner, reaching the box by its tailnet name: it may pair without the passphrase.
+   */
+  tailscale: TailscaleOwner | null;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -3957,6 +3995,20 @@ export interface PairedDevice {
    */
   last_used: string;
   name: string;
+}
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "TailscaleOwner".
+ */
+export interface TailscaleOwner {
+  /**
+   * This device's name on the tailnet.
+   */
+  device: string;
+  /**
+   * The owner's Tailscale login, e.g. someone@github.
+   */
+  login: string;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -6655,6 +6707,31 @@ export interface StateSnapshot {
     [k: string]: unknown;
   };
   version: number;
+}
+/**
+ * Joining a tailnet: the link is a secret (whoever opens it first gets the box), so
+ * only the owner who asks gets it, never the state.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "TailscaleLogin".
+ */
+export interface TailscaleLogin {
+  /**
+   * Where to sign in; None when Tailscale needs none (an admin's approval).
+   */
+  auth_url: string | null;
+}
+/**
+ * Pair the owner's device on the box's tailnet (``/api/auth/pair/tailscale``).
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "TailscalePairRequest".
+ */
+export interface TailscalePairRequest {
+  /**
+   * What the device is, e.g. "Pixel 8".
+   */
+  name: string;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema

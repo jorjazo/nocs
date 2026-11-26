@@ -67,6 +67,8 @@ import type {
   SessionReport,
   SessionSummary,
   ShareRequest,
+  TailscaleLogin,
+  TailscalePairRequest,
   ShutdownRequest,
   Site,
   SiteCreated,
@@ -172,6 +174,11 @@ export function setUp(body: PairRequest): Promise<PairedDevice> {
 
 export function pair(body: PairRequest): Promise<PairedDevice> {
   return request("POST", "/api/auth/pair", body);
+}
+
+// The owner's device on the box's tailnet pairs without the passphrase.
+export function pairTailscale(body: TailscalePairRequest): Promise<PairedDevice> {
+  return request("POST", "/api/auth/pair/tailscale", body);
 }
 
 export function listDevices(): Promise<PairedDevice[]> {
@@ -284,6 +291,16 @@ export function setNetworkMode(pin: NetworkModeRequest["pin"]): Promise<void> {
 // The read-only SMB share of the frames (ADR 0039): on or off, at any time.
 export function setShare(on: boolean): Promise<void> {
   return request("PUT", "/api/system/share", { on } satisfies ShareRequest);
+}
+
+// Joining a tailnet, or asking again while a sign-in waits: the link where the owner
+// signs in. Never in the state: whoever opens it first gets the box.
+export function tailscaleLogin(): Promise<TailscaleLogin> {
+  return request("POST", "/api/system/tailscale/login");
+}
+
+export function tailscaleLogout(): Promise<void> {
+  return request("POST", "/api/system/tailscale/logout");
 }
 
 // Updates from apt (ADR 0025): accepted at once (202). Installing restarts nocsd at

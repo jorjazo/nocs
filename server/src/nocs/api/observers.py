@@ -4,9 +4,9 @@
 Observer access (ADR 0014) also shares its view with any page the owner opens, rebound
 to the box's address (ADR 0046). The rules below take out of snapshots and patches what
 says where the box is or which networks it knows: the mount's and the saved sites'
-coordinates, a GPS fix, the location drivers report, and Wi-Fi names. Positions that
-follow from what is left (the mount's altitude and azimuth with its coordinates and the
-time, tonight's sky) stay: observers watch the session through them.
+coordinates, a GPS fix, the location drivers report, Wi-Fi names and the tailnet.
+Positions that follow from what is left (the mount's altitude and azimuth with its
+coordinates and the time, tonight's sky) stay: observers watch the session through them.
 """
 
 from __future__ import annotations
@@ -91,6 +91,8 @@ RULES: tuple[Rule, ...] = (
     Rule(("network", "known"), _empty),
     Rule(("network", "joining"), _none),
     Rule(("network", "last_join"), _none),
+    # The tailnet, its addresses and the owner's login.
+    Rule(("tailscale",), _none),
     # Who else is connected is the owner's business: observers get the count only.
     Rule(("clients", "devices"), _empty),
     Rule(("indi", "devices", "*", "properties", "GEOGRAPHIC_COORD"), _remove),

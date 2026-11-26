@@ -152,6 +152,13 @@ Server) or on Linux. It is read-only and needs no password, so anyone on that ne
 can read the frames while it is on; Windows 11 asks for a login: user `nocs`, password
 `nocs`.
 
+**From anywhere, with Tailscale.** With the box on your home Wi-Fi (it needs the
+internet for this), open Rig → Tailscale → **Join a tailnet**, open the link it shows
+and sign in to your Tailscale account. From then on, your phone or laptop with
+Tailscale reaches the box at the address Rig shows (`http://nocs.<your tailnet>.ts.net`)
+wherever both are online, and pairs with **Pair with Tailscale**, without the
+passphrase. Other people on your tailnet still need the passphrase.
+
 ## 6. At the end
 
 - **Eject** the USB drive on Rig, under Storage, before unplugging it.

@@ -75,6 +75,11 @@ runuser -u nocs -- /opt/nocs/venv/bin/nocs-system call hello | grep -q '"time.se
 ! (echo > /dev/tcp/127.0.0.1/445) 2>/dev/null || fail "something listens on 445"
 runuser -u nocs -- /opt/nocs/venv/bin/nocs-system call share.status | grep -q '"on": false' \
     || fail "nocs-system does not run the SMB share"
+# Tailscale is there for the owner to join a tailnet from Rig.
+command -v tailscale >/dev/null || fail "no Tailscale"
+[[ $(systemctl is-enabled tailscaled) == enabled ]] || fail "tailscaled is not enabled"
+runuser -u nocs -- /opt/nocs/venv/bin/nocs-system call hello | grep -q '"tailscale.login"' \
+    || fail "nocs-system does not offer joining a tailnet"
 [[ ! -e /snap ]] && ! command -v snap >/dev/null || fail "snapd is still there"
 echo PASS
 CHECK

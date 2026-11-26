@@ -26,6 +26,8 @@ from nocs.api.schemas import (
     PairedDevice,
     PairRequest,
     PassphraseRequest,
+    TailscaleOwner,
+    TailscalePairRequest,
 )
 from nocs.auth import (
     AlreadySetUpError,
@@ -35,6 +37,7 @@ from nocs.auth import (
     ThrottledError,
     WrongPassphraseError,
 )
+from nocs.services.tailscale import TailscaleService
 from nocs.state import StateStore
 
 CLIENTS = ("clients",)
@@ -53,6 +56,7 @@ _PUBLIC = {
     ("GET", "/api/auth"),
     ("POST", "/api/auth/setup"),
     ("POST", "/api/auth/pair"),
+    ("POST", "/api/auth/pair/tailscale"),
 }
 _OBSERVER = {("GET", "/api/state"), ("WEBSOCKET", "/api/ws"), ("GET", "/api/guiding/steps")}
 _OBSERVER_PREFIXES = {
@@ -214,8 +218,14 @@ class Sockets:
                 socket.revoked.set()
 
 
-def auth_router(auth: AuthStore, sockets: Sockets) -> APIRouter:
+def auth_router(auth: AuthStore, sockets: Sockets, tailscale: TailscaleService) -> APIRouter:
     router = APIRouter(prefix="/api/auth")
+
+    async def tailnet_owner(request: Request) -> TailscaleOwner | None:
+        """The owner's device on the box's tailnet making this request, if it is one."""
+        address = request.client.host if request.client is not None else None
+        peer = await tailscale.owner(address, request.headers.get("host"))
+        return None if peer is None else TailscaleOwner(login=peer.login, device=peer.device)
 
     @router.get("")
     async def auth_status(  # pyright: ignore[reportUnusedFunction]
@@ -224,11 +234,14 @@ def auth_router(auth: AuthStore, sockets: Sockets) -> APIRouter:
         who = identity(request)
         if who.token is not None:
             _set_cookie(request, response, who.token)
+        offer = who.device is None and not auth.setup_required
+        owner = await tailnet_owner(request) if offer else None
         return AuthStatus(
             setup_required=auth.setup_required,
             role=who.role,
             device=_paired(who.device, who) if who.device is not None else None,
             observer=auth.observer,
+            tailscale=owner,
         )
 
     @router.post("/setup", status_code=status.HTTP_201_CREATED)
@@ -246,6 +259,23 @@ def auth_router(auth: AuthStore, sockets: Sockets) -> APIRouter:
     ) -> PairedDevice:
         with _auth_errors():
             device, token = await auth.pair(body.passphrase, body.name)
+        _set_cookie(request, response, token)
+        return _paired(device, Identity(role="owner", device=device))
+
+    @router.post("/pair/tailscale", status_code=status.HTTP_201_CREATED)
+    async def pair_tailscale(  # pyright: ignore[reportUnusedFunction]
+        body: TailscalePairRequest, request: Request, response: Response
+    ) -> PairedDevice:
+        """Pair without the passphrase: Tailscale says the device belongs to the box's
+        owner, and it names the box by its tailnet name or address."""
+        if await tailnet_owner(request) is None:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                "Tailscale does not say this is a device of the box's owner, reaching the"
+                " box by its tailnet name: pair with the passphrase",
+            )
+        with _auth_errors():
+            device, token = await auth.pair_trusted(body.name)
         _set_cookie(request, response, token)
         return _paired(device, Identity(role="owner", device=device))
 

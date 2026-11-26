@@ -87,7 +87,7 @@ updating ([ADR 0025](../docs/adr/0025-packaging-and-updates.md)).
 |---|---|
 | NetworkManager runs the network (nocs-system runs the access point and the fallback, [ADR 0028](../docs/adr/0028-networking.md)); systemd-networkd disabled on install | `/usr/lib/netplan/01-nocs-network-manager.yaml` |
 | Wi-Fi power saving off (in `/etc`: Ubuntu's own file there turns it on) | `/etc/NetworkManager/conf.d/nocs.conf` |
-| A firewall that keeps indiserver and PHD2 to the box | `nocs-firewall.service`, `/usr/share/nocs-appliance/firewall.nft` |
+| A firewall that keeps indiserver and PHD2 to the box, and lets Tailscale's UDP 41641 in | `nocs-firewall.service`, `/usr/share/nocs-appliance/firewall.nft` |
 | nocsd on port 80 | a drop-in for `nocsd.service` |
 | Every operation of nocs-system | `/etc/nocs/system.conf.d/appliance.conf` |
 | unattended-upgrades only downloads, needrestart only lists | `/etc/apt/apt.conf.d/52nocs-unattended-upgrades`, `/etc/needrestart/conf.d/nocs.conf` |
@@ -108,8 +108,9 @@ On arm64 only (CI: the Image workflow, on an `ubuntu-24.04-arm` runner), as root
 with `nocs-appliance` of the same version next to the `nocs` package. It takes
 Ubuntu's own preinstalled server image for the Raspberry Pi (checked against its
 `SHA256SUMS`), grows its root filesystem and, in a chroot that starts no services,
-adds the INDI and PHD2 PPAs, installs `nocs`, `nocs-appliance`, INDI's drivers and
-PHD2, puts ASTAP and D50 in `/opt/astap`, removes snapd, names the box `nocs`,
+adds the INDI and PHD2 PPAs and Tailscale's repository, installs `nocs`,
+`nocs-appliance`, INDI's drivers, PHD2 and Tailscale (off a tailnet until the owner
+joins one from Rig), puts ASTAP and D50 in `/opt/astap`, removes snapd, names the box `nocs`,
 replaces the boot partition's `user-data` with one that creates no login user, and
 empties the machine id and SSH host keys so each Pi makes its own.
 

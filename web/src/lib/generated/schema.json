@@ -761,6 +761,18 @@
           ],
           "default": null
         },
+        "tailscale": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TailscaleState"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "None where Tailscale is not installed or not running."
+        },
         "updates": {
           "anyOf": [
             {
@@ -831,13 +843,25 @@
         "setup_required": {
           "description": "No owner passphrase yet: set one up first.",
           "type": "boolean"
+        },
+        "tailscale": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TailscaleOwner"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Tailscale says this unpaired client is a device of the box's owner, reaching the box by its tailnet name: it may pair without the passphrase."
         }
       },
       "required": [
         "setup_required",
         "role",
         "device",
-        "observer"
+        "observer",
+        "tailscale"
       ],
       "title": "AuthStatus",
       "type": "object"
@@ -13085,6 +13109,130 @@
         "health"
       ],
       "title": "SystemState",
+      "type": "object"
+    },
+    "TailscaleLogin": {
+      "description": "Joining a tailnet: the link is a secret (whoever opens it first gets the box), so\nonly the owner who asks gets it, never the state.",
+      "properties": {
+        "auth_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Where to sign in; None when Tailscale needs none (an admin's approval)."
+        }
+      },
+      "required": [
+        "auth_url"
+      ],
+      "title": "TailscaleLogin",
+      "type": "object"
+    },
+    "TailscaleOwner": {
+      "properties": {
+        "device": {
+          "description": "This device's name on the tailnet.",
+          "type": "string"
+        },
+        "login": {
+          "description": "The owner's Tailscale login, e.g. someone@github.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "login",
+        "device"
+      ],
+      "title": "TailscaleOwner",
+      "type": "object"
+    },
+    "TailscalePairRequest": {
+      "additionalProperties": false,
+      "description": "Pair the owner's device on the box's tailnet (``/api/auth/pair/tailscale``).",
+      "properties": {
+        "name": {
+          "description": "What the device is, e.g. \"Pixel 8\".",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "TailscalePairRequest",
+      "type": "object"
+    },
+    "TailscaleState": {
+      "additionalProperties": false,
+      "description": "The box on a tailnet, as Tailscale says; the owner's devices on it may pair\nwithout the passphrase.",
+      "properties": {
+        "ips": {
+          "description": "The box's addresses on the tailnet.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The box's MagicDNS name, e.g. nocs.tail1234.ts.net."
+        },
+        "signing_in": {
+          "description": "A sign-in is pending: POST /api/system/tailscale/login gives its link.",
+          "type": "boolean"
+        },
+        "state": {
+          "description": "running: on the tailnet; needs_login: not signed in; needs_approval: an admin of the tailnet must approve the box.",
+          "enum": [
+            "running",
+            "needs_login",
+            "needs_approval",
+            "stopped",
+            "starting"
+          ],
+          "type": "string"
+        },
+        "tailnet": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "user": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The login of the user who owns the box's node: their devices may pair without the passphrase. None for a tagged node."
+        }
+      },
+      "required": [
+        "state",
+        "signing_in",
+        "name",
+        "tailnet",
+        "user",
+        "ips"
+      ],
+      "title": "TailscaleState",
       "type": "object"
     },
     "Target": {

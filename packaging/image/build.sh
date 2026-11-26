@@ -119,11 +119,23 @@ in_image apt-get update
 in_image apt-get install -y --no-install-recommends software-properties-common
 in_image add-apt-repository -y --no-update ppa:mutlaqja/ppa
 in_image add-apt-repository -y --no-update ppa:pch/phd2
+# Tailscale, from its own repository: the owner puts the box on a tailnet from Rig.
+codename=$(. "$root/etc/os-release" && echo "$VERSION_CODENAME")
+curl -fsSL "https://pkgs.tailscale.com/stable/ubuntu/$codename.noarmor.gpg" \
+    -o "$root/usr/share/keyrings/tailscale-archive-keyring.gpg" \
+    || die "no Tailscale repository for Ubuntu $codename"
+cat > "$root/etc/apt/sources.list.d/tailscale.sources" <<EOF
+Types: deb
+URIs: https://pkgs.tailscale.com/stable/ubuntu
+Suites: $codename
+Components: main
+Signed-By: /usr/share/keyrings/tailscale-archive-keyring.gpg
+EOF
 in_image apt-get update
 # nocs-appliance makes the box the appliance: the network, the firewall, port 80,
 # updates only downloaded, the GPS, the hardware watchdog (ADR 0025, 0028, 0029, 0030).
 in_image apt-get install -y /tmp/nocs.deb /tmp/nocs-appliance.deb indi-bin indi-3rdparty-drivers \
-    phd2 xvfb
+    phd2 xvfb tailscale
 in_image dpkg -i /tmp/d50.deb
 mkdir -p "$root/opt/astap"
 unzip -o -q "$CACHE/astap/astap_cli_aarch64.zip" -d "$root/opt/astap"

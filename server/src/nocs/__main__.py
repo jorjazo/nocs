@@ -31,6 +31,10 @@ def main() -> None:
             port=settings.port,
             log_level=settings.log_level,
             log_config=None,
+            # The client's address is the connection's: Tailscale pairing trusts it, and
+            # an X-Forwarded-For from a local process (or a proxy passing one on) must
+            # not make it a node of the tailnet.
+            proxy_headers=False,
         )
 
 

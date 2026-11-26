@@ -1,6 +1,7 @@
 <script lang="ts">
   // First run (create the owner passphrase, which also pairs this device) and
-  // pairing with that passphrase: the same full-screen form (ADR 0014).
+  // pairing with that passphrase: the same full-screen form (ADR 0014). When
+  // Tailscale says this is the owner's device, pairing needs no passphrase.
   import Banner from "../components/Banner.svelte";
   import Button from "../components/Button.svelte";
   import Icon from "../components/Icon.svelte";
@@ -29,6 +30,8 @@
   });
   let passphrase = $state("");
   let busy = $state(false);
+  let tailscaleBusy = $state(false);
+  const tailscale = $derived(setup ? null : (auth.status?.tailscale ?? null));
   let error = $state("");
   let passphraseError = $state("");
   let lockedUntil = $state(0);
@@ -40,6 +43,20 @@
     const timer = setInterval(() => (now = Date.now()), 1000);
     return () => clearInterval(timer);
   });
+
+  async function pairWithTailscale(): Promise<void> {
+    error = "";
+    tailscaleBusy = true;
+    try {
+      await auth.pairTailscale(name.trim());
+    } catch (e) {
+      // Refused (Tailscale changed its mind) or set up meanwhile: ask the server again.
+      if (e instanceof ApiError && (e.status === 403 || e.status === 409)) await auth.refresh();
+      error = errorText(e, t);
+    } finally {
+      tailscaleBusy = false;
+    }
+  }
 
   async function submit(event: SubmitEvent): Promise<void> {
     event.preventDefault();
@@ -97,6 +114,15 @@
     {/if}
 
     <TextField label={t.device.name} hint={t.device.nameHint} bind:value={name} required maxlength={64} />
+    {#if tailscale}
+      <div class="tailscale">
+        <p class="body">{t.pair.tailscale(tailscale.login)}</p>
+        <Button variant="primary" wide busy={tailscaleBusy} disabled={!name.trim() || busy} onclick={pairWithTailscale}>
+          {t.pair.tailscaleSubmit}
+        </Button>
+        <p class="label muted or">{t.pair.orPassphrase}</p>
+      </div>
+    {/if}
     <TextField
       label={t.passphrase.label}
       hint={setup ? t.firstRun.passphraseHint : undefined}
@@ -110,7 +136,12 @@
     {#if error}<Banner icon="alert" tone="error">{error}</Banner>{/if}
 
     <div class="actions">
-      <Button variant="primary" type="submit" wide {busy} disabled={!name.trim() || lockedFor > 0}>
+      <Button
+        variant={tailscale ? "secondary" : "primary"}
+        type="submit"
+        wide
+        {busy}
+        disabled={!name.trim() || lockedFor > 0 || tailscaleBusy}>
         {setup ? t.firstRun.submit : t.pair.submit}
       </Button>
       {#if !setup && auth.status?.observer}
@@ -170,6 +201,14 @@
     color: var(--muted);
     font-size: 17px;
     line-height: 26px;
+  }
+  .tailscale {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+  .or {
+    margin-top: var(--space-3);
   }
   .actions {
     margin-top: auto;
