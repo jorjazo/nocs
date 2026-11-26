@@ -34,7 +34,7 @@ def full_state() -> dict[str, Json]:
         },
         "tailscale": {
             "state": "running",
-            "auth_url": None,
+            "signing_in": False,
             "name": "nocs.tail-home.ts.net",
             "tailnet": "owner@example.com",
             "user": "owner@example.com",

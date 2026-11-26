@@ -19,10 +19,12 @@ from nocs.api import create_app
 from nocs.api.auth import COOKIE
 from nocs.api.schemas import AppState, TailscaleState
 from nocs.config import Settings
-from nocs.services.tailscale import TailscaleService
+from nocs.services.tailscale import LOGIN_TIMEOUT, TailscaleService
 from nocs.state import StateStore
 from nocs.system.protocol import HelperError, Message
 from nocs.system.tailscale import (
+    LINK_WAIT,
+    TIMEOUT,
     Peer,
     Status,
     Tailscale,
@@ -171,9 +173,10 @@ def test_tailnet_addresses(address: str | None, tailnet: bool) -> None:
 def test_the_names_of_the_box() -> None:
     box = parse_status(status_json())
     assert box is not None
-    for host in (BOX_NAME, "NOCS.tail-home.ts.net.", "nocs", BOX_IP, "fd7a:115c:a1e0::1"):
+    for host in (BOX_NAME, "NOCS.tail-home.ts.net.", BOX_IP, "fd7a:115c:a1e0::1"):
         assert box.names_box(host), host
-    for host in ("nocs.local", "evil.example", "192.168.1.5", "", None):
+    # Not the short name: a hostile network's DNS may own a single label.
+    for host in ("nocs", "nocs.local", "evil.example", "192.168.1.5", "", None):
         assert not box.names_box(host), host
 
 
@@ -189,6 +192,7 @@ async def test_the_state_says_where_the_box_is(tools: Path) -> None:
     assert state.state == "running"
     assert state.name == BOX_NAME
     assert state.user == "owner@example.com"
+    assert state.signing_in is False
     AppState.model_validate(store.snapshot())
 
 
@@ -211,6 +215,13 @@ async def test_only_the_owners_devices_by_the_boxs_name(tools: Path) -> None:
     assert await service.owner(TAGGED_IP, BOX_NAME) is None  # a tagged node has no owner
     assert await service.owner("100.64.0.99", BOX_NAME) is None  # not on the tailnet
     assert await service.owner(PHONE_IP, "rebound.example") is None  # DNS rebinding
+    assert await service.owner(PHONE_IP, "nocs") is None  # a short name, rebound
+    # A process on the box itself: its node is the owner's too.
+    (tools / f"whois-{BOX_IP}.json").write_text(
+        json.dumps(whois_json(OWNER_ID, "owner@example.com", "nocs"))
+    )
+    assert await service.owner(BOX_IP, BOX_NAME) is None
+    assert await service.owner(f"::ffff:{BOX_IP}", BOX_NAME) is None
     assert await service.owner(PHONE_IP, None) is None
     whois_before = sum("whois" in c for c in calls(tools))
     assert await service.owner("192.168.1.20", BOX_NAME) is None  # the LAN: not asked
@@ -229,8 +240,32 @@ async def test_a_box_off_the_tailnet_has_no_owner(tools: Path) -> None:
     assert await service.owner(PHONE_IP, BOX_NAME) is None
 
 
-async def _no_helper(op: str, args: Message) -> Message:
+async def _no_helper(op: str, args: Message, timeout: float) -> Message:
     raise AssertionError(f"{op} {args} reached nocs-system")
+
+
+async def test_the_sign_in_link_is_only_the_askers(tools: Path) -> None:
+    """The link puts the box on whoever's tailnet opens it first: the owner who asks to
+    join gets it, the state (which reaches diagnostics) only that a sign-in waits."""
+    url = "https://login.tailscale.com/a/abc123"
+    asked: list[tuple[str, float]] = []
+
+    async def helper(op: str, args: Message, timeout: float) -> Message:
+        asked.append((op, timeout))
+        (tools / "status.json").write_text(
+            json.dumps({"BackendState": "NeedsLogin", "AuthURL": url})
+        )
+        return {"auth_url": url, "state": "needs_login"}
+
+    store = StateStore()
+    service = TailscaleService(store, perform=helper)
+    assert await service.login() == url
+    # nocs-system waits up to LINK_WAIT for the link: nocsd waits longer for it.
+    assert asked == [("tailscale.login", LOGIN_TIMEOUT)]
+    assert LOGIN_TIMEOUT > LINK_WAIT + TIMEOUT
+    state = TailscaleState.model_validate(store.get(("tailscale",)))
+    assert state.signing_in is True
+    assert url not in json.dumps(store.snapshot())
 
 
 # -- the API ----------------------------------------------------------------------

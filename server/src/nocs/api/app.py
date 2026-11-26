@@ -194,7 +194,9 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
     sockets = Sockets(store)
     # Created in the lifespan: they publish to the store and spawn tasks on its loop.
     services = _Services()
-    tailscale = TailscaleService(store, lambda op, args: system().perform(op, args))
+    tailscale = TailscaleService(
+        store, lambda op, args, timeout: system().perform(op, args, timeout=timeout)
+    )
 
     def equipment() -> EquipmentService:
         assert services.equipment is not None

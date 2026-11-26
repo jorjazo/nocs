@@ -340,9 +340,11 @@ parks the mount. Observatory devices will plug into this later.
 - On a tailnet, the owner's devices pair **without the passphrase**: nocsd asks
   tailscaled who a client at a tailnet address is (`tailscale whois`), and pairs it
   when that node belongs to the user who owns the box's node (neither node tagged)
-  and the request names the box by its tailnet name or address, which a page rebound
-  to the box's address cannot (ADR 0046). Only once a passphrase is set; other users
-  of the tailnet pair with the passphrase. The device is an ordinary paired device,
+  and the request names the box by its MagicDNS name or tailnet address, which a page
+  rebound to the box's address cannot (the short name is refused: a hostile network's
+  DNS may own it). A connection from the box itself is not one, and nocsd ignores
+  `X-Forwarded-For`. Only once a passphrase is set; other users of the tailnet pair
+  with the passphrase. The device is an ordinary paired device,
   listed and revoked like the rest.
 - Optional **observer** role, off by default: read-only access without pairing
   for showing the night to others. Observers see only the Visitors view (the
@@ -367,8 +369,9 @@ parks the mount. Observatory devices will plug into this later.
   that way with NetworkManager still calling it connected. Wi-Fi power saving is off.
 - **Tailscale** for reaching the box from anywhere: the image installs it, and the
   owner joins a tailnet from Rig (nocs-system runs `tailscale login
-  --accept-dns=false` and the app shows its sign-in link; the box needs the internet
-  then) or leaves it. nocsd reads `tailscale status` itself (no privileges needed), so
+  --accept-dns=false` and the app shows its sign-in link to the owner who asked,
+  never in the state, since whoever opens it first gets the box; the box needs the
+  internet then) or leaves it. nocsd reads `tailscale status` itself (no privileges needed), so
   a PC where the owner ran `tailscale up` gets the same pairing. The firewall opens
   Tailscale's UDP port 41641 for direct connections. nocsd serves plain HTTP on the
   tailnet too (no `tailscale serve`).

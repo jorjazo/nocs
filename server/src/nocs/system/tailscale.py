@@ -63,18 +63,19 @@ class Status:
     login: str | None = None
     """That user's login name, e.g. ``someone@github``."""
 
-    @property
-    def host(self) -> str | None:
-        """The short MagicDNS name, e.g. ``nocs``."""
-        return self.name.split(".", 1)[0] if self.name else None
-
     def names_box(self, host: str | None) -> bool:
-        """Whether ``host`` (a request's, without its port) is one of the box's own
-        names or addresses on the tailnet."""
+        """Whether ``host`` (a request's, without its port) is the box's MagicDNS name or
+        one of its tailnet addresses. Not the short name (``nocs``): a single label is
+        nobody's, so a hostile network's DNS may hand it to a page of its own and rebind
+        it to the box later."""
         if not host:
             return False
         host = host.lower().rstrip(".")
-        return host in {n.lower() for n in (self.name, self.host, *self.ips) if n}
+        return host in {n.lower() for n in (self.name, *self.ips) if n}
+
+    def is_box(self, address: str) -> bool:
+        """Whether ``address`` is one of the box's own: a connection from the box itself."""
+        return _same_ip(address, self.ips)
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,16 +89,26 @@ class Peer:
     """The node's name, e.g. ``pixel-8``."""
 
 
-def is_tailnet_address(address: str | None) -> bool:
-    """Whether ``address`` is one Tailscale gives nodes (100.64.0.0/10, fd7a:115c:a1e0::/48)."""
-    if not address:
-        return False
+def _ip(address: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
     try:
         ip = ipaddress.ip_address(address)
     except ValueError:
-        return False
+        return None
     if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
-        ip = ip.ipv4_mapped
+        return ip.ipv4_mapped
+    return ip
+
+
+def _same_ip(address: str, addresses: tuple[str, ...]) -> bool:
+    ip = _ip(address)
+    return ip is not None and any(_ip(a) == ip for a in addresses)
+
+
+def is_tailnet_address(address: str | None) -> bool:
+    """Whether ``address`` is one Tailscale gives nodes (100.64.0.0/10, fd7a:115c:a1e0::/48)."""
+    ip = _ip(address) if address else None
+    if ip is None:
+        return False
     return ip in (_TAILNET_V4 if ip.version == 4 else _TAILNET_V6)
 
 

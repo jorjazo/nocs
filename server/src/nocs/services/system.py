@@ -155,9 +155,9 @@ class SystemService:
         """nocs-system performs ``op`` here, as far as NOCS knows."""
         return op in self._operations
 
-    async def perform(self, op: str, args: Message) -> Message:
+    async def perform(self, op: str, args: Message, *, timeout: float = client.TIMEOUT) -> Message:
         """Perform ``op`` for another service (storage); errors as ``_call`` raises them."""
-        return await self._call(op, args)
+        return await self._call(op, args, timeout=timeout)
 
     async def reboot(self, *, force: bool = False) -> None:
         await self._power("power.reboot", force)

@@ -67,6 +67,7 @@ import type {
   SessionReport,
   SessionSummary,
   ShareRequest,
+  TailscaleLogin,
   TailscalePairRequest,
   ShutdownRequest,
   Site,
@@ -292,8 +293,9 @@ export function setShare(on: boolean): Promise<void> {
   return request("PUT", "/api/system/share", { on } satisfies ShareRequest);
 }
 
-// Joining a tailnet: the state gets the link where the owner signs in.
-export function tailscaleLogin(): Promise<void> {
+// Joining a tailnet, or asking again while a sign-in waits: the link where the owner
+// signs in. Never in the state: whoever opens it first gets the box.
+export function tailscaleLogin(): Promise<TailscaleLogin> {
   return request("POST", "/api/system/tailscale/login");
 }
 

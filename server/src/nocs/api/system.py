@@ -19,6 +19,7 @@ from nocs.api.schemas import (
     NetworkSetupRequest,
     ShareRequest,
     ShutdownRequest,
+    TailscaleLogin,
     WifiNetwork,
 )
 from nocs.services.system import OperationUnavailableError, SystemBusyError, SystemService
@@ -134,13 +135,12 @@ def system_router(system: Callable[[], SystemService], tailscale: TailscaleServi
 
     # -- Tailscale ----------------------------------------------------------------
 
-    @router.post("/tailscale/login", status_code=status.HTTP_204_NO_CONTENT)
-    async def tailscale_login() -> Response:  # pyright: ignore[reportUnusedFunction]
-        """Start joining a tailnet: the state gets the link where the owner signs in
-        (a few seconds; the box needs the internet)."""
+    @router.post("/tailscale/login")
+    async def tailscale_login() -> TailscaleLogin:  # pyright: ignore[reportUnusedFunction]
+        """Start joining a tailnet, or ask again while a sign-in waits: the link where
+        the owner signs in (up to 20 s; the box needs the internet)."""
         with _system_errors():
-            await tailscale.login()
-        return Response(status_code=status.HTTP_204_NO_CONTENT)
+            return TailscaleLogin(auth_url=await tailscale.login())
 
     @router.post("/tailscale/logout", status_code=status.HTTP_204_NO_CONTENT)
     async def tailscale_logout() -> Response:  # pyright: ignore[reportUnusedFunction]

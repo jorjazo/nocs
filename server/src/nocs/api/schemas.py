@@ -1140,10 +1140,12 @@ class TailscaleState(StateModel):
     without the passphrase."""
 
     state: Literal["running", "needs_login", "needs_approval", "stopped", "starting"] = Field(
-        description="running: on the tailnet; needs_login: not signed in (auth_url, while a "
-        "sign-in is pending); needs_approval: an admin of the tailnet must approve the box."
+        description="running: on the tailnet; needs_login: not signed in; needs_approval: an "
+        "admin of the tailnet must approve the box."
     )
-    auth_url: str | None = Field(description="Where the owner signs in to join the box.")
+    signing_in: bool = Field(
+        description="A sign-in is pending: POST /api/system/tailscale/login gives its link."
+    )
     name: str | None = Field(description="The box's MagicDNS name, e.g. nocs.tail1234.ts.net.")
     tailnet: str | None
     user: str | None = Field(
@@ -2683,6 +2685,15 @@ class TailscalePairRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(description='What the device is, e.g. "Pixel 8".')
+
+
+class TailscaleLogin(WireModel):
+    """Joining a tailnet: the link is a secret (whoever opens it first gets the box), so
+    only the owner who asks gets it, never the state."""
+
+    auth_url: str | None = Field(
+        description="Where to sign in; None when Tailscale needs none (an admin's approval)."
+    )
 
 
 class TailscaleOwner(WireModel):

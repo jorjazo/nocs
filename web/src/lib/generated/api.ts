@@ -3645,10 +3645,6 @@ export interface SystemHealth {
  */
 export interface TailscaleState {
   /**
-   * Where the owner signs in to join the box.
-   */
-  auth_url: string | null;
-  /**
    * The box's addresses on the tailnet.
    */
   ips: string[];
@@ -3657,7 +3653,11 @@ export interface TailscaleState {
    */
   name: string | null;
   /**
-   * running: on the tailnet; needs_login: not signed in (auth_url, while a sign-in is pending); needs_approval: an admin of the tailnet must approve the box.
+   * A sign-in is pending: POST /api/system/tailscale/login gives its link.
+   */
+  signing_in: boolean;
+  /**
+   * running: on the tailnet; needs_login: not signed in; needs_approval: an admin of the tailnet must approve the box.
    */
   state: "running" | "needs_login" | "needs_approval" | "stopped" | "starting";
   tailnet: string | null;
@@ -6707,6 +6707,19 @@ export interface StateSnapshot {
     [k: string]: unknown;
   };
   version: number;
+}
+/**
+ * Joining a tailnet: the link is a secret (whoever opens it first gets the box), so
+ * only the owner who asks gets it, never the state.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "TailscaleLogin".
+ */
+export interface TailscaleLogin {
+  /**
+   * Where to sign in; None when Tailscale needs none (an admin's approval).
+   */
+  auth_url: string | null;
 }
 /**
  * Pair the owner's device on the box's tailnet (``/api/auth/pair/tailscale``).

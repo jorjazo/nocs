@@ -170,6 +170,7 @@ export type {
   SetPropertyRequest,
   ShareRequest,
   ShareState,
+  TailscaleLogin,
   TailscaleOwner,
   TailscalePairRequest,
   TailscaleState,

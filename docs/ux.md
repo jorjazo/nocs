@@ -834,9 +834,11 @@ Appliance (phase 6):
   tailnet, the box's address there (`http://<name>.<tailnet>.ts.net`, selectable), the
   tailnet and a line saying whose devices pair without the passphrase (a warning
   instead for a tagged box, which has no owner); off it, "Join a tailnet" where
-  nocs-system may (the appliance), then the sign-in link as a plain link (a new tab;
-  "New link" asks for another) until Tailscale says the box is on, or waits for an
-  admin's approval; "Leave the tailnet" with a second tap. On a PC it only shows
+  nocs-system may (the appliance), then the sign-in link as a plain link (a new tab)
+  until Tailscale says the box is on, or waits for an admin's approval. The link
+  comes only in the answer to the owner who asked (the state says only that a sign-in
+  waits: whoever opens the link first gets the box), so another device or a reload
+  shows "Show the sign-in link" instead; "Leave the tailnet" with a second tap. On a PC it only shows
   where the box is.
 - Pairing on a tailnet: when Tailscale says the device is the owner's, the pairing
   screen says so under the device's name and offers "Pair with Tailscale" as the

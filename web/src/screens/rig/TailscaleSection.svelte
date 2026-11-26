@@ -24,6 +24,16 @@
 
   let busy = $state<"login" | "logout" | null>(null);
   let error = $state("");
+  // The sign-in link, from asking to join: the state only says that a sign-in waits.
+  let link = $state<string | null>(null);
+  const pending = $derived(tailscale?.signing_in ?? false);
+  $effect(() => {
+    if (!pending) link = null;
+  });
+
+  async function login(): Promise<void> {
+    link = (await tailscaleLogin()).auth_url;
+  }
 
   async function act(which: "login" | "logout", run: () => Promise<void>): Promise<void> {
     busy = which;
@@ -60,17 +70,19 @@
       {/if}
     {:else if tailscale.state === "needs_approval"}
       <p class="muted">{t.tailscale.approval}</p>
-    {:else if tailscale.auth_url}
+    {:else if pending && link}
       <p>{t.tailscale.signIn}</p>
-      <a class="link" href={tailscale.auth_url} target="_blank" rel="noopener noreferrer">{tailscale.auth_url}</a>
+      <a class="link" href={link} target="_blank" rel="noopener noreferrer">{link}</a>
+    {:else if pending}
+      <p class="muted">{t.tailscale.pending}</p>
     {:else if tailscale.state !== "starting"}
       <p class="muted">{can("tailscale.login") ? t.tailscale.joinHint : t.tailscale.notHere}</p>
     {/if}
 
     <div class="buttons">
       {#if tailscale.state !== "running" && tailscale.state !== "starting" && can("tailscale.login")}
-        <Button variant={tailscale.auth_url ? "secondary" : "primary"} busy={busy === "login"} onclick={() => act("login", tailscaleLogin)}>
-          {tailscale.auth_url ? t.tailscale.newLink : t.tailscale.join}
+        <Button variant={pending && link ? "secondary" : "primary"} busy={busy === "login"} onclick={() => act("login", login)}>
+          {pending ? (link ? t.tailscale.newLink : t.tailscale.showLink) : t.tailscale.join}
         </Button>
       {/if}
       {#if tailscale.state !== "needs_login" && can("tailscale.logout")}
