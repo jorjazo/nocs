@@ -349,8 +349,11 @@ class LiveStackService:
         """Wait until every offered frame has been dealt with, the links of those a newer
         one replaced deleted too (tests)."""
         await self._idle.wait()
-        while self._tasks:
-            await asyncio.gather(*self._tasks, return_exceptions=True)
+        # Only the unfinished ones: a finished task leaves the set in its done callback,
+        # which the loop runs later, and gather() over finished tasks returns without
+        # yielding to it (Python 3.12+), so waiting for an empty set spun forever.
+        while running := [task for task in self._tasks if not task.done()]:
+            await asyncio.gather(*running, return_exceptions=True)
 
     async def _take(self, frame: Offered) -> None:
         if not self.on:
