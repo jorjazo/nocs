@@ -2,7 +2,7 @@
 """Publish packages and images to the NOCS apt repository (ADR 0035).
 
     publish.py debs --suite testing:5 [--suite stable:3] <.deb>...
-    publish.py image --keep 2 <image.img.xz> [its .sha256 and .manifest.txt]
+    publish.py image --keep 2 --url <repository URL> <image.img.xz> [its .sha256 and .manifest.txt]
 
 The repository is a bucket (Cloudflare R2, through the S3 API) or, for tests, a
 local directory (``--local <dir>``). Each suite's ``Packages`` files are its state:
@@ -14,6 +14,9 @@ Environment: ``R2_ENDPOINT``, ``R2_BUCKET``, ``AWS_ACCESS_KEY_ID`` and
 ``AWS_SECRET_ACCESS_KEY`` for the bucket; ``APT_SIGNING_KEY``, an armoured private
 OpenPGP key without a passphrase, to sign. Standard library only, plus ``dpkg``,
 ``gpg`` and the ``aws`` command line.
+
+``image`` also lists the images kept in ``images/rpi-imager.json``, a repository
+for Raspberry Pi Imager (its customisation needs one).
 """
 
 from __future__ import annotations
@@ -22,6 +25,8 @@ import argparse
 import functools
 import gzip
 import hashlib
+import json
+import lzma
 import os
 import re
 import shutil
@@ -268,25 +273,99 @@ class Signer:
 # -- images --------------------------------------------------------------------------
 
 _IMAGE = re.compile(r"^images/nocs-(.+)-pi5-arm64\.img\.xz$")
+IMAGER_LIST = "images/rpi-imager.json"
+IMAGER_ICON = Path(__file__).with_name("nocs-icon.svg")
+# Raspberry Pi Imager's own profile of the board, from its repository JSON
+# (https://downloads.raspberrypi.com/os_list_imagingutility_v4.json).
+IMAGER_DEVICE = {
+    "name": "Raspberry Pi 5",
+    "tags": ["pi5-64bit"],
+    "default": True,
+    "icon": "https://downloads.raspberrypi.com/imager/icons/RPi_5.png",
+    "description": "Raspberry Pi 5, 500 / 500+, and Compute Module 5",
+    "matching_type": "exclusive",
+    "capabilities": [],
+}
 
 
-def publish_image(bucket: Bucket, keep: int, files: list[Path]) -> None:
+def imager_entry(image: Path) -> dict[str, object]:
+    """The image's entry in Raspberry Pi Imager's repository JSON, but for its URL.
+
+    Imager offers its customisation (Wi-Fi, host name, user, SSH key) only for
+    images listed with an ``init_format``, never for one picked with "Use custom".
+    """
+    version = image.name.removeprefix("nocs-").removesuffix("-pi5-arm64.img.xz")
+    extracted, extract_size = hashlib.sha256(), 0
+    with lzma.open(image) as data:
+        while chunk := data.read(1 << 20):
+            extracted.update(chunk)
+            extract_size += len(chunk)
+    with image.open("rb") as data:
+        downloaded = hashlib.file_digest(data, "sha256")
+    return {
+        "name": f"NOCS {version.replace('-', '')}",
+        "description": "Astrophotography from a phone: Ubuntu Server with NOCS, INDI and PHD2",
+        "extract_size": extract_size,
+        "extract_sha256": extracted.hexdigest(),
+        "image_download_size": image.stat().st_size,
+        "image_download_sha256": downloaded.hexdigest(),
+        "release_date": datetime.now(UTC).date().isoformat(),
+        "init_format": "cloudinit",
+        "devices": ["pi5-64bit"],
+        "capabilities": [],
+    }
+
+
+def publish_image(bucket: Bucket, keep: int, files: list[Path], url: str) -> None:
     print("Uploading the image")
     images = [f for f in files if f.name.endswith(".img.xz")]
     if len(images) != 1:
         sys.exit("give exactly one .img.xz")
-    # The image last, so that a listing never shows it without its checksum.
-    for path in sorted(files, key=lambda f: f.name.endswith(".img.xz")):
-        bucket.put(path, f"images/{path.name}")
-    # Image names spell the version's "~" as "-" (packaging/image/build.sh); NOCS
-    # versions have no Debian revision, so every "-" was a "~".
-    versions = [m[1] for key in bucket.list("images/") if (m := _IMAGE.match(key))]
-    versions.sort(
-        key=functools.cmp_to_key(lambda a, b: compare(a.replace("-", "~"), b.replace("-", "~")))
+    image = images[0]
+    with tempfile.TemporaryDirectory() as tmp:
+        work = Path(tmp)
+        entry = work / image.name.replace(".img.xz", ".imager.json")
+        entry.write_text(json.dumps(imager_entry(image), indent=2) + "\n")
+        # The image last, so that a listing never shows it without its checksum.
+        for path in sorted([*files, entry], key=lambda f: f.name.endswith(".img.xz")):
+            bucket.put(path, f"images/{path.name}")
+        # Image names spell the version's "~" as "-" (packaging/image/build.sh); NOCS
+        # versions have no Debian revision, so every "-" was a "~".
+        versions = [m[1] for key in bucket.list("images/") if (m := _IMAGE.match(key))]
+        versions.sort(
+            key=functools.cmp_to_key(lambda a, b: compare(a.replace("-", "~"), b.replace("-", "~")))
+        )
+        for version in versions[:-keep]:
+            for key in bucket.list(f"images/nocs-{version}-pi5-arm64."):
+                bucket.delete(key)
+        write_imager_list(bucket, work, versions[-keep:], url)
+
+
+def write_imager_list(bucket: Bucket, work: Path, versions: list[str], url: str) -> None:
+    """Imager's repository JSON: the images kept, newest first."""
+    url = url.rstrip("/")
+    entries: list[dict[str, object]] = []
+    for version in reversed(versions):
+        name = f"nocs-{version}-pi5-arm64"
+        if f"images/{name}.imager.json" not in bucket.list(f"images/{name}.imager.json"):
+            continue  # published before Imager's list existed
+        bucket.get(f"images/{name}.imager.json", work / "entry.json")
+        entry = json.loads((work / "entry.json").read_text())
+        entries.append(
+            {
+                "name": entry.pop("name"),
+                "description": entry.pop("description"),
+                "icon": f"{url}/images/{IMAGER_ICON.name}",
+                "url": f"{url}/images/{name}.img.xz",
+                **entry,
+            }
+        )
+    listing = work / "rpi-imager.json"
+    listing.write_text(
+        json.dumps({"imager": {"devices": [IMAGER_DEVICE]}, "os_list": entries}, indent=2) + "\n"
     )
-    for version in versions[:-keep]:
-        for key in bucket.list(f"images/nocs-{version}-pi5-arm64."):
-            bucket.delete(key)
+    bucket.put(IMAGER_ICON, f"images/{IMAGER_ICON.name}")
+    bucket.put(listing, IMAGER_LIST)
 
 
 def main() -> None:
@@ -298,6 +377,7 @@ def main() -> None:
     debs.add_argument("files", nargs="+", type=Path)
     image = commands.add_parser("image", help="upload an image with its checksum and manifest")
     image.add_argument("--keep", type=int, default=2)
+    image.add_argument("--url", required=True, help="the repository's public address")
     image.add_argument("files", nargs="+", type=Path)
     args = parser.parse_args()
 
@@ -309,7 +389,7 @@ def main() -> None:
             suites[name] = int(keep or 5)
         publish_debs(bucket, suites, args.files)
     else:
-        publish_image(bucket, args.keep, args.files)
+        publish_image(bucket, args.keep, args.files, args.url)
 
 
 if __name__ == "__main__":

@@ -17,15 +17,22 @@ computer is needed at the telescope.
 
 ## 1. Write the image
 
-1. Download `nocs-<version>-pi5-arm64.img.xz` and its `.sha256` from the release
-   page.
-2. Open [Raspberry Pi Imager](https://www.raspberrypi.com/software/), choose
-   **Raspberry Pi 5**, then **Use custom** and the `.img.xz` file, and your card or
-   SSD.
-3. Optional, under **Edit settings**: your home Wi-Fi (the box joins it whenever it
-   is in range), a host name, and a public SSH key. NOCS does not need any of them.
+1. Open [Raspberry Pi Imager](https://www.raspberrypi.com/software/) (2.0 or
+   later). Under **App options**, set **Content repository** to **Use custom URL**:
+   `https://apt.nocs.app/images/rpi-imager.json`. Imager reloads with NOCS's
+   images.
+2. Choose **Raspberry Pi 5**, the newest **NOCS**, and your card or SSD. Imager
+   downloads the image and checks it.
+3. Optional, under **Customisation**: your home Wi-Fi (the box joins it whenever it
+   is in range), a host name, and a user with your public SSH key (public-key
+   authentication only). NOCS does not need any of them; without a user there is no
+   SSH.
 4. Write. To boot from a USB SSD, write the SSD and take the microSD card out of the
    Pi.
+
+The image is also on the release page, `nocs-<version>-pi5-arm64.img.xz` with its
+`.sha256`. Imager writes a file picked with **Use custom** but offers no
+customisation for it.
 
 ## 2. First boot
 
