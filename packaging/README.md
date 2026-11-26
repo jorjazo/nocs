@@ -132,7 +132,8 @@ microSD card and from a USB SSD, is checked by hand ([ADR 0026](../docs/adr/0026
 [ADR 0035](../docs/adr/0035-apt-repository-and-release-publishing.md): a signed
 repository on Cloudflare R2, behind the domain in the repository variable
 `NOCS_APT_URL`, with the suites `testing` (every push to `main`, the last 5 builds)
-and `stable` (tags, the last 3), and the release images in `images/` (the last 2).
+and `stable` (tags, the last 3), the release images in `images/` (the last 2), and
+one image built from `main` in `images/testing/`, only when asked for.
 
 ```sh
 packaging/repo/test.sh          # publish throwaway packages to a directory; apt installs them
@@ -146,7 +147,12 @@ workflow runs it after the install tests (`publish.py debs`), the Image workflow
 for tags (`publish.py image`, which also writes Imager's list of the images kept),
 and both add their files to the tag's GitHub release. The Image workflow run by hand
 with a release's tag (`republish`) publishes that release's image again without
-building it: `gh workflow run image.yml -f republish=v0.1.0rc6`.
+building it: `gh workflow run image.yml -f republish=v0.1.0rc6`. Run by hand on
+`main` with `testing` (in Actions, or `gh workflow run image.yml --ref main -f
+testing=true`), it builds the image from `main`'s head, boots it as always and
+publishes it to `images/testing/` (`publish.py image --testing`), replacing the one
+there; Imager's list shows it after the releases, as "NOCS <version> (testing)". It
+follows the `testing` suite. Pushes to `main` that build the image do not publish it.
 
 To switch it on, the repository needs:
 

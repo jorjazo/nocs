@@ -2,7 +2,8 @@
 # Check publish.py against a local directory: publish small throwaway packages to
 # testing and stable with a throwaway key, then let apt on Ubuntu 26.04 trust,
 # list and install them; older versions beyond what a suite keeps leave the pool.
-# Throwaway images too, and Raspberry Pi Imager's list of them.
+# Throwaway images too (releases and main's testing one), and Raspberry Pi Imager's
+# list of them.
 #
 #   packaging/repo/test.sh
 set -euo pipefail
@@ -60,6 +61,24 @@ for version in 0.1.0-rc1 0.1.0 0.0.9; do
     sha256sum "$image" > "$image.sha256"
     publish image --keep 2 --url https://apt.example/ "$image" "$image.sha256"
 done
+# main's testing image: only the newest stays, and the releases keep theirs.
+for version in 0.1.0.git4.gd 0.1.0.git5.ge; do
+    image=$work/nocs-$version-pi5-arm64.img.xz
+    echo "$version" | xz > "$image"
+    sha256sum "$image" > "$image.sha256"
+    publish image --testing --url https://apt.example/ "$image" "$image.sha256"
+done
+testing=$(cd "$repo/images/testing" && ls)
+[[ $testing == $'nocs-0.1.0.git5.ge-pi5-arm64.imager.json\nnocs-0.1.0.git5.ge-pi5-arm64.img.xz\nnocs-0.1.0.git5.ge-pi5-arm64.img.xz.sha256' ]] \
+    || fail "testing images kept: $testing"
+python3 - "$repo/images/rpi-imager.json" <<'IMAGER' || fail "Imager's list: $(cat "$repo/images/rpi-imager.json")"
+import json, sys
+names = [entry["name"] for entry in json.load(open(sys.argv[1]))["os_list"]]
+assert names == ["NOCS 0.1.0", "NOCS 0.1.0rc1", "NOCS 0.1.0.git5.ge (testing)"], names
+IMAGER
+# A release published after it keeps it in Imager's list.
+image=$work/nocs-0.1.0-pi5-arm64.img.xz
+publish image --keep 2 --url https://apt.example/ "$image" "$image.sha256"
 images=$(cd "$repo/images" && ls nocs-*-pi5-arm64.*)
 [[ $images == $'nocs-0.1.0-pi5-arm64.imager.json\nnocs-0.1.0-pi5-arm64.img.xz\nnocs-0.1.0-pi5-arm64.img.xz.sha256\nnocs-0.1.0-rc1-pi5-arm64.imager.json\nnocs-0.1.0-rc1-pi5-arm64.img.xz\nnocs-0.1.0-rc1-pi5-arm64.img.xz.sha256' ]] \
     || fail "images kept: $images"
@@ -69,8 +88,11 @@ python3 - "$repo/images/rpi-imager.json" "$(echo 0.1.0 | sha256sum | cut -d' ' -
 import json, sys
 listing = json.load(open(sys.argv[1]))
 assert listing["imager"]["devices"][0]["tags"] == ["pi5-64bit"]
-first, second = listing["os_list"]
+first, second, testing = listing["os_list"]
 assert [first["name"], second["name"]] == ["NOCS 0.1.0", "NOCS 0.1.0rc1"]
+assert testing["name"] == "NOCS 0.1.0.git5.ge (testing)"
+assert testing["url"] == "https://apt.example/images/testing/nocs-0.1.0.git5.ge-pi5-arm64.img.xz"
+assert testing["init_format"] == "cloudinit"
 assert first["url"] == "https://apt.example/images/nocs-0.1.0-pi5-arm64.img.xz"
 assert first["icon"] == "https://apt.example/images/nocs-icon.svg"
 assert first["init_format"] == "cloudinit" and first["devices"] == ["pi5-64bit"]

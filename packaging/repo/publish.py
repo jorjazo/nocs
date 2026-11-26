@@ -3,6 +3,7 @@
 
     publish.py debs --suite testing:5 [--suite stable:3] <.deb>...
     publish.py image --keep 2 --url <repository URL> <image.img.xz> [its .sha256 and .manifest.txt]
+    publish.py image --testing --url <repository URL> <image.img.xz> [...]
 
 The repository is a bucket (Cloudflare R2, through the S3 API) or, for tests, a
 local directory (``--local <dir>``). Each suite's ``Packages`` files are its state:
@@ -16,7 +17,9 @@ OpenPGP key without a passphrase, to sign. Standard library only, plus ``dpkg``,
 ``gpg`` and the ``aws`` command line.
 
 ``image`` also lists the images kept in ``images/rpi-imager.json``, a repository
-for Raspberry Pi Imager (its customisation needs one).
+for Raspberry Pi Imager (its customisation needs one). With ``--testing`` the image
+is a build of main's: it replaces the one in ``images/testing/``, listed after the
+releases.
 """
 
 from __future__ import annotations
@@ -273,6 +276,7 @@ class Signer:
 # -- images --------------------------------------------------------------------------
 
 _IMAGE = re.compile(r"^images/nocs-(.+)-pi5-arm64\.img\.xz$")
+_TESTING_IMAGE = re.compile(r"^images/testing/(nocs-.+-pi5-arm64)\.img\.xz$")
 IMAGER_LIST = "images/rpi-imager.json"
 IMAGER_ICON = Path(__file__).with_name("nocs-icon.svg")
 # Raspberry Pi Imager's own profile of the board, from its repository JSON
@@ -286,9 +290,10 @@ IMAGER_DEVICE = {
     "matching_type": "exclusive",
     "capabilities": [],
 }
+DESCRIPTION = "Astrophotography from a phone: Ubuntu Server with NOCS, INDI and PHD2"
 
 
-def imager_entry(image: Path) -> dict[str, object]:
+def imager_entry(image: Path, testing: bool) -> dict[str, object]:
     """The image's entry in Raspberry Pi Imager's repository JSON, but for its URL.
 
     Imager offers its customisation (Wi-Fi, host name, user, SSH key) only for
@@ -302,9 +307,10 @@ def imager_entry(image: Path) -> dict[str, object]:
             extract_size += len(chunk)
     with image.open("rb") as data:
         downloaded = hashlib.file_digest(data, "sha256")
+    name = f"NOCS {version.replace('-', '')}"
     return {
-        "name": f"NOCS {version.replace('-', '')}",
-        "description": "Astrophotography from a phone: Ubuntu Server with NOCS, INDI and PHD2",
+        "name": f"{name} (testing)" if testing else name,
+        "description": f"A build of main, not a release. {DESCRIPTION}" if testing else DESCRIPTION,
         "extract_size": extract_size,
         "extract_sha256": extracted.hexdigest(),
         "image_download_size": image.stat().st_size,
@@ -316,47 +322,75 @@ def imager_entry(image: Path) -> dict[str, object]:
     }
 
 
-def publish_image(bucket: Bucket, keep: int, files: list[Path], url: str) -> None:
+def publish_image(bucket: Bucket, keep: int, files: list[Path], url: str, testing: bool) -> None:
+    """A release's image into ``images/`` (the newest ``keep`` stay), or with
+    ``testing`` a build of main's into ``images/testing/`` (only it stays)."""
     print("Uploading the image")
     images = [f for f in files if f.name.endswith(".img.xz")]
     if len(images) != 1:
         sys.exit("give exactly one .img.xz")
     image = images[0]
+    prefix = "images/testing/" if testing else "images/"
     with tempfile.TemporaryDirectory() as tmp:
         work = Path(tmp)
         entry = work / image.name.replace(".img.xz", ".imager.json")
-        entry.write_text(json.dumps(imager_entry(image), indent=2) + "\n")
+        entry.write_text(json.dumps(imager_entry(image, testing), indent=2) + "\n")
         # The image last, so that a listing never shows it without its checksum.
         for path in sorted([*files, entry], key=lambda f: f.name.endswith(".img.xz")):
-            bucket.put(path, f"images/{path.name}")
-        # Image names spell the version's "~" as "-" (packaging/image/build.sh); NOCS
-        # versions have no Debian revision, so every "-" was a "~".
-        versions = [m[1] for key in bucket.list("images/") if (m := _IMAGE.match(key))]
-        versions.sort(
-            key=functools.cmp_to_key(lambda a, b: compare(a.replace("-", "~"), b.replace("-", "~")))
-        )
-        for version in versions[:-keep]:
-            for key in bucket.list(f"images/nocs-{version}-pi5-arm64."):
-                bucket.delete(key)
-        write_imager_list(bucket, work, versions[-keep:], url)
+            bucket.put(path, f"{prefix}{path.name}")
+        releases = release_versions(bucket)
+        name = image.name.removesuffix(".img.xz")
+        tested = name if testing else testing_name(bucket)
+        write_imager_list(bucket, work, releases[-keep:], tested, url)
+        # Imager's list first, so that it never names a deleted image.
+        if testing:
+            for key in bucket.list("images/testing/"):
+                if not key.startswith(f"images/testing/{name}."):
+                    bucket.delete(key)
+        else:
+            for version in releases[:-keep]:
+                for key in bucket.list(f"images/nocs-{version}-pi5-arm64."):
+                    bucket.delete(key)
 
 
-def write_imager_list(bucket: Bucket, work: Path, versions: list[str], url: str) -> None:
-    """Imager's repository JSON: the images kept, newest first."""
+def release_versions(bucket: Bucket) -> list[str]:
+    """The versions of the release images in ``images/``, oldest first."""
+    # Image names spell the version's "~" as "-" (packaging/image/build.sh); NOCS
+    # versions have no Debian revision, so every "-" was a "~".
+    versions = [m[1] for key in bucket.list("images/") if (m := _IMAGE.match(key))]
+    return sorted(
+        versions,
+        key=functools.cmp_to_key(lambda a, b: compare(a.replace("-", "~"), b.replace("-", "~"))),
+    )
+
+
+def testing_name(bucket: Bucket) -> str | None:
+    """The name of main's image in ``images/testing/`` (without .img.xz), if any."""
+    names = [m[1] for key in bucket.list("images/testing/") if (m := _TESTING_IMAGE.match(key))]
+    return names[-1] if names else None
+
+
+def write_imager_list(
+    bucket: Bucket, work: Path, versions: list[str], testing: str | None, url: str
+) -> None:
+    """Imager's repository JSON: the release images kept, newest first, then main's
+    testing image (its name), if there is one."""
     url = url.rstrip("/")
+    names = [f"images/nocs-{version}-pi5-arm64" for version in reversed(versions)]
+    if testing is not None:
+        names.append(f"images/testing/{testing}")
     entries: list[dict[str, object]] = []
-    for version in reversed(versions):
-        name = f"nocs-{version}-pi5-arm64"
-        if f"images/{name}.imager.json" not in bucket.list(f"images/{name}.imager.json"):
+    for name in names:
+        if f"{name}.imager.json" not in bucket.list(f"{name}.imager.json"):
             continue  # published before Imager's list existed
-        bucket.get(f"images/{name}.imager.json", work / "entry.json")
+        bucket.get(f"{name}.imager.json", work / "entry.json")
         entry = json.loads((work / "entry.json").read_text())
         entries.append(
             {
                 "name": entry.pop("name"),
                 "description": entry.pop("description"),
                 "icon": f"{url}/images/{IMAGER_ICON.name}",
-                "url": f"{url}/images/{name}.img.xz",
+                "url": f"{url}/{name}.img.xz",
                 **entry,
             }
         )
@@ -378,6 +412,9 @@ def main() -> None:
     image = commands.add_parser("image", help="upload an image with its checksum and manifest")
     image.add_argument("--keep", type=int, default=2)
     image.add_argument("--url", required=True, help="the repository's public address")
+    image.add_argument(
+        "--testing", action="store_true", help="a build of main's, into images/testing/"
+    )
     image.add_argument("files", nargs="+", type=Path)
     args = parser.parse_args()
 
@@ -389,7 +426,7 @@ def main() -> None:
             suites[name] = int(keep or 5)
         publish_debs(bucket, suites, args.files)
     else:
-        publish_image(bucket, args.keep, args.files, args.url)
+        publish_image(bucket, args.keep, args.files, args.url, args.testing)
 
 
 if __name__ == "__main__":
