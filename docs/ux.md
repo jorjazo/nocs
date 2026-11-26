@@ -172,7 +172,7 @@ Rig (2026-11-14):
   **Optics and devices** (Optical trains; Devices, with the INDI and PHD2 services and
   their restarts; without a profile, only the services), **Site** (Saved sites),
   **The box** (Status; Storage, with USB drives and file
-  sharing; Network; Updates) and **Settings** (Access; This screen, the language; the
+  sharing; Network; Tailscale; Updates) and **Settings** (Access; This screen, the language; the
   INDI properties as a row that leads to their screen). The theme is not repeated
   there: its button is in every screen's header.
 - Each section opens and closes on its own from its header (a button with a chevron
@@ -830,6 +830,18 @@ Appliance (phase 6):
   so when something does; a refusal offers "Install anyway"). After it: how many
   were installed, what is left (apt is asked again), and when Ubuntu asks for a
   restart, a banner with Restart. ASTAP is not an apt package and is not shown.
+- Rig's "Tailscale", in the box's group, for the owner where Tailscale runs: on the
+  tailnet, the box's address there (`http://<name>.<tailnet>.ts.net`, selectable), the
+  tailnet and a line saying whose devices pair without the passphrase (a warning
+  instead for a tagged box, which has no owner); off it, "Join a tailnet" where
+  nocs-system may (the appliance), then the sign-in link as a plain link (a new tab;
+  "New link" asks for another) until Tailscale says the box is on, or waits for an
+  admin's approval; "Leave the tailnet" with a second tap. On a PC it only shows
+  where the box is.
+- Pairing on a tailnet: when Tailscale says the device is the owner's, the pairing
+  screen says so under the device's name and offers "Pair with Tailscale" as the
+  primary button, with the passphrase below it ("Or with the passphrase") as the
+  secondary way. First run never offers it: the passphrase comes first.
 - Rig's "File sharing" (ADR 0039), under Storage, where nocs-system runs the share: a
   switch ("Share frames with computers", saying it is read-only and open to anyone on
   the network); while on, a chip with the computers connected, how to open it from

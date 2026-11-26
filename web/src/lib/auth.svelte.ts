@@ -1,7 +1,7 @@
 // Where this client stands with the server (ADR 0014): setup mode, unpaired,
 // observer or owner. The app shows first run, pairing or the screens from it.
 
-import { ApiError, getAuth, pair, revokeDevice, setUnauthorizedHandler, setUp } from "./api";
+import { ApiError, getAuth, pair, pairTailscale, revokeDevice, setUnauthorizedHandler, setUp } from "./api";
 import type { AuthStatus } from "./types";
 
 function asApiError(e: unknown): ApiError {
@@ -52,6 +52,12 @@ class Auth {
 
   async pair(passphrase: string, name: string): Promise<void> {
     await pair({ passphrase, name });
+    await this.refresh();
+  }
+
+  // Tailscale says this is the owner's device: no passphrase.
+  async pairTailscale(name: string): Promise<void> {
+    await pairTailscale({ name });
     await this.refresh();
   }
 

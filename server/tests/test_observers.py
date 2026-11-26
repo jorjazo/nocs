@@ -32,6 +32,14 @@ def full_state() -> dict[str, Json]:
             "joining": "Office",
             "last_join": {"ssid": "Home", "ok": True, "error": None, "at": None},
         },
+        "tailscale": {
+            "state": "running",
+            "auth_url": None,
+            "name": "nocs.tail-home.ts.net",
+            "tailnet": "owner@example.com",
+            "user": "owner@example.com",
+            "ips": ["100.101.102.103"],
+        },
         "indi": {
             "devices": {
                 "AM5": {"properties": {"GEOGRAPHIC_COORD": COORD, "EQUATORIAL_EOD_COORD": {}}},
@@ -81,6 +89,8 @@ def test_observers_get_no_location_or_networks() -> None:
         "messages": [{"device": "AM5", "timestamp": None, "text": "Slew complete"}],
     }
     assert view["clients"] == {"devices": [], "observers": 1}
+    assert view["tailscale"] is None
+    assert "tail-home" not in repr(view)
     assert "-30.03" not in repr(view)
     assert "Home" not in repr(view)
     assert "Pixel" not in repr(view)

@@ -1,5 +1,5 @@
 """Reboot, power off, rename and network the box through nocs-system (ADR 0027,
-ADR 0028), share its frames (ADR 0039); diagnostics."""
+ADR 0028), share its frames (ADR 0039), put it on a tailnet; diagnostics."""
 
 from __future__ import annotations
 
@@ -22,12 +22,13 @@ from nocs.api.schemas import (
     WifiNetwork,
 )
 from nocs.services.system import OperationUnavailableError, SystemBusyError, SystemService
+from nocs.services.tailscale import TailscaleService
 from nocs.system.client import HelperUnavailableError
 from nocs.system.network import check_password, check_ssid
 from nocs.system.protocol import HelperError, validate_hostname
 
 
-def system_router(system: Callable[[], SystemService]) -> APIRouter:
+def system_router(system: Callable[[], SystemService], tailscale: TailscaleService) -> APIRouter:
     router = APIRouter(prefix="/api/system")
 
     @router.post("/reboot", status_code=status.HTTP_204_NO_CONTENT)
@@ -129,6 +130,23 @@ def system_router(system: Callable[[], SystemService]) -> APIRouter:
         """Switch the read-only SMB share of the frames on or off."""
         with _system_errors():
             await system().share(request.on)
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    # -- Tailscale ----------------------------------------------------------------
+
+    @router.post("/tailscale/login", status_code=status.HTTP_204_NO_CONTENT)
+    async def tailscale_login() -> Response:  # pyright: ignore[reportUnusedFunction]
+        """Start joining a tailnet: the state gets the link where the owner signs in
+        (a few seconds; the box needs the internet)."""
+        with _system_errors():
+            await tailscale.login()
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    @router.post("/tailscale/logout", status_code=status.HTTP_204_NO_CONTENT)
+    async def tailscale_logout() -> Response:  # pyright: ignore[reportUnusedFunction]
+        """Take the box off its tailnet."""
+        with _system_errors():
+            await tailscale.logout()
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     @router.get("/diagnostics")

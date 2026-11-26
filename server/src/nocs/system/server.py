@@ -52,6 +52,7 @@ from nocs.system.protocol import (
     redact,
 )
 from nocs.system.share import Share, SharePaths
+from nocs.system.tailscale import Tailscale
 from nocs.system.updates import Updates
 
 log = logging.getLogger("nocs.system")
@@ -93,6 +94,7 @@ def load_config(path: Path, socket_path: Path = SOCKET) -> Config:
             network=Network() if "network" in enabled else None,
             updates=Updates() if "update" in enabled else None,
             share=_share(parser, path, user.pw_name) if "share" in enabled else None,
+            tailscale=Tailscale() if "tailscale" in enabled else None,
         ),
     )
 
@@ -131,6 +133,8 @@ class Helper:
                 tg.start_soon(self._config.context.updates.run)
             if self._config.context.share is not None:
                 tg.start_soon(self._config.context.share.run)
+            if self._config.context.tailscale is not None:
+                tg.start_soon(self._config.context.tailscale.run)
             await listener.serve(self._connection)
 
     async def reply(self, line: bytes) -> Message:

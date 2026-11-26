@@ -23,6 +23,7 @@ from nocs.system.network import Network
 from nocs.system.protocol import HelperError, Message, validate_hostname
 from nocs.system.share import UNITS as SHARE_UNITS
 from nocs.system.share import Share
+from nocs.system.tailscale import Tailscale
 from nocs.system.updates import Updates
 
 log = logging.getLogger("nocs.system")
@@ -47,6 +48,8 @@ class Context:
     """The updates' actor, where the update group is on (ADR 0025)."""
     share: Share | None = None
     """The SMB share, where the share group is on (ADR 0039)."""
+    tailscale: Tailscale | None = None
+    """Joining and leaving a tailnet, where the tailscale group is on."""
 
 
 type Operation = Callable[[Context, Message], Awaitable[Message]]
@@ -358,6 +361,23 @@ async def share_refresh(context: Context, args: Message) -> Message:
     return await _share(context).refresh(args)
 
 
+# -- Tailscale -------------------------------------------------------------------
+
+
+def _tailscale(context: Context) -> Tailscale:
+    if context.tailscale is None:
+        raise HelperError("disabled", "Tailscale is not NOCS's to run here")
+    return context.tailscale
+
+
+async def tailscale_login(context: Context, args: Message) -> Message:
+    return await _tailscale(context).login(args)
+
+
+async def tailscale_logout(context: Context, args: Message) -> Message:
+    return await _tailscale(context).logout(args)
+
+
 OPERATIONS: dict[str, Operation] = {
     "power.reboot": reboot,
     "power.poweroff": power_off,
@@ -379,4 +399,6 @@ OPERATIONS: dict[str, Operation] = {
     "share.status": share_status,
     "share.enable": share_enable,
     "share.refresh": share_refresh,
+    "tailscale.login": tailscale_login,
+    "tailscale.logout": tailscale_logout,
 }

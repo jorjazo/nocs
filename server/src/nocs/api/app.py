@@ -145,6 +145,7 @@ from nocs.services import watchdog
 from nocs.services.gps import GpsService, NoFixError
 from nocs.services.indi_bridge import IndiBridge, NotConnectedError
 from nocs.services.system import OperationUnavailableError, SystemService
+from nocs.services.tailscale import TailscaleService
 from nocs.services.timekeeping import TimeKeeper
 from nocs.sites import SiteService, SiteStore, known_zones
 from nocs.sky import Target as SkyTarget
@@ -193,6 +194,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
     sockets = Sockets(store)
     # Created in the lifespan: they publish to the store and spawn tasks on its loop.
     services = _Services()
+    tailscale = TailscaleService(store, lambda op, args: system().perform(op, args))
 
     def equipment() -> EquipmentService:
         assert services.equipment is not None
@@ -599,6 +601,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
         guiding_task = asyncio.create_task(services.guiding.run(), name="phd2")
         stacking_task = asyncio.create_task(services.stacking.run(), name="live-stack")
         system_task = asyncio.create_task(services.system.run(), name="nocs-system")
+        tailscale_task = asyncio.create_task(tailscale.run(), name="tailscale")
         time_keeper = TimeKeeper(
             services.clock,
             services.jobs,
@@ -642,6 +645,7 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
                 zones_task,
                 time_task,
                 system_task,
+                tailscale_task,
                 guiding_task,
             ):
                 background.cancel()
@@ -675,11 +679,11 @@ def create_app(settings: Settings, store: StateStore | None = None) -> FastAPI:
 
     app = FastAPI(title="NOCS", version=__version__, lifespan=lifespan)
     app.add_middleware(AuthMiddleware, auth=auth)
-    app.include_router(auth_router(auth, sockets))
+    app.include_router(auth_router(auth, sockets, tailscale))
     app.include_router(mount_router(mount, clock, sockets, guiding))
     app.include_router(power_router(power))
     app.include_router(guiding_router(guiding))
-    app.include_router(system_router(system))
+    app.include_router(system_router(system, tailscale))
     app.include_router(solver_router(pointing, centering, guiding))
     app.include_router(saved_frames_router(saved_frames))
     app.include_router(align_router(polar))

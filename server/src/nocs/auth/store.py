@@ -155,6 +155,14 @@ class AuthStore:
         await self._verify(passphrase)
         return self._pair(name)
 
+    async def pair_trusted(self, name: str) -> tuple[Device, str]:
+        """Pair a new device without the passphrase, which something else vouches for
+        (Tailscale: the owner's own device); only once a passphrase is set."""
+        name = check_name(name)
+        if self.setup_required:
+            raise SetupRequiredError
+        return self._pair(name)
+
     async def change_passphrase(self, current: str, new: str) -> None:
         new = check_passphrase(new)
         await self._verify(current)

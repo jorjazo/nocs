@@ -337,10 +337,17 @@ parks the mount. Observatory devices will plug into this later.
 - **First-run setup** sets an owner passphrase.
 - Clients **pair** once with the passphrase and receive a long-lived device
   token (an `HttpOnly` cookie); tokens can be listed and revoked.
+- On a tailnet, the owner's devices pair **without the passphrase**: nocsd asks
+  tailscaled who a client at a tailnet address is (`tailscale whois`), and pairs it
+  when that node belongs to the user who owns the box's node (neither node tagged)
+  and the request names the box by its tailnet name or address, which a page rebound
+  to the box's address cannot (ADR 0046). Only once a passphrase is set; other users
+  of the tailnet pair with the passphrase. The device is an ordinary paired device,
+  listed and revoked like the rest.
 - Optional **observer** role, off by default: read-only access without pairing
   for showing the night to others. Observers see only the Visitors view (the
   image, what it is of, how it was taken, the weather) and may download its
-  full-size JPEG, never a FITS. Their state has no site coordinates or Wi-Fi names
+  full-size JPEG, never a FITS. Their state has no site coordinates, Wi-Fi names or tailnet
   (ADR 0047), and the JPEG no location.
 - Commands and WebSockets are refused from other origins (CSRF).
 - Until HTTPS (phase 6) the web app runs without geolocation, offline
@@ -358,6 +365,13 @@ parks the mount. Observatory devices will plug into this later.
 - A station that stays connected but receives nothing for a minute, not even its
   gateway's answer to a ping, joins its network again: the Pi's Wi-Fi has stalled
   that way with NetworkManager still calling it connected. Wi-Fi power saving is off.
+- **Tailscale** for reaching the box from anywhere: the image installs it, and the
+  owner joins a tailnet from Rig (nocs-system runs `tailscale login
+  --accept-dns=false` and the app shows its sign-in link; the box needs the internet
+  then) or leaves it. nocsd reads `tailscale status` itself (no privileges needed), so
+  a PC where the owner ran `tailscale up` gets the same pairing. The firewall opens
+  Tailscale's UDP port 41641 for direct connections. nocsd serves plain HTTP on the
+  tailnet too (no `tailscale serve`).
 - Several NOCS boxes may share a network (two rigs at home): the host name and
   its mDNS name are configurable (a nocs-system operation), so each box is
   reachable as e.g. `nocs-west.local`. A pairing belongs to the name the client
@@ -379,7 +393,8 @@ parks the mount. Observatory devices will plug into this later.
 
 In rough order of expected value:
 
-1. Remote access outside the LAN (relay or VPN-style), with the same protocol.
+1. Remote access outside the LAN without Tailscale (a relay), with the same protocol;
+   Tailscale covers it today (§11).
 2. DSLR support polish (Canon via gphoto).
 3. EAA / live stacking.
 4. Observatory: roll-off roofs, domes, safety monitors, weather-driven

@@ -22,6 +22,7 @@ export const RIG_SECTIONS = [
   "system",
   "storage",
   "network",
+  "tailscale",
   "updates",
   "access",
   "screen",

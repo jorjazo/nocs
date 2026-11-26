@@ -36,6 +36,15 @@ answer "stay connected" when the phone asks.
 name it used: after a rename, open `http://<new name>.local` and pair it with your
 passphrase.
 
+**Tailscale gives no sign-in link.** The box needs the internet to join a tailnet:
+join your home Wi-Fi first (Rig → Network). Once joined, it stays on the tailnet
+wherever it has the internet; at a dark site without it, use the box's own Wi-Fi.
+
+**"Pair with Tailscale" does not show up.** Open the box by its tailnet address (the
+one Rig → Tailscale shows, or its `100.x` address), not `nocs.local`, from a device
+signed in to the same Tailscale account that put the box on the tailnet. A tagged
+box (Tailscale's ACL tags) has no owner: pair with the passphrase.
+
 **I forgot the box's Wi-Fi password.** Reach the box another way (your home Wi-Fi, if
 it knows it, or a network cable) and set a new one on Rig → Network → Access point.
 Otherwise, write the image again.

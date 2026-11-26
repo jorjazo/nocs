@@ -61,6 +61,7 @@ def test_setup_mode_allows_only_setup(client: TestClient) -> None:
         "role": None,
         "device": None,
         "observer": False,
+        "tailscale": None,
     }
     assert client.get("/api/health").status_code == 200
     response = client.get("/api/state")

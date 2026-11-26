@@ -22,6 +22,7 @@
   import AccessSection from "./rig/AccessSection.svelte";
   import DevicesSection from "./rig/DevicesSection.svelte";
   import NetworkSection from "./rig/NetworkSection.svelte";
+  import TailscaleSection from "./rig/TailscaleSection.svelte";
   import SiteSection from "./rig/SiteSection.svelte";
   import StorageSection from "./rig/StorageSection.svelte";
   import SystemSection from "./rig/SystemSection.svelte";
@@ -95,7 +96,10 @@
 
   // The box's group shows only where there is something of the box to show.
   const hasBox = $derived(
-    !!live.app.system || !!live.app.storage || !!live.app.network || (auth.owner && !!live.app.updates),
+    !!live.app.system ||
+      !!live.app.storage ||
+      !!live.app.network ||
+      (auth.owner && (!!live.app.updates || !!live.app.tailscale)),
   );
 
   // #/rig/<section> opens that section and scrolls to it, once the state is in.
@@ -160,6 +164,7 @@
       <SystemSection />
       <StorageSection />
       <NetworkSection />
+      <TailscaleSection />
       <UpdatesSection />
     {/snippet}
     {@render group("box", t.rig.groups.box, body)}
