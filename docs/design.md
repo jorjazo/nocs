@@ -353,6 +353,9 @@ parks the mount. Observatory devices will plug into this later.
 
 - First boot: access point `NOCS-xxxx` with a printed default password; the
   web app is reachable at a fixed address and at `nocs.local` (mDNS).
+- Raspberry Pi Imager's customisation (home Wi-Fi, host name, user and SSH key)
+  is applied by cloud-init at the first boot only; then cloud-init is turned off,
+  and the network and the name are NOCS's.
 - Station mode to join home Wi-Fi; Ethernet supported.
 - If the station network is lost, fall back to access point automatically.
 - A station that stays connected but receives nothing for a minute, not even its

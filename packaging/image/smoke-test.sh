@@ -76,6 +76,10 @@ runuser -u nocs -- /opt/nocs/venv/bin/nocs-system call hello | grep -q '"time.se
 runuser -u nocs -- /opt/nocs/venv/bin/nocs-system call share.status | grep -q '"on": false' \
     || fail "nocs-system does not run the SMB share"
 [[ ! -e /snap ]] && ! command -v snap >/dev/null || fail "snapd is still there"
+# cloud-init's first boot (masked here) is still to come: cloud-init stays on until then.
+[[ $(systemctl is-enabled nocs-cloud-init-off.service) == enabled ]] \
+    || fail "nothing turns cloud-init off after the first boot"
+[[ ! -e /etc/cloud/cloud-init.disabled ]] || fail "cloud-init is off before the first boot"
 echo PASS
 CHECK
 

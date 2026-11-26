@@ -120,7 +120,10 @@ driver started through the FIFO, PHD2 and D50. The outputs are
 in it. Raspberry Pi Imager 2 customises it (Wi-Fi, user, SSH key, applied by
 cloud-init at first boot) only from a repository that lists it with its
 `init_format`: `publish.py image` keeps one, `images/rpi-imager.json` (a file picked
-with "Use custom" is written as it is); booting it on a Pi 5, from a
+with "Use custom" is written as it is). `nocs-appliance` then turns cloud-init off
+once its first boot is done (`nocs-cloud-init-off.service`): at later boots it would
+put Imager's host name back after a rename from NOCS. A new `instance-id` in the
+boot partition's `meta-data` no longer applies a new `user-data`. Booting it on a Pi 5, from a
 microSD card and from a USB SSD, is checked by hand ([ADR 0026](../docs/adr/0026-raspberry-pi-image.md)).
 
 ## The apt repository

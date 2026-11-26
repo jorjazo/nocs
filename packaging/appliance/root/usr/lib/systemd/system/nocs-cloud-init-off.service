@@ -1,0 +1,17 @@
+# cloud-init applies Raspberry Pi Imager's customisation (user, SSH key, Wi-Fi, host
+# name) at the box's first boot. After that the box is NOCS's: at later boots,
+# cloud-init would put Imager's host name back after a rename from NOCS, and its
+# manage_etc_hosts would point 127.0.1.1 at it again. Once the first boot is done,
+# this turns cloud-init off for good.
+[Unit]
+Description=Turn cloud-init off after the first boot
+After=cloud-final.service
+ConditionPathExists=/var/lib/cloud/instance/boot-finished
+ConditionPathExists=!/etc/cloud/cloud-init.disabled
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/touch /etc/cloud/cloud-init.disabled
+
+[Install]
+WantedBy=cloud-init.target

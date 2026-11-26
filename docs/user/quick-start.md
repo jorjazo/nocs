@@ -26,7 +26,9 @@ computer is needed at the telescope.
 3. Optional, under **Customisation**: your home Wi-Fi (the box joins it whenever it
    is in range), a host name, and a user with your public SSH key (public-key
    authentication only). NOCS does not need any of them; without a user there is no
-   SSH.
+   SSH. The user is an administrator: for `sudo`, give it a password or tick
+   passwordless sudo. These settings apply once, at the first boot: later, rename
+   the box and change its networks from NOCS.
 4. Write. To boot from a USB SSD, write the SSD and take the microSD card out of the
    Pi.
 
