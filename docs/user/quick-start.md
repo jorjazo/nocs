@@ -22,7 +22,8 @@ computer is needed at the telescope.
    `https://apt.nocs.app/images/rpi-imager.json`. Imager reloads with NOCS's
    images.
 2. Choose **Raspberry Pi 5**, the newest **NOCS**, and your card or SSD. Imager
-   downloads the image and checks it.
+   downloads the image and checks it. One marked **(testing)**, when listed, is a
+   build of the development version, not a release.
 3. Optional, under **Customisation**: your home Wi-Fi (the box joins it whenever it
    is in range), a host name, and a user with your public SSH key (public-key
    authentication only). NOCS does not need any of them; without a user there is no

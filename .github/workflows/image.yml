@@ -2,9 +2,11 @@ name: Image
 
 # Builds the Raspberry Pi 5 image on an arm64 runner and boots it in a container
 # (ADR 0026). Slow (the star database alone is ~900 MB): it runs when the image's
-# own files change, for tags, on demand, and on image-test/* branches. Run by hand
-# with a release's tag, it builds nothing: it publishes that release's image, already
-# on the repository, again (for what publishing adds, such as Imager's list).
+# own files change, for tags, on demand, and on image-test/* branches. Run by hand on
+# main with "testing", it publishes the image it builds to the repository's
+# images/testing/ (only the newest stays). Run by hand with a release's tag, it builds
+# nothing: it publishes that release's image, already on the repository, again (for
+# what publishing adds, such as Imager's list).
 on:
   push:
     branches: [main, "image-test/**"]
@@ -15,6 +17,10 @@ on:
       republish:
         description: "A release's tag (v0.1.0rc6) to publish its image again instead of building one"
         default: ""
+      testing:
+        description: "Publish the image built from main to the repository's testing images"
+        type: boolean
+        default: false
 
 jobs:
   pi5:
@@ -24,6 +30,11 @@ jobs:
     permissions:
       contents: write  # the GitHub release
     steps:
+      - name: Only main's builds are published to testing
+        if: inputs.testing && github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::run it on main to publish to testing (this is $GITHUB_REF)"
+          exit 1
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0  # the version counts commits
@@ -100,6 +111,20 @@ jobs:
           notes=$(gh release view "$GITHUB_REF_NAME" --json body --jq .body)
           gh release edit "$GITHUB_REF_NAME" --notes "$(printf '**Raspberry Pi 5 image:** %s (in Raspberry Pi Imager: App options, Content repository, %s)\n\n%s' \
             "$link" "$NOCS_APT_URL/images/rpi-imager.json" "$notes")"
+      - name: Publish main's image to testing
+        if: inputs.testing && vars.NOCS_APT_URL != ''
+        env:
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          NOCS_APT_URL: ${{ vars.NOCS_APT_URL }}
+        run: |
+          image=$(ls packaging/out/*.img.xz)
+          python3 packaging/repo/publish.py image --testing --keep 2 --url "$NOCS_APT_URL" \
+            "$image" "$image.sha256" packaging/out/*.manifest.txt
+          echo "**Raspberry Pi 5 image (testing):** $NOCS_APT_URL/images/testing/$(basename "$image")" \
+            >> "$GITHUB_STEP_SUMMARY"
 
   republish:
     if: ${{ inputs.republish && vars.NOCS_APT_URL != '' }}
