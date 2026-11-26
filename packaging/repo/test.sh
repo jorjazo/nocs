@@ -2,6 +2,7 @@
 # Check publish.py against a local directory: publish small throwaway packages to
 # testing and stable with a throwaway key, then let apt on Ubuntu 26.04 trust,
 # list and install them; older versions beyond what a suite keeps leave the pool.
+# Throwaway images too, and Raspberry Pi Imager's list of them.
 #
 #   packaging/repo/test.sh
 set -euo pipefail
@@ -51,16 +52,30 @@ grep -q 'nocs_0.1.0.git5.ge_amd64.deb' <<<"$pool" || fail "testing lost its newe
 grep -q 'nocs_0.1.0_amd64.deb' <<<"$pool" || fail "stable lost its release"
 ! grep -q 'git[1-3]\.' <<<"$pool" || fail "old testing builds were not pruned"
 
-# Images: the newest two stay, an rc sorts before its release.
+# Images: the newest two stay, an rc sorts before its release; Imager's list names
+# them, newest first, with the sizes and checksums of the image and of its contents.
 for version in 0.1.0-rc1 0.1.0 0.0.9; do
     image=$work/nocs-$version-pi5-arm64.img.xz
-    echo "$version" > "$image"
+    echo "$version" | xz > "$image"
     sha256sum "$image" > "$image.sha256"
-    publish image --keep 2 "$image" "$image.sha256"
+    publish image --keep 2 --url https://apt.example/ "$image" "$image.sha256"
 done
-images=$(ls "$repo/images")
-[[ $images == $'nocs-0.1.0-pi5-arm64.img.xz\nnocs-0.1.0-pi5-arm64.img.xz.sha256\nnocs-0.1.0-rc1-pi5-arm64.img.xz\nnocs-0.1.0-rc1-pi5-arm64.img.xz.sha256' ]] \
+images=$(cd "$repo/images" && ls nocs-*-pi5-arm64.*)
+[[ $images == $'nocs-0.1.0-pi5-arm64.imager.json\nnocs-0.1.0-pi5-arm64.img.xz\nnocs-0.1.0-pi5-arm64.img.xz.sha256\nnocs-0.1.0-rc1-pi5-arm64.imager.json\nnocs-0.1.0-rc1-pi5-arm64.img.xz\nnocs-0.1.0-rc1-pi5-arm64.img.xz.sha256' ]] \
     || fail "images kept: $images"
+[[ -f $repo/images/nocs-icon.svg ]] || fail "no icon for Imager"
+python3 - "$repo/images/rpi-imager.json" "$(echo 0.1.0 | sha256sum | cut -d' ' -f1)" <<'IMAGER' \
+    || fail "Imager's list: $(cat "$repo/images/rpi-imager.json")"
+import json, sys
+listing = json.load(open(sys.argv[1]))
+assert listing["imager"]["devices"][0]["tags"] == ["pi5-64bit"]
+first, second = listing["os_list"]
+assert [first["name"], second["name"]] == ["NOCS 0.1.0", "NOCS 0.1.0rc1"]
+assert first["url"] == "https://apt.example/images/nocs-0.1.0-pi5-arm64.img.xz"
+assert first["icon"] == "https://apt.example/images/nocs-icon.svg"
+assert first["init_format"] == "cloudinit" and first["devices"] == ["pi5-64bit"]
+assert first["extract_size"] == len("0.1.0\n") and first["extract_sha256"] == sys.argv[2]
+IMAGER
 
 docker run --rm -i -v "$repo:/repo:ro" -v "$work/keyring.asc:/usr/share/keyrings/nocs-test.asc:ro" \
     ubuntu:26.04 bash -s <<'CHECK' || fail "apt does not accept the repository"

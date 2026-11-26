@@ -117,8 +117,10 @@ empties the machine id and SSH host keys so each Pi makes its own.
 `systemd-nspawn` in a throwaway overlay and checks the services, nocsd's health, a
 driver started through the FIFO, PHD2 and D50. The outputs are
 `nocs-<version>-pi5-arm64.img.xz`, its SHA-256 and a manifest of every package
-in it. Write it with Raspberry Pi Imager ("Use custom"), whose customisation
-(Wi-Fi, SSH key) cloud-init applies at first boot; booting it on a Pi 5, from a
+in it. Raspberry Pi Imager 2 customises it (Wi-Fi, user, SSH key, applied by
+cloud-init at first boot) only from a repository that lists it with its
+`init_format`: `publish.py image` keeps one, `images/rpi-imager.json` (a file picked
+with "Use custom" is written as it is); booting it on a Pi 5, from a
 microSD card and from a USB SSD, is checked by hand ([ADR 0026](../docs/adr/0026-raspberry-pi-image.md)).
 
 ## The apt repository
@@ -137,7 +139,10 @@ packaging/repo/new-key.sh       # once: the signing key, into the secret APT_SIG
 files: it downloads those, never the packages, uploads new packages first and the
 signed indices last, and deletes what no suite names any more. The Packages
 workflow runs it after the install tests (`publish.py debs`), the Image workflow
-for tags (`publish.py image`), and both add their files to the tag's GitHub release.
+for tags (`publish.py image`, which also writes Imager's list of the images kept),
+and both add their files to the tag's GitHub release. The Image workflow run by hand
+with a release's tag (`republish`) publishes that release's image again without
+building it: `gh workflow run image.yml -f republish=v0.1.0rc6`.
 
 To switch it on, the repository needs:
 

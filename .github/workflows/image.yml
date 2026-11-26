@@ -2,16 +2,23 @@ name: Image
 
 # Builds the Raspberry Pi 5 image on an arm64 runner and boots it in a container
 # (ADR 0026). Slow (the star database alone is ~900 MB): it runs when the image's
-# own files change, for tags, on demand, and on image-test/* branches.
+# own files change, for tags, on demand, and on image-test/* branches. Run by hand
+# with a release's tag, it builds nothing: it publishes that release's image, already
+# on the repository, again (for what publishing adds, such as Imager's list).
 on:
   push:
     branches: [main, "image-test/**"]
     paths: [packaging/image/**, packaging/appliance/**, .github/workflows/image.yml]
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      republish:
+        description: "A release's tag (v0.1.0rc6) to publish its image again instead of building one"
+        default: ""
 
 jobs:
   pi5:
+    if: ${{ !inputs.republish }}
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 150
     permissions:
@@ -79,8 +86,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           image=$(ls packaging/out/*.img.xz)
-          python3 packaging/repo/publish.py image --keep 2 "$image" "$image.sha256" \
-            packaging/out/*.manifest.txt
+          python3 packaging/repo/publish.py image --keep 2 --url "$NOCS_APT_URL" \
+            "$image" "$image.sha256" packaging/out/*.manifest.txt
           prerelease=()
           [[ $GITHUB_REF_NAME == *rc* ]] && prerelease=(--prerelease)
           notes=(--generate-notes)
@@ -91,4 +98,29 @@ jobs:
           gh release upload "$GITHUB_REF_NAME" --clobber "$image.sha256" packaging/out/*.manifest.txt
           link="$NOCS_APT_URL/images/$(basename "$image")"
           notes=$(gh release view "$GITHUB_REF_NAME" --json body --jq .body)
-          gh release edit "$GITHUB_REF_NAME" --notes "$(printf '**Raspberry Pi 5 image:** %s\n\n%s' "$link" "$notes")"
+          gh release edit "$GITHUB_REF_NAME" --notes "$(printf '**Raspberry Pi 5 image:** %s (in Raspberry Pi Imager: App options, Content repository, %s)\n\n%s' \
+            "$link" "$NOCS_APT_URL/images/rpi-imager.json" "$notes")"
+
+  republish:
+    if: ${{ inputs.republish && vars.NOCS_APT_URL != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Publish the release's image again
+        env:
+          TAG: ${{ inputs.republish }}
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          NOCS_APT_URL: ${{ vars.NOCS_APT_URL }}
+        run: |
+          [[ $TAG =~ ^v[0-9]+\.[0-9]+\.[0-9]+(rc[0-9]+)?$ ]] || { echo "not a release tag: $TAG"; exit 1; }
+          version=${TAG#v}
+          name=nocs-${version/rc/-rc}-pi5-arm64  # as packaging/image/build.sh names it
+          mkdir out
+          for file in "$name.img.xz" "$name.img.xz.sha256" "$name.manifest.txt"; do
+            curl -fsSL -o "out/$file" "$NOCS_APT_URL/images/$file"
+          done
+          (cd out && sha256sum -c "$name.img.xz.sha256")
+          python3 packaging/repo/publish.py image --keep 2 --url "$NOCS_APT_URL" out/*
