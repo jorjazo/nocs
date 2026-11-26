@@ -9,12 +9,15 @@ set -e
 unit=nocs-firewall.service
 
 if [ "$1" = "configure" ] || [ "$1" = "abort-upgrade" ] || [ "$1" = "abort-deconfigure" ] || [ "$1" = "abort-remove" ]; then
-    deb-systemd-helper unmask "$unit" >/dev/null || true
-    if deb-systemd-helper --quiet was-enabled "$unit"; then
-        deb-systemd-helper enable "$unit" >/dev/null || true
-    else
-        deb-systemd-helper update-state "$unit" >/dev/null || true
-    fi
+    # nocs-cloud-init-off.service runs once, after cloud-init's first boot.
+    for enable in "$unit" nocs-cloud-init-off.service; do
+        deb-systemd-helper unmask "$enable" >/dev/null || true
+        if deb-systemd-helper --quiet was-enabled "$enable"; then
+            deb-systemd-helper enable "$enable" >/dev/null || true
+        else
+            deb-systemd-helper update-state "$enable" >/dev/null || true
+        fi
+    done
 fi
 
 # Samba's own services stay off: NOCS runs smbd as nocs-share.service, only while the
