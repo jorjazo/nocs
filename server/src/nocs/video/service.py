@@ -31,6 +31,7 @@ import logging
 import os
 import re
 import struct
+import time
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, replace
@@ -40,7 +41,7 @@ from typing import Any, cast
 
 import anyio
 
-from nocs.devices import Camera, DeviceError, Frame
+from nocs.devices import Camera, CameraLinkError, DeviceError, Frame
 from nocs.devices.camera import Recording, Region
 from nocs.equipment import Role
 from nocs.equipment.profiles import write_atomic
@@ -71,6 +72,10 @@ CROP_WAIT = 5.0
 exposure)."""
 STOPPED_AFTER = 3.0
 """Seconds the driver may say it does not stream before the video fails."""
+SILENT_AFTER = 10.0
+"""Seconds without a frame (beyond the exposure) before the video fails: a driver can
+say it streams while the camera sends nothing (a ZWO camera the Pi's USB cannot power
+keeps being reset)."""
 BAD_FRAMES = 20
 """Frames in a row that cannot be shown before it is logged."""
 BANDWIDTH = 90.0
@@ -126,6 +131,11 @@ class _Recording:
     """``frame_bytes`` comes from the file's header."""
     written: int = 0
     size: int = 0
+
+
+def silent(heard: float, now: float, exposure: float) -> bool:
+    """No frame since ``heard`` (the stream's start or its last frame) for too long."""
+    return now - heard > SILENT_AFTER + exposure
 
 
 def fit_region(region: Region, sensor_width: int, sensor_height: int) -> Region:
@@ -219,6 +229,8 @@ class VideoService:
         self._recordings: list[dict[str, Json]] = []
         self._error: str | None = None
         self._published: dict[str, Json] | None = None
+        self._heard = 0.0
+        """``time.monotonic()`` of the stream's start or its last frame."""
 
     async def start(self) -> None:
         """Read the recordings listed before (blocks on the card: in a thread)."""
@@ -311,6 +323,8 @@ class VideoService:
             self._restart.set()
             return
         if settings.exposure != previous.exposure:
+            # Frames of the exposure before may still be on their way.
+            self._heard = time.monotonic()
             await camera.set_stream_exposure(settings.exposure)
         if settings.gain is not None and settings.gain != previous.gain:
             await camera.set_gain(settings.gain)
@@ -508,6 +522,7 @@ class VideoService:
         self._rendered = None
         self._jpeg = None
         await camera.start_stream()
+        self._heard = time.monotonic()
         if settings.region is not None:
             await self._crop(camera, settings.region)
         return settings
@@ -545,6 +560,7 @@ class VideoService:
             return
         if size is None:
             return
+        self._heard = time.monotonic()
         self._latest = (frame.data, size.width, size.height)
         self._arrived.set()
 
@@ -576,13 +592,16 @@ class VideoService:
             event.set()
 
     async def _stats(self) -> None:
-        """Publish the frame rate; raises when the camera goes or stops streaming."""
+        """Publish the frame rate; raises when the camera goes, stops streaming or sends
+        no frames."""
         quiet = 0
         while True:
             camera = self._camera()
             quiet = 0 if camera.streaming else quiet + 1
             if quiet * STATS_PERIOD > STOPPED_AFTER:
-                raise DeviceError(f"{camera.name} stopped streaming")
+                raise CameraLinkError(f"{camera.name} stopped streaming")
+            if silent(self._heard, time.monotonic(), self._settings.exposure):
+                raise CameraLinkError(f"{camera.name} sent no frame for {SILENT_AFTER:g} s")
             self._fps = camera.stream_fps
             self._publish()
             await asyncio.sleep(STATS_PERIOD)

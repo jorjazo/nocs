@@ -11,6 +11,7 @@
   import ScreenHeader from "../components/ScreenHeader.svelte";
   import Section from "../components/Section.svelte";
   import SegmentedControl from "../components/SegmentedControl.svelte";
+  import UsbPowerNotice from "../components/UsbPowerNotice.svelte";
   import { connectProfile, disconnectEquipment, getProfile } from "../lib/api";
   import { auth } from "../lib/auth.svelte";
   import { connectionTone, ROLES, roles } from "../lib/equipment";
@@ -229,6 +230,7 @@
         {#if equipment.error || actionError}
           <p class="error">{actionError || equipment.error}</p>
         {/if}
+        <UsbPowerNotice />
         {#if auth.owner && profileId !== null}
           {@const id = profileId}
           <div class="buttons">

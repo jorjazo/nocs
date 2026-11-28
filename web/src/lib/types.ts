@@ -207,6 +207,7 @@ export type {
   UnmountedDrive,
   UpdatesState,
   UpgradablePackage,
+  UsbPower,
   WeatherState,
   WifiCountry,
   WifiNetwork,

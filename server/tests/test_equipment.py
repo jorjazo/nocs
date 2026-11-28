@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 from fakes import FakeClient, driver_info, number_property, switch_property
+from usbtree import device, pi
 
 from nocs.devices import DeviceInterface, DeviceUnresponsive, Focuser
 from nocs.devices import base as devices_base
@@ -19,6 +20,7 @@ from nocs.equipment import (
     Role,
 )
 from nocs.equipment import service as service_module
+from nocs.equipment.usbpower import UsbPaths
 from nocs.indi import IndiClient, PropertyState
 from nocs.indi.drivers import DriverControlError, DriverFifo
 from nocs.state import Json, StateStore
@@ -155,8 +157,12 @@ async def make_service(
 ) -> AsyncIterator[Factory]:
     services: list[EquipmentService] = []
 
-    def make(fifo: DriverFifo | None, driver_timeout: float = 1.0) -> EquipmentService:
-        service = EquipmentService(store, profiles, bridge, fifo, driver_timeout=driver_timeout)
+    def make(
+        fifo: DriverFifo | None, driver_timeout: float = 1.0, usb_paths: UsbPaths | None = None
+    ) -> EquipmentService:
+        service = EquipmentService(
+            store, profiles, bridge, fifo, driver_timeout=driver_timeout, usb_paths=usb_paths
+        )
         services.append(service)
         return service
 
@@ -583,3 +589,23 @@ async def test_a_profile_connecting_while_listing_keeps_the_driver(
     service.disconnect()
     await until(store, lambda: equipment(store, "connection") == "disconnected")
     assert fifo.commands == [("start", POWER_DRIVER), ("stop", POWER_DRIVER)]
+
+
+async def test_connecting_says_when_the_pis_usb_ports_cannot_power_a_camera(
+    make_service: Factory, store: StateStore, fifo: FakeFifo, tmp_path: Path
+) -> None:
+    paths = pi(tmp_path / "pi")
+    device(paths, "3-1", product="ASI432MM", vendor="03c3", draw=400)
+    service = make_service(fifo, usb_paths=paths)
+    assert equipment(store, "usb_power") is None
+    service.connect("rig")
+    await connected(store)
+    assert equipment(store, "usb_power") == {
+        "limit": 600,
+        "supply": 3000,
+        "draw": 400,
+        "cameras": ["ASI432MM"],
+    }
+    service.disconnect()
+    await until(store, lambda: equipment(store, "connection") == "disconnected")
+    assert equipment(store, "usb_power") is None

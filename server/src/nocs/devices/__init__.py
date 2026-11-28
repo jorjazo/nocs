@@ -1,6 +1,7 @@
 """Typed device facades (camera, mount, focuser, filter wheel, power box, weather sensor)."""
 
 from nocs.devices.base import (
+    CameraLinkError,
     Device,
     DeviceError,
     DeviceInterface,
@@ -30,6 +31,7 @@ __all__ = [
     "STOPPED",
     "AltitudeLimits",
     "Camera",
+    "CameraLinkError",
     "Coordinates",
     "Device",
     "DeviceError",

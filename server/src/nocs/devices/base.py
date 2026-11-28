@@ -78,6 +78,14 @@ class DeviceError(Exception):
     """A device rejected a command, is missing a property, or went away."""
 
 
+class CameraLinkError(DeviceError):
+    """A camera that sends no image: an exposure the driver gave up on, or a video
+    stream without frames. On a Raspberry Pi it is most often its USB (power, port,
+    cable): jobs that fail with it say so (``fault``)."""
+
+    fault = "camera_link"
+
+
 class DeviceUnresponsive(DeviceError):
     """A device stopped answering: silent or past a command's deadline, it did not
     answer a probe either (ADR 0030)."""

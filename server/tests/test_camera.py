@@ -6,7 +6,7 @@ from collections.abc import Mapping
 import pytest
 from fakes import FakeClient, number_property, switch_property
 
-from nocs.devices import Camera, DeviceError, DeviceUnresponsive
+from nocs.devices import Camera, CameraLinkError, DeviceError, DeviceUnresponsive
 from nocs.devices import base as devices_base
 from nocs.devices.camera import Region
 from nocs.indi import Permission, Property, PropertyState, PropertyType
@@ -194,6 +194,31 @@ async def test_a_camera_that_hangs_mid_exposure_is_noticed_before_its_end(
     camera = Camera(client, "Cam", images=camera_client())
     with pytest.raises(DeviceUnresponsive, match="Cam is not answering"):
         await asyncio.wait_for(camera.expose(60), 1)
+
+
+@pytest.mark.parametrize(
+    ("message", "link"),
+    [
+        ("Failed to get image data", True),
+        ("Requested exposure value (900) seconds out of bounds [0.000032, 600]", False),
+        ("Cannot start exposure while streaming is active.", False),
+    ],
+)
+async def test_a_failed_exposure_says_whether_the_camera_sent_nothing(
+    message: str, link: bool
+) -> None:
+    client = camera_client()
+
+    def respond(device: str, name: str, values: Mapping[str, str | float | bool]) -> None:
+        if name == "CCD_EXPOSURE":
+            loop = asyncio.get_running_loop()
+            loop.call_soon(client.update, "Cam", "CCD_EXPOSURE", PropertyState.ALERT, None, message)
+
+    client.responder = respond
+    camera = Camera(client, "Cam", images=camera_client())
+    with pytest.raises(DeviceError, match="Cam exposure failed") as raised:
+        await asyncio.wait_for(camera.expose(1), 1)
+    assert isinstance(raised.value, CameraLinkError) is link
 
 
 async def test_driver_saves_the_image_itself() -> None:

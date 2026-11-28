@@ -708,6 +708,7 @@ export const en = {
     tracking: "Tracking",
     status: {
       streaming: "Streaming",
+      waiting: "Waiting for frames",
       starting: "Starting",
       recording: "Recording",
       idle: "Stopped",
@@ -736,6 +737,24 @@ export const en = {
     cameraBusy: "The main camera is busy with something else: stop it there first.",
     needsStream: "Start the video to record.",
     failed: "The video stopped",
+    waiting: "Waiting for frames",
+    waitingBody: "The camera streams but has sent no frame yet.",
+  },
+  cameraLink: {
+    title: "The camera sends no image",
+    cause: "Most often it is the camera's USB:",
+    limited: (limit: string) =>
+      `The Raspberry Pi limits its USB ports to ${limit} in all, and the camera takes its power from them.`,
+    hub: "Plug the camera into a powered hub, such as a power box's, rather than the Raspberry Pi.",
+    cable: "Try another USB cable or another port.",
+    supply: "Give the Raspberry Pi a 5 A supply (the official 27 W one), plugged in without an adapter or extension.",
+    close: "OK",
+  },
+  usbPower: {
+    cameras: (limit: string, supply: string | null, cameras: string) =>
+      `The Raspberry Pi limits its USB ports to ${limit} in all${supply ? ` (its supply offered ${supply})` : ""}, and ${cameras} takes its power from them: it can drop out and send no image. Plug it into a powered hub, or give the Pi a 5 A supply.`,
+    draw: (limit: string, supply: string | null, draw: string) =>
+      `The Raspberry Pi limits its USB ports to ${limit} in all${supply ? ` (its supply offered ${supply})` : ""}, and what it powers asks for ${draw}: devices can drop out. Plug them into a powered hub, or give the Pi a 5 A supply.`,
   },
   clock: {
     behind: (by: string) => `The Pi's clock is ${by} behind: NOCS uses this device's time for frames and the mount.`,

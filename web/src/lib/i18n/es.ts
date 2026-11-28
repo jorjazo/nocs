@@ -688,6 +688,7 @@ export const es: Messages = {
     tracking: "Seguimiento",
     status: {
       streaming: "Transmitiendo",
+      waiting: "Esperando cuadros",
       starting: "Iniciando",
       recording: "Grabando",
       idle: "Detenido",
@@ -715,6 +716,24 @@ export const es: Messages = {
     cameraBusy: "La cámara principal está ocupada en otra cosa: detenla ahí primero.",
     needsStream: "Inicia el video para grabar.",
     failed: "El video se detuvo",
+    waiting: "Esperando cuadros",
+    waitingBody: "La cámara transmite pero todavía no envió ningún cuadro.",
+  },
+  cameraLink: {
+    title: "La cámara no envía imagen",
+    cause: "Lo más común es el USB de la cámara:",
+    limited: (limit: string) =>
+      `La Raspberry Pi limita sus puertos USB a ${limit} en total, y la cámara se alimenta de ellos.`,
+    hub: "Conecta la cámara a un hub alimentado, como el de una caja de alimentación, en vez de a la Raspberry Pi.",
+    cable: "Prueba otro cable USB u otro puerto.",
+    supply: "Dale a la Raspberry Pi una fuente de 5 A (la oficial de 27 W), enchufada sin adaptador ni alargador.",
+    close: "Entendido",
+  },
+  usbPower: {
+    cameras: (limit: string, supply: string | null, cameras: string) =>
+      `La Raspberry Pi limita sus puertos USB a ${limit} en total${supply ? ` (su fuente ofreció ${supply})` : ""}, y ${cameras} se alimenta de ellos: puede caerse y no enviar imagen. Conéctala a un hub alimentado o dale a la Pi una fuente de 5 A.`,
+    draw: (limit: string, supply: string | null, draw: string) =>
+      `La Raspberry Pi limita sus puertos USB a ${limit} en total${supply ? ` (su fuente ofreció ${supply})` : ""}, y lo que alimenta pide ${draw}: los dispositivos pueden caerse. Conéctalos a un hub alimentado o dale a la Pi una fuente de 5 A.`,
   },
   clock: {
     behind: (by) => `El reloj de la Pi va ${by} atrasado: NOCS usa la hora de este dispositivo para las tomas y la montura.`,

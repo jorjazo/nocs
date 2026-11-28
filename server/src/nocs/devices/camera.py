@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 
-from nocs.devices.base import Device, DeviceError, DeviceInterface, event_device
+from nocs.devices.base import CameraLinkError, Device, DeviceError, DeviceInterface, event_device
 from nocs.indi import (
     BlobElement,
     BlobMode,
@@ -24,6 +25,11 @@ from nocs.indi import (
 
 DOWNLOAD_MARGIN = 60.0
 """Extra time allowed beyond the exposure for readout and transfer."""
+
+
+REFUSED = re.compile(r"out of bounds|while stream|while record", re.IGNORECASE)
+"""INDI's CCD base class refusing an exposure (out of range, during a video): a
+request it turned down, not a camera that sent nothing."""
 
 
 class FrameType(StrEnum):
@@ -622,7 +628,10 @@ class Camera(Device):
                 ):
                     if prop.name == "CCD_EXPOSURE" and prop.state is PropertyState.ALERT:
                         detail = f": {prop.message}" if prop.message else ""
-                        result.set_exception(DeviceError(f"{self.name} exposure failed{detail}"))
+                        # INDI's CCD base refuses some exposures outright: not the camera.
+                        refused = REFUSED.search(prop.message or "") is not None
+                        error = DeviceError if refused else CameraLinkError
+                        result.set_exception(error(f"{self.name} exposure failed{detail}"))
                     elif (value := result_of(prop)) is not None:
                         result.set_result(value)
                 case ConnectionLost(reason=reason):

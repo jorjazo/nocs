@@ -34,6 +34,10 @@ Navigation follows the night, not the device tree.
   fixed, and has no button (ADR 0041).
 - A running sequence or plan is always reachable in one tap from any screen (its
   tab, with a dot), and a sequence's prompts to ready the rig show on any screen.
+- Wherever a job fails because the camera sent no image (an exposure the driver gave
+  up on, a video without frames), a popup says so with the error and what to check:
+  the Pi's limited USB ports first when connecting found them, then a powered hub,
+  another cable or port, a 5 A supply. It shows failures seen happen, not old ones.
 - Explore, Sequences, Plan and Video exclude each other: while Explore loops or
   takes frames, while Video streams, or while a sequence or the plan is active
   (running, paused, or waiting on the user), the others' tabs are dimmed and going
@@ -55,7 +59,7 @@ Navigation follows the night, not the device tree.
 | A target's page | Search (or coordinates, or one of my frames), the object, its lines, its altitude tonight, the framing chart with camera frame and rotation, "Go and center", remove, start its frames again. |
 | Explore | The image edge to edge with a status bar and a folding histogram under it, guiding, focus and go to over it, and a panel of actions at its side (a sheet when upright): stack, filter, exposure, loop / capture, save / solve / download what is on screen (ADR 0054). |
 | Sequences | Explore's base (image, histogram, status bar, guiding and focus over it) with the sequence's widget at the right (state, groups and their frames, the frame in progress, recent events, the way to configure it), a panel with what it does around its groups, last frame or group stack, start / pause / resume / stop. |
-| Video | Explore's base: the live video edge to edge (linear, as recorded) with its histogram (the clipped top in the warning tone, the share saturated said) and a status bar (size, depth, exposure, fps, sharpness); the focuser over it by hand, with the sharpness and the best since the image last changed, no autofocus; go to at the right (the Sun, the Moon and the planets too; a planet has only "Go"). The panel: exposure in ms, gain, depth (8 or 16 bits, when the camera records both), the region (full or a size, placed by tapping the image), filter, tracking rate, the recording's length in seconds or frames with its size, then the recordings (download, delete, frames dropped). Dock: Start/Stop the video, Record. A recording keeps the mount, the focuser and the wheel still. |
+| Video | Explore's base: the live video edge to edge (linear, as recorded) with its histogram (the clipped top in the warning tone, the share saturated said) and a status bar (size, depth, exposure, fps, sharpness); the focuser over it by hand, with the sharpness and the best since the image last changed, no autofocus; go to at the right (the Sun, the Moon and the planets too; a planet has only "Go"). The panel: exposure in ms, gain, depth (8 or 16 bits, when the camera records both), the region (full or a size, placed by tapping the image), filter, tracking rate, the recording's length in seconds or frames with its size, then the recordings (download, delete, frames dropped). Dock: Start/Stop the video, Record. A recording keeps the mount, the focuser and the wheel still. Until the first frame the status says "Waiting for frames"; 10 s without one stops the video. |
 | Configure the sequence | The saved sequences, the name, the groups in order (kind, filter, exposure, frames, settings), the calibration still missing, where the run will ask to ready the rig, estimates, the steps. |
 | Session | The night's frames and their calibration, the past sessions; a banner leads to a running sequence. |
 
@@ -167,7 +171,9 @@ Icons: 24 px, 1.8 px stroke, round caps and joins, drawn in-house.
 Rig (2026-11-14):
 
 - On top, always in view: the profile picker (in the header), the connection with
-  its chip, Connect / Disconnect and Edit / New profile. Everything else is in
+  its chip, Connect / Disconnect and Edit / New profile, and a warning when connecting
+  found the Pi's USB ports limited to 600 mA with a camera, or more than that, on
+  their power (it names them; a powered hub or a 5 A supply). Everything else is in
   sections, in four groups, each group a card under a small title:
   **Optics and devices** (Optical trains; Devices, with the INDI and PHD2 services and
   their restarts; without a profile, only the services), **Site** (Saved sites),
@@ -540,8 +546,8 @@ Tonight and Plan:
 - The get-ready checklist lists Connect, Focus (with a focuser) and Polar align
   (ADR 0053); each step says how it stands, and the first pending one carries the
   screen's primary button. Connect offers "Connect <profile>" for the selected
-  profile besides Open Rig; Focus goes to the focuser's calibration while it has
-  none.
+  profile besides Open Rig, and shows Rig's warning about the Pi's limited USB ports;
+  Focus goes to the focuser's calibration while it has none.
 - Tonight's cards open and close like Rig's sections, and closed they still say
   how they stand: the checklist how many steps are done, the night how much of the
   dark window is left, Pointing the object, its altitude and the guiding RMS, the

@@ -3,6 +3,7 @@
   // app, keeps the state channel open while allowed, and lays out the tabs.
   import Banner from "./components/Banner.svelte";
   import Button from "./components/Button.svelte";
+  import CameraFault from "./components/CameraFault.svelte";
   import EmptyState from "./components/EmptyState.svelte";
   import NavBar from "./components/NavBar.svelte";
   import { reportClock } from "./lib/api";
@@ -200,6 +201,7 @@
       </main>
     {/if}
     <PromptDialog />
+    {#if role !== "observer" && auth.owner}<CameraFault />{/if}
   {/key}
 {/if}
 

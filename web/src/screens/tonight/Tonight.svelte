@@ -12,6 +12,7 @@
   import RigStatus from "../../components/RigStatus.svelte";
   import ScreenHeader from "../../components/ScreenHeader.svelte";
   import Section from "../../components/Section.svelte";
+  import UsbPowerNotice from "../../components/UsbPowerNotice.svelte";
   import WeatherCard from "../../components/WeatherCard.svelte";
   import { connectProfile } from "../../lib/api";
   import { auth } from "../../lib/auth.svelte";
@@ -311,6 +312,7 @@
             <span class="title">{step.title}</span>
             <span class="muted">{step.detail}</span>
             {#if step.key === "connect" && connectError}<span class="error">{connectError}</span>{/if}
+            {#if step.key === "connect"}<UsbPowerNotice />{/if}
             {#if stepState === "blocked"}
               <ul class="blockers">
                 {#each step.blockers as blocker (`${blocker.reason}:${blocker.role}`)}

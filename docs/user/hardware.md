@@ -41,6 +41,9 @@ not, are welcome: send the diagnostics bundle (see [troubleshooting](troubleshoo
   FAT, exFAT, NTFS, ext4, btrfs or XFS are mounted when plugged in.
 - **Wi-Fi:** the Pi's own. A USB hub with its own power helps when the camera, the
   guide camera, the focuser, the filter wheel and the mount all hang off the Pi.
+- **USB power:** without a 5 A supply (the official 27 W one, plugged straight in)
+  the Pi 5 gives its USB ports 600 mA in all, too little for most cameras: plug them
+  into a powered hub, such as the power box's. NOCS warns about it when connecting.
 - **USB 3 next to the Pi** interferes with its Wi-Fi: USB 3 ports, cables and devices
   (cameras, drives, hubs) radiate in the 2.4 GHz band, the only band of the box's
   access point. On the rig, with two USB 3 devices on the Pi, neither a laptop nor a
