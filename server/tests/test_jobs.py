@@ -75,6 +75,20 @@ async def test_a_failure_says_its_fault(store: StateStore) -> None:
     )
 
 
+async def test_a_failure_that_hides_its_context_has_no_fault(store: StateStore) -> None:
+    manager = JobManager(store)
+
+    async def run(context: JobContext) -> Json:
+        try:
+            raise CameraLinkError("Camera exposure failed")
+        except CameraLinkError:
+            raise RuntimeError("something else") from None
+
+    job_id = manager.start("find", ["main_camera"], run)
+    await manager.wait(job_id)
+    assert job(store, job_id)["fault"] is None
+
+
 async def test_locks_conflicting_jobs_and_commands(store: StateStore) -> None:
     manager = JobManager(store)
     release = asyncio.Event()

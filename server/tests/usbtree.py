@@ -6,8 +6,9 @@ from nocs.equipment.usbpower import UsbPaths
 
 
 def pi(root: Path, *, enabled: int = 0, supply: int = 3000) -> UsbPaths:
-    paths = UsbPaths(power=root / "power", devices=root / "usb")
+    paths = UsbPaths(model=root / "compatible", power=root / "power", devices=root / "usb")
     paths.power.mkdir(parents=True)
+    paths.model.write_bytes(b"raspberrypi,5-model-b\0brcm,bcm2712\0")
     paths.devices.mkdir(parents=True)
     (paths.power / "usb_max_current_enable").write_bytes(enabled.to_bytes(4, "big"))
     (paths.power / "max_current").write_bytes(supply.to_bytes(4, "big"))

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { cameraLinkCauses, newCameraFaults, usbPowerText } from "./camerafault.ts";
+import { cameraLinkCauses, jobStates, newCameraFaults, usbPowerText } from "./camerafault.ts";
 import { en } from "./i18n/en.ts";
 import type { JobInfo } from "./types.ts";
 
@@ -20,9 +20,12 @@ function job(state: JobInfo["state"], fault: JobInfo["fault"] = null): JobInfo {
 }
 
 test("the popup shows jobs it saw fail for the camera's link", () => {
-  const before = { a: job("running"), b: job("running"), c: job("failed", "camera_link") };
-  const after = { a: job("failed", "camera_link"), b: job("failed"), c: job("failed", "camera_link") };
-  assert.deepEqual(newCameraFaults(before, after), ["a"]);
+  const jobs = { a: job("running"), b: job("running"), c: job("failed", "camera_link") };
+  const before = jobStates(jobs);
+  // The live state changes its jobs in place.
+  Object.assign(jobs.a, { state: "failed", fault: "camera_link" });
+  Object.assign(jobs.b, { state: "failed" });
+  assert.deepEqual(newCameraFaults(before, jobs), ["a"]);
   // Failures already over when the page loads are old news.
   assert.deepEqual(newCameraFaults(null, { a: job("failed", "camera_link") }), []);
 });
@@ -42,4 +45,6 @@ test("the Pi's limited ports come first among the causes", () => {
   const power = { limit: 600, supply: 3000, draw: 500, cameras: ["ASI432MM"] };
   assert.ok(/600 mA/.test(cameraLinkCauses(power, en, "en")[0] ?? ""));
   assert.equal(cameraLinkCauses(null, en, "en").length, 3);
+  // A drive asking too much is no reason the camera failed.
+  assert.equal(cameraLinkCauses({ ...power, draw: 896, cameras: [] }, en, "en").length, 3);
 });

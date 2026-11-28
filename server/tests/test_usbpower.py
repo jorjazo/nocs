@@ -69,4 +69,9 @@ def test_nothing_when_the_ports_are_not_limited(tmp_path: Path) -> None:
 
 
 def test_nothing_on_a_computer_that_is_no_pi_5(tmp_path: Path) -> None:
-    assert read_usb_power(UsbPaths(power=tmp_path / "none", devices=tmp_path / "none")) is None
+    none = tmp_path / "none"
+    assert read_usb_power(UsbPaths(model=none, power=none, devices=none)) is None
+    paths = pi(tmp_path / "pi4")
+    paths.model.write_bytes(b"raspberrypi,4-model-b\0brcm,bcm2711\0")
+    rig(paths, camera_at="3-1")
+    assert read_usb_power(paths) is None

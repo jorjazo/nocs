@@ -25,6 +25,9 @@ from pathlib import Path
 LIMITED = 600
 """mA the Pi 5's USB ports give in all without a 5 A supply (1600 with one)."""
 
+PI_5 = "brcm,bcm2712"
+"""The Pi 5's SoC in the device tree's ``compatible``."""
+
 SELF_POWERED = 0x40
 """``bmAttributes`` bit of a device (a hub) with power of its own."""
 VENDOR_SPECIFIC = "ff"
@@ -51,6 +54,7 @@ _MILLIAMPS = re.compile(r"^(\d+)\s*mA$")
 class UsbPaths:
     """Where the firmware and the kernel publish it (replaced in tests)."""
 
+    model: Path = Path("/proc/device-tree/compatible")
     power: Path = Path("/proc/device-tree/chosen/power")
     devices: Path = Path("/sys/bus/usb/devices")
 
@@ -81,6 +85,8 @@ def read_usb_power(paths: UsbPaths, cameras: Collection[str] = ()) -> UsbPower |
     """What is at risk on the Pi's limited USB ports; ``None`` when they are not limited
     (or this is no Pi 5) or nothing is at risk. ``cameras`` are the INDI names of the
     profile's cameras: a USB device whose name is in one of them is a camera too."""
+    if PI_5 not in _strings(paths.model):
+        return None
     enabled = _u32(paths.power / "usb_max_current_enable")
     if enabled is None or enabled != 0:
         return None
@@ -152,6 +158,15 @@ def _text(path: Path) -> str | None:
         return path.read_text().strip()
     except (OSError, UnicodeDecodeError):
         return None
+
+
+def _strings(path: Path) -> list[str]:
+    """A device tree string list: NUL-separated."""
+    try:
+        data = path.read_bytes()
+    except OSError:
+        return []
+    return [part.decode(errors="replace") for part in data.split(b"\0") if part]
 
 
 def _u32(path: Path) -> int | None:

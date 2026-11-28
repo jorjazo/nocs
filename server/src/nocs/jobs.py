@@ -258,7 +258,9 @@ def fault_of(error: BaseException) -> str | None:
         seen.add(id(current))
         if isinstance(fault := getattr(current, "fault", None), str):
             return fault
-        current = current.__cause__ or current.__context__
+        current = current.__cause__ or (
+            None if current.__suppress_context__ else current.__context__
+        )
     return None
 
 

@@ -3,10 +3,9 @@
   // gave up on, a video without frames): what failed and what to check, the Pi's
   // limited USB ports first when they power something at risk. Mounted once, for the
   // owner, on every screen: it shows failures it saw happen, not old ones.
-  import { cameraLinkCauses, newCameraFaults } from "../lib/camerafault";
+  import { cameraLinkCauses, jobStates, newCameraFaults, type JobStates } from "../lib/camerafault";
   import { i18n } from "../lib/i18n";
   import { live } from "../lib/live.svelte";
-  import type { JobInfo } from "../lib/types";
   import Banner from "./Banner.svelte";
   import Button from "./Button.svelte";
   import Sheet from "./Sheet.svelte";
@@ -14,13 +13,15 @@
   const t = $derived(i18n.t);
   const locale = $derived(i18n.locale);
 
-  let before: Record<string, JobInfo> | null = null;
+  let before: JobStates | null = null;
   let shown = $state<string | null>(null);
 
   $effect(() => {
     const jobs = live.synced ? (live.app.jobs ?? {}) : null;
+    // Reads every job's state, so the effect runs again when one changes.
+    const states = jobStates(jobs);
     const found = newCameraFaults(before, jobs);
-    before = jobs ? { ...jobs } : null;
+    before = states;
     const last = found.at(-1);
     if (last !== undefined) shown = jobs?.[last]?.error ?? "";
   });

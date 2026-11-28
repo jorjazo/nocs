@@ -323,6 +323,8 @@ class VideoService:
             self._restart.set()
             return
         if settings.exposure != previous.exposure:
+            # Frames of the exposure before may still be on their way.
+            self._heard = time.monotonic()
             await camera.set_stream_exposure(settings.exposure)
         if settings.gain is not None and settings.gain != previous.gain:
             await camera.set_gain(settings.gain)
@@ -558,7 +560,7 @@ class VideoService:
             return
         if size is None:
             return
-        self._heard = time.monotonic()  # frames can be parsed off the event loop
+        self._heard = time.monotonic()
         self._latest = (frame.data, size.width, size.height)
         self._arrived.set()
 

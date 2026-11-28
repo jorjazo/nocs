@@ -5,13 +5,20 @@ import type { Messages } from "./i18n/en";
 import type { JobInfo, UsbPower } from "./types";
 
 type Jobs = Record<string, JobInfo> | null | undefined;
+export type JobStates = Record<string, JobInfo["state"]>;
+
+// Each job's state, as plain values: the live state changes its jobs in place, so
+// keeping the jobs themselves would keep nothing of how they were.
+export function jobStates(jobs: Jobs): JobStates | null {
+  return jobs ? Object.fromEntries(Object.entries(jobs).map(([id, job]) => [id, job.state])) : null;
+}
 
 // Jobs that were running in `before` and failed with the camera link fault in `after`:
 // failures found already over when the page loads are old news.
-export function newCameraFaults(before: Jobs, after: Jobs): string[] {
+export function newCameraFaults(before: JobStates | null, after: Jobs): string[] {
   if (!before || !after) return [];
   return Object.entries(after)
-    .filter(([id, job]) => job.state === "failed" && job.fault === "camera_link" && before[id]?.state === "running")
+    .filter(([id, job]) => job.state === "failed" && job.fault === "camera_link" && before[id] === "running")
     .map(([id]) => id);
 }
 
@@ -32,8 +39,8 @@ export function usbPowerText(power: UsbPower, t: Messages, locale: string): stri
   return t.usbPower.draw(limit, supply, milliamps(power.draw, locale));
 }
 
-// The likely causes, the Pi's limited ports first when they power something at risk.
+// The likely causes, the Pi's limited ports first when a camera takes its power from them.
 export function cameraLinkCauses(power: UsbPower | null | undefined, t: Messages, locale: string): string[] {
   const causes = [t.cameraLink.hub, t.cameraLink.cable, t.cameraLink.supply];
-  return power ? [t.cameraLink.limited(milliamps(power.limit, locale)), ...causes] : causes;
+  return power && power.cameras.length > 0 ? [t.cameraLink.limited(milliamps(power.limit, locale)), ...causes] : causes;
 }
