@@ -133,6 +133,13 @@ possible:
   clock and GPS on connect (the Pi has no network time in the field); gpsd
   support for USB GPS receivers.
 - **Health:** CPU temperature, throttling, under-voltage, memory, disk.
+- **USB power:** a Pi 5 whose supply did not offer 5 A over USB-PD gives its USB
+  ports 600 mA in all. Connecting reads that from the device tree
+  (`chosen/power`) and what hangs from the ports from sysfs, and warns when a camera
+  takes its power from them (directly or through hubs without power of their own) or
+  what they power declares more than 600 mA. Declared draws are not peaks: an
+  ASI432MM declaring 400 mA kept being reset, sending no image, until it moved to
+  the power box's hub.
 - **USB hotplug:** detect known devices (e.g. ZWO cameras) and suggest drivers.
 - **Updates, reboot and shutdown.**
 
@@ -323,6 +330,13 @@ stopping it before a FAT drive's 4 GB limit or a full drive.
   holds): a drive slower than the camera shows there.
 - Streaming is a job holding the main camera; a recording also holds the mount, the
   focuser and the wheel. There is no guiding and no autofocus here.
+- The driver can say it streams while the camera sends nothing (a ZWO camera the
+  Pi's USB cannot power is reset over and over): until the first frame the video is
+  "waiting for frames", and it fails when 10 s (beyond the exposure) pass without
+  one, or when the driver stops streaming for 3 s.
+- A job that fails because the camera sent no image (that, or an exposure the
+  driver gave up on) carries the fault `camera_link`; the app then explains it in a
+  popup with the likely causes, the Pi's limited USB ports first when they apply.
 - Previews reach the browser by long polling (`/api/video/frame?after=<n>`), so a
   slow phone gets fewer frames and the state is not flooded.
 

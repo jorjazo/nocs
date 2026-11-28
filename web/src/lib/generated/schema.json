@@ -3777,6 +3777,18 @@
             "$ref": "#/$defs/ProfileSummary"
           },
           "type": "object"
+        },
+        "usb_power": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UsbPower"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Set when connecting found the Raspberry Pi's USB ports limited and something at risk on them; None otherwise."
         }
       },
       "required": [
@@ -7424,6 +7436,10 @@
       "title": "JnowPosition",
       "type": "object"
     },
+    "JobFaultName": {
+      "const": "camera_link",
+      "type": "string"
+    },
     "JobInfo": {
       "additionalProperties": false,
       "properties": {
@@ -7436,6 +7452,18 @@
               "type": "null"
             }
           ]
+        },
+        "fault": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/JobFaultName"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The kind of failure the app explains: camera_link, the camera sent no image (an exposure it gave up on, a video without frames)."
         },
         "finished": {
           "anyOf": [
@@ -14017,6 +14045,46 @@
         "reboot"
       ],
       "title": "UpgradablePackage",
+      "type": "object"
+    },
+    "UsbPower": {
+      "additionalProperties": false,
+      "description": "A Raspberry Pi 5 whose supply did not offer 5 A limits its USB ports to 600 mA\nin all: what hangs from them on the Pi's own power.",
+      "properties": {
+        "cameras": {
+          "description": "Cameras the Pi powers, by their USB name.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "draw": {
+          "description": "mA declared by the devices the Pi powers (not behind a powered hub).",
+          "type": "integer"
+        },
+        "limit": {
+          "description": "mA the Pi's USB ports may give in all.",
+          "type": "integer"
+        },
+        "supply": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "mA the power supply offered the Pi."
+        }
+      },
+      "required": [
+        "limit",
+        "supply",
+        "draw",
+        "cameras"
+      ],
+      "title": "UsbPower",
       "type": "object"
     },
     "ValueRange": {

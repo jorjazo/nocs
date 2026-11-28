@@ -11,7 +11,7 @@ import pytest
 from nocs.devices.camera import Region
 from nocs.video.frames import FrameError, render
 from nocs.video.ser import HEADER, frames_written, read_header
-from nocs.video.service import fit_region, recorded_seconds, recording_name
+from nocs.video.service import SILENT_AFTER, fit_region, recorded_seconds, recording_name, silent
 
 
 def disc(width: int, height: int, blur: int = 0, peak: int = 200) -> np.ndarray:
@@ -122,3 +122,10 @@ def test_recording_names_keep_clear_of_indi_placeholders() -> None:
     name = recording_name(when, "M_T_ 42", 0.005, 300)
     assert name == "20261121-213000-M-T-42-5ms-g300"
     assert recording_name(when, None, 0.0125, None) == "20261121-213000-12.5ms"
+
+
+def test_a_stream_without_frames_is_silent_after_a_while() -> None:
+    assert not silent(100.0, 100.0 + SILENT_AFTER, exposure=0.01)
+    assert silent(100.0, 100.0 + SILENT_AFTER + 0.02, exposure=0.01)
+    # Long exposures get their time on top.
+    assert not silent(100.0, 100.0 + SILENT_AFTER + 2, exposure=5.0)

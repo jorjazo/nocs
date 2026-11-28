@@ -233,6 +233,11 @@ export type Phd2AppState = "Stopped" | "Selected" | "Calibrating" | "Guiding" | 
 export type PropertyStateName = "Idle" | "Ok" | "Busy" | "Alert";
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "JobFaultName".
+ */
+export type JobFaultName = "camera_link";
+/**
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
  * via the `definition` "JobStateName".
  */
 export type JobStateName = "running" | "succeeded" | "failed" | "cancelled";
@@ -1354,6 +1359,10 @@ export interface EquipmentState {
   profiles: {
     [k: string]: ProfileSummary;
   };
+  /**
+   * Set when connecting found the Raspberry Pi's USB ports limited and something at risk on them; None otherwise.
+   */
+  usb_power?: UsbPower | null;
 }
 /**
  * A serial port search in progress (ADR 0048).
@@ -1413,6 +1422,31 @@ export interface ProfileSummary {
    * Seconds of the frames NOCS solves to point, as saved (`solving.exposure`).
    */
   solve_exposure: number;
+}
+/**
+ * A Raspberry Pi 5 whose supply did not offer 5 A limits its USB ports to 600 mA
+ * in all: what hangs from them on the Pi's own power.
+ *
+ * This interface was referenced by `NOCSAPI`'s JSON-Schema
+ * via the `definition` "UsbPower".
+ */
+export interface UsbPower {
+  /**
+   * Cameras the Pi powers, by their USB name.
+   */
+  cameras: string[];
+  /**
+   * mA declared by the devices the Pi powers (not behind a powered hub).
+   */
+  draw: number;
+  /**
+   * mA the Pi's USB ports may give in all.
+   */
+  limit: number;
+  /**
+   * mA the power supply offered the Pi.
+   */
+  supply: number | null;
 }
 /**
  * This interface was referenced by `NOCSAPI`'s JSON-Schema
@@ -2256,6 +2290,10 @@ export interface IndiServer {
  */
 export interface JobInfo {
   error: string | null;
+  /**
+   * The kind of failure the app explains: camera_link, the camera sent no image (an exposure it gave up on, a video without frames).
+   */
+  fault?: JobFaultName | null;
   finished: string | null;
   kind: string;
   message: string | null;

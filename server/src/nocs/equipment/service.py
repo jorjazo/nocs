@@ -9,6 +9,9 @@ State layout under ``("equipment",)``::
     devices:    {<role>: {driver, device, status, error, unresponsive_since}}
     detecting:  {device, port, attempt, attempts} while a serial port is being looked
                 for (ADR 0048), else None
+    usb_power:  {limit, supply, draw, cameras} when connecting found the Raspberry
+                Pi's USB ports limited and something at risk on them
+                (:mod:`nocs.equipment.usbpower`), else None
 
 Connecting starts the drivers that are not running yet, waits for each device,
 sets its serial port, connects it and waits until its facade is ready. A serial
@@ -58,6 +61,7 @@ from nocs.equipment.ports import (
     words,
 )
 from nocs.equipment.profiles import DeviceConfig, Profile, ProfileStore, Role
+from nocs.equipment.usbpower import UsbPaths, read_usb_power
 from nocs.indi import IndiClient, IndiEvent, PropertyDeleted, PropertyUpdated, TextElement
 from nocs.indi.drivers import DriverControlError, DriverFifo
 from nocs.state import Json, Path, StateStore
@@ -171,9 +175,11 @@ class EquipmentService:
         driver_timeout: float = DRIVER_START_TIMEOUT,
         ports: Callable[[], list[SerialPort]] = serial_ports,
         reserved_ports: Callable[[], Collection[str]] = tuple,
+        usb_paths: UsbPaths | None = None,
     ) -> None:
         """``ports`` lists the serial ports to look for devices on; ``reserved_ports``
-        says which ones something else holds (gpsd's GPS)."""
+        says which ones something else holds (gpsd's GPS); ``usb_paths`` where the
+        Raspberry Pi says how much its USB ports give."""
         self._store = store
         self._profiles = profiles
         self._fifo = fifo
@@ -203,6 +209,7 @@ class EquipmentService:
         self._saving = asyncio.Lock()
         self._searching: set[str] = set()
         """Devices whose port is being looked for: their refused connections are expected."""
+        self._usb_paths = usb_paths or UsbPaths()
 
         with store.transaction():
             self._publish_profiles()
@@ -210,6 +217,7 @@ class EquipmentService:
             self._publish_connection(Connection.DISCONNECTED)
             self._publish_roles(DeviceStatus.DISCONNECTED)
             store.set((*ROOT, "detecting"), None)
+            store.set((*ROOT, "usb_power"), None)
         self._unwatch = bridge.watch(self._on_client)
         if bridge.client is not None:
             self._on_client(bridge.client)
@@ -459,6 +467,7 @@ class EquipmentService:
                 for role in pending:
                     group.start_soon(self._connect_role, client, role, profile.devices[role])
             await self._configure_cameras(client, profile)
+            await self._check_usb_power()
         except Exception as e:
             log.exception("connecting %s failed", self._profile_id)
             self._publish_connection(Connection.CONNECTING, f"connecting failed: {e}")
@@ -483,6 +492,7 @@ class EquipmentService:
                     log.warning("cannot stop driver %s: %s", driver, e)
         self._started.clear()
         self._resolved.clear()
+        self._store.set((*ROOT, "usb_power"), None)
         self._publish_roles(DeviceStatus.DISCONNECTED)
         self._publish_connection(Connection.DISCONNECTED)
 
@@ -761,6 +771,35 @@ class EquipmentService:
                 self._profile = patch(self._profile)
             await anyio.to_thread.run_sync(save)
         log.info("%s is on %s: kept in profile %s", name, port, profile_id)
+
+    async def _check_usb_power(self) -> None:
+        """Say whether the Pi's USB ports are limited with something at risk on them."""
+        cameras = [
+            name
+            for role in (Role.MAIN_CAMERA, Role.GUIDE_CAMERA)
+            if (name := self._resolved.get(role)) is not None
+        ]
+        found = await anyio.to_thread.run_sync(read_usb_power, self._usb_paths, cameras)
+        if found is not None:
+            log.warning(
+                "the Raspberry Pi limits its USB ports to %d mA (supply: %s mA); "
+                "it powers %d mA of devices, cameras: %s",
+                found.limit,
+                found.supply,
+                found.draw,
+                ", ".join(found.cameras) or "none",
+            )
+        self._store.set(
+            (*ROOT, "usb_power"),
+            None
+            if found is None
+            else {
+                "limit": found.limit,
+                "supply": found.supply,
+                "draw": found.draw,
+                "cameras": list[Json](found.cameras),
+            },
+        )
 
     async def _configure_cameras(self, client: IndiClient, profile: Profile) -> None:
         """Point the cameras at the rig's other devices and optics, for their FITS headers.

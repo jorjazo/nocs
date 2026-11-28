@@ -230,7 +230,8 @@
         : `${t.video.status.recording} · ${t.video.recording(formatPlain(recording.written, locale), formatBytes(recording.size, locale))}`;
       return { tone: recording.stopping ? "warning" : "accent", text };
     }
-    if (streaming) return { tone: "accent", text: t.video.status.streaming };
+    // The driver can say it streams while the camera sends nothing.
+    if (streaming) return { tone: "accent", text: frame ? t.video.status.streaming : t.video.status.waiting };
     if (starting) return { tone: "accent", text: t.video.status.starting };
     if (video?.error) return { tone: "error", text: t.video.failed };
     return { tone: "neutral", text: t.video.status.idle };
@@ -300,8 +301,8 @@
         ontap={tapped}>
         {#snippet empty()}
           <div class="nopreview">
-            <p class="heading">{t.video.noPreview}</p>
-            <p class="muted">{t.video.noPreviewBody}</p>
+            <p class="heading">{streaming ? t.video.waiting : t.video.noPreview}</p>
+            <p class="muted">{streaming ? t.video.waitingBody : t.video.noPreviewBody}</p>
           </div>
         {/snippet}
         <ImageOverlay

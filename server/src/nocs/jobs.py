@@ -3,7 +3,11 @@
 A job runs as a task, locks resources (equipment roles) while it runs, and
 publishes its progress in the state tree under ``("jobs", <id>)``::
 
-    {kind, resources, state, progress, message, error, result, started, finished}
+    {kind, resources, state, progress, message, error, fault, result, started, finished}
+
+A job that fails with an error carrying a ``fault`` (or caused by one) publishes it,
+so the app can explain that kind of failure (``camera_link``: the camera sent no
+image).
 
 Commands that would disturb a running job (changing the gain mid-exposure)
 check the lock first and are refused with ``ResourceBusyError``.
@@ -158,6 +162,7 @@ class JobManager:
                 "progress": None,
                 "message": None,
                 "error": None,
+                "fault": None,
                 "result": None,
                 "started": _now(),
                 "finished": None,
@@ -201,7 +206,9 @@ class JobManager:
             self._finish(job_id, JobState.CANCELLED)
         except Exception as e:
             log.info("job %s (%s) failed: %s", job_id, self._kinds[job_id], e)
-            self._finish(job_id, JobState.FAILED, error=str(e) or type(e).__name__)
+            self._finish(
+                job_id, JobState.FAILED, error=str(e) or type(e).__name__, fault=fault_of(e)
+            )
         else:
             self._finish(job_id, JobState.SUCCEEDED, result=result)
 
@@ -213,7 +220,13 @@ class JobManager:
                 self._store.set((*ROOT, job_id, key), value)
 
     def _finish(
-        self, job_id: str, state: JobState, *, error: str | None = None, result: Json = None
+        self,
+        job_id: str,
+        state: JobState,
+        *,
+        error: str | None = None,
+        fault: str | None = None,
+        result: Json = None,
     ) -> None:
         if self._tasks.pop(job_id, None) is None:
             return  # already finished
@@ -224,6 +237,7 @@ class JobManager:
             path = (*ROOT, job_id)
             self._store.set((*path, "state"), state.value)
             self._store.set((*path, "error"), error)
+            self._store.set((*path, "fault"), fault)
             self._store.set((*path, "result"), result)
             self._store.set((*path, "finished"), _now())
             if state is JobState.SUCCEEDED:
@@ -234,6 +248,18 @@ class JobManager:
                 old = self._finished.pop(0)
                 self._kinds.pop(old, None)
                 self._store.delete((*ROOT, old))
+
+
+def fault_of(error: BaseException) -> str | None:
+    """The ``fault`` of an error, or of the error it came from."""
+    seen: set[int] = set()
+    current: BaseException | None = error
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(fault := getattr(current, "fault", None), str):
+            return fault
+        current = current.__cause__ or current.__context__
+    return None
 
 
 def _now() -> str:

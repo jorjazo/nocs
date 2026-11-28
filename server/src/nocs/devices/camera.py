@@ -6,7 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 
-from nocs.devices.base import Device, DeviceError, DeviceInterface, event_device
+from nocs.devices.base import CameraLinkError, Device, DeviceError, DeviceInterface, event_device
 from nocs.indi import (
     BlobElement,
     BlobMode,
@@ -622,7 +622,9 @@ class Camera(Device):
                 ):
                     if prop.name == "CCD_EXPOSURE" and prop.state is PropertyState.ALERT:
                         detail = f": {prop.message}" if prop.message else ""
-                        result.set_exception(DeviceError(f"{self.name} exposure failed{detail}"))
+                        result.set_exception(
+                            CameraLinkError(f"{self.name} exposure failed{detail}")
+                        )
                     elif (value := result_of(prop)) is not None:
                         result.set_result(value)
                 case ConnectionLost(reason=reason):

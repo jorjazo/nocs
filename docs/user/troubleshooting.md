@@ -65,6 +65,18 @@ The next visit sets a new passphrase; every device has to pair again.
 lose USB devices or damage its card. Use the official 27 W supply, or a 5 V / 5 A
 one; a long or thin cable has the same effect. NOCS also says when it happened last.
 
+**"The Raspberry Pi limits its USB ports to 600 mA".** Connecting found the Pi's
+supply did not offer it 5 A, so its four USB ports give 600 mA in all, and a camera
+takes its power from them (or they power more than that). A camera short of power
+drops out under load: exposures fail and the video sends no frames. Plug the camera
+into a hub with its own power (a power box's), or give the Pi the official 27 W
+supply plugged straight in: the Pi 4's 3 A supply, an adapter or an extension cable
+in the way all leave the ports limited.
+
+**"The camera sends no image".** An exposure failed or the video got no frames for
+10 seconds. It is most often the camera's USB: its power (see above), its cable or
+its port. Try another cable or port, or a powered hub.
+
 **"The CPU runs slower than it can" / "The CPU is hot".** Give the Pi an active
 cooler, and shade it during the day.
 

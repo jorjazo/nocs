@@ -140,6 +140,18 @@ class PortDetection(StateModel):
     attempts: int = Field(ge=1, description="How many ports there are to try.")
 
 
+class UsbPower(StateModel):
+    """A Raspberry Pi 5 whose supply did not offer 5 A limits its USB ports to 600 mA
+    in all: what hangs from them on the Pi's own power."""
+
+    limit: int = Field(description="mA the Pi's USB ports may give in all.")
+    supply: int | None = Field(description="mA the power supply offered the Pi.")
+    draw: int = Field(
+        description="mA declared by the devices the Pi powers (not behind a powered hub)."
+    )
+    cameras: list[str] = Field(description="Cameras the Pi powers, by their USB name.")
+
+
 class EquipmentState(StateModel):
     profiles: dict[str, ProfileSummary]
     active: str | None = Field(description="Id of the selected profile.")
@@ -149,6 +161,11 @@ class EquipmentState(StateModel):
     detecting: PortDetection | None = Field(
         description="The serial port search in progress, connecting or from the editor."
     )
+    usb_power: UsbPower | None = Field(
+        default=None,
+        description="Set when connecting found the Raspberry Pi's USB ports limited and "
+        "something at risk on them; None otherwise.",
+    )
 
 
 type FrameTypeName = Literal["light", "dark", "bias", "flat"]
@@ -157,6 +174,7 @@ type SavedFrameTypeName = Literal[
 ]
 """What a saved frame can be: a camera's frame types, and live stacks (ADR 0039)."""
 type JobStateName = Literal["running", "succeeded", "failed", "cancelled"]
+type JobFaultName = Literal["camera_link"]
 
 
 class ValueRange(StateModel):
@@ -306,6 +324,11 @@ class JobInfo(StateModel):
     progress: float | None = Field(description="0 to 1; None while unknown.")
     message: str | None
     error: str | None
+    fault: JobFaultName | None = Field(
+        default=None,
+        description="The kind of failure the app explains: camera_link, the camera sent "
+        "no image (an exposure it gave up on, a video without frames).",
+    )
     result: Any = Field(description="Kind-specific; for exposures, a FrameInfo.")
     started: str
     finished: str | None
